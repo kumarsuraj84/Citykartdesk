@@ -1,0 +1,890 @@
+import { notFound } from 'next/navigation'
+import Link from 'next/link'
+import {
+  ChevronLeft,
+  Lock,
+  Clock,
+} from 'lucide-react'
+import { redirect } from 'next/navigation'
+import { getCurrentProfile, getTeamMembers } from '@/lib/queries/profiles'
+import { getRequestById, getRequestActivity, getRequestComments, getRequestCollaborators, getRelatedRequests, getCsatSurveyForRequest } from '@/lib/queries/requests'
+import { getRequestAttachments } from '@/lib/queries/attachments'
+import { getApprovalsForRequest } from '@/lib/queries/approvals'
+import { ApprovalPanel } from '@/components/requests/ApprovalPanel'
+import { RelatedRequestsPanel } from '@/components/requests/RelatedRequestsPanel'
+import { CsatSurvey } from '@/components/requests/CsatSurvey'
+import { SLABadge } from '@/components/requests/SLABadge'
+import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
+import { RequestSidebarPanel } from '@/components/requests/RequestSidebarPanel'
+import { RequestTasksTab } from '@/components/requests/RequestTasksTab'
+import { getTasksForRequest } from '@/lib/queries/tasks'
+import { CommentForm } from '@/components/requests/CommentForm'
+import { AttachmentChips } from '@/components/requests/AttachmentChips'
+import { AttachmentUpload } from '@/components/requests/AttachmentUpload'
+import { RequestDetailTabs } from '@/components/requests/RequestDetailTabs'
+import { RequestActionBar } from '@/components/requests/RequestActionBar'
+import { getActiveTimer } from '@/lib/actions/requests'
+import { formatRelativeTime } from '@/lib/utils'
+import { STATUS_LABELS, TERMINAL_STATUSES } from '@/lib/constants/requests'
+import type {
+  RequestStatus,
+  ActivityAction,
+  RequestActivityWithActor,
+  RequestCommentWithAuthor,
+  FormField,
+  FormSection,
+  RequestCollaborator,
+} from '@/types'
+
+interface PageProps {
+  params: Promise<{ id: string }>
+}
+
+// ── Activity labels ────────────────────────────────────────────────────────────
+
+const ACTION_LABELS: Record<ActivityAction, string> = {
+  created:            'submitted this request',
+  assigned:           'assigned this request',
+  unassigned:         'unassigned this request',
+  status_changed:     'updated the status',
+  priority_changed:   'updated the priority',
+  resolved:           'resolved this request',
+  closed:             'closed this request',
+  reopened:           'reopened this request',
+  cancelled:          'cancelled this request',
+  approval_requested: 'requested approval',
+  approved:           'approved this request',
+  rejected:           'rejected this request',
+  comment_added:      'left a comment',
+  attachment_added:   'attached a file',
+  collaborator_added:   'added a collaborator',
+  collaborator_removed: 'removed a collaborator',
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function formatDuration(ms: number): string {
+  if (ms <= 0) return '0m'
+  const days  = Math.floor(ms / 86_400_000)
+  const hours = Math.floor((ms % 86_400_000) / 3_600_000)
+  const mins  = Math.floor((ms % 3_600_000)  / 60_000)
+  if (days  > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${mins}m`
+  return `${mins}m`
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function SidebarRow({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
+      <div className="min-w-0 text-right">{children}</div>
+    </div>
+  )
+}
+
+function TicketRow({
+  label,
+  value,
+}: {
+  label: string
+  value: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 px-4 py-2.5">
+      <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
+      <div className="min-w-0 text-right text-xs font-medium text-foreground">{value}</div>
+    </div>
+  )
+}
+
+function TicketCell({
+  label,
+  value,
+  className,
+}: {
+  label: string
+  value: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={['flex flex-col gap-0.5 px-4 py-3', className].filter(Boolean).join(' ')}>
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <div className="text-xs font-medium text-foreground">{value}</div>
+    </div>
+  )
+}
+
+function MetricCard({
+  label,
+  value,
+  sub,
+  highlight,
+}: {
+  label: string
+  value: string
+  sub: string
+  highlight?: 'red'
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-muted/20 p-4 text-center">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <p
+        className={`mt-1.5 text-2xl font-bold tabular-nums ${
+          highlight === 'red' ? 'text-red-600' : 'text-foreground'
+        }`}
+      >
+        {value}
+      </p>
+      <p className="mt-0.5 text-[10px] text-muted-foreground">{sub}</p>
+    </div>
+  )
+}
+
+function CommentBubble({ comment }: { comment: RequestCommentWithAuthor }) {
+  const initial = comment.author.full_name.charAt(0).toUpperCase()
+  return (
+    <div
+      className={`rounded-xl p-4 ${
+        comment.is_internal
+          ? 'border border-amber-200 bg-amber-50/60'
+          : 'border border-border bg-card'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+            comment.is_internal
+              ? 'bg-amber-100 text-amber-700'
+              : 'bg-primary/10 text-primary'
+          }`}
+        >
+          {initial}
+        </div>
+        <div className="min-w-0 flex-1">
+          {/* Row 1: author name */}
+          <span className="text-sm font-semibold text-foreground">
+            {comment.author.full_name}
+          </span>
+          {/* Row 2: badge + timestamp */}
+          <div className="mt-0.5 flex flex-wrap items-center gap-2">
+            {comment.is_internal ? (
+              <span className="flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                <Lock className="h-2.5 w-2.5" />
+                Internal Note
+              </span>
+            ) : (
+              <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                Public
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground">
+              {formatRelativeTime(comment.created_at)}
+            </span>
+          </div>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+            {comment.body.split(/(@\w+)/g).map((part, i) =>
+              /^@\w+$/.test(part) ? (
+                <span key={i} className="font-semibold text-primary">{part}</span>
+              ) : part
+            )}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function HistoryRow({ item }: { item: RequestActivityWithActor }) {
+  const actor = item.actor?.full_name ?? 'System'
+  const label = ACTION_LABELS[item.action] ?? item.action
+
+  let detail: string | null = null
+  if (item.action === 'status_changed' && item.metadata) {
+    const m = item.metadata as { from?: string; to?: string }
+    if (m.from && m.to) {
+      detail = `${STATUS_LABELS[m.from as RequestStatus] ?? m.from} → ${STATUS_LABELS[m.to as RequestStatus] ?? m.to}`
+    }
+  }
+  if (item.action === 'priority_changed' && item.metadata) {
+    const m = item.metadata as { priority_from?: string; priority_to?: string }
+    if (m.priority_from && m.priority_to) {
+      detail = `${m.priority_from} → ${m.priority_to}`
+    }
+  }
+  if (item.action === 'attachment_added' && item.metadata) {
+    const m = item.metadata as { file_name?: string }
+    if (m.file_name) detail = m.file_name
+  }
+  if (
+    (item.action === 'collaborator_added' || item.action === 'collaborator_removed') &&
+    item.metadata
+  ) {
+    const m = item.metadata as { collaborator_name?: string }
+    if (m.collaborator_name) detail = m.collaborator_name
+  }
+
+  return (
+    <div className="flex items-start gap-4 border-b border-border py-3 last:border-0">
+      <div className="w-28 shrink-0 space-y-0.5">
+        <p className="text-xs font-medium text-foreground">
+          {new Date(item.created_at).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+          })}
+        </p>
+        <p className="text-[10px] text-muted-foreground">
+          {new Date(item.created_at).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </p>
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-foreground">{actor}</p>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        {detail && (
+          <span className="mt-1 inline-block rounded-md bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+            {detail}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Field value display helper ─────────────────────────────────────────────────
+
+function displayFieldValue(field: FormField, raw: unknown): string {
+  if (raw === undefined || raw === null || raw === '') return '—'
+  if (field.type === 'checkbox') return raw ? 'Yes' : 'No'
+  if (field.type === 'multiselect' && Array.isArray(raw)) {
+    const labels = (raw as string[]).map((v) => {
+      const opt = field.options?.find((o) => o.value === v)
+      return opt?.label ?? v
+    })
+    return labels.length > 0 ? labels.join(', ') : '—'
+  }
+  if (field.type === 'select' || field.type === 'radio') {
+    const opt = field.options?.find((o) => o.value === String(raw))
+    return opt?.label ?? String(raw)
+  }
+  return String(raw)
+}
+
+function FieldRow({ field, data }: { field: FormField; data: Record<string, unknown> }) {
+  return (
+    <div className="flex items-start justify-between gap-4 px-4 py-2.5">
+      <dt className="shrink-0 text-xs text-muted-foreground">{field.label}</dt>
+      <dd className="text-right text-xs font-medium text-foreground whitespace-pre-wrap break-words">
+        {displayFieldValue(field, data[field.id])}
+      </dd>
+    </div>
+  )
+}
+
+// ── SubmittedData: section-aware, backward-compatible ─────────────────────────
+
+function SubmittedData({
+  sections,
+  legacySchema,
+  data,
+}: {
+  sections: FormSection[]
+  legacySchema: FormField[]
+  data: Record<string, unknown>
+}) {
+  const hasSections = sections.length > 0
+
+  if (!hasSections && legacySchema.length === 0) return null
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Submitted Information
+      </h3>
+
+      {hasSections ? (
+        // ── Section-grouped display ───────────────────────────────────────────
+        <div className="space-y-3">
+          {[...sections]
+            .sort((a, b) => a.order - b.order)
+            .filter((s) => s.fields.length > 0)
+            .map((section) => (
+              <div key={section.id} className="rounded-lg border border-border">
+                {/* Section header */}
+                <div className="border-b border-border bg-muted/30 px-4 py-2">
+                  <p className="text-xs font-semibold text-foreground">{section.title}</p>
+                  {section.description && (
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {section.description}
+                    </p>
+                  )}
+                </div>
+                {/* Fields */}
+                <dl className="divide-y divide-border">
+                  {[...section.fields]
+                    .sort((a, b) => a.order - b.order)
+                    .map((field) => (
+                      <FieldRow key={field.id} field={field} data={data} />
+                    ))}
+                </dl>
+              </div>
+            ))}
+        </div>
+      ) : (
+        // ── Legacy flat display ───────────────────────────────────────────────
+        <dl className="rounded-lg border border-border divide-y divide-border">
+          {[...legacySchema]
+            .sort((a, b) => a.order - b.order)
+            .map((field) => (
+              <FieldRow key={field.id} field={field} data={data} />
+            ))}
+        </dl>
+      )}
+    </div>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+export default async function RequestDetailPage({ params }: PageProps) {
+  const { id } = await params
+
+  const profile = await getCurrentProfile()
+  if (!profile) redirect('/login')
+
+  // Phase 1: everything that only needs `id` runs in parallel.
+  // teamMembers and csatSurvey are gated on request data so they stay in Phase 2.
+  const [request, activity, comments, attachments, collaborators, approvals, linkedTasks, activeTimer, relatedRequests] = await Promise.all([
+    getRequestById(id),
+    getRequestActivity(id),
+    getRequestComments(id),
+    getRequestAttachments(id),
+    getRequestCollaborators(id),
+    getApprovalsForRequest(id),
+    getTasksForRequest(id),
+    getActiveTimer(id),
+    getRelatedRequests(id),
+  ])
+
+  if (!request) notFound()
+
+  const isAgent =
+    profile.role === 'manager' ||
+    profile.role === 'admin' ||
+    profile.team_members.some((m) => m.team_id === request.team_id)
+  const isRequester = request.requester_id === profile.id
+  const canManage   = isAgent
+  const isTerminal  = TERMINAL_STATUSES.includes(request.status)
+
+  // Phase 2: only the two queries that depend on request data.
+  const [teamMembers, csatSurvey] = await Promise.all([
+    canManage ? getTeamMembers(request.team_id) : Promise.resolve([]),
+    isRequester ? getCsatSurveyForRequest(id) : Promise.resolve(null),
+  ])
+
+  const approval = approvals[0] ?? null
+
+  // Show Approvals tab if the service has a predefined workflow OR any ad-hoc approval was sent
+  const hasApprovalWorkflow = Boolean(
+    (request.service as { approval_workflow_id?: string | null }).approval_workflow_id
+  ) || approvals.length > 0
+
+  const formSchema = Array.isArray(request.form_schema_snapshot)
+    ? (request.form_schema_snapshot as unknown as FormField[])
+    : []
+  const formSections = Array.isArray(request.form_sections_snapshot)
+    ? (request.form_sections_snapshot as unknown as FormSection[])
+    : []
+  const formData = (request.form_data ?? {}) as Record<string, unknown>
+
+  // Server-side time calculations (server component — Date.now() is intentional)
+  // eslint-disable-next-line react-hooks/purity
+  const nowMs           = Date.now()
+  const createdMs       = new Date(request.created_at).getTime()
+  const updatedMs       = new Date(request.updated_at).getTime()
+  const elapsedMs       = nowMs - createdMs
+  const responseDueMs   = request.response_due_at
+    ? new Date(request.response_due_at).getTime() - nowMs
+    : null
+  const resolutionDueMs = request.resolution_due_at
+    ? new Date(request.resolution_due_at).getTime() - nowMs
+    : null
+
+  // ── Tab: Conversations ──────────────────────────────────────────────────────
+  const conversationsTab = (
+    <div className="flex flex-col" style={{ minHeight: '480px', maxHeight: '70vh' }}>
+      {/* Scrollable message thread */}
+      <div className="flex-1 overflow-y-auto p-5 space-y-4 min-h-0">
+        <AttachmentChips attachments={attachments} />
+
+        {request.status === 'waiting_user' && isRequester && !isAgent && (
+          <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
+            <p className="text-sm font-semibold text-orange-900">Action needed</p>
+            <p className="mt-0.5 text-xs text-orange-700">
+              The team is waiting for your response. Add a reply below to continue.
+            </p>
+          </div>
+        )}
+
+        {comments.length === 0 ? (
+          <div className="py-10 text-center">
+            <p className="text-sm text-muted-foreground">No messages yet.</p>
+            {!isTerminal && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Add a reply below to start the conversation.
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {comments.map((comment) => (
+              <CommentBubble key={comment.id} comment={comment} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Pinned reply composer */}
+      {!isTerminal ? (
+        <div className="shrink-0 border-t border-border bg-card px-5 py-4 space-y-3">
+          <CommentForm requestId={request.id} canPostInternal={isAgent} />
+          <AttachmentUpload requestId={request.id} />
+        </div>
+      ) : (
+        <div className="shrink-0 border-t border-border bg-muted/20 px-5 py-3 text-center">
+          <p className="text-xs text-muted-foreground">This request is closed — no further replies can be added.</p>
+        </div>
+      )}
+    </div>
+  )
+
+  // ── Tab: Details ────────────────────────────────────────────────────────────
+  const detailsTab = (
+    <div className="space-y-5">
+      {(formSections.length > 0 || formSchema.length > 0) && (
+        <SubmittedData sections={formSections} legacySchema={formSchema} data={formData} />
+      )}
+
+      {request.description && (
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Description
+          </h3>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+            {request.description}
+          </p>
+        </div>
+      )}
+
+      {/* ── Ticket Details ── */}
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Ticket Details
+        </h3>
+        <div className="rounded-lg border border-border grid grid-cols-2 divide-x divide-border overflow-hidden">
+          <TicketCell label="Service"     value={request.service.name} />
+          <TicketCell label="Team"        value={request.team.name} />
+          <TicketCell label="Requester"   value={request.requester.full_name} className="border-t border-border" />
+          <TicketCell
+            label="Status"
+            value={<StatusBadge status={request.status} size="sm" />}
+            className="border-t border-border"
+          />
+          <TicketCell
+            label="Priority"
+            value={<PriorityBadge priority={request.priority} size="sm" />}
+            className="border-t border-border"
+          />
+          {request.assignee && (
+            <TicketCell label="Assigned To" value={request.assignee.full_name} className="border-t border-border col-span-2" />
+          )}
+        </div>
+      </div>
+
+      {/* ── Ticket Cycle Status ── */}
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Ticket Cycle Status
+        </h3>
+        <div className="rounded-lg border border-border grid grid-cols-2 divide-x divide-border overflow-hidden">
+          <TicketCell
+            label="Created"
+            value={new Date(request.created_at).toLocaleString('en-US', {
+              month: 'short', day: 'numeric', year: 'numeric',
+              hour: '2-digit', minute: '2-digit',
+            })}
+          />
+          <TicketCell label="Last Updated" value={formatRelativeTime(request.updated_at)} />
+          <TicketCell
+            label="Responded Time"
+            className="border-t border-border"
+            value={
+              request.responded_at
+                ? new Date(request.responded_at).toLocaleString('en-US', {
+                    month: 'short', day: 'numeric', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
+                  })
+                : 'Not yet responded'
+            }
+          />
+          <TicketCell
+            label="Completed Time"
+            className="border-t border-border"
+            value={
+              request.resolved_at ?? request.closed_at
+                ? new Date((request.resolved_at ?? request.closed_at)!).toLocaleString('en-US', {
+                    month: 'short', day: 'numeric', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
+                  })
+                : 'Not yet completed'
+            }
+          />
+          {request.resolution_due_at && (
+            <TicketCell
+              label="Resolution Due"
+              className="border-t border-border"
+              value={
+                <SLABadge
+                  resolutionDueAt={request.resolution_due_at}
+                  responseDueAt={request.response_due_at}
+                  status={request.status}
+                />
+              }
+            />
+          )}
+          {request.response_due_at && (
+            <TicketCell
+              label="Response Due"
+              className="border-t border-border"
+              value={new Date(request.response_due_at).toLocaleString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+              })}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+
+  // ── Tab: Approvals ──────────────────────────────────────────────────────────
+  const approvalsTab = approvals.length > 0 ? (
+    <div className="space-y-6">
+      {approvals.map((a, idx) => (
+        <div key={a.id}>
+          {approvals.length > 1 && (
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Round {approvals.length - idx}
+              {idx === 0 && ' · Latest'}
+            </p>
+          )}
+          <ApprovalPanel
+            approval={a}
+            viewerId={profile.id}
+            viewerRole={profile.role}
+          />
+        </div>
+      ))}
+    </div>
+  ) : (
+    <div className="rounded-xl border border-border bg-muted/10 py-14 text-center">
+      <p className="text-sm text-muted-foreground">No approval workflow attached to this request.</p>
+    </div>
+  )
+
+  // ── Tab: Time Elapsed ───────────────────────────────────────────────────────
+  const timeElapsedTab = (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <MetricCard
+          label="Life of Request"
+          value={formatDuration(elapsedMs)}
+          sub="Total elapsed"
+        />
+        <MetricCard
+          label="Last Updated"
+          value={formatDuration(nowMs - updatedMs)}
+          sub="ago"
+        />
+        <MetricCard
+          label="Response Time"
+          value={
+            responseDueMs == null
+              ? '—'
+              : responseDueMs > 0
+              ? formatDuration(responseDueMs)
+              : 'Overdue'
+          }
+          sub={
+            request.response_due_at
+              ? responseDueMs != null && responseDueMs > 0
+                ? 'remaining'
+                : new Date(request.response_due_at).toLocaleDateString()
+              : 'Not set'
+          }
+          highlight={responseDueMs != null && responseDueMs < 0 ? 'red' : undefined}
+        />
+        <MetricCard
+          label="Resolution Time"
+          value={
+            resolutionDueMs == null
+              ? '—'
+              : resolutionDueMs > 0
+              ? formatDuration(resolutionDueMs)
+              : 'Overdue'
+          }
+          sub={
+            request.resolution_due_at
+              ? resolutionDueMs != null && resolutionDueMs > 0
+                ? 'remaining'
+                : new Date(request.resolution_due_at).toLocaleDateString()
+              : 'Not set'
+          }
+          highlight={resolutionDueMs != null && resolutionDueMs < 0 ? 'red' : undefined}
+        />
+      </div>
+
+      <div>
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          SLA Status
+        </h3>
+        <div className="rounded-lg border border-border px-4 py-3">
+          <div className="flex items-center gap-3">
+            <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="flex-1">
+              <SLABadge
+                resolutionDueAt={request.resolution_due_at}
+                responseDueAt={request.response_due_at}
+                status={request.status}
+                showLabel
+              />
+            </div>
+            {request.resolution_due_at && (
+              <span className="text-xs text-muted-foreground">
+                Due{' '}
+                {new Date(request.resolution_due_at).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {request.resolution_due_at && (() => {
+        const dueMs = new Date(request.resolution_due_at).getTime()
+        const total = dueMs - createdMs
+        const pct   = total > 0 ? Math.min(100, Math.round((elapsedMs / total) * 100)) : 100
+        return (
+          <div>
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Progress
+            </h3>
+            <div className="rounded-lg border border-border px-4 py-4 space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>
+                  {new Date(request.created_at).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </span>
+                <span className="font-semibold text-foreground">{pct}% elapsed</span>
+                <span>
+                  {new Date(request.resolution_due_at).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    pct >= 100 ? 'bg-red-500' : pct >= 75 ? 'bg-amber-500' : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+    </div>
+  )
+
+  // ── Tab: History ────────────────────────────────────────────────────────────
+  const historyTab = (
+    <div>
+      {activity.length === 0 ? (
+        <div className="py-10 text-center">
+          <p className="text-sm text-muted-foreground">No history yet.</p>
+        </div>
+      ) : (
+        <div>
+          {[...activity]
+            .sort((a, b) => b.created_at.localeCompare(a.created_at))
+            .map((item) => (
+              <HistoryRow key={item.id} item={item} />
+            ))}
+        </div>
+      )}
+    </div>
+  )
+
+  // ── Right sidebar ───────────────────────────────────────────────────────────
+  const sidebar = (
+    <div className="space-y-3">
+      <RequestSidebarPanel
+        requestId={request.id}
+        requestNo={request.request_no}
+        status={request.status}
+        priority={request.priority}
+        assigneeId={request.assigned_to}
+        assigneeName={request.assignee?.full_name ?? null}
+        teamName={request.team.name}
+        serviceName={request.service.name}
+        requesterId={request.requester_id}
+        requesterName={request.requester.full_name}
+        resolutionDueAt={request.resolution_due_at}
+        responseDueAt={request.response_due_at}
+        createdAt={request.created_at}
+        updatedAt={request.updated_at}
+        teamId={request.team_id}
+        viewerId={profile.id}
+        isAgent={isAgent}
+        isRequester={isRequester}
+        isTerminal={isTerminal}
+        teamMembers={teamMembers}
+        initialCollaborators={collaborators}
+      />
+      <RelatedRequestsPanel
+        requestId={request.id}
+        initialRelated={relatedRequests}
+        canManage={canManage}
+      />
+      {csatSurvey && isRequester && (
+        <CsatSurvey
+          surveyId={csatSurvey.id}
+          initialRating={csatSurvey.rating}
+          initialComment={csatSurvey.comment}
+          submitted={csatSurvey.submitted_at !== null}
+        />
+      )}
+    </div>
+  )
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+  return (
+    <div className="mx-auto max-w-6xl space-y-4">
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-1.5 text-sm">
+        <Link
+          href="/requests"
+          className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Requests
+        </Link>
+        <span className="text-muted-foreground/40">/</span>
+        <span className="font-medium text-foreground">{request.request_no}</span>
+      </nav>
+
+      {/* Header card */}
+      <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
+        {/* Action bar row */}
+        <div className="mb-3 flex items-center justify-between gap-3">
+          {/* Left: title meta */}
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={request.status} />
+            <PriorityBadge priority={request.priority} />
+            <SLABadge
+              resolutionDueAt={request.resolution_due_at}
+              responseDueAt={request.response_due_at}
+              status={request.status}
+              showLabel
+            />
+          </div>
+          {/* Right: action buttons */}
+          <RequestActionBar
+            requestId={request.id}
+            viewerId={profile.id}
+            isAgent={isAgent}
+            isManager={profile.role === 'manager' || profile.role === 'admin'}
+            isAssignedToViewer={request.assigned_to === profile.id}
+            isTerminal={isTerminal}
+            activeTimer={activeTimer}
+          />
+        </div>
+
+        <h1 className="text-xl font-bold tracking-tight text-foreground">
+          {request.title}
+        </h1>
+        <p className="mt-1 text-xs text-muted-foreground">
+          <span className="font-mono">{request.request_no}</span>
+          <span className="mx-1.5 opacity-40">·</span>
+          Requested by{' '}
+          <span className="font-medium text-foreground">
+            {request.requester.full_name}
+          </span>
+          <span className="mx-1.5 opacity-40">·</span>
+          {formatRelativeTime(request.created_at)}
+        </p>
+
+        {/* Task progress bar — only shown when tasks are linked */}
+        {linkedTasks.length > 0 && (() => {
+          const activeTasks = linkedTasks.filter((t) => t.status !== 'cancelled')
+          const doneTasks   = linkedTasks.filter((t) => t.status === 'done').length
+          const pct         = activeTasks.length > 0 ? Math.round((doneTasks / activeTasks.length) * 100) : 0
+          return (
+            <div className="mt-3 flex items-center gap-3 border-t border-border pt-3">
+              <span className="shrink-0 text-xs text-muted-foreground">Tasks</span>
+              <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${pct === 100 ? 'bg-emerald-500' : 'bg-primary'}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{doneTasks}/{activeTasks.length}</span>
+            </div>
+          )
+        })()}
+      </div>
+
+      {/* Tabs + sidebar */}
+      <RequestDetailTabs
+        conversations={conversationsTab}
+        details={detailsTab}
+        tasks={
+          <RequestTasksTab
+            requestId={request.id}
+            requestNo={request.request_no}
+            requestTitle={request.title}
+            teamId={request.team_id}
+            initialTasks={linkedTasks}
+            canManage={canManage}
+          />
+        }
+        approvals={approvalsTab}
+        timeElapsed={timeElapsedTab}
+        history={historyTab}
+        sidebar={sidebar}
+        commentCount={comments.length}
+        activityCount={activity.length}
+        taskCount={linkedTasks.length}
+        showApprovals={hasApprovalWorkflow}
+      />
+    </div>
+  )
+}

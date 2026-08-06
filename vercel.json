@@ -1,0 +1,17 @@
+{
+  "regions": ["bom1"],
+  "crons": [
+    {
+      "path": "/api/intake/cron/classify",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/alerts/run",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/escalation/run",
+      "schedule": "*/10 * * * *"
+    }
+  ]
+}
