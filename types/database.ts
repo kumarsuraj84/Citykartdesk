@@ -2772,6 +2772,7 @@ export type Database = {
           org_id: string
           owner_id: string
           priority: Database["public"]["Enums"]["project_priority"]
+          reference_notes: string | null
           start_date: string | null
           status: Database["public"]["Enums"]["project_status"]
           target_date: string | null
@@ -2789,6 +2790,7 @@ export type Database = {
           org_id: string
           owner_id: string
           priority?: Database["public"]["Enums"]["project_priority"]
+          reference_notes?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["project_status"]
           target_date?: string | null
@@ -2806,6 +2808,7 @@ export type Database = {
           org_id?: string
           owner_id?: string
           priority?: Database["public"]["Enums"]["project_priority"]
+          reference_notes?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["project_status"]
           target_date?: string | null
@@ -4634,6 +4637,9 @@ export type Database = {
         | "task_completed"
         | "milestone_due_soon"
         | "milestone_overdue"
+        | "task_due_soon"
+        | "task_overdue"
+        | "daily_digest"
       org_status: "trial" | "active" | "suspended" | "cancelled"
       project_priority: "P1" | "P2" | "P3"
       project_status:
@@ -4900,6 +4906,9 @@ export const Constants = {
         "task_completed",
         "milestone_due_soon",
         "milestone_overdue",
+        "task_due_soon",
+        "task_overdue",
+        "daily_digest",
       ],
       org_status: ["trial", "active", "suspended", "cancelled"],
       project_priority: ["P1", "P2", "P3"],
