@@ -111,7 +111,7 @@ export async function getProjectAnalytics(orgId: string): Promise<ProjectAnalyti
     id: string; name: string; owner_id: string; status: ProjectStatus; start_date: string | null; target_date: string | null
   }>
   const milestonesArr = (milestonesRaw ?? []) as Array<{
-    id: string; name: string; status: string; start_date: string | null; end_date: string
+    id: string; name: string; status: string; start_date: string | null; end_date: string | null
     project_id: string; project: { name: string } | null
   }>
   const tasksArr = (tasksRaw ?? []) as Array<{ status: TaskStatus; assignee_id: string | null; project_id: string }>
@@ -128,9 +128,12 @@ export async function getProjectAnalytics(orgId: string): Promise<ProjectAnalyti
   const projectsByStatus = Object.entries(projectStatusCounts).map(([status, count]) => ({ status, count }))
 
   const sevenDaysOut = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-  const milestonesOverdue = milestonesArr.filter((m) => new Date(m.end_date) < now).length
+  // Milestones without an end_date (not yet scheduled) can't be overdue/due-soon —
+  // exclude rather than let a null slip into `new Date(null)` (silently epoch-1970,
+  // which would wrongly count as "overdue").
+  const milestonesOverdue = milestonesArr.filter((m) => m.end_date && new Date(m.end_date) < now).length
   const milestonesDueSoon = milestonesArr.filter(
-    (m) => new Date(m.end_date) >= now && new Date(m.end_date) <= sevenDaysOut
+    (m) => m.end_date && new Date(m.end_date) >= now && new Date(m.end_date) <= sevenDaysOut
   ).length
 
   // ── Owner workload — open (non-done/cancelled) project-linked tasks, by assignee ──
@@ -151,15 +154,19 @@ export async function getProjectAnalytics(orgId: string): Promise<ProjectAnalyti
 
   // ── Milestones timeline (portfolio Gantt) ────────────────────────────────
 
-  const milestonesTimeline: MilestoneTimelineRow[] = milestonesArr.map((m) => ({
-    id: m.id,
-    name: m.name,
-    projectId: m.project_id,
-    projectName: m.project?.name ?? 'Unknown project',
-    status: m.status,
-    startDate: m.start_date,
-    endDate: m.end_date,
-  }))
+  // Milestones with no end_date yet (not scheduled) can't be plotted on a
+  // dated Gantt row — exclude them here rather than fake a date.
+  const milestonesTimeline: MilestoneTimelineRow[] = milestonesArr
+    .filter((m): m is typeof m & { end_date: string } => !!m.end_date)
+    .map((m) => ({
+      id: m.id,
+      name: m.name,
+      projectId: m.project_id,
+      projectName: m.project?.name ?? 'Unknown project',
+      status: m.status,
+      startDate: m.start_date,
+      endDate: m.end_date,
+    }))
 
   // ── Load-detection Gantt items ────────────────────────────────────────────
   // One bar per open project (needs a target_date) plus one per active
@@ -181,28 +188,32 @@ export async function getProjectAnalytics(orgId: string): Promise<ProjectAnalyti
       ownerName: profileById.get(p.owner_id)?.full_name ?? 'Unknown',
     }))
 
-  const milestoneLoadItems: LoadItem[] = milestonesArr.map((m) => {
-    const project = projectById.get(m.project_id)
-    const ownerId = project?.owner_id ?? ''
-    return {
-      id: m.id,
-      kind: 'milestone',
-      name: m.name,
-      status: m.status,
-      startDate: m.start_date,
-      endDate: m.end_date,
-      projectId: m.project_id,
-      projectName: m.project?.name ?? 'Unknown project',
-      ownerId,
-      ownerName: profileById.get(ownerId)?.full_name ?? 'Unknown',
-    }
-  })
+  const milestoneLoadItems: LoadItem[] = milestonesArr
+    .filter((m): m is typeof m & { end_date: string } => !!m.end_date)
+    .map((m) => {
+      const project = projectById.get(m.project_id)
+      const ownerId = project?.owner_id ?? ''
+      return {
+        id: m.id,
+        kind: 'milestone',
+        name: m.name,
+        status: m.status,
+        startDate: m.start_date,
+        endDate: m.end_date,
+        projectId: m.project_id,
+        projectName: m.project?.name ?? 'Unknown project',
+        ownerId,
+        ownerName: profileById.get(ownerId)?.full_name ?? 'Unknown',
+      }
+    })
 
   const loadItems: LoadItem[] = [...projectLoadItems, ...milestoneLoadItems]
 
   // ── Overdue-milestone aging ───────────────────────────────────────────────
 
-  const overdueMilestones = milestonesArr.filter((m) => new Date(m.end_date) < now)
+  const overdueMilestones = milestonesArr
+    .filter((m): m is typeof m & { end_date: string } => !!m.end_date)
+    .filter((m) => new Date(m.end_date) < now)
   const daysOverdue = (m: { end_date: string }) => (now.getTime() - new Date(m.end_date).getTime()) / (1000 * 3600 * 24)
   const milestoneOverdueAging: BacklogAging = {
     d1:      overdueMilestones.filter((m) => daysOverdue(m) < 1).length,
@@ -366,6 +377,7 @@ export async function getProjectAnalytics(orgId: string): Promise<ProjectAnalyti
     else deliveryBuckets.dueLater++
   }
   for (const m of milestonesArr) {
+    if (!m.end_date) { deliveryBuckets.noDate++; continue }
     const endStr = m.end_date.slice(0, 10)
     if (endStr < todayStr) deliveryBuckets.overdue++
     else if (endStr <= sevenDaysOutStr) deliveryBuckets.due7++
