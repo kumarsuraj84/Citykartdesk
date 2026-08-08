@@ -87,8 +87,13 @@ export function TaskActivityFeed({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const feedBottomRef = useRef<HTMLDivElement>(null)
 
-  // Sync if server sends new comments (after panel re-fetch)
-  useEffect(() => { setLocalComments(comments) }, [comments])
+  // Sync if server sends new comments (after panel re-fetch). Adjusting state during
+  // render (React's documented pattern) instead of an effect, since this mirrors a prop.
+  const [prevComments, setPrevComments] = useState(comments)
+  if (prevComments !== comments) {
+    setPrevComments(comments)
+    setLocalComments(comments)
+  }
 
   // Scroll to bottom when comments change
   useEffect(() => {

@@ -5,7 +5,6 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import type { FormSection } from '@/types'
-import type { Json } from '@/types/database'
 
 type ActionResult = { error?: string }
 
@@ -14,7 +13,7 @@ type ActionResult = { error?: string }
 async function requireAdmin() {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (profile.role !== 'admin') return { error: 'Admin role required.' }
+  if (!['admin','platform_owner'].includes(profile.role)) return { error: 'Admin role required.' }
   return { profile }
 }
 

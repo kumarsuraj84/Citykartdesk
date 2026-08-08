@@ -9,7 +9,7 @@ type ActionResult = { error?: string }
 async function requireAdmin() {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (profile.role !== 'admin') return { error: 'Admin role required.' }
+  if (!['admin','platform_owner'].includes(profile.role)) return { error: 'Admin role required.' }
   return { profile }
 }
 
@@ -49,7 +49,7 @@ export async function createCategory(
   let i = 2
   while (usedSlugs.has(slug)) { slug = `${baseSlug}-${i++}` }
 
-  const { data: row, error } = await (supabase as any)
+  const { data: row, error } = await supabase
     .from('service_categories')
     .insert({
       org_id: guard.profile!.org_id,

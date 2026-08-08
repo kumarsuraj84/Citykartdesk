@@ -1,4 +1,4 @@
-# FlowDesk Production Readiness Checklist
+# Citykart Desk Production Readiness Checklist
 
 **Date:** 2026-06-14
 **Status:** PRE-UAT COMPLETE — AWAITING UAT EXECUTION

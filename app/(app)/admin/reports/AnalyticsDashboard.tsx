@@ -70,7 +70,7 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const [drawer, setDrawer] = useState<DrawerFilter | null>(null)
   const close = useCallback(() => setDrawer(null), [])
 
-  const periodLabel = data.period === '7d' ? 'last 7 days' : data.period === '30d' ? 'last 30 days' : 'last 90 days'
+  const periodLabel = data.periodLabel
 
   return (
     <>

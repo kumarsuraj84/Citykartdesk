@@ -46,6 +46,8 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
   const serviceId = formData.get('service_id') as string | null
   if (!serviceId) return { error: 'Service is required.' }
 
+  const projectId = (formData.get('project_id') as string | null) || null
+
   const rawFormData = formData.get('form_data') as string | null
   let parsedFormData: Record<string, unknown> = {}
   if (rawFormData) {
@@ -147,6 +149,7 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
       form_sections_snapshot: (service.form_sections ?? []) as Json,
       response_due_at: responseDueAt,
       resolution_due_at: resolutionDueAt,
+      project_id: projectId,
     })
     .select('id, request_no')
     .single()
@@ -193,7 +196,7 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
       await admin.from('request_activity').insert({
         request_id: request.id,
         actor_id:   resolvedUserId,
-        action:     'auto_assigned',
+        action:     'assigned',
         metadata:   { assigned_to: resolvedUserId, via: 'routing_rule' },
       })
       if (resolvedUserId) {
@@ -274,6 +277,7 @@ export async function updateRequestStatus(
   const isAgent =
     profile.role === 'manager' ||
     profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
     profile.team_members.some((m) => m.team_id === request.team_id)
   const isRequester = request.requester_id === profile.id
 
@@ -333,12 +337,28 @@ export async function updateRequestStatus(
   if (updateError) return { error: updateError.message }
 
   // CSAT: create survey record when request is resolved (requester can rate later)
-  if (newStatus === 'resolved' && request.requester_id) {
-    await supabase
-      .from('csat_surveys')
-      .insert({ request_id: requestId, sent_at: nowIso })
-      .onConflict('request_id')
-      .ignore()
+  // Uses the admin client because csat_surveys' INSERT policy only allows
+  // admin/platform_owner directly; this write must succeed regardless of who
+  // resolved the request. Upsert-ignore dedupes against the UNIQUE(request_id)
+  // constraint so reopen→resolve cycles don't error on a pre-existing survey row.
+  if (newStatus === 'resolved' && request.requester_id && profile.org_id) {
+    try {
+      const admin = createAdminClient()
+      const { error: csatError } = await admin
+        .from('csat_surveys')
+        .upsert(
+          {
+            org_id: profile.org_id,
+            request_id: requestId,
+            requester_id: request.requester_id,
+            sent_at: nowIso,
+          },
+          { onConflict: 'request_id', ignoreDuplicates: true }
+        )
+      if (csatError) console.error('[updateRequestStatus] CSAT survey creation failed', csatError)
+    } catch (e) {
+      console.error('[updateRequestStatus] CSAT survey creation failed', e)
+    }
   }
 
   // REOPEN: recalculate resolution_due_at from current time and clear resolution timestamps
@@ -456,6 +476,7 @@ export async function assignRequest(
   const isAgentOrManager =
     profile.role === 'manager' ||
     profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
     profile.team_members.length > 0
 
   if (!isAgentOrManager) return { error: 'Not authorized to assign requests.' }
@@ -472,6 +493,7 @@ export async function assignRequest(
   const isOnTeam =
     profile.role === 'manager' ||
     profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
     profile.team_members.some((m) => m.team_id === request.team_id)
 
   if (!isOnTeam) return { error: 'Not authorized to assign requests for this team.' }
@@ -569,6 +591,23 @@ export async function bulkUpdateStatus(
   return result
 }
 
+// ── Bulk priority change ──────────────────────────────────────────────────────
+
+export async function bulkChangePriority(
+  requestIds: string[],
+  newPriority: RequestPriority
+): Promise<BulkResult> {
+  const settled = await Promise.all(
+    requestIds.map(async (id) => ({ id, r: await changePriority(id, newPriority) }))
+  )
+  const result: BulkResult = { succeeded: [], failed: [] }
+  for (const { id, r } of settled) {
+    if (r.error) result.failed.push({ id, error: r.error })
+    else result.succeeded.push(id)
+  }
+  return result
+}
+
 // ── Collaborators ─────────────────────────────────────────────────────────────
 
 /**
@@ -606,6 +645,7 @@ export async function addCollaborator(
   const isAgentOrManager =
     profile.role === 'manager' ||
     profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
     profile.team_members.length > 0
 
   if (!isAgentOrManager) return { error: 'Not authorized to add collaborators.' }
@@ -621,6 +661,7 @@ export async function addCollaborator(
   const isOnTeam =
     profile.role === 'manager' ||
     profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
     profile.team_members.some((m) => m.team_id === request.team_id)
 
   if (!isOnTeam) return { error: 'Not authorized to add collaborators for this team.' }
@@ -770,6 +811,7 @@ export async function addComment(
   const isAgent =
     profile.role === 'manager' ||
     profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
     profile.team_members.some((m) => m.team_id === request.team_id)
 
   // Only agents/managers may post internal notes
@@ -934,6 +976,7 @@ export async function changePriority(
   const isAgentOrManager =
     profile.role === 'manager' ||
     profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
     profile.team_members.length > 0
 
   if (!isAgentOrManager) return { error: 'Not authorized to change priority.' }
@@ -949,6 +992,7 @@ export async function changePriority(
   const isOnTeam =
     profile.role === 'manager' ||
     profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
     profile.team_members.some((m) => m.team_id === request.team_id)
 
   if (!isOnTeam) return { error: 'Not authorized to change priority for this team.' }
@@ -1020,7 +1064,7 @@ export async function changePriority(
 
 export async function autoCloseRequests(): Promise<{ closed: number }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { closed: 0 }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { closed: 0 }
 
   const supabase = await createClient()
   const admin = createAdminClient()
@@ -1083,7 +1127,7 @@ export async function duplicateRequest(requestId: string): Promise<{ id?: string
   if (!profile) return { error: 'Not authenticated.' }
 
   const supabase = await createClient()
-  const admin = createAdminClient() as unknown as { from: (t: string) => any }
+  const admin = createAdminClient()
 
   const { data: src } = await supabase
     .from('requests')
@@ -1096,6 +1140,7 @@ export async function duplicateRequest(requestId: string): Promise<{ id?: string
   const { data: newReq, error } = await admin
     .from('requests')
     .insert({
+      request_no:           '', // overwritten by trg_requests_assign_no before insert
       title:                src.title + ' (copy)',
       description:          src.description,
       service_id:           src.service_id,
@@ -1117,6 +1162,71 @@ export async function duplicateRequest(requestId: string): Promise<{ id?: string
   return { id: newReq.id }
 }
 
+// ── Sub-requests ───────────────────────────────────────────────────────────────
+
+export async function createSubRequest(
+  parentRequestId: string,
+  title: string,
+  opts?: { priority?: RequestPriority; assignedTo?: string }
+): Promise<{ id?: string; error?: string }> {
+  const profile = await getCurrentProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+  if (!title.trim()) return { error: 'Title is required.' }
+
+  const isAgentOrAbove =
+    profile.role === 'agent' ||
+    profile.role === 'manager' ||
+    profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
+    profile.team_members.length > 0
+  if (!isAgentOrAbove) return { error: 'Only agents and managers can create sub-requests.' }
+
+  const supabase = await createClient()
+
+  const { data: parent } = await supabase
+    .from('requests')
+    .select('org_id, service_id, team_id, requester_id, priority, service:services(sla_config)')
+    .eq('id', parentRequestId)
+    .single()
+  if (!parent) return { error: 'Parent request not found.' }
+
+  const priority = opts?.priority ?? (parent.priority as RequestPriority)
+  const now = new Date()
+  const slaConfig = (parent.service as unknown as { sla_config: SLAConfig } | null)?.sla_config
+  const slaTier = slaConfig?.[priority]
+
+  // Preserves the original requester on the sub-request (same person the parent
+  // was raised for), which requests_insert's RLS (requester_id = auth.uid()) would
+  // reject if the acting agent differs — so this goes through the admin client,
+  // same as duplicateRequest.
+  const admin = createAdminClient()
+  const { data: newReq, error } = await admin
+    .from('requests')
+    .insert({
+      request_no: '',
+      title: title.trim(),
+      parent_request_id: parentRequestId,
+      service_id: parent.service_id,
+      team_id: parent.team_id,
+      org_id: parent.org_id,
+      requester_id: parent.requester_id,
+      assigned_to: opts?.assignedTo ?? null,
+      priority,
+      status: 'open',
+      response_due_at: calcDeadline(slaTier?.response_hours, now),
+      resolution_due_at: calcDeadline(slaTier?.resolution_hours, now),
+    })
+    .select('id, request_no, title, status, priority, resolution_due_at')
+    .single()
+
+  if (error || !newReq) return { error: error?.message ?? 'Failed to create sub-request.' }
+
+  await logActivity({ requestId: newReq.id, actorId: profile.id, action: 'created', metadata: { parent_request_id: parentRequestId } }).catch(() => {})
+
+  revalidatePath(`/requests/${parentRequestId}`)
+  return { id: newReq.id }
+}
+
 // ── Submit for Approval ───────────────────────────────────────────────────────
 
 export async function submitForApproval(requestId: string): Promise<ActionResult> {
@@ -1124,7 +1234,7 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
   if (!profile) return { error: 'Not authenticated.' }
 
   const supabase = await createClient()
-  const admin = createAdminClient() as unknown as { from: (t: string) => any }
+  const admin = createAdminClient()
 
   const { data: req } = await supabase
     .from('requests')
@@ -1141,8 +1251,7 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
   if (['resolved', 'closed', 'cancelled', 'pending_approval'].includes(req.status))
     return { error: 'Request cannot be submitted for approval in its current state.' }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const workflowId = (req.services as any)?.approval_workflow_id as string | null
+  const workflowId = req.services?.approval_workflow_id ?? null
 
   // Check for existing approval record
   const { data: existing } = await supabase
@@ -1338,8 +1447,7 @@ export async function addRelatedRequest(
     .eq('id', requestId)
     .single()
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const orgId = (src?.team as any)?.org_id
+  const orgId = src?.team?.org_id
   if (!orgId) return { error: 'Could not determine org.' }
 
   const { data: link, error } = await supabase

@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { periodStart, type Period } from '@/lib/queries/analytics'
+import { resolvePeriodParam, type PeriodParam } from '@/lib/queries/analytics'
 
 function avg(arr: number[]): number | null {
   if (!arr.length) return null
@@ -23,7 +23,8 @@ export type TaskAgentRow  = { agentId: string; agentName: string; open: number; 
 export type TaskAging     = { d1: number; d7: number; d30: number; d30plus: number }
 
 export type TaskAnalyticsData = {
-  period: Period
+  period: PeriodParam
+  periodLabel: string
   // Volume
   totalOpen: number
   totalOverdue: number
@@ -50,42 +51,42 @@ export type TaskAnalyticsData = {
   aging: TaskAging
 }
 
-export async function getTaskAnalytics(period: Period): Promise<TaskAnalyticsData> {
+export async function getTaskAnalytics(orgId: string, period: PeriodParam): Promise<TaskAnalyticsData> {
   const admin  = createAdminClient()
-  const start  = periodStart(period).toISOString()
+  const { start: startDate, end: endDate, label: periodLabel, days } = resolvePeriodParam(period)
   const now    = new Date()
-  const nowIso = now.toISOString()
-  const days   = period === '7d' ? 7 : period === '30d' ? 30 : 90
 
+  // Admin client bypasses RLS — every query below scopes to orgId explicitly.
   const [
     { data: allTasks },
     { data: teamsData },
     { data: profilesData },
   ] = await Promise.all([
-    admin.from('tasks').select('id,title,status,priority,task_type,assignee_id,team_id,request_id,created_at,completed_at,due_date'),
-    admin.from('teams').select('id,name'),
-    admin.from('profiles').select('id,full_name'),
+    admin.from('tasks').select('id,title,status,priority,task_type,assignee_id,team_id,request_id,created_at,completed_at,due_date').eq('org_id', orgId),
+    admin.from('teams').select('id,name').eq('org_id', orgId),
+    admin.from('profiles').select('id,full_name').eq('org_id', orgId),
   ])
 
   const tasks      = allTasks ?? []
-  const teamMap    = Object.fromEntries((teamsData ?? []).map((t: any) => [t.id, t.name]))
-  const profileMap = Object.fromEntries((profilesData ?? []).map((p: any) => [p.id, p.full_name]))
+  const teamMap    = Object.fromEntries((teamsData ?? []).map((t) => [t.id, t.name]))
+  const profileMap = Object.fromEntries((profilesData ?? []).map((p) => [p.id, p.full_name]))
 
-  const startDate  = new Date(start)
-  const inPeriod   = (d: string) => new Date(d) >= startDate
-  const isOpen     = (t: any) => !['done','cancelled'].includes(t.status)
-  const isDone     = (t: any) => t.status === 'done'
-  const isOverdue  = (t: any) => t.due_date && new Date(t.due_date) < now && isOpen(t)
+  type TaskRow = (typeof tasks)[number]
 
-  const periodTasks     = tasks.filter((t: any) => inPeriod(t.created_at))
-  const completedPeriod = tasks.filter((t: any) => t.completed_at && inPeriod(t.completed_at))
+  const inPeriod   = (d: string) => new Date(d) >= startDate && new Date(d) <= endDate
+  const isOpen     = (t: TaskRow) => !['done','cancelled'].includes(t.status)
+  const isDone     = (t: TaskRow) => t.status === 'done'
+  const isOverdue  = (t: TaskRow) => t.due_date != null && new Date(t.due_date) < now && isOpen(t)
+
+  const periodTasks     = tasks.filter((t) => inPeriod(t.created_at))
+  const completedPeriod = tasks.filter((t) => t.completed_at && inPeriod(t.completed_at))
   const openTasks       = tasks.filter(isOpen)
   const overdueTasks    = tasks.filter(isOverdue)
 
   // Avg completion hours
   const completionTimes = completedPeriod
-    .filter((t: any) => t.completed_at)
-    .map((t: any) => (new Date(t.completed_at!).getTime() - new Date(t.created_at).getTime()) / 3_600_000)
+    .filter((t) => t.completed_at)
+    .map((t) => (new Date(t.completed_at!).getTime() - new Date(t.created_at).getTime()) / 3_600_000)
   const avgCompletionHours    = avg(completionTimes)
   const medianCompletionHours = median(completionTimes)
 
@@ -110,8 +111,10 @@ export async function getTaskAnalytics(period: Period): Promise<TaskAnalyticsDat
   const ORDER = ['urgent','high','medium','low']
   const byPriority: TaskByPriority[] = ORDER
     .filter((p) => priorityMap[p])
-    .map((p) => ({ priority: p, ...priorityMap[p], avgHours: avg(priorityMap[p].times) }))
-    .map(({ times: _, ...rest }) => rest as TaskByPriority)
+    .map((p) => {
+      const agg = priorityMap[p]
+      return { priority: p, count: agg.count, done: agg.done, overdue: agg.overdue, avgHours: avg(agg.times) }
+    })
 
   // By type
   const typeCount: Record<string, number> = {}
@@ -200,6 +203,7 @@ export async function getTaskAnalytics(period: Period): Promise<TaskAnalyticsDat
 
   return {
     period,
+    periodLabel,
     totalOpen,
     totalOverdue: overdueTasks.length,
     totalCreatedInPeriod: periodTasks.length,
@@ -213,8 +217,8 @@ export async function getTaskAnalytics(period: Period): Promise<TaskAnalyticsDat
     byType,
     byTeam,
     agentLeaderboard,
-    linkedToRequests: tasks.filter((t: any) => t.request_id).length,
-    standalone: tasks.filter((t: any) => !t.request_id).length,
+    linkedToRequests: tasks.filter((t) => t.request_id).length,
+    standalone: tasks.filter((t) => !t.request_id).length,
     trend,
     aging,
   }

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import {
-  Plus, Trash2, ChevronDown, ChevronRight, Edit2, Save, X,
+  Plus, Trash2, ChevronDown, ChevronRight, Edit2, Save,
   ArrowUp, ArrowDown, GitMerge, Link2, Unlink,
 } from 'lucide-react'
 import {
@@ -83,8 +83,11 @@ function StepRow({
   }
 
   function handleDelete() {
+    if (!confirm('Remove this approval step?')) return
+    setError('')
     start(async () => {
-      await deleteWorkflowStep(step.id)
+      const result = await deleteWorkflowStep(step.id)
+      if (result.error) { setError(result.error); return }
       onDeleted(step.id)
     })
   }
@@ -143,45 +146,48 @@ function StepRow({
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-background px-3 py-2 group">
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">
-        {step.step_order}
-      </span>
-      <div className="flex-1 min-w-0">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          {step.approver_type === 'any_manager' ? 'Any Manager' : 'Specific User'}
+    <div className="rounded-lg border border-border/50 bg-background px-3 py-2 group">
+      <div className="flex items-center gap-2">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">
+          {step.step_order}
         </span>
-        <p className="text-sm text-foreground truncate">{approverLabel}</p>
+        <div className="flex-1 min-w-0">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            {step.approver_type === 'any_manager' ? 'Any Manager' : 'Specific User'}
+          </span>
+          <p className="text-sm text-foreground truncate">{approverLabel}</p>
+        </div>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => onMoved(step.id, 'up')}
+            disabled={step.step_order === 1 || isPending}
+            className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30"
+          >
+            <ArrowUp className="h-3 w-3" />
+          </button>
+          <button
+            onClick={() => onMoved(step.id, 'down')}
+            disabled={step.step_order === totalSteps || isPending}
+            className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30"
+          >
+            <ArrowDown className="h-3 w-3" />
+          </button>
+          <button
+            onClick={() => setEditing(true)}
+            className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
+          >
+            <Edit2 className="h-3 w-3" />
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isPending}
+            className="rounded p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50 disabled:opacity-40"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
       </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          onClick={() => onMoved(step.id, 'up')}
-          disabled={step.step_order === 1 || isPending}
-          className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30"
-        >
-          <ArrowUp className="h-3 w-3" />
-        </button>
-        <button
-          onClick={() => onMoved(step.id, 'down')}
-          disabled={step.step_order === totalSteps || isPending}
-          className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30"
-        >
-          <ArrowDown className="h-3 w-3" />
-        </button>
-        <button
-          onClick={() => setEditing(true)}
-          className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
-        >
-          <Edit2 className="h-3 w-3" />
-        </button>
-        <button
-          onClick={handleDelete}
-          disabled={isPending}
-          className="rounded p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50 disabled:opacity-40"
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
-      </div>
+      {error && <p className="mt-1.5 text-xs text-red-500">{error}</p>}
     </div>
   )
 }

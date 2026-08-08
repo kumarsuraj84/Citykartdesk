@@ -2,13 +2,16 @@
 
 import { useState, useTransition, useMemo } from 'react'
 import {
-  createDepartment, updateDepartment, deleteDepartment,
-  createLocation, updateLocation, deleteLocation,
+  createDepartment, updateDepartment, deleteDepartment, importDepartments,
+  createLocation, updateLocation, deleteLocation, importLocations,
   createCostCenter, updateCostCenter, deleteCostCenter,
+  createJobFunction, updateJobFunction, deleteJobFunction,
+  createDesignation, updateDesignation, deleteDesignation,
 } from '@/lib/actions/admin/org'
-import type { DepartmentRow, LocationRow, CostCenterRow, UserOption } from './page'
+import { ImportModal } from '@/components/ui/ImportModal'
+import type { DepartmentRow, LocationRow, CostCenterRow, JobFunctionRow, DesignationRow, UserOption } from './page'
 
-type Tab = 'departments' | 'locations' | 'cost_centers'
+type Tab = 'departments' | 'locations' | 'cost_centers' | 'job_functions' | 'designations'
 
 const TIMEZONES = [
   'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
@@ -68,6 +71,58 @@ function FormSelect({ label, value, onChange, options, placeholder }: {
   )
 }
 
+interface LocationFormValues { name: string; code: string; city: string; country: string; timezone: string; is_active: boolean }
+
+function LocationForm({ f, setF, onSubmit, onCancel, submitLabel, pending, tzOptions }: {
+  f: LocationFormValues; setF: (v: LocationFormValues) => void; onSubmit: (e: React.FormEvent) => void; onCancel: () => void; submitLabel: string
+  pending: boolean; tzOptions: { value: string; label: string }[]
+}) {
+  return (
+    <form onSubmit={onSubmit} className="space-y-3">
+      <div className="grid grid-cols-3 gap-3">
+        <FormInput label="Name" value={f.name} onChange={v => setF({ ...f, name: v })} required placeholder="e.g. HQ New York" />
+        <FormInput label="Code" value={f.code} onChange={v => setF({ ...f, code: v })} placeholder="e.g. NYC" />
+        <FormInput label="City" value={f.city} onChange={v => setF({ ...f, city: v })} placeholder="e.g. New York" />
+        <FormInput label="Country" value={f.country} onChange={v => setF({ ...f, country: v })} placeholder="e.g. USA" />
+        <FormSelect label="Timezone" value={f.timezone} onChange={v => setF({ ...f, timezone: v })} options={tzOptions} placeholder="Select timezone" />
+      </div>
+      <div className="flex items-center gap-2">
+        <input type="checkbox" checked={f.is_active} onChange={e => setF({ ...f, is_active: e.target.checked })} className="rounded" />
+        <span className="text-xs text-muted-foreground">Active</span>
+      </div>
+      <div className="flex gap-2">
+        <button type="submit" disabled={pending} className="rounded-lg bg-foreground px-4 py-1.5 text-xs font-semibold text-background hover:opacity-90 disabled:opacity-50">{submitLabel}</button>
+        <button type="button" onClick={onCancel} className="rounded-lg border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/40">Cancel</button>
+      </div>
+    </form>
+  )
+}
+
+interface CostCenterFormValues { name: string; code: string; department_id: string; is_active: boolean }
+
+function CCForm({ f, setF, onSubmit, onCancel, submitLabel, pending, deptOptions }: {
+  f: CostCenterFormValues; setF: (v: CostCenterFormValues) => void; onSubmit: (e: React.FormEvent) => void; onCancel: () => void; submitLabel: string
+  pending: boolean; deptOptions: { value: string; label: string }[]
+}) {
+  return (
+    <form onSubmit={onSubmit} className="space-y-3">
+      <div className="grid grid-cols-3 gap-3">
+        <FormInput label="Name" value={f.name} onChange={v => setF({ ...f, name: v })} required placeholder="e.g. IT Operations" />
+        <FormInput label="Code" value={f.code} onChange={v => setF({ ...f, code: v })} placeholder="e.g. CC-IT-001" />
+        <FormSelect label="Department" value={f.department_id} onChange={v => setF({ ...f, department_id: v })} options={deptOptions} />
+      </div>
+      <div className="flex items-center gap-2">
+        <input type="checkbox" checked={f.is_active} onChange={e => setF({ ...f, is_active: e.target.checked })} className="rounded" />
+        <span className="text-xs text-muted-foreground">Active</span>
+      </div>
+      <div className="flex gap-2">
+        <button type="submit" disabled={pending} className="rounded-lg bg-foreground px-4 py-1.5 text-xs font-semibold text-background hover:opacity-90 disabled:opacity-50">{submitLabel}</button>
+        <button type="button" onClick={onCancel} className="rounded-lg border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/40">Cancel</button>
+      </div>
+    </form>
+  )
+}
+
 // ─── Departments Tab ───────────────────────────────────────────────────────────
 
 interface DeptTabProps {
@@ -81,6 +136,7 @@ function DepartmentsTab({ departments, allUsers }: DeptTabProps) {
   const [treeView, setTreeView] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [showImport, setShowImport] = useState(false)
 
   // Add form state
   const [addName, setAddName] = useState('')
@@ -174,15 +230,43 @@ function DepartmentsTab({ departments, allUsers }: DeptTabProps) {
             {treeView ? 'Tree View' : 'Flat View'}
           </button>
         </div>
-        <button
-          onClick={() => setShowAdd(v => !v)}
-          className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
-        >
-          + Add Department
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowImport(true)}
+            className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted/40 transition-colors"
+          >
+            Import
+          </button>
+          <button
+            onClick={() => setShowAdd(v => !v)}
+            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+          >
+            + Add Department
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+
+      {showImport && (
+        <ImportModal
+          title="Departments"
+          sampleFilename="departments-sample.csv"
+          sampleColumns={[
+            { key: 'name', label: 'name' },
+            { key: 'code', label: 'code' },
+            { key: 'parent_department', label: 'parent_department' },
+            { key: 'active', label: 'active' },
+          ]}
+          sampleRows={[
+            { name: 'Retail Operations', code: 'OPS', parent_department: '', active: 'true' },
+            { name: 'Store Support', code: 'STORE', parent_department: 'Retail Operations', active: 'true' },
+          ]}
+          onImport={(rows) => importDepartments(rows as never)}
+          onClose={() => setShowImport(false)}
+          onDone={() => {}}
+        />
+      )}
 
       {showAdd && (
         <form onSubmit={handleAdd} className="rounded-xl border border-border bg-card p-4 space-y-3 shadow-sm">
@@ -278,6 +362,7 @@ function LocationsTab({ locations }: { locations: LocationRow[] }) {
   const [editId, setEditId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [showImport, setShowImport] = useState(false)
 
   const blank = { name: '', code: '', city: '', country: '', timezone: 'UTC', is_active: true }
   const [addF, setAddF] = useState(blank)
@@ -320,33 +405,12 @@ function LocationsTab({ locations }: { locations: LocationRow[] }) {
 
   const tzOptions = TIMEZONES.map(tz => ({ value: tz, label: tz }))
 
-  function LocationForm({ f, setF, onSubmit, onCancel, submitLabel }: {
-    f: typeof blank; setF: (v: typeof blank) => void; onSubmit: (e: React.FormEvent) => void; onCancel: () => void; submitLabel: string
-  }) {
-    return (
-      <form onSubmit={onSubmit} className="space-y-3">
-        <div className="grid grid-cols-3 gap-3">
-          <FormInput label="Name" value={f.name} onChange={v => setF({ ...f, name: v })} required placeholder="e.g. HQ New York" />
-          <FormInput label="Code" value={f.code} onChange={v => setF({ ...f, code: v })} placeholder="e.g. NYC" />
-          <FormInput label="City" value={f.city} onChange={v => setF({ ...f, city: v })} placeholder="e.g. New York" />
-          <FormInput label="Country" value={f.country} onChange={v => setF({ ...f, country: v })} placeholder="e.g. USA" />
-          <FormSelect label="Timezone" value={f.timezone} onChange={v => setF({ ...f, timezone: v })} options={tzOptions} placeholder="Select timezone" />
-        </div>
-        <div className="flex items-center gap-2">
-          <input type="checkbox" checked={f.is_active} onChange={e => setF({ ...f, is_active: e.target.checked })} className="rounded" />
-          <span className="text-xs text-muted-foreground">Active</span>
-        </div>
-        <div className="flex gap-2">
-          <button type="submit" disabled={pending} className="rounded-lg bg-foreground px-4 py-1.5 text-xs font-semibold text-background hover:opacity-90 disabled:opacity-50">{submitLabel}</button>
-          <button type="button" onClick={onCancel} className="rounded-lg border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/40">Cancel</button>
-        </div>
-      </form>
-    )
-  }
-
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <button onClick={() => setShowImport(true)} className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted/40 transition-colors">
+          Import
+        </button>
         <button onClick={() => setShowAdd(v => !v)} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors">
           + Add Location
         </button>
@@ -354,16 +418,38 @@ function LocationsTab({ locations }: { locations: LocationRow[] }) {
 
       {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
 
+      {showImport && (
+        <ImportModal
+          title="Locations"
+          sampleFilename="locations-sample.csv"
+          sampleColumns={[
+            { key: 'name', label: 'name' },
+            { key: 'code', label: 'code' },
+            { key: 'city', label: 'city' },
+            { key: 'country', label: 'country' },
+            { key: 'timezone', label: 'timezone' },
+            { key: 'active', label: 'active' },
+          ]}
+          sampleRows={[
+            { name: 'Head Office', code: 'HO', city: 'Gurugram', country: 'India', timezone: 'Asia/Kolkata', active: 'true' },
+            { name: 'Mumbai Store', code: 'MUM', city: 'Mumbai', country: 'India', timezone: 'Asia/Kolkata', active: 'true' },
+          ]}
+          onImport={(rows) => importLocations(rows as never)}
+          onClose={() => setShowImport(false)}
+          onDone={() => {}}
+        />
+      )}
+
       {showAdd && (
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
           <p className="text-sm font-semibold text-foreground">New Location</p>
-          <LocationForm f={addF} setF={setAddF} onSubmit={handleAdd} onCancel={() => setShowAdd(false)} submitLabel="Create" />
+          <LocationForm f={addF} setF={setAddF} onSubmit={handleAdd} onCancel={() => setShowAdd(false)} submitLabel="Create" pending={pending} tzOptions={tzOptions} />
         </div>
       )}
 
       <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-        <div className="grid grid-cols-[1fr_80px_120px_120px_160px_80px_120px] gap-x-4 border-b border-border bg-muted/30 px-4 py-2.5">
-          {['Name', 'Code', 'City', 'Country', 'Timezone', 'Active', 'Actions'].map(h => (
+        <div className="grid grid-cols-[1fr_70px_110px_60px_80px_90px_100px_70px_120px] gap-x-3 border-b border-border bg-muted/30 px-4 py-2.5">
+          {['Name', 'Code', 'City', 'Tz', 'Users', 'Open', 'Avg. Res.', 'Active', 'Actions'].map(h => (
             <span key={h} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
           ))}
         </div>
@@ -374,15 +460,17 @@ function LocationsTab({ locations }: { locations: LocationRow[] }) {
           <div key={l.id}>
             {editId === l.id ? (
               <div className="px-4 py-3 border-b border-border/50 bg-muted/20 space-y-3">
-                <LocationForm f={editF} setF={setEditF} onSubmit={handleEdit} onCancel={() => setEditId(null)} submitLabel="Save" />
+                <LocationForm f={editF} setF={setEditF} onSubmit={handleEdit} onCancel={() => setEditId(null)} submitLabel="Save" pending={pending} tzOptions={tzOptions} />
               </div>
             ) : (
-              <div className="grid grid-cols-[1fr_80px_120px_120px_160px_80px_120px] items-center gap-x-4 border-b border-border/50 last:border-0 px-4 py-3">
+              <div className="grid grid-cols-[1fr_70px_110px_60px_80px_90px_100px_70px_120px] items-center gap-x-3 border-b border-border/50 last:border-0 px-4 py-3">
                 <TableCell>{l.name}</TableCell>
                 <TableCell className="text-muted-foreground">{l.code ?? '—'}</TableCell>
                 <TableCell className="text-muted-foreground">{l.city ?? '—'}</TableCell>
-                <TableCell className="text-muted-foreground">{l.country ?? '—'}</TableCell>
                 <TableCell className="text-muted-foreground text-xs">{l.timezone}</TableCell>
+                <TableCell className="text-muted-foreground">{l.user_count}</TableCell>
+                <TableCell className="text-muted-foreground">{l.open_requests}</TableCell>
+                <TableCell className="text-muted-foreground text-xs">{l.avg_resolution_hours != null ? `${l.avg_resolution_hours}h` : '—'}</TableCell>
                 <div><ActiveBadge active={l.is_active} /></div>
                 <div className="flex gap-1.5">
                   <button onClick={() => startEdit(l)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Edit</button>
@@ -454,28 +542,6 @@ function CostCentersTab({ costCenters, departments }: { costCenters: CostCenterR
     })
   }
 
-  function CCForm({ f, setF, onSubmit, onCancel, submitLabel }: {
-    f: typeof blank; setF: (v: typeof blank) => void; onSubmit: (e: React.FormEvent) => void; onCancel: () => void; submitLabel: string
-  }) {
-    return (
-      <form onSubmit={onSubmit} className="space-y-3">
-        <div className="grid grid-cols-3 gap-3">
-          <FormInput label="Name" value={f.name} onChange={v => setF({ ...f, name: v })} required placeholder="e.g. IT Operations" />
-          <FormInput label="Code" value={f.code} onChange={v => setF({ ...f, code: v })} placeholder="e.g. CC-IT-001" />
-          <FormSelect label="Department" value={f.department_id} onChange={v => setF({ ...f, department_id: v })} options={deptOptions} />
-        </div>
-        <div className="flex items-center gap-2">
-          <input type="checkbox" checked={f.is_active} onChange={e => setF({ ...f, is_active: e.target.checked })} className="rounded" />
-          <span className="text-xs text-muted-foreground">Active</span>
-        </div>
-        <div className="flex gap-2">
-          <button type="submit" disabled={pending} className="rounded-lg bg-foreground px-4 py-1.5 text-xs font-semibold text-background hover:opacity-90 disabled:opacity-50">{submitLabel}</button>
-          <button type="button" onClick={onCancel} className="rounded-lg border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/40">Cancel</button>
-        </div>
-      </form>
-    )
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
@@ -489,7 +555,7 @@ function CostCentersTab({ costCenters, departments }: { costCenters: CostCenterR
       {showAdd && (
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
           <p className="text-sm font-semibold text-foreground">New Cost Center</p>
-          <CCForm f={addF} setF={setAddF} onSubmit={handleAdd} onCancel={() => setShowAdd(false)} submitLabel="Create" />
+          <CCForm f={addF} setF={setAddF} onSubmit={handleAdd} onCancel={() => setShowAdd(false)} submitLabel="Create" pending={pending} deptOptions={deptOptions} />
         </div>
       )}
 
@@ -506,7 +572,7 @@ function CostCentersTab({ costCenters, departments }: { costCenters: CostCenterR
           <div key={c.id}>
             {editId === c.id ? (
               <div className="px-4 py-3 border-b border-border/50 bg-muted/20 space-y-3">
-                <CCForm f={editF} setF={setEditF} onSubmit={handleEdit} onCancel={() => setEditId(null)} submitLabel="Save" />
+                <CCForm f={editF} setF={setEditF} onSubmit={handleEdit} onCancel={() => setEditId(null)} submitLabel="Save" pending={pending} deptOptions={deptOptions} />
               </div>
             ) : (
               <div className="grid grid-cols-[1fr_120px_200px_80px_120px] items-center gap-x-4 border-b border-border/50 last:border-0 px-4 py-3">
@@ -534,22 +600,172 @@ function CostCentersTab({ costCenters, departments }: { costCenters: CostCenterR
   )
 }
 
+// ─── Simple master-data tab (Job Functions / Designations) ────────────────────
+// Both are flat name+code+active lists with identical CRUD shape — one
+// generic tab body parameterized by the three server actions and copy.
+
+interface SimpleMasterRow {
+  id: string
+  name: string
+  code: string | null
+  is_active: boolean
+}
+
+interface SimpleMasterFormValues { name: string; code: string; is_active: boolean }
+
+function SimpleMasterForm({ f, setF, onSubmit, onCancel, submitLabel, pending }: {
+  f: SimpleMasterFormValues; setF: (v: SimpleMasterFormValues) => void; onSubmit: (e: React.FormEvent) => void; onCancel: () => void; submitLabel: string
+  pending: boolean
+}) {
+  return (
+    <form onSubmit={onSubmit} className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <FormInput label="Name" value={f.name} onChange={v => setF({ ...f, name: v })} required placeholder="e.g. Retail Operations" />
+        <FormInput label="Code" value={f.code} onChange={v => setF({ ...f, code: v })} placeholder="e.g. RETAIL" />
+      </div>
+      <div className="flex items-center gap-2">
+        <input type="checkbox" checked={f.is_active} onChange={e => setF({ ...f, is_active: e.target.checked })} className="rounded" />
+        <span className="text-xs text-muted-foreground">Active</span>
+      </div>
+      <div className="flex gap-2">
+        <button type="submit" disabled={pending} className="rounded-lg bg-foreground px-4 py-1.5 text-xs font-semibold text-background hover:opacity-90 disabled:opacity-50">{submitLabel}</button>
+        <button type="button" onClick={onCancel} className="rounded-lg border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/40">Cancel</button>
+      </div>
+    </form>
+  )
+}
+
+function SimpleMasterTab({ rows, noun, actions }: {
+  rows: SimpleMasterRow[]
+  noun: string
+  actions: {
+    create: (fields: { name: string; code?: string; is_active?: boolean }) => Promise<{ error?: string }>
+    update: (id: string, fields: { name?: string; code?: string | null; is_active?: boolean }) => Promise<{ error?: string }>
+    remove: (id: string) => Promise<{ error?: string }>
+  }
+}) {
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const [editId, setEditId] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [showAdd, setShowAdd] = useState(false)
+
+  const blank: SimpleMasterFormValues = { name: '', code: '', is_active: true }
+  const [addF, setAddF] = useState(blank)
+  const [editF, setEditF] = useState(blank)
+
+  function startEdit(r: SimpleMasterRow) {
+    setEditId(r.id)
+    setEditF({ name: r.name, code: r.code ?? '', is_active: r.is_active })
+  }
+
+  function handleAdd(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    startTransition(async () => {
+      const res = await actions.create({ name: addF.name, code: addF.code, is_active: addF.is_active })
+      if (res.error) { setError(res.error); return }
+      setAddF(blank); setShowAdd(false)
+    })
+  }
+
+  function handleEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editId) return
+    setError(null)
+    startTransition(async () => {
+      const res = await actions.update(editId, editF)
+      if (res.error) { setError(res.error); return }
+      setEditId(null)
+    })
+  }
+
+  function handleDelete(id: string) {
+    setError(null)
+    startTransition(async () => {
+      const res = await actions.remove(id)
+      if (res.error) { setError(res.error); return }
+      setConfirmDelete(null)
+    })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <button onClick={() => setShowAdd(v => !v)} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors">
+          + Add {noun}
+        </button>
+      </div>
+
+      {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+
+      {showAdd && (
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
+          <p className="text-sm font-semibold text-foreground">New {noun}</p>
+          <SimpleMasterForm f={addF} setF={setAddF} onSubmit={handleAdd} onCancel={() => setShowAdd(false)} submitLabel="Create" pending={pending} />
+        </div>
+      )}
+
+      <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+        <div className="grid grid-cols-[1fr_140px_80px_120px] gap-x-4 border-b border-border bg-muted/30 px-4 py-2.5">
+          {['Name', 'Code', 'Active', 'Actions'].map(h => (
+            <span key={h} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
+          ))}
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">No {noun.toLowerCase()}s yet.</div>
+        ) : rows.map(r => (
+          <div key={r.id}>
+            {editId === r.id ? (
+              <div className="px-4 py-3 border-b border-border/50 bg-muted/20 space-y-3">
+                <SimpleMasterForm f={editF} setF={setEditF} onSubmit={handleEdit} onCancel={() => setEditId(null)} submitLabel="Save" pending={pending} />
+              </div>
+            ) : (
+              <div className="grid grid-cols-[1fr_140px_80px_120px] items-center gap-x-4 border-b border-border/50 last:border-0 px-4 py-3">
+                <TableCell>{r.name}</TableCell>
+                <TableCell className="text-muted-foreground">{r.code ?? '—'}</TableCell>
+                <div><ActiveBadge active={r.is_active} /></div>
+                <div className="flex gap-1.5">
+                  <button onClick={() => startEdit(r)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Edit</button>
+                  {confirmDelete === r.id ? (
+                    <>
+                      <button onClick={() => handleDelete(r.id)} disabled={pending} className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Confirm</button>
+                      <button onClick={() => setConfirmDelete(null)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Cancel</button>
+                    </>
+                  ) : (
+                    <button onClick={() => setConfirmDelete(r.id)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40 hover:border-red-200 hover:text-red-600">Delete</button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Client ───────────────────────────────────────────────────────────────
 
 interface Props {
   departments: DepartmentRow[]
   locations: LocationRow[]
   costCenters: CostCenterRow[]
+  jobFunctions: JobFunctionRow[]
+  designations: DesignationRow[]
   allUsers: UserOption[]
 }
 
-export function OrgStructureClient({ departments, locations, costCenters, allUsers }: Props) {
+export function OrgStructureClient({ departments, locations, costCenters, jobFunctions, designations, allUsers }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('departments')
 
   const tabs: { id: Tab; label: string; count: number }[] = [
     { id: 'departments', label: 'Departments', count: departments.length },
     { id: 'locations', label: 'Locations', count: locations.length },
     { id: 'cost_centers', label: 'Cost Centers', count: costCenters.length },
+    { id: 'job_functions', label: 'Functions', count: jobFunctions.length },
+    { id: 'designations', label: 'Designations', count: designations.length },
   ]
 
   return (
@@ -580,6 +796,20 @@ export function OrgStructureClient({ departments, locations, costCenters, allUse
       {activeTab === 'departments' && <DepartmentsTab departments={departments} allUsers={allUsers} />}
       {activeTab === 'locations' && <LocationsTab locations={locations} />}
       {activeTab === 'cost_centers' && <CostCentersTab costCenters={costCenters} departments={departments} />}
+      {activeTab === 'job_functions' && (
+        <SimpleMasterTab
+          rows={jobFunctions}
+          noun="Function"
+          actions={{ create: createJobFunction, update: updateJobFunction, remove: deleteJobFunction }}
+        />
+      )}
+      {activeTab === 'designations' && (
+        <SimpleMasterTab
+          rows={designations}
+          noun="Designation"
+          actions={{ create: createDesignation, update: updateDesignation, remove: deleteDesignation }}
+        />
+      )}
     </div>
   )
 }

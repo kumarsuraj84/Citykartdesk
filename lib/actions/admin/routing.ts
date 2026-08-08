@@ -9,7 +9,7 @@ type AnyClient = { from: (t: string) => any }
 
 async function requireAdminOrManager() {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return null
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return null
   return profile
 }
 

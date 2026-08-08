@@ -24,6 +24,8 @@ export type Notification = Tables<'notifications'>
 export type NotificationPreference = Tables<'notification_preferences'>
 export type RequestAttachment = Tables<'request_attachments'>
 export type AppSetting = Tables<'app_settings'>
+export type Project = Tables<'projects'>
+export type ProjectActivity = Tables<'project_activity'>
 
 // ============================================================
 // Enum types
@@ -41,6 +43,8 @@ export type ApprovalDecisionType = Enums<'approval_decision_type'>
 export type ApproverType = Enums<'approver_type'>
 export type ActivityAction = Enums<'activity_action'>
 export type NotificationType = Enums<'notification_type'>
+export type ProjectStatus = Enums<'project_status'>
+export type ProjectPriority = Enums<'project_priority'>
 
 // ============================================================
 // Enriched types (with joins)
@@ -80,8 +84,11 @@ export type ServiceWithRelations = Service & {
   sub_category: ServiceSubCategory | null
   team: Team
   approval_workflow: ApprovalWorkflow | null
-  owner: Profile | null
-  backup_owner: Profile | null
+  // Owner/backup_owner are always fetched as a lean projection (id, full_name, avatar_url) —
+  // see SERVICE_SELECT in lib/queries/services.ts. Kept as a Pick rather than the full Profile
+  // so the type matches what every query site actually returns.
+  owner: Pick<Profile, 'id' | 'full_name' | 'avatar_url'> | null
+  backup_owner: Pick<Profile, 'id' | 'full_name' | 'avatar_url'> | null
   escalation_policy: EscalationPolicy | null
 }
 
@@ -250,6 +257,44 @@ export type TaskCommentWithAuthor = Tables<'task_comments'> & {
 
 export type TaskActivityWithActor = Tables<'task_activity'> & {
   actor: ProfileMini | null
+}
+
+// ============================================================
+// Project enriched types
+// ============================================================
+
+export type ProjectWithDetails = Tables<'projects'> & {
+  owner: ProfileMini
+  functional_owner: ProfileMini | null
+  team: Pick<Tables<'teams'>, 'id' | 'name'> | null
+}
+
+export type Milestone = Tables<'milestones'>
+
+export type MilestoneWithDetails = Tables<'milestones'> & {
+  owner: ProfileMini | null
+  functional_owner: ProfileMini | null
+}
+
+export type ProjectMemberWithProfile = Tables<'project_members'> & {
+  user: ProfileMini
+}
+
+export type ProjectUpdateWithAuthor = Tables<'project_updates'> & {
+  author: ProfileMini
+}
+
+export type ProjectActivityWithActor = Tables<'project_activity'> & {
+  actor: ProfileMini | null
+}
+
+export type ProjectProgress = {
+  not_started: number
+  in_progress: number
+  blocked: number
+  done: number
+  cancelled: number
+  total: number
 }
 
 // ============================================================

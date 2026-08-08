@@ -6,7 +6,7 @@
 -- those columns NULL produces "Database error querying schema" the moment the
 -- user tries to log in.
 --
--- Run against the CognixDesk Supabase project (jhdzjzrimjjtqwnkrwha).
+-- Run against the Citykart Desk Supabase project (jhdzjzrimjjtqwnkrwha).
 
 -- 1. Repair every existing user whose token columns are NULL.
 UPDATE auth.users SET

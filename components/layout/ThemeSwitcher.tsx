@@ -38,6 +38,8 @@ export function ThemeSwitcher() {
   useEffect(() => {
     const stored = localStorage.getItem(THEME_STORAGE_KEY) as ThemeValue | null
     const valid = THEME_OPTIONS.some((o) => o.value === stored) ? (stored as ThemeValue) : 'light'
+    // client-only hydration from localStorage — must run after mount to avoid SSR mismatch
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTheme(valid)
     applyTheme(valid)
   }, [])

@@ -9,6 +9,14 @@ import type { TaskPriority, TaskStatus, TaskType } from '@/types'
 interface NewTaskPanelProps {
   profiles: { id: string; full_name: string }[]
   onCreated?: (id: string) => void
+  /** Available projects for the picker. Omit (or pass `defaultProjectId`) when the project is fixed by context. */
+  allProjects?: { id: string; name: string }[]
+  /** Fixes the task to a project (e.g. when creating from within a project's detail page) — hides the picker. */
+  defaultProjectId?: string
+  /** Fixes the task to a milestone within that project (e.g. creating from a milestone card). */
+  defaultMilestoneId?: string
+  /** Icon-only trigger for dense contexts (e.g. a table row) instead of the full "New Task" pill. */
+  compact?: boolean
 }
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string; cls: string }[] = [
@@ -23,7 +31,7 @@ const PRIORITY_OPTIONS: { value: TaskPriority; label: string; flagCls: string }[
   { value: 'low',    label: 'Low',    flagCls: 'text-slate-400' },
 ]
 
-export function NewTaskPanel({ profiles, onCreated }: NewTaskPanelProps) {
+export function NewTaskPanel({ profiles, onCreated, allProjects = [], defaultProjectId, defaultMilestoneId, compact = false }: NewTaskPanelProps) {
   const router = useRouter()
   const [open, setOpen]               = useState(false)
   const [title, setTitle]             = useState('')
@@ -33,6 +41,7 @@ export function NewTaskPanel({ profiles, onCreated }: NewTaskPanelProps) {
   const [status, setStatus]           = useState<TaskStatus>('open')
   const [taskType, setTaskType]       = useState<TaskType>('personal')
   const [dueDate, setDueDate]         = useState('')
+  const [projectId, setProjectId]     = useState('')
   const [error, setError]             = useState<string | null>(null)
   const [isPending, startTransition]  = useTransition()
 
@@ -62,7 +71,7 @@ export function NewTaskPanel({ profiles, onCreated }: NewTaskPanelProps) {
   function reset() {
     setTitle(''); setDescription(''); setAssigneeId('')
     setPriority('medium'); setStatus('open'); setTaskType('personal')
-    setDueDate(''); setError(null); setOpenDrop(null)
+    setDueDate(''); setProjectId(''); setError(null); setOpenDrop(null)
   }
 
   function handleClose() { setOpen(false); reset() }
@@ -79,6 +88,8 @@ export function NewTaskPanel({ profiles, onCreated }: NewTaskPanelProps) {
         status,
         dueDate: dueDate || undefined,
         taskType,
+        projectId: defaultProjectId || projectId || undefined,
+        milestoneId: defaultMilestoneId,
       })
       if (result.error) {
         setError(result.error)
@@ -100,13 +111,23 @@ export function NewTaskPanel({ profiles, onCreated }: NewTaskPanelProps) {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="btn-gradient"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        New Task
-      </button>
+      {compact ? (
+        <button
+          onClick={() => setOpen(true)}
+          title="New task"
+          className="rounded-lg p-1 text-muted-foreground/60 hover:bg-muted hover:text-foreground transition-colors"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          className="btn-gradient"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          New Task
+        </button>
+      )}
 
       {open && (
         <>
@@ -263,6 +284,20 @@ export function NewTaskPanel({ profiles, onCreated }: NewTaskPanelProps) {
                     <option value="personal">Personal</option>
                     <option value="team">Team</option>
                   </select>
+
+                  {/* Project (fixed by context when defaultProjectId is set) */}
+                  {!defaultProjectId && allProjects.length > 0 && (
+                    <select
+                      value={projectId}
+                      onChange={(e) => setProjectId(e.target.value)}
+                      className="rounded border border-border bg-transparent px-2 py-0.5 text-xs text-muted-foreground focus:outline-none focus:ring-0 cursor-pointer"
+                    >
+                      <option value="">No project</option>
+                      {allProjects.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 {error && (

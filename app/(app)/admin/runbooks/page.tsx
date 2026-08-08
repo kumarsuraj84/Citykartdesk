@@ -3,7 +3,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import RunbooksClient from './RunbooksClient'
 
 export const metadata = {
-  title: 'Admin Runbooks — CognixDesk',
+  title: 'Admin Runbooks — Citykart Desk',
 }
 
 export default async function RunbooksPage() {

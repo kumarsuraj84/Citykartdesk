@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import type { Json } from '@/types/database'
+
+function isJsonObject(v: Json | null | undefined): v is { [key: string]: Json | undefined } {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
 
 // Vercel cron: runs every 5 minutes (see vercel.json).
 // Checks whether any intake_messages lack a final classification and, if so,
@@ -39,14 +44,18 @@ export async function GET(req: NextRequest) {
   //   3. No limit (classify all) if sinceDays = 0 and no channel dates
   let sinceDate: string | undefined
 
-  const { data: activeChannels } = await (admin as any)
+  const { data: activeChannels } = await admin
     .from('intake_channels')
     .select('config')
     .eq('status', 'active')
 
   const channelDates: string[] = (activeChannels ?? [])
-    .map((ch: { config: Record<string, unknown> | null }) => ch.config?.sync_from_date as string | undefined)
-    .filter(Boolean)
+    .map((ch) => {
+      const cfg = ch.config
+      const syncFromDate = isJsonObject(cfg) ? cfg.sync_from_date : undefined
+      return typeof syncFromDate === 'string' ? syncFromDate : undefined
+    })
+    .filter((d): d is string => Boolean(d))
 
   if (channelDates.length > 0) {
     // Use the earliest date across all active channels so no in-scope message is missed.
@@ -60,17 +69,17 @@ export async function GET(req: NextRequest) {
   }
 
   // Quick count: unclassified = messages in scope with no is_final classification row.
-  const messagesQuery = (admin as any)
+  let messagesQuery = admin
     .from('intake_messages')
     .select('id', { count: 'exact', head: true })
-  if (sinceDate) messagesQuery.gte('received_at', sinceDate)
+  if (sinceDate) messagesQuery = messagesQuery.gte('received_at', sinceDate)
   const { count: totalMessages } = await messagesQuery
 
-  const classifiedQuery = (admin as any)
+  let classifiedQuery = admin
     .from('intake_classifications')
     .select('id', { count: 'exact', head: true })
     .eq('is_final', true)
-  if (sinceDate) classifiedQuery.gte('created_at', sinceDate)
+  if (sinceDate) classifiedQuery = classifiedQuery.gte('created_at', sinceDate)
   const { count: classified } = await classifiedQuery
 
   const pending = (totalMessages ?? 0) - (classified ?? 0)

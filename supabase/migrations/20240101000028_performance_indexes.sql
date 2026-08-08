@@ -1,5 +1,5 @@
 -- ============================================================
--- FlowDesk — Performance Indexes
+-- Citykart Desk — Performance Indexes
 -- ============================================================
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;

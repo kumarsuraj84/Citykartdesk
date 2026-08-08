@@ -14,3 +14,9 @@
 
 ## Daily digest: the daily_digest alert type fires itself at hour 8 check (runs on the 30-min cron but only sends when current hour === 8 and no digest exists today)
 ## To ensure daily digest fires at 8am add a dedicated cron: 0 8 * * * -> /api/alerts/run
+
+# DeskTime Sync Cron Setup
+
+## DeskTime sync: /api/desktime/sync once daily, pulls the last 3 days for every org with a connected API key
+## Vercel: add to vercel.json: crons entry with path /api/desktime/sync and schedule 0 2 * * *
+## Local: curl -H "X-Cron-Secret: dev" http://localhost:3210/api/desktime/sync

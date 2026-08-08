@@ -5,12 +5,38 @@ type AnyClient = { from: (t: string) => any }
 
 export type Period = '7d' | '30d' | '90d'
 
+/** Explicit start/end date range (YYYY-MM-DD), for "custom" report windows. */
+export type DateRange = { from: string; to: string }
+
+export type PeriodParam = Period | DateRange
+
+export function isDateRange(p: PeriodParam): p is DateRange {
+  return typeof p === 'object'
+}
+
 export function periodStart(p: Period): Date {
   const d = new Date()
   const days = p === '7d' ? 7 : p === '30d' ? 30 : 90
   d.setDate(d.getDate() - days)
   d.setHours(0, 0, 0, 0)
   return d
+}
+
+function shortDate(d: Date): string {
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+/** Resolves a preset period or a custom range into a concrete window + display label. */
+export function resolvePeriodParam(p: PeriodParam): { start: Date; end: Date; label: string; days: number } {
+  if (isDateRange(p)) {
+    const start = new Date(`${p.from}T00:00:00`)
+    const end = new Date(`${p.to}T23:59:59.999`)
+    const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1)
+    return { start, end, label: `${shortDate(start)} – ${shortDate(end)}`, days }
+  }
+  const days = p === '7d' ? 7 : p === '30d' ? 30 : 90
+  const label = p === '7d' ? 'last 7 days' : p === '30d' ? 'last 30 days' : 'last 90 days'
+  return { start: periodStart(p), end: new Date(), label, days }
 }
 
 function hours(a: string, b: string): number {
@@ -64,7 +90,8 @@ export type ServiceRow = { name: string; count: number }
 export type BacklogAging = { d1: number; d7: number; d30: number; d30plus: number }
 
 export type AnalyticsData = {
-  period: Period
+  period: PeriodParam
+  periodLabel: string
   // Volume
   totalCreated: number
   totalResolved: number
@@ -106,11 +133,24 @@ export type AnalyticsData = {
 
 // ── Main query ─────────────────────────────────────────────────────────────────
 
-export async function getAnalytics(period: Period): Promise<AnalyticsData> {
+export async function getAnalytics(orgId: string, period: PeriodParam): Promise<AnalyticsData> {
   const admin = createAdminClient() as unknown as AnyClient
-  const start = periodStart(period).toISOString()
+  const { start: startDate, end: endDate, label: periodLabel, days } = resolvePeriodParam(period)
+  const start = startDate.toISOString()
+  const end = endDate.toISOString()
   const now = new Date()
-  const nowIso = now.toISOString()
+
+  // approvals/approval_decisions have no org_id column of their own — scoped
+  // via requests.org_id, resolved as id sets up front (admin client bypasses
+  // RLS, so this org boundary must be enforced here explicitly, not left to
+  // the DB). Not period-windowed: an approval/decision inside the reporting
+  // window can reference a request created well before it.
+  const { data: orgRequestIdRows } = await admin.from('requests').select('id').eq('org_id', orgId)
+  const orgRequestIds = (orgRequestIdRows ?? []).map((r: { id: string }) => r.id)
+  const { data: orgApprovalIdRows } = orgRequestIds.length > 0
+    ? await admin.from('approvals').select('id').in('request_id', orgRequestIds)
+    : { data: [] as { id: string }[] }
+  const orgApprovalIds = (orgApprovalIdRows ?? []).map((a: { id: string }) => a.id)
 
   // Run all fetches in parallel
   const [
@@ -127,40 +167,52 @@ export async function getAnalytics(period: Period): Promise<AnalyticsData> {
     admin
       .from('requests')
       .select('id, status, priority, team_id, service_id, assigned_to, created_at, resolved_at, responded_at, closed_at, resolution_due_at, response_due_at')
+      .eq('org_id', orgId)
       .gte('created_at', start)
+      .lte('created_at', end)
       .order('created_at', { ascending: true }),
 
     // All currently open requests (for backlog aging + SLA breached)
     admin
       .from('requests')
       .select('id, status, priority, team_id, assigned_to, created_at, resolution_due_at, response_due_at, responded_at')
+      .eq('org_id', orgId)
       .not('status', 'in', '("resolved","closed","cancelled")'),
 
     // Approval decisions in period
-    admin
-      .from('approval_decisions')
-      .select('id, approval_id, decision, decided_at')
-      .gte('decided_at', start),
+    orgApprovalIds.length > 0
+      ? admin
+          .from('approval_decisions')
+          .select('id, approval_id, decision, decided_at')
+          .in('approval_id', orgApprovalIds)
+          .gte('decided_at', start)
+          .lte('decided_at', end)
+      : Promise.resolve({ data: [] }),
 
     // All approvals
-    admin
-      .from('approvals')
-      .select('id, status, created_at, request_id')
-      .gte('created_at', start),
+    orgRequestIds.length > 0
+      ? admin
+          .from('approvals')
+          .select('id, status, created_at, request_id')
+          .in('request_id', orgRequestIds)
+          .gte('created_at', start)
+          .lte('created_at', end)
+      : Promise.resolve({ data: [] }),
 
     // Teams lookup
-    admin.from('teams').select('id, name'),
+    admin.from('teams').select('id, name').eq('org_id', orgId),
 
     // Services lookup
-    admin.from('services').select('id, name'),
+    admin.from('services').select('id, name').eq('org_id', orgId),
 
     // Profiles lookup (agents)
-    admin.from('profiles').select('id, full_name, role'),
+    admin.from('profiles').select('id, full_name, role').eq('org_id', orgId),
 
     // Tasks
     admin
       .from('tasks')
-      .select('id, status, priority, due_date, assignee_id, team_id, created_at, updated_at'),
+      .select('id, status, priority, due_date, assignee_id, team_id, created_at, updated_at')
+      .eq('org_id', orgId),
   ])
 
   const reqs = (periodRequests ?? []) as Array<{
@@ -331,24 +383,35 @@ export async function getAnalytics(period: Period): Promise<AnalyticsData> {
   const avgApprovalCycleHours = avg(cycleTimes)
 
   // ── Volume trend ──────────────────────────────────────────────────────────
+  // Bucket by day for short windows, by week once the range gets long enough
+  // that a daily chart would be unreadable (mirrors taskAnalytics's bucketing).
 
-  const days = period === '7d' ? 7 : period === '30d' ? 30 : 90
+  const byWeek = days > 60
   const trendMap: Record<string, { created: number; resolved: number }> = {}
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(now)
-    d.setDate(d.getDate() - i)
-    const key = d.toISOString().slice(0, 10)
-    trendMap[key] = { created: 0, resolved: 0 }
+  const bucketKey = (d: Date) => {
+    if (!byWeek) return d.toISOString().slice(0, 10)
+    const week = new Date(d)
+    week.setDate(week.getDate() - week.getDay())
+    return week.toISOString().slice(0, 10)
+  }
+  for (let i = 0; i < days; i++) {
+    const d = new Date(startDate)
+    d.setDate(d.getDate() + i)
+    if (d > endDate) break
+    const key = bucketKey(d)
+    if (!trendMap[key]) trendMap[key] = { created: 0, resolved: 0 }
   }
   reqs.forEach((r) => {
-    const day = r.created_at.slice(0, 10)
+    const day = bucketKey(new Date(r.created_at))
     if (trendMap[day]) trendMap[day].created++
     if (r.resolved_at) {
-      const rday = r.resolved_at.slice(0, 10)
+      const rday = bucketKey(new Date(r.resolved_at))
       if (trendMap[rday]) trendMap[rday].resolved++
     }
   })
-  const trend: TrendPoint[] = Object.entries(trendMap).map(([date, v]) => ({ date, ...v }))
+  const trend: TrendPoint[] = Object.entries(trendMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, v]) => ({ date, ...v }))
 
   // ── Backlog aging ─────────────────────────────────────────────────────────
 
@@ -369,11 +432,12 @@ export async function getAnalytics(period: Period): Promise<AnalyticsData> {
     (t) => t.due_date && new Date(t.due_date) < now && !['done', 'cancelled'].includes(t.status)
   ).length
   const tasksDoneInPeriod = tasksArr.filter(
-    (t) => t.status === 'done' && t.updated_at >= start
+    (t) => t.status === 'done' && t.updated_at >= start && t.updated_at <= end
   ).length
 
   return {
     period,
+    periodLabel,
     totalCreated,
     totalResolved,
     totalClosed,

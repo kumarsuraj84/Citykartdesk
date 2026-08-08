@@ -148,7 +148,7 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
 
-  const isManager = profile.role === 'manager' || profile.role === 'admin'
+  const isManager = profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'
 
   if (!isManager) {
     return (
@@ -182,7 +182,7 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
 
   const page     = Math.max(1, parseInt(params.page ?? '1', 10) || 1)
   const pageSize = [25, 50, 100].includes(parseInt(params.pageSize ?? '50', 10))
-    ? parseInt(params.pageSize!, 10)
+    ? parseInt(params.pageSize ?? '50', 10)
     : 50
 
   // Fetch current page + per-tab counts in parallel

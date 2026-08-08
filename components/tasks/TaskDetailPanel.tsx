@@ -7,9 +7,13 @@ import {
   Circle, CheckCircle2, XCircle, Clock, ExternalLink,
 } from 'lucide-react'
 import { updateTaskStatus, updateTaskField } from '@/lib/actions/tasks'
+import { attachToProject } from '@/lib/actions/projects'
+import { FolderKanban } from 'lucide-react'
 import { TaskActivityFeed } from './TaskActivityFeed'
 import { SubtaskList } from './SubtaskList'
+import { TaskDependencyList } from './TaskDependencyList'
 import { formatRelativeTime } from '@/lib/utils'
+import type { TaskDependency } from '@/lib/queries/tasks'
 import type { TaskWithDetails, TaskCommentWithAuthor, TaskActivityWithActor } from '@/types'
 import type { TaskStatus, TaskPriority } from '@/types'
 
@@ -20,7 +24,10 @@ interface TaskDetailPanelProps {
   comments: TaskCommentWithAuthor[]
   activity: TaskActivityWithActor[]
   subtasks: TaskWithDetails[]
+  dependencies?: { blockedBy: TaskDependency[]; blocking: TaskDependency[] }
   linkedRequest?: { id: string; request_no: string; title: string } | null
+  linkedProject?: { id: string; name: string } | null
+  allProjects?: { id: string; name: string }[]
   profiles: ProfileMini[]
   currentUserId: string
   currentUserName: string
@@ -88,17 +95,6 @@ function DropdownProp({
   )
 }
 
-// ── Property label cell ───────────────────────────────────────────────────────
-
-function PropLabel({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
-  return (
-    <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
-      <Icon className="h-3.5 w-3.5 shrink-0" />
-      <span>{label}</span>
-    </div>
-  )
-}
-
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 export function TaskDetailPanel({
@@ -106,7 +102,10 @@ export function TaskDetailPanel({
   comments,
   activity,
   subtasks,
+  dependencies,
   linkedRequest,
+  linkedProject,
+  allProjects = [],
   profiles,
   currentUserId,
   currentUserName,
@@ -118,7 +117,8 @@ export function TaskDetailPanel({
   const [titleValue, setTitleValue] = useState(task.title)
   const [editingDesc, setEditingDesc] = useState(false)
   const [descValue, setDescValue] = useState(task.description ?? '')
-  const [openDrop, setOpenDrop] = useState<'status' | 'priority' | 'assignee' | 'due' | null>(null)
+  const [openDrop, setOpenDrop] = useState<'status' | 'priority' | 'assignee' | 'due' | 'project' | null>(null)
+  const [localProject, setLocalProject] = useState(linkedProject ?? null)
   const [localStatus, setLocalStatus]         = useState<TaskStatus>(task.status)
   const [localPriority, setLocalPriority]     = useState<TaskPriority>(task.priority)
   const [localAssigneeId, setLocalAssigneeId] = useState<string | null>(task.assignee_id)
@@ -167,6 +167,10 @@ export function TaskDetailPanel({
   function changeDueDate(value: string) {
     const v = value || null; setLocalDueDate(v); setOpenDrop(null)
     startTransition(async () => { await updateTaskField(task.id, 'due_date', v) })
+  }
+  function changeProject(project: { id: string; name: string } | null) {
+    setLocalProject(project); setOpenDrop(null)
+    startTransition(async () => { await attachToProject('task', task.id, project?.id ?? null) })
   }
 
   const statusCfg    = STATUS_CONFIG[localStatus]
@@ -221,6 +225,34 @@ export function TaskDetailPanel({
             </DropdownProp>
 
             <div className="flex-1" />
+
+            {/* Project picker */}
+            <DropdownProp
+              open={openDrop === 'project'}
+              onToggle={() => setOpenDrop(openDrop === 'project' ? null : 'project')}
+              trigger={
+                <button className="flex items-center gap-1 rounded border border-border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
+                  <FolderKanban className="h-3 w-3" />
+                  {localProject?.name ?? 'Project'}
+                </button>
+              }
+            >
+              <button
+                onClick={() => changeProject(null)}
+                className="w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50"
+              >
+                No project
+              </button>
+              {allProjects.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => changeProject(p)}
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 ${p.id === localProject?.id ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </DropdownProp>
 
             {/* Linked request badge */}
             {linkedRequest && (
@@ -415,6 +447,17 @@ export function TaskDetailPanel({
               <div className="rounded-xl border border-border bg-background/50 px-4 py-3">
                 <SubtaskList parentTaskId={task.id} initialSubtasks={subtasks} profiles={profiles} />
               </div>
+
+              {/* Dependencies */}
+              {dependencies && (
+                <div className="rounded-xl border border-border bg-background/50 px-4 py-3">
+                  <TaskDependencyList
+                    taskId={task.id}
+                    initialBlockedBy={dependencies.blockedBy}
+                    initialBlocking={dependencies.blocking}
+                  />
+                </div>
+              )}
 
               {/* Created timestamp */}
               <p className="text-[10px] text-muted-foreground/50 -mt-2">

@@ -66,18 +66,25 @@ export function GlobalSearch({ dark = false }: { dark?: boolean }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Reset when closed
-  useEffect(() => {
+  // Reset search state whenever the panel transitions to closed. Adjusting state during
+  // render (React's documented pattern) instead of an effect, since this mirrors the
+  // `open` flag rather than syncing with anything external.
+  const [prevOpen, setPrevOpen] = useState(open)
+  if (prevOpen !== open) {
+    setPrevOpen(open)
     if (!open) {
       setQuery('')
       setGrouped(EMPTY_RESULTS)
       setActiveIdx(-1)
     }
-  }, [open])
+  }
 
   // Debounced search
   useEffect(() => {
     if (query.trim().length < 2) {
+      // Part of the debounced network-search effect below (cleared via setTimeout/cleanup),
+      // not a plain prop mirror — clearing stale results when the query is too short.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setGrouped(EMPTY_RESULTS)
       setLoading(false)
       setActiveIdx(-1)

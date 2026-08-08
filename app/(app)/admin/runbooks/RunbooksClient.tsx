@@ -102,7 +102,7 @@ const content: Record<string, React.ReactNode> = {
     <article className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
       <h2>Platform Overview</h2>
       <p>
-        CognixDesk is an internal service management platform that connects employees with the teams
+        Citykart Desk is an internal service management platform that connects employees with the teams
         that support them — IT, HR, Finance, Legal, and beyond. It provides a unified portal for
         submitting requests, a workbench for agents to resolve them, and an admin layer for
         configuring services, SLAs, and workflows.
@@ -110,8 +110,8 @@ const content: Record<string, React.ReactNode> = {
       <h3>Core Concepts</h3>
       <ul>
         <li>
-          <strong>Services</strong> — the catalogue of things employees can request (e.g. "Laptop
-          Setup", "New Hire Onboarding", "Expense Reimbursement").
+          <strong>Services</strong> — the catalogue of things employees can request (e.g. &quot;Laptop
+          Setup&quot;, &quot;New Hire Onboarding&quot;, &quot;Expense Reimbursement&quot;).
         </li>
         <li>
           <strong>Requests</strong> — an instance of an employee asking for a service. Each request
@@ -142,11 +142,11 @@ const content: Record<string, React.ReactNode> = {
   'role-guide': (
     <article className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
       <h2>Role Guide</h2>
-      <p>CognixDesk has four built-in roles. Each controls what a user can see and do.</p>
+      <p>Citykart Desk has four built-in roles. Each controls what a user can see and do.</p>
       <h3>Employee</h3>
       <p>
         The default role. Employees can browse the service catalogue, submit requests, track their
-        own requests, and leave comments. They cannot see other users' requests or admin pages.
+        own requests, and leave comments. They cannot see other users&apos; requests or admin pages.
       </p>
       <h3>Agent</h3>
       <p>
@@ -179,11 +179,11 @@ const content: Record<string, React.ReactNode> = {
       <h2>First Login &amp; Profile Setup</h2>
       <ol>
         <li>
-          Navigate to your CognixDesk URL and click <strong>Sign in with Google</strong> (or SSO
+          Navigate to your Citykart Desk URL and click <strong>Sign in with Google</strong> (or SSO
           provider configured by your admin).
         </li>
         <li>
-          On first login, CognixDesk creates your profile automatically using your email and display
+          On first login, Citykart Desk creates your profile automatically using your email and display
           name from the identity provider.
         </li>
         <li>
@@ -257,14 +257,14 @@ const content: Record<string, React.ReactNode> = {
       <ol>
         <li>Go to <strong>Admin → Categories</strong>.</li>
         <li>Click <strong>New Category</strong>.</li>
-        <li>Enter a name (e.g. "IT", "HR", "Finance") and an optional icon.</li>
+        <li>Enter a name (e.g. &quot;IT&quot;, &quot;HR&quot;, &quot;Finance&quot;) and an optional icon.</li>
         <li>Save.</li>
       </ol>
       <h3>Step 2 — Create Sub-categories</h3>
       <ol>
         <li>In the same Categories page, select a parent category.</li>
         <li>Click <strong>Add Sub-category</strong>.</li>
-        <li>Enter the sub-category name (e.g. "Hardware" under "IT").</li>
+        <li>Enter the sub-category name (e.g. &quot;Hardware&quot; under &quot;IT&quot;).</li>
         <li>Save.</li>
       </ol>
       <h3>Step 3 — Attach Services</h3>
@@ -303,8 +303,8 @@ const content: Record<string, React.ReactNode> = {
       <div className="not-prose rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/40">
         <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Note</p>
         <p className="mt-1 text-sm text-blue-700 dark:text-blue-400">
-          The SLA clock starts when a request is submitted and pauses when it enters a "Pending
-          Customer" status.
+          The SLA clock starts when a request is submitted and pauses when it enters a &quot;Pending
+          Customer&quot; status.
         </p>
       </div>
     </article>
@@ -327,7 +327,7 @@ const content: Record<string, React.ReactNode> = {
         <li>Save.</li>
       </ol>
       <p>
-        When a request is submitted, it is automatically routed to the owning team's queue unless a
+        When a request is submitted, it is automatically routed to the owning team&apos;s queue unless a
         more specific routing rule overrides it.
       </p>
     </article>
@@ -361,7 +361,7 @@ const content: Record<string, React.ReactNode> = {
       <ol>
         <li>Go to <strong>Admin → Approval Flows</strong>.</li>
         <li>Click <strong>New Workflow</strong>.</li>
-        <li>Give the workflow a descriptive name (e.g. "Procurement Approval").</li>
+        <li>Give the workflow a descriptive name (e.g. &quot;Procurement Approval&quot;).</li>
         <li>
           Set <strong>Trigger</strong>: when should this workflow run?{' '}
           <code>On Submit</code> (blocks the request until approved) or{' '}
@@ -388,7 +388,7 @@ const content: Record<string, React.ReactNode> = {
           <ul>
             <li><code>Specific User</code> — name a single approver.</li>
             <li><code>Team</code> — any member of a team can approve.</li>
-            <li><code>Manager</code> — the requester's direct manager is resolved at runtime.</li>
+            <li><code>Manager</code> — the requester&apos;s direct manager is resolved at runtime.</li>
             <li><code>Role</code> — any user with the given role can approve.</li>
           </ul>
         </li>
@@ -457,7 +457,7 @@ const content: Record<string, React.ReactNode> = {
         <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Rule evaluation order</p>
         <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">
           Rules are evaluated top-to-bottom. The first matching rule wins. If no rule matches, the
-          service's owning team is used as the fallback.
+          service&apos;s owning team is used as the fallback.
         </p>
       </div>
     </article>
@@ -469,7 +469,7 @@ const content: Record<string, React.ReactNode> = {
       <ol>
         <li>Go to <strong>Admin → Request Config → Business Hours</strong>.</li>
         <li>Click <strong>New Schedule</strong>.</li>
-        <li>Name the schedule (e.g. "Standard 9–5 EST").</li>
+        <li>Name the schedule (e.g. &quot;Standard 9–5 EST&quot;).</li>
         <li>
           For each day of the week, toggle it on/off and set the open and close times.
         </li>
@@ -488,7 +488,7 @@ const content: Record<string, React.ReactNode> = {
       <ol>
         <li>Go to <strong>Admin → Request Config → Holiday Calendars</strong>.</li>
         <li>Click <strong>New Calendar</strong>.</li>
-        <li>Name it (e.g. "US Federal Holidays 2026").</li>
+        <li>Name it (e.g. &quot;US Federal Holidays 2026&quot;).</li>
         <li>
           Click <strong>Add Date</strong> to add each holiday. Enter a date and an optional label.
         </li>
@@ -547,7 +547,7 @@ const content: Record<string, React.ReactNode> = {
         <li>Go to <strong>Admin → Request Config → SLA Tiers</strong>.</li>
         <li>Click <strong>New Tier</strong>.</li>
         <li>
-          Name the tier (e.g. "Gold", "Silver", "Bronze") and set response and resolution
+          Name the tier (e.g. &quot;Gold&quot;, &quot;Silver&quot;, &quot;Bronze&quot;) and set response and resolution
           targets for each priority level.
         </li>
         <li>Save.</li>
@@ -564,7 +564,7 @@ const content: Record<string, React.ReactNode> = {
       <ol>
         <li>Go to <strong>Admin → Teams</strong>.</li>
         <li>Click <strong>New Team</strong>.</li>
-        <li>Enter a <strong>Team Name</strong> (e.g. "IT Support", "HR Ops").</li>
+        <li>Enter a <strong>Team Name</strong> (e.g. &quot;IT Support&quot;, &quot;HR Ops&quot;).</li>
         <li>Select a <strong>Team Lead</strong> from the user list.</li>
         <li>Optionally add a <strong>Description</strong> and a <strong>Colour</strong> for UI labelling.</li>
         <li>Save.</li>
@@ -587,7 +587,7 @@ const content: Record<string, React.ReactNode> = {
         <li>Click <strong>Add</strong>.</li>
       </ol>
       <p>
-        Members immediately gain access to the team's request queue. There is no limit on the
+        Members immediately gain access to the team&apos;s request queue. There is no limit on the
         number of members per team.
       </p>
     </article>
@@ -620,7 +620,7 @@ const content: Record<string, React.ReactNode> = {
     <article className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
       <h2>Deactivate a User</h2>
       <ol>
-        <li>Go to <strong>Admin → Users</strong> and open the user's profile.</li>
+        <li>Go to <strong>Admin → Users</strong> and open the user&apos;s profile.</li>
         <li>Scroll to the bottom and click <strong>Deactivate Account</strong>.</li>
         <li>Confirm in the dialog.</li>
       </ol>
@@ -645,14 +645,14 @@ const content: Record<string, React.ReactNode> = {
       <ol>
         <li>Go to <strong>Admin → Task Config → Task Templates</strong>.</li>
         <li>Click <strong>New Template</strong>.</li>
-        <li>Name the template (e.g. "New Employee Onboarding Checklist").</li>
+        <li>Name the template (e.g. &quot;New Employee Onboarding Checklist&quot;).</li>
         <li>
           Click <strong>Add Task</strong> to add each task item. For each task, set:
           <ul>
             <li>Title</li>
             <li>Optional description</li>
             <li>Default assignee (team or role)</li>
-            <li>Default due offset (e.g. "+2 business days from request creation")</li>
+            <li>Default due offset (e.g. &quot;+2 business days from request creation&quot;)</li>
           </ul>
         </li>
         <li>Save.</li>
@@ -728,7 +728,7 @@ const content: Record<string, React.ReactNode> = {
           Set the <strong>Frequency</strong>: Daily, Weekly (pick day), or Monthly (pick date).
         </li>
         <li>
-          Enter one or more <strong>Recipient Emails</strong>. These do not need to be CognixDesk
+          Enter one or more <strong>Recipient Emails</strong>. These do not need to be Citykart Desk
           users.
         </li>
         <li>Set the delivery time and timezone.</li>
@@ -744,7 +744,7 @@ const content: Record<string, React.ReactNode> = {
     <article className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
       <h2>How to Read the Audit Log</h2>
       <p>
-        The audit log records every meaningful action taken in CognixDesk — who did what, to which
+        The audit log records every meaningful action taken in Citykart Desk — who did what, to which
         record, and when.
       </p>
       <ol>
@@ -758,7 +758,7 @@ const content: Record<string, React.ReactNode> = {
         <li><code>request.status_changed</code> — a status transition occurred.</li>
         <li><code>request.assigned</code> — the request was assigned or reassigned.</li>
         <li><code>approval.approved</code> / <code>approval.rejected</code> — an approval step was actioned.</li>
-        <li><code>user.role_changed</code> — an admin changed a user's role.</li>
+        <li><code>user.role_changed</code> — an admin changed a user&apos;s role.</li>
         <li><code>service.archived</code> — a service was archived.</li>
       </ul>
       <div className="not-prose rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/40">
@@ -824,7 +824,7 @@ const content: Record<string, React.ReactNode> = {
   'email-resend': (
     <article className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
       <h2>Wire Up Email (Resend)</h2>
-      <p>CognixDesk uses Resend to send transactional emails. You need a Resend account and a verified sending domain.</p>
+      <p>Citykart Desk uses Resend to send transactional emails. You need a Resend account and a verified sending domain.</p>
       <ol>
         <li>
           Sign up at{' '}
@@ -833,7 +833,7 @@ const content: Record<string, React.ReactNode> = {
         </li>
         <li>
           In the Resend dashboard, go to <strong>API Keys → Create API Key</strong>. Give it a
-          name (e.g. "CognixDesk Production") and copy the key.
+          name (e.g. &quot;Citykart Desk Production&quot;) and copy the key.
         </li>
         <li>
           In your deployment environment, set the following environment variable:
@@ -845,7 +845,7 @@ const content: Record<string, React.ReactNode> = {
           Go to <strong>Admin → Settings → Email</strong> and set:
           <ul>
             <li><strong>From Address</strong> — e.g. <code>support@yourdomain.com</code></li>
-            <li><strong>From Name</strong> — e.g. <code>CognixDesk Support</code></li>
+            <li><strong>From Name</strong> — e.g. <code>Citykart Desk Support</code></li>
           </ul>
         </li>
         <li>
@@ -860,7 +860,7 @@ const content: Record<string, React.ReactNode> = {
     <article className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
       <h2>Set Up Cron Jobs</h2>
       <p>
-        CognixDesk has several background jobs that must run on a schedule for SLA timers,
+        Citykart Desk has several background jobs that must run on a schedule for SLA timers,
         escalations, auto-close, and scheduled reports to work.
       </p>
       <h3>Jobs and their schedules</h3>

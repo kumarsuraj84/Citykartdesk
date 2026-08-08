@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getCurrentProfile, getTeamMembers } from '@/lib/queries/profiles'
+import { getCurrentProfile } from '@/lib/queries/profiles'
 import { getTaskTemplates, getTaskStatuses, getTaskPriorities } from '@/lib/queries/admin'
 import { TaskConfigClient } from './TaskConfigClient'
 import { PageHeader } from '@/components/ui/PageHeader'

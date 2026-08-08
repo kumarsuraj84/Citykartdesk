@@ -34,6 +34,29 @@ interface FormState {
   is_active: boolean
 }
 
+function formStateFromRule(editRule: AssignmentRule | null): FormState {
+  if (editRule) {
+    return {
+      name: editRule.name,
+      scope_type: editRule.scope_type,
+      scope_id: editRule.scope_id,
+      strategy: editRule.strategy,
+      assignee_ids: editRule.assignee_ids,
+      priority_filter: editRule.priority_filter ?? '',
+      is_active: editRule.is_active,
+    }
+  }
+  return {
+    name: '',
+    scope_type: 'service',
+    scope_id: '',
+    strategy: 'round_robin',
+    assignee_ids: [],
+    priority_filter: '',
+    is_active: true,
+  }
+}
+
 const PRIORITY_OPTIONS = ['critical', 'high', 'medium', 'low']
 
 const SCOPE_LABELS: Record<ScopeType, string> = {
@@ -327,42 +350,19 @@ function RuleModal({
   categories: { id: string; name: string; parent_id: string | null }[]
   profiles: Pick<Profile, 'id' | 'full_name' | 'role'>[]
 }) {
-  const [form, setForm] = useState<FormState>({
-    name: '',
-    scope_type: 'service',
-    scope_id: '',
-    strategy: 'round_robin',
-    assignee_ids: [],
-    priority_filter: '',
-    is_active: true,
-  })
+  const [form, setForm] = useState<FormState>(() => formStateFromRule(editRule))
   const [saving, startSave] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (editRule) {
-      setForm({
-        name: editRule.name,
-        scope_type: editRule.scope_type,
-        scope_id: editRule.scope_id,
-        strategy: editRule.strategy,
-        assignee_ids: editRule.assignee_ids,
-        priority_filter: editRule.priority_filter ?? '',
-        is_active: editRule.is_active,
-      })
-    } else {
-      setForm({
-        name: '',
-        scope_type: 'service',
-        scope_id: '',
-        strategy: 'round_robin',
-        assignee_ids: [],
-        priority_filter: '',
-        is_active: true,
-      })
-    }
+  // Reset the form whenever the modal is (re)opened or the rule being edited changes.
+  // Adjusting state during render (React's documented pattern) instead of an effect,
+  // since this is state derived from props, not an external-system sync.
+  const [prevResetKey, setPrevResetKey] = useState<[boolean, AssignmentRule | null]>([open, editRule])
+  if (prevResetKey[0] !== open || prevResetKey[1] !== editRule) {
+    setPrevResetKey([open, editRule])
+    setForm(formStateFromRule(editRule))
     setError(null)
-  }, [open, editRule])
+  }
 
   const scopeOptions =
     form.scope_type === 'service'

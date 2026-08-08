@@ -4,11 +4,11 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Home, Inbox, ListTodo, ShieldCheck, Bell, LayoutGrid,
+  Home, Inbox, ListTodo, ShieldCheck, Bell, LayoutGrid, FolderKanban,
   BarChart3, Activity, Settings, Monitor, BookOpenText,
   Users, Tag, GitBranch, Building2, Database, Workflow,
   LogOut, BookOpen, KeyRound, ChevronDown, Sparkles, Filter,
-  PanelLeftClose, PanelLeftOpen,
+  PanelLeftClose, PanelLeftOpen, Timer,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/actions/auth'
@@ -56,8 +56,9 @@ export function Sidebar({ profile, navVisibility, navCounts, className }: Sideba
     {
       key: 'workspace',
       label: 'Workspace',
-      show: has('requests') || has('tasks') || has('approvals'),
+      show: has('requests') || has('tasks') || has('approvals') || has('projects'),
       items: [
+        ...(has('projects')  ? [{ label: 'Projects',      href: '/projects',      icon: FolderKanban, countKey: 'projects'      as keyof NavCounts }] : []),
         ...(has('requests') ? [{ label: 'Requests',      href: '/requests',      icon: Inbox,       countKey: 'requests'      as keyof NavCounts }] : []),
         ...(has('tasks')    ? [{ label: 'Tasks',          href: '/tasks',         icon: ListTodo,    countKey: 'tasks'         as keyof NavCounts }] : []),
         ...(has('approvals') && (isAgent || isManager || isAdmin)
@@ -85,8 +86,9 @@ export function Sidebar({ profile, navVisibility, navCounts, className }: Sideba
       label: 'Analytics',
       show: isManager || isAdmin,
       items: [
-        { label: 'Dashboards', href: '/admin/reports', icon: BarChart3 },
-        { label: 'Audit Logs', href: '/admin/audit',   icon: Activity  },
+        { label: 'Dashboards', href: '/admin/reports',  icon: BarChart3 },
+        { label: 'DeskTime',   href: '/admin/desktime',  icon: Timer     },
+        { label: 'Audit Logs', href: '/admin/audit',    icon: Activity  },
       ],
     },
     {
@@ -105,9 +107,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className }: Sideba
         {
           label: 'Organization',
           items: [
-            { label: 'Org Settings', href: '/admin/org',        icon: Building2 },
-            { label: 'Departments',  href: '/admin/departments', icon: Building2 },
-            { label: 'Locations',    href: '/admin/locations',   icon: Building2 },
+            { label: 'Org Settings', href: '/admin/org', icon: Building2 },
           ],
         },
         ...(isAdmin && has('services') ? [{
@@ -155,6 +155,8 @@ export function Sidebar({ profile, navVisibility, navCounts, className }: Sideba
       const saved = localStorage.getItem('fd-nav')
       if (saved) {
         const p = JSON.parse(saved)
+        // client-only hydration from localStorage — must run after mount to avoid SSR mismatch
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         if (p.s) setOpenSections(p.s)
         if (p.g) setOpenGroups(p.g)
       }

@@ -39,6 +39,22 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled:        'Cancelled',
 }
 
+const PROJECT_STATUS_COLORS: Record<string, string> = {
+  not_started: 'var(--muted-foreground)',
+  in_progress: 'var(--info)',
+  blocked:     'var(--destructive)',
+  done:        'var(--success)',
+  cancelled:   'color-mix(in oklab, var(--muted-foreground) 65%, transparent)',
+}
+
+const PROJECT_STATUS_LABELS: Record<string, string> = {
+  not_started: 'Not Started',
+  in_progress: 'In Progress',
+  blocked:     'Blocked',
+  done:        'Done',
+  cancelled:   'Cancelled',
+}
+
 // ── KPI Card ───────────────────────────────────────────────────────────────────
 
 export function KpiCard({
@@ -111,14 +127,17 @@ export function DonutChart({
   const strokeWidth = 14
 
   const segments = useMemo(() => {
-    let offset = 0
+    const dashes = data.map((d) => (total ? d.value / total : 0) * circ)
+    // Inclusive running total of dash lengths, computed without mutating a captured variable.
+    const cumulative = dashes.reduce<number[]>(
+      (acc, dash, i) => [...acc, (i === 0 ? 0 : acc[i - 1]) + dash],
+      []
+    )
     return data.map((d, i) => {
-      const pct = total ? d.value / total : 0
-      const dash = pct * circ
+      const dash = dashes[i]
       const gap = circ - dash
-      const seg = { ...d, dash, gap, offset, color: d.color ?? PALETTE[i % PALETTE.length] }
-      offset += dash
-      return seg
+      const offset = cumulative[i] - dash
+      return { ...d, dash, gap, offset, color: d.color ?? PALETTE[i % PALETTE.length] }
     })
   }, [data, circ, total])
 
@@ -449,4 +468,4 @@ export function PriorityBadge({ priority }: { priority: string }) {
 
 // ── Re-exports ─────────────────────────────────────────────────────────────────
 
-export { fmtHours, PRIORITY_COLORS, STATUS_COLORS, STATUS_LABELS, PALETTE }
+export { fmtHours, PRIORITY_COLORS, STATUS_COLORS, STATUS_LABELS, PALETTE, PROJECT_STATUS_COLORS, PROJECT_STATUS_LABELS }

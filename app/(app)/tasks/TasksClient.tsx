@@ -3,11 +3,12 @@
 import { useState, useEffect, useTransition, type ReactNode } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { LayoutList, Columns3, CalendarDays } from 'lucide-react'
+import { LayoutList, Columns3, CalendarDays, GanttChartSquare } from 'lucide-react'
 import { TaskTable } from '@/components/tasks/TaskTable'
 import { TaskDetailPanel } from '@/components/tasks/TaskDetailPanel'
 import { FilterDropdown } from '@/components/tasks/FilterTabs'
 import { loadTaskPanelData } from '@/lib/actions/tasks'
+import type { TaskDependency } from '@/lib/queries/tasks'
 import type {
   TaskWithDetails,
   TaskCommentWithAuthor,
@@ -23,7 +24,9 @@ interface PanelData {
   comments: TaskCommentWithAuthor[]
   activity: TaskActivityWithActor[]
   subtasks: TaskWithDetails[]
+  dependencies: { blockedBy: TaskDependency[]; blocking: TaskDependency[] }
   linkedRequest: { id: string; request_no: string; title: string } | null
+  linkedProject: { id: string; name: string } | null
 }
 
 interface TasksClientProps {
@@ -36,9 +39,19 @@ interface TasksClientProps {
   initialCustomFields: CustomField[]
   initialCustomFieldValues: Record<string, Record<string, CustomFieldValue['value']>>
   toolbarActions?: ReactNode
+  /** Base route for view-switcher navigation. Defaults to '/tasks' — pass e.g. `/projects/[id]` to embed this view elsewhere. */
+  basePath?: string
+  /** Hides the My Tasks / Team Tasks filter dropdown — the caller has already scoped `tasks` (e.g. to one project). */
+  hideFilter?: boolean
+  /** Projects available in the task detail panel's project picker. */
+  allProjects?: { id: string; name: string }[]
+  /** Enhancements (milestones) for the current project — omit outside a project context. */
+  milestones?: { id: string; name: string }[]
+  /** Scopes tasks created via the inline "+ Add task" row to this project — omit outside a project context. */
+  projectId?: string
 }
 
-type ViewMode = 'table' | 'board' | 'calendar'
+type ViewMode = 'table' | 'board' | 'calendar' | 'timeline'
 
 // ── Lazily-loaded views ─────────────────────────────────────────────────────────
 // Board (dnd-kit) and Calendar pull in heavy client deps that the default Table view
@@ -59,6 +72,10 @@ const TaskCalendarView = dynamic(
   () => import('@/components/tasks/TaskCalendarView').then((m) => m.TaskCalendarView),
   { loading: ViewLoading, ssr: false }
 )
+const TaskTimelineView = dynamic(
+  () => import('@/components/tasks/TaskTimelineView').then((m) => m.TaskTimelineView),
+  { loading: ViewLoading, ssr: false }
+)
 
 // ── View switcher ─────────────────────────────────────────────────────────────
 
@@ -66,6 +83,7 @@ const VIEW_OPTIONS: { value: ViewMode; label: string; Icon: React.ElementType }[
   { value: 'table',    label: 'Table',    Icon: LayoutList },
   { value: 'board',    label: 'Board',    Icon: Columns3 },
   { value: 'calendar', label: 'Calendar', Icon: CalendarDays },
+  { value: 'timeline', label: 'Timeline', Icon: GanttChartSquare },
 ]
 
 function ViewSwitcher({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode) => void }) {
@@ -100,13 +118,18 @@ export function TasksClient({
   initialCustomFields,
   initialCustomFieldValues,
   toolbarActions,
+  basePath = '/tasks',
+  hideFilter = false,
+  allProjects = [],
+  milestones = [],
+  projectId,
 }: TasksClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [, startTransition] = useTransition()
 
   const rawView = searchParams.get('view') ?? 'table'
-  const view: ViewMode = ['table', 'board', 'calendar'].includes(rawView) ? (rawView as ViewMode) : 'table'
+  const view: ViewMode = ['table', 'board', 'calendar', 'timeline'].includes(rawView) ? (rawView as ViewMode) : 'table'
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId ?? null)
   const [panelData, setPanelData] = useState<PanelData | null>(null)
@@ -119,21 +142,23 @@ export function TasksClient({
   function setView(v: ViewMode) {
     const params = new URLSearchParams(searchParams.toString())
     params.set('view', v)
-    startTransition(() => { router.replace(`/tasks?${params.toString()}`) })
+    startTransition(() => { router.replace(`${basePath}?${params.toString()}`) })
   }
 
   async function openPanel(id: string) {
     setSelectedTaskId(id)
     setLoading(true)
     try {
-      const { task, comments, activity, subtasks, linkedRequest } = await loadTaskPanelData(id)
+      const { task, comments, activity, subtasks, dependencies, linkedRequest, linkedProject } = await loadTaskPanelData(id)
       if (task) {
         setPanelData({
           task,
           comments: comments as TaskCommentWithAuthor[],
           activity: activity as TaskActivityWithActor[],
           subtasks: subtasks as TaskWithDetails[],
+          dependencies,
           linkedRequest: linkedRequest ?? null,
+          linkedProject: linkedProject ?? null,
         })
       }
     } finally {
@@ -148,14 +173,16 @@ export function TasksClient({
 
   async function refreshPanel(taskId: string) {
     try {
-      const { task, comments, activity, subtasks, linkedRequest } = await loadTaskPanelData(taskId)
+      const { task, comments, activity, subtasks, dependencies, linkedRequest, linkedProject } = await loadTaskPanelData(taskId)
       if (task) {
         setPanelData({
           task,
           comments: comments as TaskCommentWithAuthor[],
           activity: activity as TaskActivityWithActor[],
           subtasks: subtasks as TaskWithDetails[],
+          dependencies,
           linkedRequest: linkedRequest ?? null,
+          linkedProject: linkedProject ?? null,
         })
       }
     } catch { /* silent */ }
@@ -169,15 +196,16 @@ export function TasksClient({
   }
 
   useEffect(() => {
+    // Open the task panel based on a URL param on mount — external (URL) sync, not derived prop state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (initialTaskId) openPanel(initialTaskId)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTaskId])
 
   return (
     <>
       {/* Unified toolbar: filter dropdown ← → view switcher + actions */}
       <div className="flex items-center justify-between gap-3">
-        <FilterDropdown />
+        {hideFilter ? <div /> : <FilterDropdown basePath={basePath} />}
         <div className="flex items-center gap-2">
           <ViewSwitcher view={view} onChange={setView} />
           {toolbarActions}
@@ -195,10 +223,13 @@ export function TasksClient({
           onCustomFieldsChange={setCustomFields}
           onCustomValueChange={handleCustomValueChange}
           profiles={profiles}
+          milestones={milestones}
+          projectId={projectId}
         />
       )}
       {view === 'board' && <TaskBoardView tasks={tasks} onTaskClick={openPanel} />}
       {view === 'calendar' && <TaskCalendarView tasks={tasks} onTaskClick={openPanel} />}
+      {view === 'timeline' && <TaskTimelineView tasks={tasks} onTaskClick={openPanel} />}
 
       {/* Loading overlay */}
       {loading && !panelData && (
@@ -221,7 +252,10 @@ export function TasksClient({
           comments={panelData.comments}
           activity={panelData.activity}
           subtasks={panelData.subtasks}
+          dependencies={panelData.dependencies}
           linkedRequest={panelData.linkedRequest}
+          linkedProject={panelData.linkedProject}
+          allProjects={allProjects}
           profiles={profiles}
           currentUserId={currentUserId}
           currentUserName={currentUserName}

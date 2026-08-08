@@ -46,9 +46,17 @@ export default async function AdminTeamsPage() {
     .eq('is_active', true)
     .order('full_name', { ascending: true })
 
-  const teams: TeamWithMembers[] = (teamsRaw ?? []).map((t: any) => {
+  type TeamQueryRow = {
+    id: string; name: string; slug: string; prefix: string
+    is_active: boolean; created_at: string; updated_at: string
+    team_members: { is_lead: boolean; user: { id: string; full_name: string } | null }[] | null
+    services: { name: string }[] | null
+  }
+  type ProfileQueryRow = { id: string; full_name: string }
+
+  const teams: TeamWithMembers[] = ((teamsRaw ?? []) as TeamQueryRow[]).map((t) => {
     const members = (t.team_members ?? [])
-      .map((tm: any) => tm.user ? { id: tm.user.id, full_name: tm.user.full_name, is_lead: tm.is_lead } : null)
+      .map((tm) => tm.user ? { id: tm.user.id, full_name: tm.user.full_name, is_lead: tm.is_lead } : null)
       .filter(Boolean) as { id: string; full_name: string; is_lead: boolean }[]
 
     return {
@@ -61,11 +69,11 @@ export default async function AdminTeamsPage() {
       updated_at: t.updated_at,
       member_count: members.length,
       members,
-      service_names: (t.services ?? []).map((s: any) => s.name),
+      service_names: (t.services ?? []).map((s) => s.name),
     }
   })
 
-  const allUsers: UserOption[] = (profilesRaw ?? []).map((p: any) => ({
+  const allUsers: UserOption[] = ((profilesRaw ?? []) as ProfileQueryRow[]).map((p) => ({
     id: p.id,
     full_name: p.full_name,
   }))

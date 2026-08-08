@@ -10,7 +10,7 @@
 -- every existing org, and seed defaults automatically whenever a new org is created (via a
 -- trigger, so all creation paths are covered, incl. owner-portal-created orgs).
 --
--- Scope: CognixDesk-owned table only (dedicated Supabase project, no HRMS).
+-- Scope: Citykart Desk-owned table only (dedicated Supabase project, no HRMS).
 
 -- 1. Ensure every existing row has an org_id (migration 033 backfilled to the owner org).
 UPDATE global_sla_config

@@ -31,7 +31,13 @@ export function SourceCell({ entity, id, value }: {
   const triggerRef = useRef<HTMLSpanElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { setCurrent(value) }, [value])
+  // Re-sync local state when the underlying value prop changes.
+  // Adjusting state during render (React's documented pattern) instead of an effect.
+  const [prevValue, setPrevValue] = useState(value)
+  if (prevValue !== value) {
+    setPrevValue(value)
+    setCurrent(value)
+  }
 
   useEffect(() => {
     if (!open) return

@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { signOut } from '@/lib/actions/auth'
@@ -16,14 +15,14 @@ export default function TrialExpiredPage() {
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold tracking-tight">Trial period ended</h1>
           <p className="text-muted-foreground">
-            Your CognixDesk trial has expired. To continue using the platform, please contact us to
+            Your Citykart Desk trial has expired. To continue using the platform, please contact us to
             activate your subscription.
           </p>
         </div>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Button asChild>
-            <a href="mailto:sales@cognixdesk.app">Contact sales</a>
+          <Button render={<a href="mailto:sales@citykart.org" />}>
+            Contact sales
           </Button>
           <form action={signOut}>
             <Button variant="outline" type="submit">Sign out</Button>

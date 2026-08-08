@@ -26,6 +26,10 @@ export interface LocationRow {
   timezone: string
   is_active: boolean
   created_at: string
+  user_count: number
+  open_requests: number
+  total_requests: number
+  avg_resolution_hours: number | null
 }
 
 export interface CostCenterRow {
@@ -34,6 +38,22 @@ export interface CostCenterRow {
   code: string | null
   department_id: string | null
   department_name?: string | null
+  is_active: boolean
+  created_at: string
+}
+
+export interface JobFunctionRow {
+  id: string
+  name: string
+  code: string | null
+  is_active: boolean
+  created_at: string
+}
+
+export interface DesignationRow {
+  id: string
+  name: string
+  code: string | null
   is_active: boolean
   created_at: string
 }
@@ -51,7 +71,7 @@ export default async function OrgStructurePage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = (await createClient()) as any
 
-  const [deptResult, locResult, ccResult, usersResult] = await Promise.all([
+  const [deptResult, locResult, ccResult, funcResult, desigResult, usersResult, allProfilesResult, requestsResult] = await Promise.all([
     supabase
       .from('departments')
       .select('id, name, code, parent_id, head_user_id, is_active, created_at, head:profiles!departments_head_user_id_fkey(full_name)')
@@ -65,13 +85,46 @@ export default async function OrgStructurePage() {
       .select('id, name, code, department_id, is_active, created_at, department:departments(name)')
       .order('name'),
     supabase
+      .from('job_functions')
+      .select('id, name, code, is_active, created_at')
+      .order('name'),
+    supabase
+      .from('designations')
+      .select('id, name, code, is_active, created_at')
+      .order('name'),
+    supabase
       .from('profiles')
       .select('id, full_name')
       .eq('is_active', true)
       .order('full_name'),
+    supabase
+      .from('profiles')
+      .select('id, location_id')
+      .eq('org_id', profile.org_id ?? '')
+      .eq('is_active', true),
+    supabase
+      .from('requests')
+      .select('id, requester_id, status, created_at, resolved_at')
+      .eq('org_id', profile.org_id ?? ''),
   ])
 
-  const departments: DepartmentRow[] = (deptResult.data ?? []).map((d: any) => ({
+  type DeptQueryRow = {
+    id: string; name: string; code: string | null; parent_id: string | null
+    head_user_id: string | null; is_active: boolean; created_at: string
+    head: { full_name: string } | null
+  }
+  type LocQueryRow = {
+    id: string; name: string; code: string | null; city: string | null; country: string | null
+    timezone: string | null; is_active: boolean; created_at: string
+  }
+  type CCQueryRow = {
+    id: string; name: string; code: string | null; department_id: string | null
+    is_active: boolean; created_at: string
+    department: { name: string } | null
+  }
+  type ProfileQueryRow = { id: string; full_name: string }
+
+  const departments: DepartmentRow[] = ((deptResult.data ?? []) as DeptQueryRow[]).map((d) => ({
     id: d.id,
     name: d.name,
     code: d.code,
@@ -82,18 +135,37 @@ export default async function OrgStructurePage() {
     created_at: d.created_at,
   }))
 
-  const locations: LocationRow[] = (locResult.data ?? []).map((l: any) => ({
-    id: l.id,
-    name: l.name,
-    code: l.code,
-    city: l.city,
-    country: l.country,
-    timezone: l.timezone ?? 'UTC',
-    is_active: l.is_active,
-    created_at: l.created_at,
-  }))
+  const locProfiles: { id: string; location_id: string | null }[] = allProfilesResult.data ?? []
+  const locRequests: { id: string; requester_id: string; status: string; created_at: string; resolved_at: string | null }[] = requestsResult.data ?? []
+  const profileLocMap = new Map(locProfiles.map((p) => [p.id, p.location_id]))
 
-  const costCenters: CostCenterRow[] = (ccResult.data ?? []).map((c: any) => ({
+  const locations: LocationRow[] = ((locResult.data ?? []) as LocQueryRow[]).map((l) => {
+    const usersHere = locProfiles.filter((p) => p.location_id === l.id)
+    const requestsHere = locRequests.filter((r) => profileLocMap.get(r.requester_id) === l.id)
+    const openRequests = requestsHere.filter((r) => !['resolved', 'closed', 'cancelled'].includes(r.status))
+    const resolvedWithTime = requestsHere.filter((r) => r.resolved_at && r.created_at)
+    const avgHours =
+      resolvedWithTime.length > 0
+        ? resolvedWithTime.reduce((sum, r) => sum + (new Date(r.resolved_at!).getTime() - new Date(r.created_at).getTime()) / 3_600_000, 0) / resolvedWithTime.length
+        : null
+
+    return {
+      id: l.id,
+      name: l.name,
+      code: l.code,
+      city: l.city,
+      country: l.country,
+      timezone: l.timezone ?? 'UTC',
+      is_active: l.is_active,
+      created_at: l.created_at,
+      user_count: usersHere.length,
+      open_requests: openRequests.length,
+      total_requests: requestsHere.length,
+      avg_resolution_hours: avgHours !== null ? Math.round(avgHours * 10) / 10 : null,
+    }
+  })
+
+  const costCenters: CostCenterRow[] = ((ccResult.data ?? []) as CCQueryRow[]).map((c) => ({
     id: c.id,
     name: c.name,
     code: c.code,
@@ -103,22 +175,27 @@ export default async function OrgStructurePage() {
     created_at: c.created_at,
   }))
 
-  const allUsers: UserOption[] = (usersResult.data ?? []).map((p: any) => ({
+  const allUsers: UserOption[] = ((usersResult.data ?? []) as ProfileQueryRow[]).map((p) => ({
     id: p.id,
     full_name: p.full_name,
   }))
+
+  const jobFunctions: JobFunctionRow[] = funcResult.data ?? []
+  const designations: DesignationRow[] = desigResult.data ?? []
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Organization Structure"
-        description="Manage departments, locations, and cost centers."
+        description="Manage departments, locations, cost centers, functions, and designations."
         breadcrumbs={[{ label: 'Admin' }, { label: 'Org Structure' }]}
       />
       <OrgStructureClient
         departments={departments}
         locations={locations}
         costCenters={costCenters}
+        jobFunctions={jobFunctions}
+        designations={designations}
         allUsers={allUsers}
       />
     </div>

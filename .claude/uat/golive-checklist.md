@@ -1,4 +1,4 @@
-# FlowDesk Go-Live Checklist
+# Citykart Desk Go-Live Checklist
 
 **Version:** 1.0
 **Last Updated:** 2026-06-14
@@ -62,7 +62,7 @@ Complete every item before production deployment. Items marked ✅ are verified.
 | 4.3 | `pg_trgm` extension installed | ⬜ | |
 | 4.4 | All 17 performance indexes present | ⬜ | |
 | 4.5 | Seed data removed / replaced with real data | ⬜ | |
-| 4.6 | No test users (agent@flowdesk.dev etc.) in prod | ⬜ | |
+| 4.6 | No test users (agent@citykart.dev etc.) in prod | ⬜ | |
 | 4.7 | Admin account created with secure password | ⬜ | |
 | 4.8 | Database backup configured and tested | ⬜ | |
 | 4.9 | Point-in-time recovery enabled (Supabase Pro) | ⬜ | |

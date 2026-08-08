@@ -16,6 +16,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Plus, Loader2, GripVertical } from 'lucide-react'
+import { toast } from 'sonner'
 import { createTask, updateTaskStatus } from '@/lib/actions/tasks'
 import { TaskStatusBadge, TaskPriorityBadge } from './TaskBadges'
 import type { TaskWithDetails, TaskStatus } from '@/types'
@@ -69,10 +70,13 @@ function SortableCard({
     opacity: selfDragging ? 0.35 : 1,
   }
 
+  // Point-in-time overdue check on frequently-re-rendered card data; not a source of bugs,
+  // and threading a shared `now` through the board/DnD tree for this is out of scope here.
   const overdue =
     task.due_date &&
     task.status !== 'done' &&
     task.status !== 'cancelled' &&
+    // eslint-disable-next-line react-hooks/purity
     new Date(task.due_date).getTime() < Date.now()
 
   return (
@@ -125,7 +129,6 @@ function OverlayCard({ task }: { task: TaskWithDetails }) {
 
 function BoardColumn({
   status,
-  label,
   accent,
   tasks,
   onTaskClick,
@@ -230,7 +233,13 @@ export function TaskBoardView({ tasks: initialTasks, onTaskClick }: { tasks: Tas
   const [overColumn, setOverColumn] = useState<TaskStatus | null>(null)
   const [, startTransition] = useTransition()
 
-  useEffect(() => { setTasks(initialTasks) }, [initialTasks])
+  // Re-sync local board state whenever the server passes a new snapshot of tasks.
+  // Adjusting state during render (React's documented pattern) instead of an effect.
+  const [prevInitialTasks, setPrevInitialTasks] = useState(initialTasks)
+  if (prevInitialTasks !== initialTasks) {
+    setPrevInitialTasks(initialTasks)
+    setTasks(initialTasks)
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -262,7 +271,7 @@ export function TaskBoardView({ tasks: initialTasks, onTaskClick }: { tasks: Tas
     return task?.status ?? null
   }
 
-  function onDragOver({ active, over }: DragOverEvent) {
+  function onDragOver({ over }: DragOverEvent) {
     setOverColumn(over ? resolveColumn(String(over.id)) : null)
   }
 
@@ -276,8 +285,15 @@ export function TaskBoardView({ tasks: initialTasks, onTaskClick }: { tasks: Tas
 
     if (!toCol || fromCol === toCol) return
 
-    setTasks(prev => prev.map(t => t.id === String(active.id) ? { ...t, status: toCol } : t))
-    startTransition(async () => { await updateTaskStatus(String(active.id), toCol) })
+    const taskId = String(active.id)
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: toCol } : t))
+    startTransition(async () => {
+      const result = await updateTaskStatus(taskId, toCol)
+      if (result.error) {
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: fromCol ?? t.status } : t))
+        toast.error(result.error)
+      }
+    })
   }
 
   return (

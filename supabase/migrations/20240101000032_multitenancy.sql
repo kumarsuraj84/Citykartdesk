@@ -2,7 +2,7 @@
 -- Sprint: Multi-tenancy — Organizations + Module Access
 -- ============================================================
 -- Strategy: additive only. Existing tables get an org_id FK.
--- Existing data is backfilled to a default "FlowDesk" org.
+-- Existing data is backfilled to a default "CityKart" org.
 -- RLS on new tables only; existing RLS unchanged for now.
 -- ============================================================
 
@@ -88,8 +88,8 @@ CREATE INDEX idx_teams_org    ON teams(org_id);
 INSERT INTO organizations (id, name, slug, status, seat_limit, trial_ends_at)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
-  'FlowDesk',
-  'flowdesk',
+  'CityKart',
+  'citykart',
   'active',
   9999,
   NULL

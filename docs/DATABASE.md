@@ -1,9 +1,8 @@
-# CognixDesk — Database Reference (Supabase / PostgreSQL)
+# Citykart Desk — Database Reference (Supabase / PostgreSQL)
 
-> Reconstructed from `supabase/migrations/**` (47 migrations) + `supabase/seed.sql`.
-> Region: **ap-south-1 (Mumbai)**. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for how the
-> app uses this schema. **Constraint:** HRMS shares this Supabase instance (boundary
-> to-confirm) — never alter HRMS tables; scope all migrations to CognixDesk tables.
+> Reconstructed from `supabase/migrations/**` (66 migrations) + `supabase/seed.sql`.
+> Runs on a local Supabase instance (Postgres + Auth + REST via the Supabase CLI).
+> See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for how the app uses this schema.
 
 ---
 
@@ -45,7 +44,7 @@
   Auto-created by `handle_new_user()` trigger on `auth.users` insert.
 - **`organizations`** (PK `id`) — `name`, `slug` (unique), `status` (`org_status`,
   default `trial`), `seat_limit` (default 10), `trial_ends_at`, `is_owner`.
-  Default owner org: id `00000000-0000-0000-0000-000000000001`, slug `flowdesk`,
+  Default owner org: id `00000000-0000-0000-0000-000000000001`, slug `citykart`,
   `is_owner=true`, all modules enabled perpetually (seed).
 - **`org_module_access`** — `org_id`, `module` (`module_slug`), `enabled`, `seat_limit`
   (null inherits org), `valid_from`, `valid_until` (null = perpetual). UNIQUE
@@ -181,7 +180,7 @@
 - **`org_signup_requests`** — public-insert lead form: `full_name`, `email`,
   `company_name`, `company_size`, `use_case`, `status` (`pending|approved|rejected`),
   `rejection_reason`, `approved_org_id`. No public SELECT (owner/admin reviews via app).
-- **`error_reports`** — `org_id`, `user_id`, `app` (default `cognixdesk`), `error_type`
+- **`error_reports`** — `org_id`, `user_id`, `app` (default `citykart-desk`), `error_type`
   (`crash|error|feedback`), `message`, `stack`, `url`, `metadata`, `status`
   (`new|triaged|resolved|dismissed`), `owner_note`. Any authenticated user can INSERT;
   admin/platform_owner SELECT.

@@ -33,7 +33,7 @@ export async function sendEmail(p: EmailPayload): Promise<{ error?: string }> {
 
     if (!res.ok) return { error: await res.text() }
     return {}
-  } catch (e: any) {
-    return { error: e.message }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) }
   }
 }

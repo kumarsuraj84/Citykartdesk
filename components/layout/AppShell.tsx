@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { Sparkles } from 'lucide-react'
+import Image from 'next/image'
 import { Sidebar } from './Sidebar'
 import { MobileNav } from './MobileNav'
 import { NotificationBell } from './NotificationBell'
@@ -13,7 +13,7 @@ function getInitials(name: string): string {
   return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-const ZERO_COUNTS: NavCounts = { requests: 0, tasks: 0, approvals: 0, notifications: 0 }
+const ZERO_COUNTS: NavCounts = { requests: 0, tasks: 0, approvals: 0, notifications: 0, projects: 0 }
 
 interface AppShellProps {
   profile: ProfileWithTeams
@@ -62,11 +62,15 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
 
         {/* Brand — matches sidebar width */}
         <Link href="/home" className="flex w-[196px] shrink-0 items-center gap-2.5">
-          <div className="relative h-8 w-8 rounded-lg grid place-items-center bg-gradient-to-br from-primary-glow to-primary shadow-[inset_0_1px_0_oklch(1_0_0/0.3),0_4px_12px_-4px_oklch(0.3_0.15_255/0.6)] shrink-0">
-            <Sparkles className="h-4 w-4 text-primary-foreground" strokeWidth={2.5} />
-          </div>
+          <Image
+            src="/citykart-desk-icon.png"
+            alt="Citykart Desk"
+            width={32}
+            height={32}
+            className="h-8 w-8 rounded-xl object-cover shadow-sm shrink-0"
+          />
           <div className="leading-none">
-            <p className="font-extrabold text-[14px] tracking-tight text-white">CognixDesk</p>
+            <p className="font-extrabold text-[14px] tracking-tight text-white">Citykart Desk</p>
             <p className="text-[8px] uppercase tracking-[0.18em] text-white/60 mt-0.5">Service Desk</p>
           </div>
         </Link>

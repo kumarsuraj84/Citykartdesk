@@ -1,6 +1,6 @@
 -- ============================================================
--- FlowDesk — Seed Data (local development)
--- Passwords are all: Password123!
+-- Citykart Desk — Seed Data (local development)
+-- Single admin account only. No demo/onboarded users.
 -- ============================================================
 
 -- ============================================================
@@ -21,7 +21,7 @@ INSERT INTO teams (id, name, slug, prefix, department_id, notification_email, is
     'it-support',
     'IT',
     '10000000-0000-0000-0000-000000000001',
-    'it-support@flowdesk.dev',
+    'it-support@citykart.org',
     true
   ),
   (
@@ -30,7 +30,7 @@ INSERT INTO teams (id, name, slug, prefix, department_id, notification_email, is
     'hr-operations',
     'HR',
     '10000000-0000-0000-0000-000000000002',
-    'hr@flowdesk.dev',
+    'hr@citykart.org',
     true
   ),
   (
@@ -39,80 +39,15 @@ INSERT INTO teams (id, name, slug, prefix, department_id, notification_email, is
     'facilities',
     'FAC',
     '10000000-0000-0000-0000-000000000003',
-    'facilities@flowdesk.dev',
+    'facilities@citykart.org',
     true
   );
 
 -- ============================================================
--- AUTH USERS + PROFILES
--- Trigger handle_new_user creates profiles automatically.
--- We then update roles for manager/admin.
+-- ADMIN ACCOUNT
+-- Trigger handle_new_user creates the profile automatically.
+-- We then elevate the role to platform_owner (full access).
 -- ============================================================
-
--- user: Alex Johnson (regular user / requester)
-INSERT INTO auth.users (
-  id, instance_id, aud, role, email,
-  encrypted_password, email_confirmed_at,
-  raw_app_meta_data, raw_user_meta_data,
-  created_at, updated_at,
-  confirmation_token, recovery_token,
-  email_change_token_new, email_change
-) VALUES (
-  '30000000-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000000',
-  'authenticated', 'authenticated',
-  'user@flowdesk.dev',
-  crypt('Password123!', gen_salt('bf')),
-  now(),
-  '{"provider":"email","providers":["email"]}',
-  '{"full_name":"Alex Johnson"}',
-  now(), now(),
-  '', '', '', ''
-);
-
--- agent: Sam Rivera (IT Support team member)
-INSERT INTO auth.users (
-  id, instance_id, aud, role, email,
-  encrypted_password, email_confirmed_at,
-  raw_app_meta_data, raw_user_meta_data,
-  created_at, updated_at,
-  confirmation_token, recovery_token,
-  email_change_token_new, email_change
-) VALUES (
-  '30000000-0000-0000-0000-000000000002',
-  '00000000-0000-0000-0000-000000000000',
-  'authenticated', 'authenticated',
-  'agent@flowdesk.dev',
-  crypt('Password123!', gen_salt('bf')),
-  now(),
-  '{"provider":"email","providers":["email"]}',
-  '{"full_name":"Sam Rivera"}',
-  now(), now(),
-  '', '', '', ''
-);
-
--- manager: Jordan Lee
-INSERT INTO auth.users (
-  id, instance_id, aud, role, email,
-  encrypted_password, email_confirmed_at,
-  raw_app_meta_data, raw_user_meta_data,
-  created_at, updated_at,
-  confirmation_token, recovery_token,
-  email_change_token_new, email_change
-) VALUES (
-  '30000000-0000-0000-0000-000000000003',
-  '00000000-0000-0000-0000-000000000000',
-  'authenticated', 'authenticated',
-  'manager@flowdesk.dev',
-  crypt('Password123!', gen_salt('bf')),
-  now(),
-  '{"provider":"email","providers":["email"]}',
-  '{"full_name":"Jordan Lee"}',
-  now(), now(),
-  '', '', '', ''
-);
-
--- admin: Admin User
 INSERT INTO auth.users (
   id, instance_id, aud, role, email,
   encrypted_password, email_confirmed_at,
@@ -124,29 +59,16 @@ INSERT INTO auth.users (
   '30000000-0000-0000-0000-000000000004',
   '00000000-0000-0000-0000-000000000000',
   'authenticated', 'authenticated',
-  'admin@flowdesk.dev',
-  crypt('Password123!', gen_salt('bf')),
+  'suraj@citykart.org',
+  crypt('Password!!', gen_salt('bf')),
   now(),
   '{"provider":"email","providers":["email"]}',
-  '{"full_name":"Admin User"}',
+  '{"full_name":"Suraj"}',
   now(), now(),
   '', '', '', ''
 );
 
--- Elevate roles (trigger created profiles as 'user')
-UPDATE profiles SET role = 'manager' WHERE id = '30000000-0000-0000-0000-000000000003';
 UPDATE profiles SET role = 'platform_owner' WHERE id = '30000000-0000-0000-0000-000000000004';
-
--- ============================================================
--- TEAM MEMBERS
--- ============================================================
-INSERT INTO team_members (team_id, user_id, is_lead, org_id) VALUES
-  -- IT Support: Sam (agent), Jordan (lead), Admin
-  ('20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000002', false, '00000000-0000-0000-0000-000000000001'),
-  ('20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000003', true,  '00000000-0000-0000-0000-000000000001'),
-  ('20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000004', false, '00000000-0000-0000-0000-000000000001'),
-  -- HR Operations: Jordan (lead)
-  ('20000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000003', true,  '00000000-0000-0000-0000-000000000001');
 
 -- ============================================================
 -- SERVICE CATEGORIES
@@ -414,7 +336,7 @@ INSERT INTO services (
 );
 
 -- ============================================================
--- SERVICE SUB-CATEGORIES (Phase 3)
+-- SERVICE SUB-CATEGORIES
 -- ============================================================
 INSERT INTO service_sub_categories (id, category_id, name, slug, description, icon, sort_order, is_active) VALUES
   -- Hardware
@@ -449,362 +371,217 @@ UPDATE services SET sub_category_id = '70000000-0000-0000-0000-000000000007' WHE
 UPDATE services SET sub_category_id = '70000000-0000-0000-0000-000000000008' WHERE id = '60000000-0000-0000-0000-000000000008'; -- Maintenance Request → Building & Maintenance
 
 -- ============================================================
--- DUMMY REQUESTS  (covers all statuses + ticket flows)
--- Requester = Alex Johnson (30000000-0000-0000-0000-000000000001)
--- Agent     = Sam Rivera   (30000000-0000-0000-0000-000000000002)
--- Manager   = Jordan Lee   (30000000-0000-0000-0000-000000000003)
+-- KNOWLEDGE BASE — starter articles (one per seeded service)
 -- ============================================================
-
--- NOTE: we bypass the trigger by inserting request_no manually.
--- The trigger only fires on INSERT without request_no set; providing it skips it.
-
-INSERT INTO requests (
-  id, request_no, title, description,
-  requester_id, assigned_to, service_id, team_id,
-  priority, status, form_data,
-  response_due_at, resolution_due_at, responded_at, resolved_at, closed_at,
-  created_at, updated_at
-) VALUES
-
--- 1. OPEN — new laptop request, unassigned
+INSERT INTO kb_articles (id, org_id, title, slug, content, status, author_id) VALUES
 (
-  'A0000000-0000-0000-0000-000000000001',
-  'IT-000001',
-  'New MacBook Pro for design work',
-  'I need a new MacBook Pro M3 for video editing and design. My current machine is 4 years old and struggling.',
-  '30000000-0000-0000-0000-000000000001', NULL,
-  '60000000-0000-0000-0000-000000000001',
-  '20000000-0000-0000-0000-000000000001',
-  'high', 'open',
-  '{"reason":"upgrade","os_preference":"macos","additional_notes":"Need minimum 16GB RAM and 512GB SSD for video editing workflow."}'::jsonb,
-  now() + interval '8 hours', now() + interval '24 hours',
-  NULL, NULL, NULL,
-  now() - interval '2 hours', now() - interval '2 hours'
+  '80000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000001',
+  'How to Request a New Laptop',
+  'how-to-request-a-new-laptop',
+  '## When to use this
+
+Use the **Laptop Request** service when you need a new laptop for a new hire, a replacement for a broken or lost device, or an upgrade.
+
+## Before you submit
+
+- Have your current asset tag ready if this is a replacement.
+- Decide whether you need macOS or Windows.
+- If this is for a new hire, note their start date so IT can prepare the device in time.
+
+## What happens next
+
+1. Your request is routed to **IT Support**.
+2. Standard turnaround is 1–3 business days depending on priority and stock.
+3. You''ll get a notification when the request moves to *In Progress* and again when it''s *Resolved*.
+
+## Related
+
+See also: *Troubleshooting a Flickering or Broken Monitor* if the issue is a peripheral rather than the laptop itself.',
+  'published',
+  '30000000-0000-0000-0000-000000000004'
 ),
-
--- 2. IN_PROGRESS — equipment repair, assigned to Sam
 (
-  'A0000000-0000-0000-0000-000000000002',
-  'IT-000002',
-  'Monitor flickering on second display',
-  'My external Dell monitor has started flickering. It makes it impossible to work for more than 30 minutes.',
-  '30000000-0000-0000-0000-000000000001',
-  '30000000-0000-0000-0000-000000000002',
-  '60000000-0000-0000-0000-000000000002',
-  '20000000-0000-0000-0000-000000000001',
-  'high', 'in_progress',
-  '{"device_type":"monitor","issue_description":"Dell U2722D flickering at random intervals, worse after 30 mins of use. Tried different cables and ports.","asset_tag":"AST-00421"}'::jsonb,
-  now() - interval '2 hours', now() + interval '22 hours',
-  now() - interval '3 hours', NULL, NULL,
-  now() - interval '5 hours', now() - interval '3 hours'
+  '80000000-0000-0000-0000-000000000002',
+  '00000000-0000-0000-0000-000000000001',
+  'Troubleshooting a Flickering or Broken Monitor',
+  'troubleshooting-a-flickering-or-broken-monitor',
+  '## Quick checks before raising a ticket
+
+1. Try a different cable (HDMI/DisplayPort) if you have one.
+2. Try a different port on your laptop or dock.
+3. Restart your machine — a driver glitch can look like a hardware fault.
+
+## If it''s still broken
+
+Raise an **Equipment Repair** request under Hardware and include:
+- The device type (monitor, keyboard, mouse, etc.)
+- A clear description of the issue and when it started
+- The asset tag / serial number if visible on a sticker on the device
+
+Marking the request **High** priority is appropriate if the fault blocks you from working.',
+  'published',
+  '30000000-0000-0000-0000-000000000004'
 ),
-
--- 3. PENDING_APPROVAL — access request awaiting manager sign-off
 (
-  'A0000000-0000-0000-0000-000000000003',
-  'IT-000003',
-  'Admin access to Salesforce CRM',
-  'Need admin access to Salesforce to manage lead assignments for the new sales territory rollout.',
-  '30000000-0000-0000-0000-000000000001', NULL,
-  '60000000-0000-0000-0000-000000000004',
-  '20000000-0000-0000-0000-000000000001',
-  'medium', 'pending_approval',
-  '{"system_name":"Salesforce CRM","access_level":"admin","justification":"New territory assignments require admin-level lead management. Approved verbally by Jordan Lee on Monday.","manager_approved":true}'::jsonb,
-  now() + interval '24 hours', now() + interval '48 hours',
-  NULL, NULL, NULL,
-  now() - interval '1 day', now() - interval '1 day'
+  '80000000-0000-0000-0000-000000000003',
+  '00000000-0000-0000-0000-000000000001',
+  'Requesting Software Installation',
+  'requesting-software-installation',
+  '## What this covers
+
+Use the **Software Installation** service to get any application, tool, or license installed on your work device — e.g. Adobe Acrobat, Slack, Figma, dev tools.
+
+## What to include
+
+- The exact software name and, if relevant, which edition/tier.
+- A short business justification (why you need it for your role).
+- Whether it''s urgent and why, if so.
+
+## Note on licensed software
+
+Paid software may require budget approval from your manager before IT can proceed — mention this in the justification if you already have verbal sign-off.',
+  'published',
+  '30000000-0000-0000-0000-000000000004'
 ),
-
--- 4. RESOLVED — software install, fully resolved
 (
-  'A0000000-0000-0000-0000-000000000004',
-  'IT-000004',
-  'Install Figma desktop app',
-  'Please install Figma desktop on my MacBook. Currently using the web version which is slower.',
-  '30000000-0000-0000-0000-000000000001',
-  '30000000-0000-0000-0000-000000000002',
-  '60000000-0000-0000-0000-000000000003',
-  '20000000-0000-0000-0000-000000000001',
-  'low', 'resolved',
-  '{"software_name":"Figma","business_justification":"UI/UX design work. Desktop app is significantly faster than browser version.","urgency_reason":""}'::jsonb,
-  now() - interval '3 days', now() - interval '2 days',
-  now() - interval '4 days', now() - interval '2 days', NULL,
-  now() - interval '5 days', now() - interval '2 days'
+  '80000000-0000-0000-0000-000000000004',
+  '00000000-0000-0000-0000-000000000001',
+  'How to Request System Access (VPN, CRM, Shared Drives)',
+  'how-to-request-system-access',
+  '## What this covers
+
+Use the **Access Request** service for VPN access, logins to internal systems (e.g. CRM), or access to shared drives/folders.
+
+## Access levels
+
+- **Read only** — view data without changing it.
+- **Read and write** — the default for most day-to-day work.
+- **Admin access** — reserved for system owners; requires manager approval.
+
+## Approval
+
+Requests for elevated or admin-level access are routed through a **manager approval** step before IT provisions anything. Make sure the "manager has verbally approved" box only checked if that''s actually true — it speeds up approval but is double-checked.',
+  'published',
+  '30000000-0000-0000-0000-000000000004'
 ),
-
--- 5. CLOSED — office supplies, all done
 (
-  'A0000000-0000-0000-0000-000000000005',
-  'FAC-000001',
-  'Notebooks and pens for Q3 planning',
-  'Need supplies for the upcoming Q3 planning sessions.',
-  '30000000-0000-0000-0000-000000000001',
-  '30000000-0000-0000-0000-000000000002',
-  '60000000-0000-0000-0000-000000000007',
-  '20000000-0000-0000-0000-000000000003',
-  'low', 'closed',
-  '{"items":"3x A4 notebooks, 2x boxes of ballpoint pens, 1x whiteboard markers set","delivery_location":"Floor 2, Desk 7A"}'::jsonb,
-  now() - interval '8 days', now() - interval '6 days',
-  now() - interval '9 days', now() - interval '7 days', now() - interval '6 days',
-  now() - interval '10 days', now() - interval '6 days'
+  '80000000-0000-0000-0000-000000000005',
+  '00000000-0000-0000-0000-000000000001',
+  'New Employee Onboarding Checklist',
+  'new-employee-onboarding-checklist',
+  '## For managers submitting an onboarding request
+
+Raise a **New Employee Onboarding** request as early as possible — ideally at least a week before the start date — so equipment and access are ready on day one.
+
+## Information to have ready
+
+- Full legal name and personal email (for offer/access setup)
+- Start date and job title
+- Department and reporting manager
+- Equipment needed: laptop, monitor, phone, access card
+
+## What HR + IT do with this
+
+- HR prepares the employment paperwork and building/access card.
+- IT provisions a laptop and default accounts (email, core tools).
+- Both teams coordinate so the new hire has a working setup on day one.',
+  'published',
+  '30000000-0000-0000-0000-000000000004'
 ),
-
--- 6. OPEN — HR onboarding for a new hire, urgent
 (
-  'A0000000-0000-0000-0000-000000000006',
-  'HR-000001',
-  'Onboarding setup for Priya Sharma — starts Monday',
-  'New senior designer Priya Sharma joins Monday. Need full onboarding pack urgently.',
-  '30000000-0000-0000-0000-000000000003',
-  NULL,
-  '60000000-0000-0000-0000-000000000005',
-  '20000000-0000-0000-0000-000000000002',
-  'urgent', 'open',
-  '{"employee_name":"Priya Sharma","start_date":"2026-06-16","role_title":"Senior Product Designer","department":"Product","equipment_needed":["laptop","monitor","access_card"],"notes":"Priya is relocating from London. Please ensure laptop is pre-configured with Figma, Notion, and Slack before arrival."}'::jsonb,
-  now() + interval '2 hours', now() + interval '24 hours',
-  NULL, NULL, NULL,
-  now() - interval '30 minutes', now() - interval '30 minutes'
+  '80000000-0000-0000-0000-000000000006',
+  '00000000-0000-0000-0000-000000000001',
+  'Leave & Time-Off Policy FAQ',
+  'leave-and-time-off-policy-faq',
+  '## Common questions
+
+**Can I carry over unused leave into next year?**
+Check with HR for the current policy — this is configured per fiscal year and may change.
+
+**How do I request leave?**
+Raise an **HR General Inquiry** with topic "Leave & time off" and describe your request; HR will confirm balance and approve.
+
+**Who approves leave?**
+Your direct manager, via the standard approval workflow.
+
+For anything not covered here, raise a general HR inquiry and someone will get back to you.',
+  'published',
+  '30000000-0000-0000-0000-000000000004'
 ),
-
--- 7. IN_PROGRESS — maintenance (flickering lights)
 (
-  'A0000000-0000-0000-0000-000000000007',
-  'FAC-000002',
-  'Broken lighting in meeting room B',
-  'Three ceiling lights in meeting room B are out. Hard to hold video calls in there.',
-  '30000000-0000-0000-0000-000000000001',
-  '30000000-0000-0000-0000-000000000002',
-  '60000000-0000-0000-0000-000000000008',
-  '20000000-0000-0000-0000-000000000003',
-  'medium', 'in_progress',
-  '{"issue_type":"lighting","location":"Meeting Room B, Floor 3","description":"Three ceiling tube lights have failed. Replacement bulbs may be needed. Issue started last Tuesday.","safety_hazard":false}'::jsonb,
-  now() - interval '12 hours', now() + interval '60 hours',
-  now() - interval '1 day', NULL, NULL,
-  now() - interval '2 days', now() - interval '1 day'
+  '80000000-0000-0000-0000-000000000007',
+  '00000000-0000-0000-0000-000000000001',
+  'Ordering Office Supplies',
+  'ordering-office-supplies',
+  '## What this covers
+
+Use the **Office Supplies** service for stationery, consumables, and small desk items (notebooks, pens, whiteboard markers, etc.).
+
+## What to include
+
+- A clear list of items and quantities (e.g. "3x A4 notebooks, 1 box of pens").
+- Your delivery location — floor and desk number if applicable.
+
+## Turnaround
+
+Low-priority by default; typically fulfilled within a few business days from office stock or a supplier order.',
+  'published',
+  '30000000-0000-0000-0000-000000000004'
 ),
-
--- 8. RESOLVED — HR inquiry about leave policy
 (
-  'A0000000-0000-0000-0000-000000000008',
-  'HR-000002',
-  'Question about carry-over leave policy',
-  'Can unused annual leave days be carried into next year? Need clarification before year-end.',
-  '30000000-0000-0000-0000-000000000001',
-  '30000000-0000-0000-0000-000000000003',
-  '60000000-0000-0000-0000-000000000006',
-  '20000000-0000-0000-0000-000000000002',
-  'low', 'resolved',
-  '{"topic":"leave","details":"I have 5 unused annual leave days remaining. Our handbook is unclear on whether these roll over to 2027 or are forfeited."}'::jsonb,
-  now() - interval '6 days', now() - interval '4 days',
-  now() - interval '7 days', now() - interval '5 days', NULL,
-  now() - interval '8 days', now() - interval '5 days'
-),
+  '80000000-0000-0000-0000-000000000008',
+  '00000000-0000-0000-0000-000000000001',
+  'Reporting a Facilities or Maintenance Issue',
+  'reporting-a-facilities-or-maintenance-issue',
+  '## What this covers
 
--- 9. OPEN — VPN access request
-(
-  'A0000000-0000-0000-0000-000000000009',
-  'IT-000005',
-  'VPN access for remote work',
-  'Starting to work from home 3 days a week and need VPN to access internal tools.',
-  '30000000-0000-0000-0000-000000000001', NULL,
-  '60000000-0000-0000-0000-000000000004',
-  '20000000-0000-0000-0000-000000000001',
-  'medium', 'open',
-  '{"system_name":"Corporate VPN","access_level":"read_write","justification":"Working remotely 3 days/week starting next month. Need VPN for JIRA, Confluence, and internal dev environments.","manager_approved":true}'::jsonb,
-  now() + interval '24 hours', now() + interval '48 hours',
-  NULL, NULL, NULL,
-  now() - interval '4 hours', now() - interval '4 hours'
-),
+Use the **Maintenance Request** service for lighting, HVAC (heating/cooling), plumbing, cleaning, or security/access issues in the office.
 
--- 10. CLOSED — laptop repair all done
-(
-  'A0000000-0000-0000-0000-000000000010',
-  'IT-000006',
-  'Keyboard keys sticking on ThinkPad',
-  'Several keys on my ThinkPad keyboard are sticking, especially the spacebar and Enter key.',
-  '30000000-0000-0000-0000-000000000001',
-  '30000000-0000-0000-0000-000000000002',
-  '60000000-0000-0000-0000-000000000002',
-  '20000000-0000-0000-0000-000000000001',
-  'medium', 'closed',
-  '{"device_type":"laptop","issue_description":"Spacebar and Enter key are sticking intermittently. Suspect liquid spill residue underneath.","asset_tag":"AST-00087"}'::jsonb,
-  now() - interval '15 days', now() - interval '12 days',
-  now() - interval '16 days', now() - interval '13 days', now() - interval '12 days',
-  now() - interval '17 days', now() - interval '12 days'
+## What to include
+
+- Issue type and exact location (floor + room, e.g. "Meeting Room B").
+- A clear description of the problem and when it started.
+- Check the **safety hazard** box if the issue poses any risk (e.g. exposed wiring, water leak near electronics) — this raises the priority automatically.
+
+## Response times
+
+Safety-hazard issues are treated as urgent regardless of the selected priority.',
+  'published',
+  '30000000-0000-0000-0000-000000000004'
 );
 
--- ============================================================
--- APPROVALS  (for requests that need manager sign-off)
--- ============================================================
-INSERT INTO approvals (id, request_id, workflow_id, current_step, status, created_at) VALUES
-  -- IT-000003 (Salesforce access): pending
-  (
-    'B0000000-0000-0000-0000-000000000001',
-    'A0000000-0000-0000-0000-000000000003',
-    '50000000-0000-0000-0000-000000000001',
-    1, 'pending', now() - interval '1 day'
-  ),
-  -- HR-000001 (Onboarding Priya): pending
-  (
-    'B0000000-0000-0000-0000-000000000002',
-    'A0000000-0000-0000-0000-000000000006',
-    '50000000-0000-0000-0000-000000000002',
-    1, 'pending', now() - interval '30 minutes'
-  );
-
--- ============================================================
--- COMMENTS  (agent notes, customer replies, internal notes)
--- ============================================================
-INSERT INTO request_comments (id, request_id, author_id, body, is_internal, created_at) VALUES
-
--- IT-000002 (monitor flickering)
-(
-  'C0000000-0000-0000-0000-000000000001',
-  'A0000000-0000-0000-0000-000000000002',
-  '30000000-0000-0000-0000-000000000002',
-  'Hi Alex — picked this up. I''ll swing by your desk this afternoon to take a look at the monitor. Could you keep the flickering happening so I can witness it?',
-  false, now() - interval '3 hours'
-),
-(
-  'C0000000-0000-0000-0000-000000000002',
-  'A0000000-0000-0000-0000-000000000002',
-  '30000000-0000-0000-0000-000000000001',
-  'Thanks Sam! It''s been flickering constantly this morning — shouldn''t be hard to reproduce. I''m at desk 7B.',
-  false, now() - interval '2 hours 30 minutes'
-),
-(
-  'C0000000-0000-0000-0000-000000000003',
-  'A0000000-0000-0000-0000-000000000002',
-  '30000000-0000-0000-0000-000000000002',
-  'Checked the monitor — display cable looks fine, issue is likely a failing backlight on the panel. Ordering a replacement unit from IT stock. ETA 1–2 business days.',
-  true, now() - interval '1 hour'
-),
-
--- IT-000004 (Figma install) — resolved thread
-(
-  'C0000000-0000-0000-0000-000000000004',
-  'A0000000-0000-0000-0000-000000000004',
-  '30000000-0000-0000-0000-000000000002',
-  'Figma Desktop has been installed and is ready to use. You can find it in your Applications folder. Let me know if anything looks off.',
-  false, now() - interval '2 days'
-),
-(
-  'C0000000-0000-0000-0000-000000000005',
-  'A0000000-0000-0000-0000-000000000004',
-  '30000000-0000-0000-0000-000000000001',
-  'Perfect, works great! Much faster than the browser. Thank you.',
-  false, now() - interval '2 days' + interval '30 minutes'
-),
-
--- FAC-000002 (meeting room lights)
-(
-  'C0000000-0000-0000-0000-000000000006',
-  'A0000000-0000-0000-0000-000000000007',
-  '30000000-0000-0000-0000-000000000002',
-  'Logged this with the facilities contractor. They''re scheduled to inspect Meeting Room B on Thursday morning. Room will need to be free 8–10am.',
-  false, now() - interval '1 day'
-),
-
--- HR-000002 (leave policy)
-(
-  'C0000000-0000-0000-0000-000000000007',
-  'A0000000-0000-0000-0000-000000000008',
-  '30000000-0000-0000-0000-000000000003',
-  'Hi Alex — great question. Per our current policy, up to 5 days of unused annual leave can be carried forward to the following calendar year. These must be used by March 31st or they will expire. I''ve updated the HR wiki with a clearer version of this policy.',
-  false, now() - interval '5 days'
-),
-(
-  'C0000000-0000-0000-0000-000000000008',
-  'A0000000-0000-0000-0000-000000000008',
-  '30000000-0000-0000-0000-000000000001',
-  'That''s exactly what I needed to know. Thanks Jordan!',
-  false, now() - interval '5 days' + interval '1 hour'
-);
-
--- ============================================================
--- ADDITIONAL USERS (more realistic team)
--- ============================================================
-INSERT INTO auth.users (
-  id, instance_id, aud, role, email,
-  encrypted_password, email_confirmed_at,
-  raw_app_meta_data, raw_user_meta_data,
-  created_at, updated_at,
-  confirmation_token, recovery_token,
-  email_change_token_new, email_change
-) VALUES
--- agent2: Maya Patel (IT Support)
-(
-  '30000000-0000-0000-0000-000000000005',
-  '00000000-0000-0000-0000-000000000000',
-  'authenticated', 'authenticated',
-  'maya@flowdesk.dev',
-  crypt('Password123!', gen_salt('bf')),
-  now(),
-  '{"provider":"email","providers":["email"]}',
-  '{"full_name":"Maya Patel"}',
-  now(), now(), '', '', '', ''
-),
--- user2: Chris Walker (regular employee)
-(
-  '30000000-0000-0000-0000-000000000006',
-  '00000000-0000-0000-0000-000000000000',
-  'authenticated', 'authenticated',
-  'chris@flowdesk.dev',
-  crypt('Password123!', gen_salt('bf')),
-  now(),
-  '{"provider":"email","providers":["email"]}',
-  '{"full_name":"Chris Walker"}',
-  now(), now(), '', '', '', ''
-);
-
-INSERT INTO team_members (team_id, user_id, is_lead, org_id) VALUES
-  ('20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000005', false, '00000000-0000-0000-0000-000000000001');
-
--- Chris's requests
-INSERT INTO requests (
-  id, request_no, title, description,
-  requester_id, assigned_to, service_id, team_id,
-  priority, status, form_data,
-  response_due_at, resolution_due_at, responded_at, resolved_at,
-  created_at, updated_at
-) VALUES
-(
-  'A0000000-0000-0000-0000-000000000011',
-  'IT-000007',
-  'Slack not syncing on mobile',
-  'Slack stopped showing new messages on my iPhone. Desktop works fine.',
-  '30000000-0000-0000-0000-000000000006',
-  '30000000-0000-0000-0000-000000000005',
-  '60000000-0000-0000-0000-000000000003',
-  '20000000-0000-0000-0000-000000000001',
-  'medium', 'in_progress',
-  '{"software_name":"Slack (mobile)","business_justification":"Need mobile Slack for on-call alerts.","urgency_reason":"Missing urgent messages."}'::jsonb,
-  now() + interval '12 hours', now() + interval '3 days',
-  now() - interval '2 hours', NULL,
-  now() - interval '3 hours', now() - interval '2 hours'
-),
-(
-  'A0000000-0000-0000-0000-000000000012',
-  'IT-000008',
-  'New laptop — replacement for cracked screen',
-  'Dropped my laptop and the screen cracked. Need a replacement urgently.',
-  '30000000-0000-0000-0000-000000000006', NULL,
-  '60000000-0000-0000-0000-000000000001',
-  '20000000-0000-0000-0000-000000000001',
-  'urgent', 'open',
-  '{"reason":"replacement","os_preference":"windows","additional_notes":"Current laptop is a Dell XPS 13, asset tag AST-00233. Screen is cracked, otherwise functional."}'::jsonb,
-  now() + interval '2 hours', now() + interval '8 hours',
-  NULL, NULL,
-  now() - interval '1 hour', now() - interval '1 hour'
-);
+INSERT INTO kb_article_services (article_id, service_id) VALUES
+  ('80000000-0000-0000-0000-000000000001', '60000000-0000-0000-0000-000000000001'), -- Laptop Request
+  ('80000000-0000-0000-0000-000000000002', '60000000-0000-0000-0000-000000000002'), -- Equipment Repair
+  ('80000000-0000-0000-0000-000000000003', '60000000-0000-0000-0000-000000000003'), -- Software Installation
+  ('80000000-0000-0000-0000-000000000004', '60000000-0000-0000-0000-000000000004'), -- Access Request
+  ('80000000-0000-0000-0000-000000000005', '60000000-0000-0000-0000-000000000005'), -- New Employee Onboarding
+  ('80000000-0000-0000-0000-000000000006', '60000000-0000-0000-0000-000000000006'), -- HR General Inquiry
+  ('80000000-0000-0000-0000-000000000007', '60000000-0000-0000-0000-000000000007'), -- Office Supplies
+  ('80000000-0000-0000-0000-000000000008', '60000000-0000-0000-0000-000000000008'); -- Maintenance Request
 
 -- ── Backfill org_id for all seeded data ────────────────────────────────────────
--- All seed data belongs to the default FlowDesk org
-UPDATE profiles SET org_id = '00000000-0000-0000-0000-000000000001' WHERE org_id IS NULL;
-UPDATE teams    SET org_id = '00000000-0000-0000-0000-000000000001' WHERE org_id IS NULL;
+-- All seed data belongs to the default Citykart Desk org
+UPDATE profiles          SET org_id = '00000000-0000-0000-0000-000000000001' WHERE org_id IS NULL;
+UPDATE teams             SET org_id = '00000000-0000-0000-0000-000000000001' WHERE org_id IS NULL;
+UPDATE departments       SET org_id = '00000000-0000-0000-0000-000000000001' WHERE org_id IS NULL;
+UPDATE service_categories SET org_id = '00000000-0000-0000-0000-000000000001' WHERE org_id IS NULL;
+UPDATE services          SET org_id = '00000000-0000-0000-0000-000000000001' WHERE org_id IS NULL;
+UPDATE approval_workflows SET org_id = '00000000-0000-0000-0000-000000000001' WHERE org_id IS NULL;
 
 -- ── Enable all modules for the default org ──────────────────────────────────────
 INSERT INTO org_module_access (org_id, module, enabled)
 SELECT '00000000-0000-0000-0000-000000000001', m.module::module_slug, true
-FROM (VALUES ('tasks'), ('requests'), ('approvals'), ('services'), ('analytics'), ('time_tracking')) m(module)
+FROM (VALUES ('tasks'), ('requests'), ('approvals'), ('services'), ('analytics'), ('time_tracking'), ('projects')) m(module)
 ON CONFLICT (org_id, module) DO UPDATE SET enabled = true;
+
+-- ── Default AI application patterns for DeskTime hour-splitting ────────────────
+INSERT INTO ai_applications (org_id, name) VALUES
+  ('00000000-0000-0000-0000-000000000001', 'Remote'),
+  ('00000000-0000-0000-0000-000000000001', 'Claude'),
+  ('00000000-0000-0000-0000-000000000001', 'Localhost'),
+  ('00000000-0000-0000-0000-000000000001', 'Snooker'),
+  ('00000000-0000-0000-0000-000000000001', 'WMS'),
+  ('00000000-0000-0000-0000-000000000001', 'Sql')
+ON CONFLICT (org_id, name) DO NOTHING;

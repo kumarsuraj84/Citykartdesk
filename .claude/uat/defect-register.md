@@ -1,6 +1,6 @@
-# FlowDesk UAT Defect Register
+# Citykart Desk UAT Defect Register
 
-**Program:** FlowDesk Enterprise UAT
+**Program:** Citykart Desk Enterprise UAT
 **Start Date:** 2026-06-14
 **Status:** OPEN — UAT In Progress
 **Freeze Directive:** Active — No feature development permitted

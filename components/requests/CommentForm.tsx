@@ -166,6 +166,9 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
                               <button
                                 key={r.id}
                                 type="button"
+                                // insertCanned only reads textareaRef.current inside a setTimeout scheduled
+                                // from this click handler, never during render — safe ref access.
+                                // eslint-disable-next-line react-hooks/refs
                                 onClick={() => insertCanned(r.body)}
                                 className="w-full text-left rounded-lg px-2.5 py-2 text-xs hover:bg-muted transition-colors"
                               >

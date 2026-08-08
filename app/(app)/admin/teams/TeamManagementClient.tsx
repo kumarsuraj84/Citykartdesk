@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo, useRef, useEffect } from 'react'
 import {
-  Plus, Trash2, ChevronDown, ChevronRight, Edit2, Save, X, UserMinus, UserPlus, Search,
+  Plus, Trash2, ChevronDown, ChevronRight, X, UserMinus, UserPlus, Search,
 } from 'lucide-react'
 import {
   createTeam,

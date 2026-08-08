@@ -14,7 +14,7 @@
 -- so authenticated users get SELECT only.
 --
 -- Reuses existing SECURITY DEFINER helpers: current_org_id(), current_user_role(),
--- is_team_member(). Scope: CognixDesk only. HRMS untouched.
+-- is_team_member(). Scope: Citykart Desk only. HRMS untouched.
 -- ============================================================
 
 -- ── 1. Enums ─────────────────────────────────────────────────

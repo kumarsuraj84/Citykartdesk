@@ -463,7 +463,7 @@ export async function reclassifyReview(
 
   // Log the reclassification
   await logIntakeAudit({
-    orgId: profile.org_id,
+    orgId: review.org_id,
     actorId: profile.id,
     entityId: reviewId,
     action: 'review_reclassified',

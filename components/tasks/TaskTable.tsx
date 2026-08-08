@@ -4,6 +4,7 @@ import { useState, useTransition, useRef, useEffect, Fragment, useCallback, memo
 import { useRouter } from 'next/navigation'
 import { ChevronDown, ChevronRight, Plus, Loader2, Link2, Settings2, Trash2, CheckSquare, Check, Calendar, X, UserRound, Flag } from 'lucide-react'
 import { createTask, fetchSubtasks, deleteTask, updateTaskStatus, updateTaskField } from '@/lib/actions/tasks'
+import { assignTaskMilestone } from '@/lib/actions/projects'
 import { SourceCell } from '@/components/ui/SourceCell'
 import { CustomFieldCell } from './CustomFieldCell'
 import { CustomColumnManager, EditFieldModal } from './CustomColumnManager'
@@ -48,12 +49,12 @@ function AvatarInitial({ name }: { name: string }) {
 }
 
 const TD = 'px-3 py-[5px] text-sm border-r border-border/50 last:border-r-0'
-const TH = 'px-3 py-[6px] text-[11px] font-medium text-muted-foreground border-r border-border/50 last:border-r-0 whitespace-nowrap'
+const TH = 'px-3 py-[6px] text-[11px] font-medium text-primary-foreground/85 border-r border-white/15 last:border-r-0 whitespace-nowrap'
 
 // ── Generic cell popover ──────────────────────────────────────────────────────
 
 function CellPopover({ children, trigger, align = 'left' }: {
-  children: React.ReactNode
+  children: React.ReactNode | ((close: () => void) => React.ReactNode)
   trigger: React.ReactNode
   align?: 'left' | 'right'
 }) {
@@ -108,7 +109,7 @@ function CellPopover({ children, trigger, align = 'left' }: {
           }}
           className="min-w-[160px] rounded-xl border border-border bg-card shadow-2xl"
         >
-          {typeof children === 'function' ? (children as any)(() => setOpen(false)) : children}
+          {typeof children === 'function' ? children(() => setOpen(false)) : children}
         </div>
       )}
     </>
@@ -160,14 +161,23 @@ function StatusCell({ taskId, status, onUpdate }: { taskId: string; status: Task
 
 // ── Priority cell ─────────────────────────────────────────────────────────────
 
-function PriorityCell({ taskId, priority, onUpdate }: { taskId: string; priority: string | null; onUpdate: (p: string) => void }) {
+// tasks.priority is a NOT NULL DB column with no 'urgent' value (task_priority enum
+// is low/medium/high only, default 'medium'). PRIORITY_META also lists 'urgent' and
+// 'none' for display purposes, but neither is a legal value to persist — normalize
+// both to the same default used on task creation before writing or updating state.
+function normalizeTaskPriority(p: string): 'low' | 'medium' | 'high' {
+  return p === 'low' || p === 'medium' || p === 'high' ? p : 'medium'
+}
+
+function PriorityCell({ taskId, priority, onUpdate }: { taskId: string; priority: string | null; onUpdate: (p: 'low' | 'medium' | 'high') => void }) {
   const [isPending, startTransition] = useTransition()
   const p = PRIORITY_META[priority ?? 'none'] ?? PRIORITY_META.none
 
   function pick(next: string, close: () => void) {
+    const resolved = normalizeTaskPriority(next)
     startTransition(async () => {
-      await updateTaskField(taskId, 'priority', next === 'none' ? null : next)
-      onUpdate(next)
+      await updateTaskField(taskId, 'priority', resolved)
+      onUpdate(resolved)
       close()
     })
   }
@@ -204,8 +214,9 @@ function DueDateCell({ taskId, dueDate, status, onUpdate }: {
   taskId: string; dueDate: string | null; status: TaskStatus; onUpdate: (d: string | null) => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const overdue = dueDate && status !== 'done' && status !== 'cancelled' && new Date(dueDate).getTime() < Date.now()
-  const dueSoon = !overdue && dueDate && status !== 'done' && status !== 'cancelled' && new Date(dueDate).getTime() < Date.now() + 86_400_000 * 2
+  const [now] = useState(() => Date.now())
+  const overdue = dueDate && status !== 'done' && status !== 'cancelled' && new Date(dueDate).getTime() < now
+  const dueSoon = !overdue && dueDate && status !== 'done' && status !== 'cancelled' && new Date(dueDate).getTime() < now + 86_400_000 * 2
 
   function save(val: string, close: () => void) {
     const iso = val ? new Date(val).toISOString() : null
@@ -325,6 +336,62 @@ function AssigneeCell({ taskId, assignee, profiles, onUpdate }: {
   )
 }
 
+// ── Enhancement (milestone) cell ─────────────────────────────────────────────
+
+function MilestoneCell({ taskId, milestoneId, milestones, onUpdate }: {
+  taskId: string
+  milestoneId: string | null
+  milestones: { id: string; name: string }[]
+  onUpdate: (id: string | null) => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const current = milestones.find(m => m.id === milestoneId) ?? null
+
+  function pick(id: string | null, close: () => void) {
+    if (id === milestoneId) { close(); return }
+    startTransition(async () => {
+      await assignTaskMilestone(taskId, id)
+      onUpdate(id)
+      close()
+    })
+  }
+
+  return (
+    <CellPopover
+      trigger={
+        current ? (
+          <span className="text-[12px] text-foreground truncate max-w-[110px] inline-block hover:opacity-70 transition-opacity cursor-pointer">
+            {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : current.name}
+          </span>
+        ) : (
+          <span className="text-[11px] text-muted-foreground/40 cursor-pointer hover:text-muted-foreground transition-colors">
+            {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Set…'}
+          </span>
+        )
+      }
+    >
+      {(close: () => void) => (
+        <div className="max-h-56 w-56 overflow-y-auto p-1">
+          {current && (
+            <button onClick={() => pick(null, close)}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted transition-colors">
+              <X className="h-3 w-3" />Remove
+            </button>
+          )}
+          {milestones.map(m => (
+            <button key={m.id} onClick={() => pick(m.id, close)}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs hover:bg-muted transition-colors text-left">
+              <span className="truncate">{m.name}</span>
+              {milestoneId === m.id && <Check className="h-3 w-3 ml-auto text-primary shrink-0" />}
+            </button>
+          ))}
+          {milestones.length === 0 && <p className="px-2.5 py-2 text-xs text-muted-foreground">No enhancements yet</p>}
+        </div>
+      )}
+    </CellPopover>
+  )
+}
+
 // ── Inline title edit ─────────────────────────────────────────────────────────
 
 function TitleCell({ taskId, title, status, subtaskCount, onUpdate, onExpand, isExpanded, loadingSubtasks, onOpen }: {
@@ -338,7 +405,7 @@ function TitleCell({ taskId, title, status, subtaskCount, onUpdate, onExpand, is
   const inputRef = useRef<HTMLInputElement>(null)
   const isDone = status === 'done' || status === 'cancelled'
 
-  useEffect(() => { if (editing) { setVal(title); inputRef.current?.focus(); inputRef.current?.select() } }, [editing])
+  useEffect(() => { if (editing) { inputRef.current?.focus(); inputRef.current?.select() } }, [editing])
 
   function save() {
     if (!val.trim() || val === title) { setEditing(false); return }
@@ -378,7 +445,7 @@ function TitleCell({ taskId, title, status, subtaskCount, onUpdate, onExpand, is
       <span
         className={`truncate text-[13px] cursor-pointer ${isDone ? 'line-through text-muted-foreground' : 'text-foreground hover:text-primary'}`}
         onClick={e => { e.stopPropagation(); onOpen() }}
-        onDoubleClick={e => { e.stopPropagation(); setEditing(true) }}
+        onDoubleClick={e => { e.stopPropagation(); setVal(title); setEditing(true) }}
         title="Click to open · Double-click to edit"
       >
         {title}
@@ -394,18 +461,21 @@ function TitleCell({ taskId, title, status, subtaskCount, onUpdate, onExpand, is
 
 // ── Group header ──────────────────────────────────────────────────────────────
 
-function GroupHeader({ status, count, collapsed, onToggle, colSpan }: {
-  status: TaskStatus; count: number; collapsed: boolean; onToggle: () => void; colSpan: number
+function GroupHeader({ status, count, sharePct, collapsed, onToggle, colSpan }: {
+  status: TaskStatus; count: number; sharePct: number; collapsed: boolean; onToggle: () => void; colSpan: number
 }) {
   const m = STATUS_META[status]
   return (
     <tr className="bg-muted/30 select-none">
       <td colSpan={colSpan} className="px-3 py-1.5 border-b border-border">
-        <button onClick={onToggle} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+        <button onClick={onToggle} className="flex w-full items-center gap-2 hover:opacity-80 transition-opacity">
           {collapsed ? <ChevronRight className="h-3 w-3 text-muted-foreground" /> : <ChevronDown className="h-3 w-3 text-muted-foreground" />}
           <span className={`inline-block h-2 w-2 rounded-full ${m.dot}`} />
           <span className="text-[11px] font-semibold text-foreground">{m.label}</span>
           <span className="text-[11px] text-muted-foreground">{count}</span>
+          <span className="ml-2 h-1 w-24 shrink-0 overflow-hidden rounded-full bg-muted">
+            <span className={`block h-full rounded-full ${m.dot}`} style={{ width: `${sharePct}%` }} />
+          </span>
         </button>
       </td>
     </tr>
@@ -416,7 +486,7 @@ function GroupHeader({ status, count, collapsed, onToggle, colSpan }: {
 
 const TaskRow = memo(function TaskRow({
   task, rowNum, onTaskClick, customFields, customValues, onCustomValueChange,
-  selected, onSelectToggle, profiles,
+  selected, onSelectToggle, profiles, milestones,
   onFieldUpdate,
 }: {
   task: TaskWithDetails
@@ -428,6 +498,7 @@ const TaskRow = memo(function TaskRow({
   selected: boolean
   onSelectToggle: (id: string) => void
   profiles: { id: string; full_name: string }[]
+  milestones: { id: string; name: string }[]
   onFieldUpdate: (taskId: string, patch: Partial<TaskWithDetails>) => void
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -446,12 +517,10 @@ const TaskRow = memo(function TaskRow({
     setExpanded(!expanded)
   }
 
-  const isDone = task.status === 'done' || task.status === 'cancelled'
-
   return (
     <>
       <tr
-        className={`group border-b border-border/50 transition-colors ${selected ? 'bg-primary/5' : 'hover:bg-muted/30'}`}
+        className={`group border-b border-border/50 transition-colors ${selected ? 'bg-primary/5' : `hover:bg-primary/10 ${rowNum % 2 === 0 ? 'bg-slate-100 dark:bg-white/5' : 'bg-card'}`}`}
         onClick={() => onTaskClick(task.id)}
       >
         {/* Row num / checkbox */}
@@ -517,9 +586,21 @@ const TaskRow = memo(function TaskRow({
           <PriorityCell
             taskId={task.id}
             priority={task.priority}
-            onUpdate={p => onFieldUpdate(task.id, { priority: p === 'none' ? null : p })}
+            onUpdate={p => onFieldUpdate(task.id, { priority: p })}
           />
         </td>
+
+        {/* Enhancement (milestone) — click to pick, only when the project has any */}
+        {milestones.length > 0 && (
+          <td className={`${TD} min-w-[110px]`} onClick={e => e.stopPropagation()}>
+            <MilestoneCell
+              taskId={task.id}
+              milestoneId={task.milestone_id}
+              milestones={milestones}
+              onUpdate={id => onFieldUpdate(task.id, { milestone_id: id })}
+            />
+          </td>
+        )}
 
         {/* Source — editable dropdown */}
         <td className={TD} onClick={e => e.stopPropagation()}>
@@ -561,6 +642,7 @@ const TaskRow = memo(function TaskRow({
             <td className={TD}><span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold ${STATUS_META[sub.status].bg} ${STATUS_META[sub.status].text}`}>{STATUS_META[sub.status].label}</span></td>
             <td className={`${TD} text-[12px] text-muted-foreground`}>{formatDate(sub.due_date)}</td>
             <td className={TD}><span className={`text-[12px] font-medium ${PRIORITY_META[sub.priority ?? 'none']?.color}`}>{PRIORITY_META[sub.priority ?? 'none']?.label}</span></td>
+            {milestones.length > 0 && <td className={`${TD} text-[12px] text-muted-foreground`}>{milestones.find(m => m.id === sub.milestone_id)?.name ?? '—'}</td>}
             <td className={TD} onClick={e => e.stopPropagation()}><SourceCell entity="task" id={sub.id} value={(sub as { source_metadata?: { created_via?: string } | null }).source_metadata?.created_via ?? null} /></td>
             {customFields.map(f => <td key={f.id} className={`${TD} text-[12px] text-muted-foreground`}>—</td>)}
             <td className="px-3 py-[4px]" />
@@ -574,12 +656,13 @@ const TaskRow = memo(function TaskRow({
 // ── Inline add row ────────────────────────────────────────────────────────────
 
 function InlineAddRow({
-  status, colSpan, onAdded, profiles = [],
+  status, colSpan, onAdded, profiles = [], projectId,
 }: {
   status: TaskStatus
   colSpan: number
   onAdded: (task: TaskWithDetails) => void
   profiles?: { id: string; full_name: string }[]
+  projectId?: string
 }) {
   const router = useRouter()
   const [active, setActive] = useState(false)
@@ -621,7 +704,7 @@ function InlineAddRow({
     return () => document.removeEventListener('mousedown', handler)
   }, [showAssigneePicker, showPriorityPicker, showDatePicker])
 
-  function openPicker(btnRef: React.RefObject<HTMLButtonElement | null>, setter: (v: boolean) => void, others: Array<(v: boolean) => void>) {
+  function openPicker(btnRef: React.RefObject<HTMLButtonElement | null>, setter: React.Dispatch<React.SetStateAction<boolean>>, others: Array<React.Dispatch<React.SetStateAction<boolean>>>) {
     others.forEach(s => s(false))
     if (btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect()
@@ -642,9 +725,10 @@ function InlineAddRow({
         title: title.trim(),
         taskType: 'personal',
         status,
-        priority: (quickPriority as any) ?? 'medium',
+        priority: quickPriority ? normalizeTaskPriority(quickPriority) : 'medium',
         assigneeId: quickAssignee?.id ?? undefined,
         dueDate: quickDueDate ?? undefined,
+        projectId,
       })
       if (!result.error && result.data) {
         onAdded({
@@ -663,6 +747,8 @@ function InlineAddRow({
           due_date: quickDueDate,
           completed_at: null,
           request_id: null,
+          project_id: projectId ?? null,
+          milestone_id: null,
           team_id: null,
           creator: { id: '', full_name: '' },
           subtask_count: 0,
@@ -853,40 +939,63 @@ interface TaskTableProps {
   onCustomFieldsChange: (fields: CustomField[]) => void
   onCustomValueChange: (taskId: string, fieldId: string, value: CustomFieldValue['value']) => void
   profiles?: { id: string; full_name: string }[]
+  /** Enhancements (milestones) for the current project — omit outside a project context. */
+  milestones?: { id: string; name: string }[]
+  /** Scopes tasks created via the inline "+ Add task" row to this project — omit outside a project context. */
+  projectId?: string
 }
 
-export function TaskTable({ tasks: initialTasks, onTaskClick, customFields, customFieldValues, teamId, onCustomFieldsChange, onCustomValueChange, profiles = [] }: TaskTableProps) {
+export function TaskTable({ tasks: initialTasks, onTaskClick, customFields, customFieldValues, teamId, onCustomFieldsChange, onCustomValueChange, profiles = [], milestones = [], projectId }: TaskTableProps) {
   const [tasks, setTasks] = useState<TaskWithDetails[]>(initialTasks)
+  const [prevInitialTasks, setPrevInitialTasks] = useState(initialTasks)
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all')
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<TaskStatus>>(new Set())
   const [editingField, setEditingField] = useState<CustomField | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkPending, startBulkTransition] = useTransition()
+  const [bulkError, setBulkError] = useState('')
 
-  useEffect(() => { setTasks(initialTasks) }, [initialTasks])
+  if (initialTasks !== prevInitialTasks) {
+    setPrevInitialTasks(initialTasks)
+    setTasks(initialTasks)
+  }
 
   const handleFieldUpdate = useCallback((taskId: string, patch: Partial<TaskWithDetails>) => {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...patch } : t))
   }, [])
 
   function toggleSelect(id: string) {
-    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setSelectedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
   }
   function clearSelection() { setSelectedIds(new Set()) }
 
   function handleBulkStatus(status: TaskStatus) {
     const ids = Array.from(selectedIds)
+    setBulkError('')
     startBulkTransition(async () => {
-      await Promise.all(ids.map(id => updateTaskStatus(id, status)))
-      setTasks(prev => prev.map(t => ids.includes(t.id) ? { ...t, status } : t))
+      const results = await Promise.all(ids.map(id => updateTaskStatus(id, status)))
+      const succeededIds = ids.filter((id, i) => !results[i].error)
+      setTasks(prev => prev.map(t => succeededIds.includes(t.id) ? { ...t, status } : t))
+      const failedCount = ids.length - succeededIds.length
+      if (failedCount > 0) {
+        setBulkError(`Failed to update ${failedCount} of ${ids.length} task(s).`)
+      }
       clearSelection()
     })
   }
 
   function handleBulkDelete() {
     const ids = Array.from(selectedIds)
+    if (!confirm(`Delete ${ids.length} task(s)? This cannot be undone.`)) return
+    setBulkError('')
     startBulkTransition(async () => {
-      await Promise.all(ids.map(id => deleteTask(id)))
-      setTasks(prev => prev.filter(t => !ids.includes(t.id)))
+      const results = await Promise.all(ids.map(id => deleteTask(id)))
+      const succeededIds = ids.filter((id, i) => !results[i].error)
+      setTasks(prev => prev.filter(t => !succeededIds.includes(t.id)))
+      const failedCount = ids.length - succeededIds.length
+      if (failedCount > 0) {
+        setBulkError(`Failed to delete ${failedCount} of ${ids.length} task(s).`)
+      }
       clearSelection()
     })
   }
@@ -907,7 +1016,22 @@ export function TaskTable({ tasks: initialTasks, onTaskClick, customFields, cust
   const canAdd = statusFilter === 'all' || statusFilter === 'open' || statusFilter === 'in_progress'
   const addStatus: TaskStatus = statusFilter === 'all' || statusFilter === 'in_progress' ? 'in_progress' : 'open'
 
-  const totalCols = 8 + customFields.length + 1
+  const totalCols = 8 + customFields.length + 1 + (milestones.length > 0 ? 1 : 0)
+
+  // Grouped-by-status rendering only makes sense on the "All" tab — a single-status
+  // filter is already one implicit group.
+  const isGrouped = statusFilter === 'all'
+  const groups = isGrouped
+    ? STATUS_ORDER.map(s => ({ status: s, items: visibleTasks.filter(t => t.status === s) })).filter(g => g.items.length > 0)
+    : []
+
+  function toggleGroup(status: TaskStatus) {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(status)) next.delete(status); else next.add(status)
+      return next
+    })
+  }
 
   return (
     <>
@@ -921,23 +1045,26 @@ export function TaskTable({ tasks: initialTasks, onTaskClick, customFields, cust
       )}
 
       {selectedIds.size > 0 && (
-        <div className="mb-2 flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-2">
-          <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <CheckSquare className="h-3.5 w-3.5" />{selectedIds.size} selected
-          </span>
-          <div className="flex gap-2">
-            {(['in_progress', 'done'] as TaskStatus[]).map(s => (
-              <button key={s} onClick={() => handleBulkStatus(s)} disabled={bulkPending}
-                className={`rounded px-2.5 py-0.5 text-xs font-medium disabled:opacity-50 ${STATUS_META[s].bg} ${STATUS_META[s].text}`}>
-                {STATUS_META[s].label}
+        <div className="mb-2 rounded-xl border border-border bg-card px-4 py-2">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <CheckSquare className="h-3.5 w-3.5" />{selectedIds.size} selected
+            </span>
+            <div className="flex gap-2">
+              {(['in_progress', 'done'] as TaskStatus[]).map(s => (
+                <button key={s} onClick={() => handleBulkStatus(s)} disabled={bulkPending}
+                  className={`rounded px-2.5 py-0.5 text-xs font-medium disabled:opacity-50 ${STATUS_META[s].bg} ${STATUS_META[s].text}`}>
+                  {STATUS_META[s].label}
+                </button>
+              ))}
+              <button onClick={handleBulkDelete} disabled={bulkPending}
+                className="btn-danger">
+                {bulkPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}Delete
               </button>
-            ))}
-            <button onClick={handleBulkDelete} disabled={bulkPending}
-              className="btn-danger">
-              {bulkPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}Delete
-            </button>
+            </div>
+            <button onClick={clearSelection} className="btn-ghost ml-auto">Clear</button>
           </div>
-          <button onClick={clearSelection} className="btn-ghost ml-auto">Clear</button>
+          {bulkError && <p className="mt-1.5 text-xs text-red-500">{bulkError}</p>}
         </div>
       )}
 
@@ -971,19 +1098,20 @@ export function TaskTable({ tasks: initialTasks, onTaskClick, customFields, cust
         <div className="overflow-x-auto">
         <table className="w-full border-collapse text-left">
           <thead>
-            <tr className="border-b border-border bg-muted/10">
-              <th className="w-10 px-2 py-[6px] border-r border-border/50" />
+            <tr className="border-b border-border bg-primary">
+              <th className="w-10 px-2 py-[6px] border-r border-white/15" />
               <th className={TH}>Name</th>
               <th className={TH}>Assignee</th>
               <th className={TH}>Status</th>
               <th className={TH}>Due date</th>
               <th className={TH}>Priority</th>
+              {milestones.length > 0 && <th className={TH}>Enhancement</th>}
               <th className={TH}>Source</th>
               {customFields.map(field => (
                 <th key={field.id} className={TH}>
                   <div className="flex items-center gap-1 group/col">
                     {field.name}
-                    <button onClick={() => setEditingField(field)} className="opacity-0 group-hover/col:opacity-100 rounded p-0.5 text-muted-foreground/50 hover:text-foreground transition-all">
+                    <button onClick={() => setEditingField(field)} className="opacity-0 group-hover/col:opacity-100 rounded p-0.5 text-primary-foreground/60 hover:text-primary-foreground transition-all">
                       <Settings2 className="h-3 w-3" />
                     </button>
                   </div>
@@ -1003,26 +1131,59 @@ export function TaskTable({ tasks: initialTasks, onTaskClick, customFields, cust
                 </p>
               </td></tr>
             )}
-            {visibleTasks.map((task, i) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                rowNum={i + 1}
-                onTaskClick={onTaskClick}
-                customFields={customFields}
-                customValues={customFieldValues[task.id] ?? {}}
-                onCustomValueChange={onCustomValueChange}
-                selected={selectedIds.has(task.id)}
-                onSelectToggle={toggleSelect}
-                profiles={profiles}
-                onFieldUpdate={handleFieldUpdate}
-              />
-            ))}
+            {isGrouped ? (
+              groups.map(({ status, items }) => (
+                <Fragment key={status}>
+                  <GroupHeader
+                    status={status}
+                    count={items.length}
+                    sharePct={visibleTasks.length > 0 ? (items.length / visibleTasks.length) * 100 : 0}
+                    collapsed={collapsedGroups.has(status)}
+                    onToggle={() => toggleGroup(status)}
+                    colSpan={totalCols}
+                  />
+                  {!collapsedGroups.has(status) && items.map((task, i) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      rowNum={i + 1}
+                      onTaskClick={onTaskClick}
+                      customFields={customFields}
+                      customValues={customFieldValues[task.id] ?? {}}
+                      onCustomValueChange={onCustomValueChange}
+                      selected={selectedIds.has(task.id)}
+                      onSelectToggle={toggleSelect}
+                      profiles={profiles}
+                      milestones={milestones}
+                      onFieldUpdate={handleFieldUpdate}
+                    />
+                  ))}
+                </Fragment>
+              ))
+            ) : (
+              visibleTasks.map((task, i) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  rowNum={i + 1}
+                  onTaskClick={onTaskClick}
+                  customFields={customFields}
+                  customValues={customFieldValues[task.id] ?? {}}
+                  onCustomValueChange={onCustomValueChange}
+                  selected={selectedIds.has(task.id)}
+                  onSelectToggle={toggleSelect}
+                  profiles={profiles}
+                  milestones={milestones}
+                  onFieldUpdate={handleFieldUpdate}
+                />
+              ))
+            )}
             {canAdd && (
               <InlineAddRow
                 status={addStatus}
                 colSpan={totalCols}
                 profiles={profiles}
+                projectId={projectId}
                 onAdded={task => setTasks(prev => [...prev, task])}
               />
             )}

@@ -4,11 +4,12 @@ import { useState, useTransition } from 'react'
 import { CheckCircle2, XCircle, Clock, UserCheck, MessageSquare, CalendarDays } from 'lucide-react'
 import { approveApproval, rejectApproval, delegateApproval, searchUsersForDelegation } from '@/lib/actions/approvals'
 import type { ApprovalWithDetails } from '@/lib/queries/approvals'
+import type { UserRole } from '@/types'
 
 interface ApprovalPanelProps {
   approval: ApprovalWithDetails
   viewerId: string
-  viewerRole: 'user' | 'manager' | 'admin'
+  viewerRole: UserRole
 }
 
 function formatDate(iso: string) {
@@ -38,7 +39,7 @@ export function ApprovalPanel({ approval, viewerId, viewerRole }: ApprovalPanelP
   const [delegateSearch, setDelegateSearch] = useState('')
   const [delegateResults, setDelegateResults] = useState<{ id: string; full_name: string }[]>([])
 
-  const isManager  = viewerRole === 'manager' || viewerRole === 'admin'
+  const isManager  = viewerRole === 'manager' || viewerRole === 'admin' || viewerRole === 'platform_owner'
   const isParallel = approval.current_step === 0
   const isAdHoc    = approval.workflow?.name.startsWith('Ad-hoc:') ?? false
 

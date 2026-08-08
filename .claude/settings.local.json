@@ -5,7 +5,24 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git push *)",
-      "Bash(npm -v)"
+      "Bash(npm -v)",
+      "Bash(awk -F= '{print $1}' .env.local)",
+      "Bash(node node_modules/typescript/lib/tsc.js --noEmit)",
+      "Bash(cd \"/c/Users/Administrator/Desktop/AI WORK/Zoho Alternate\" && find node_modules/next/dist/docs -iname \"*base-ui*\" 2>/dev/null; find / -maxdepth 6 -iname \"*.md\" -path \"*base-ui*\" 2>/dev/null | head -20; grep -rn \"render=\" --include=\"*.tsx\" app components 2>/dev/null | grep -v node_modules | head -20)",
+      "Bash(node -e ' *)",
+      "Bash(node node_modules/eslint/bin/eslint.js app lib components types proxy.ts)",
+      "Bash(node node_modules/next/dist/bin/next build)",
+      "Bash(node node_modules/eslint/bin/eslint.js app lib components types proxy.ts -f json)",
+      "Read(//tmp/**)",
+      "Bash(node \"C:\\\\Users\\\\ADMINI~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Administrator-Desktop-AI-WORK-Zoho-Alternate\\\\43585082-8e8b-4e42-a2d0-9aff28e63da8\\\\scratchpad\\\\summarize.js\")",
+      "Bash(node \"C:\\\\Users\\\\ADMINI~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Administrator-Desktop-AI-WORK-Zoho-Alternate\\\\43585082-8e8b-4e42-a2d0-9aff28e63da8\\\\scratchpad\\\\list.js\")",
+      "Bash(xargs grep -l \"no-unused-vars\")",
+      "Bash(node node_modules/eslint/bin/eslint.js \"images.remotePatterns\")",
+      "Bash(node node_modules/eslint/bin/eslint.js \"app/\\(app\\)/admin/approvals/WorkflowBuilderClient.tsx\" \"app/\\(app\\)/admin/request-config/AlertRulesClient.tsx\" \"app/\\(app\\)/admin/roles/PermissionMatrixClient.tsx\" \"app/\\(app\\)/admin/runbooks/RunbooksClient.tsx\" \"app/\\(app\\)/admin/task-config/page.tsx\" \"app/\\(app\\)/admin/teams/TeamManagementClient.tsx\" \"app/\\(app\\)/home/page.tsx\" \"app/not-found.tsx\")",
+      "Bash(node node_modules/eslint/bin/eslint.js \"app/\\(app\\)/admin/org/OrgStructureClient.tsx\" \"app/\\(app\\)/admin/routing/RoutingRulesClient.tsx\" \"app/\\(app\\)/admin/users/UserManagementClient.tsx\" \"app/\\(app\\)/intake/review/[id]/ReviewClient.tsx\" \"app/\\(app\\)/profile/ProfileClient.tsx\" \"app/\\(app\\)/requests/[id]/page.tsx\" \"app/\\(app\\)/tasks/TasksClient.tsx\" \"app/\\(app\\)/trial-expired/page.tsx\" \"app/\\(auth\\)/reset-password/page.tsx\" \"components/analytics/Charts.tsx\" \"components/analytics/DetailDrawer.tsx\" \"components/analytics/TaskDashboard.tsx\" \"components/intake/AiBrief.tsx\" \"components/intake/PipelineStatusBanner.tsx\" \"components/layout/GlobalSearch.tsx\" \"components/layout/Sidebar.tsx\" \"components/layout/ThemeSwitcher.tsx\" \"components/requests/CommentForm.tsx\" \"components/requests/ExportButton.tsx\" \"components/requests/LinkedTasksPanel.tsx\" \"components/requests/RequestActionBar.tsx\" \"components/requests/RequestBoardView.tsx\" \"components/requests/RequestSidebarPanel.tsx\" \"components/requests/RequestTasksTab.tsx\" \"components/tasks/CustomColumnManager.tsx\" \"components/tasks/CustomFieldCell.tsx\" \"components/tasks/SubtaskList.tsx\" \"components/tasks/TaskActivityFeed.tsx\" \"components/tasks/TaskBoardView.tsx\" \"components/tasks/TaskCalendarView.tsx\" \"components/tasks/TaskDetailPanel.tsx\" \"components/tasks/TaskDetailSidebar.tsx\" \"components/ui/SourceCell.tsx\")",
+      "Bash(node node_modules/eslint/bin/eslint.js \"app/\\(app\\)/admin/runbooks/RunbooksClient.tsx\")",
+      "Bash(xargs grep -l \"profiles\")",
+      "Bash(python3 -c ' *)"
     ]
   }
 }

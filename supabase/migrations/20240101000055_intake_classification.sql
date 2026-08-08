@@ -13,7 +13,7 @@
 -- Reviews store SUGGESTED (engine snapshot) and FINAL (reviewer decision) values
 -- separately for auditability and the future feedback loop.
 --
--- Scope: CognixDesk only. HRMS untouched. Dark launch preserved (intake module
+-- Scope: Citykart Desk only. HRMS untouched. Dark launch preserved (intake module
 -- still disabled by default).
 -- ============================================================
 

@@ -13,7 +13,7 @@
 --   - The worker reads them via the admin (service-role) client.
 --   - `authenticated` can never read a decrypted secret.
 --
--- Scope: CognixDesk only. HRMS untouched.
+-- Scope: Citykart Desk only. HRMS untouched.
 -- ============================================================
 
 -- ── 0. Vault extension ───────────────────────────────────────

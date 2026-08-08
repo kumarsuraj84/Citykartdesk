@@ -9,7 +9,7 @@
 -- 'intake' therefore lives in the next migration (053), not here. This mirrors
 -- how 'agent'/'platform_owner' were added in migration 035.
 --
--- Scope: CognixDesk-owned schema only. HRMS is untouched.
+-- Scope: Citykart Desk-owned schema only.
 -- ============================================================
 
 ALTER TYPE module_slug ADD VALUE IF NOT EXISTS 'intake';

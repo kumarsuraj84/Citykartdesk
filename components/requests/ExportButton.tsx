@@ -1,7 +1,7 @@
 'use client'
 
 import { useTransition, useState } from 'react'
-import { Loader2, Download, ChevronDown } from 'lucide-react'
+import { Loader2, Download } from 'lucide-react'
 import { downloadCSV } from '@/lib/export/csv'
 
 interface ExportButtonProps {

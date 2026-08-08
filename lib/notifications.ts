@@ -83,7 +83,7 @@ export async function notify(inputs: NotifyInput | NotifyInput[]): Promise<void>
     const { sendNotificationEmail } = await import('@/lib/email/notify-email')
     const adminClient = createAdminClient()
     for (const n of notificationRows) {
-      const { data: u } = await (adminClient as any).auth.admin.getUserById(n.user_id)
+      const { data: u } = await adminClient.auth.admin.getUserById(n.user_id)
       if (!u?.user?.email) continue
       await sendNotificationEmail({ type: n.type, recipientEmail: u.user.email, recipientName: '', data: { ...(n.metadata as Record<string, string> ?? {}), title: n.title, body: n.body ?? '', link: n.link ?? '' } })
     }

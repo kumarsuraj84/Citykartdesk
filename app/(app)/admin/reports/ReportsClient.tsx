@@ -94,8 +94,8 @@ export function ReportsClient() {
             action={() =>
               exportRequests({
                 status: reqStatus || undefined,
-                dateFrom: reqFrom || undefined,
-                dateTo: reqTo || undefined,
+                date_from: reqFrom || undefined,
+                date_to: reqTo || undefined,
               })
             }
             filename="requests.csv"
@@ -123,8 +123,8 @@ export function ReportsClient() {
             action={() =>
               exportTasks({
                 status: taskStatus || undefined,
-                dateFrom: taskFrom || undefined,
-                dateTo: taskTo || undefined,
+                date_from: taskFrom || undefined,
+                date_to: taskTo || undefined,
               })
             }
             filename="tasks.csv"
@@ -152,8 +152,8 @@ export function ReportsClient() {
             action={() =>
               exportApprovals({
                 status: appStatus || undefined,
-                dateFrom: appFrom || undefined,
-                dateTo: appTo || undefined,
+                date_from: appFrom || undefined,
+                date_to: appTo || undefined,
               })
             }
             filename="approvals.csv"

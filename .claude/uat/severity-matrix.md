@@ -1,4 +1,4 @@
-# FlowDesk UAT Severity Matrix
+# Citykart Desk UAT Severity Matrix
 
 ---
 
@@ -91,8 +91,8 @@ Any defect that:
 |---------|-----------------|-------------------|
 | Employee | Standard user (no team) | Browse catalog → Submit request → Track status → Close |
 | Collaborator | Standard user added to a request | View shared request → Comment → Cannot reassign |
-| Agent | `agent@flowdesk.dev` / `Password123!` | See queue → Assign → Transition → Resolve → Internal notes |
-| Manager | `manager@flowdesk.dev` / `Password123!` | Dashboard KPIs → Approve → Team queue → Export |
+| Agent | `agent@citykart.dev` / `Password123!` | See queue → Assign → Transition → Resolve → Internal notes |
+| Manager | `manager@citykart.dev` / `Password123!` | Dashboard KPIs → Approve → Team queue → Export |
 | Admin | Admin-role account | Full admin panel → User mgmt → SLA config → Monitoring |
 
 ---

@@ -1,4 +1,4 @@
--- owner_delete_org: permanently deletes a CognixDesk organization and all its data.
+-- owner_delete_org: permanently deletes a Citykart Desk organization and all its data.
 -- Called server-side only (service-role client or SECURITY DEFINER chain).
 -- Hard-deletes in dependency order to avoid FK violations.
 

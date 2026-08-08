@@ -14,7 +14,6 @@ import {
 import { StatusBadge, PriorityBadge } from './RequestBadges'
 import { SLABadge } from './SLABadge'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
-import { STATUS_LABELS, PRIORITY_BADGE_STYLES } from '@/lib/constants/requests'
 import { formatRelativeTime } from '@/lib/utils'
 import type { RequestStatus, RequestPriority, RequestCollaborator } from '@/types'
 
@@ -338,7 +337,7 @@ export function RequestSidebarPanel({
   requestId, requestNo, status, priority,
   assigneeId, assigneeName, teamName, serviceName,
   requesterId, requesterName,
-  resolutionDueAt, responseDueAt, createdAt, updatedAt,
+  resolutionDueAt, responseDueAt, createdAt,
   viewerId, isAgent, isRequester, isTerminal,
   teamMembers, initialCollaborators,
 }: RequestSidebarPanelProps) {

@@ -6,7 +6,7 @@
 -- email_change_token_current, phone_change, phone_change_token and
 -- reauthentication_token. This version sets all eight to ''.
 --
--- Apply (CREATE OR REPLACE) against the CognixDesk Supabase project
+-- Apply (CREATE OR REPLACE) against the Citykart Desk Supabase project
 -- (jhdzjzrimjjtqwnkrwha). For users already created before this fix, also run
 -- fix_auth_null_tokens.sql to repair their rows.
 

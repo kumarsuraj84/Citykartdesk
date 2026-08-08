@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Save, Check, AlertTriangle, Circle } from 'lucide-react'
+import { Save, Check, AlertTriangle, Circle, Link2, Link2Off } from 'lucide-react'
 import { updateAppSetting, updateRetentionPolicy } from '@/lib/actions/admin/config'
+import { saveDeskTimeApiKey, disconnectDeskTime } from '@/lib/actions/admin/integrations'
 
 type Tab = 'general' | 'retention' | 'integrations'
 
@@ -21,6 +22,10 @@ interface SettingsClientProps {
   integrationStatus: {
     resendKeySet: boolean
     resendKeyMasked: string | null
+  }
+  deskTimeStatus: {
+    connected: boolean
+    connectedAt: string | null
   }
 }
 
@@ -254,7 +259,108 @@ function RetentionTab({ policies }: { policies: RetentionPolicy[] }) {
   )
 }
 
-function IntegrationsTab({ status }: { status: SettingsClientProps['integrationStatus'] }) {
+function DeskTimeCard({ status }: { status: SettingsClientProps['deskTimeStatus'] }) {
+  const [apiKey, setApiKey]           = useState('')
+  const [editing, setEditing]         = useState(false)
+  const [saved, setSaved]             = useState(false)
+  const [error, setError]             = useState<string | null>(null)
+  const [isPending, startTransition]  = useTransition()
+
+  function handleSave() {
+    if (!apiKey.trim()) { setError('Enter a DeskTime API key.'); return }
+    setError(null)
+    startTransition(async () => {
+      const result = await saveDeskTimeApiKey(apiKey.trim())
+      if (result.error) { setError(result.error); return }
+      setApiKey('')
+      setEditing(false)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    })
+  }
+
+  function handleDisconnect() {
+    setError(null)
+    startTransition(async () => {
+      const result = await disconnectDeskTime()
+      if (result.error) setError(result.error)
+    })
+  }
+
+  const connectedDate = status.connectedAt
+    ? new Date(status.connectedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : null
+
+  return (
+    <div className="rounded-xl border border-border bg-card px-4 py-4 shadow-sm space-y-3">
+      <div className="flex items-start gap-3">
+        {status.connected
+          ? <Link2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
+          : <Link2Off className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+        <div className="flex-1 space-y-0.5">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium text-foreground">DeskTime</p>
+            {saved && <Check className="h-3.5 w-3.5 text-emerald-500" />}
+          </div>
+          <p className="text-xs text-muted-foreground">Pulls team time-tracking data into Projects reporting.</p>
+          {status.connected && connectedDate && (
+            <p className="text-xs text-muted-foreground/70 font-mono">Connected {connectedDate}</p>
+          )}
+        </div>
+      </div>
+
+      {editing ? (
+        <div className="flex items-center gap-2 pl-6">
+          <input
+            type="password"
+            autoFocus
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="DeskTime API key"
+            className="flex-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          <button onClick={handleSave} disabled={isPending} className="btn-gradient disabled:opacity-40">
+            <Save className="h-3.5 w-3.5" />
+            {isPending ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            onClick={() => { setEditing(false); setApiKey(''); setError(null) }}
+            className="btn-soft"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="pl-6 flex items-center gap-3">
+          <button onClick={() => setEditing(true)} className="text-xs text-primary hover:underline">
+            {status.connected ? 'Update key' : 'Connect DeskTime'}
+          </button>
+          {status.connected && (
+            <button
+              onClick={handleDisconnect}
+              disabled={isPending}
+              className="text-xs text-red-600 hover:underline disabled:opacity-40"
+            >
+              {isPending ? 'Disconnecting…' : 'Disconnect'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <div className="pl-6 flex items-center gap-2 text-xs text-red-600">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          {error}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function IntegrationsTab({ status, deskTimeStatus }: {
+  status: SettingsClientProps['integrationStatus']
+  deskTimeStatus: SettingsClientProps['deskTimeStatus']
+}) {
   const integrations = [
     {
       name: 'Email (Resend)',
@@ -287,8 +393,9 @@ function IntegrationsTab({ status }: { status: SettingsClientProps['integrationS
   return (
     <div className="space-y-4 max-w-2xl">
       <p className="text-sm text-muted-foreground">
-        Integration status is derived from environment variables and cannot be edited here. Configure env vars in your deployment environment.
+        Most integration status is derived from environment variables and cannot be edited here — DeskTime is the exception, connected below.
       </p>
+      <DeskTimeCard status={deskTimeStatus} />
       <div className="space-y-3">
         {integrations.map((intg) => (
           <div key={intg.name} className="rounded-xl border border-border bg-card px-4 py-4 shadow-sm">
@@ -309,7 +416,7 @@ function IntegrationsTab({ status }: { status: SettingsClientProps['integrationS
   )
 }
 
-export function SettingsClient({ autoCloseDays, retentionPolicies, integrationStatus }: SettingsClientProps) {
+export function SettingsClient({ autoCloseDays, retentionPolicies, integrationStatus, deskTimeStatus }: SettingsClientProps) {
   const [tab, setTab] = useState<Tab>('general')
 
   const tabs: { key: Tab; label: string }[] = [
@@ -338,7 +445,7 @@ export function SettingsClient({ autoCloseDays, retentionPolicies, integrationSt
 
       {tab === 'general'      && <GeneralTab autoCloseDays={autoCloseDays} />}
       {tab === 'retention'    && <RetentionTab policies={retentionPolicies} />}
-      {tab === 'integrations' && <IntegrationsTab status={integrationStatus} />}
+      {tab === 'integrations' && <IntegrationsTab status={integrationStatus} deskTimeStatus={deskTimeStatus} />}
     </div>
   )
 }

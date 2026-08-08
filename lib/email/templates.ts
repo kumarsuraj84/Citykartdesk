@@ -1,10 +1,10 @@
 function layout(body: string): string {
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#ffffff;font-family:sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:32px;">
-  <div style="font-size:24px;font-weight:bold;color:#2563eb;margin-bottom:16px;">FlowDesk</div>
+  <div style="font-size:24px;font-weight:bold;color:#2563eb;margin-bottom:16px;">Citykart Desk</div>
   <hr style="border:none;border-top:1px solid #e5e7eb;margin-bottom:24px;" />
   <div style="font-size:16px;color:#374151;">${body}</div>
-  <div style="font-size:12px;color:#9CA3AF;margin-top:32px;">You are receiving this email because you have an account on FlowDesk. Please do not reply to this message.</div>
+  <div style="font-size:12px;color:#9CA3AF;margin-top:32px;">You are receiving this email because you have an account on Citykart Desk. Please do not reply to this message.</div>
 </div>
 </body></html>`
 }

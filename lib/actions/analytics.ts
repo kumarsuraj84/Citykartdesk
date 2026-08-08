@@ -1,7 +1,14 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { periodStart, type Period } from '@/lib/queries/analytics'
+import { getCurrentProfile } from '@/lib/queries/profiles'
+import { resolvePeriodParam, type PeriodParam } from '@/lib/queries/analytics'
+import type { Database } from '@/types/database'
+
+type RequestStatus = Database['public']['Enums']['request_status']
+type RequestPriority = Database['public']['Enums']['request_priority']
+type TaskStatus = Database['public']['Enums']['task_status']
+type TaskPriority = Database['public']['Enums']['task_priority']
 
 // ── Shared filter type — _module switches which table is queried ──────────────
 
@@ -18,7 +25,7 @@ export type DrawerFilter = {
   frtBreached?: boolean
   resolvedInPeriod?: boolean
   createdInPeriod?: boolean
-  period?: Period
+  period?: PeriodParam
   sort?: 'created_desc' | 'tat_desc' | 'priority'
   // Task-specific filters
   taskOverdue?: boolean
@@ -50,9 +57,13 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
   data: DrawerRequest[]
   error?: string
 }> {
+  const profile = await getCurrentProfile()
+  if (!profile) return { data: [], error: 'Not authenticated.' }
+  if (!profile.org_id) return { data: [], error: 'Your account is not linked to an organisation.' }
+
   // Route to task query if module = tasks
   if (filter._module === 'tasks') {
-    const res = await getFilteredTasks(filter)
+    const res = await getFilteredTasks(filter, profile.org_id)
     // Return as DrawerRequest shape so DrawerRequest component works for both
     return {
       data: res.data.map((t) => ({
@@ -87,9 +98,10 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
         team:teams(name),
         service:services(name)
       `)
+      .eq('org_id', profile.org_id)
 
-    if (filter.status?.length)   q = q.in('status', filter.status)
-    if (filter.priority)         q = q.eq('priority', filter.priority)
+    if (filter.status?.length)   q = q.in('status', filter.status as RequestStatus[])
+    if (filter.priority)         q = q.eq('priority', filter.priority as RequestPriority)
     if (filter.teamId)           q = q.eq('team_id', filter.teamId)
     if (filter.assignedTo)       q = q.eq('assigned_to', filter.assignedTo)
 
@@ -102,11 +114,12 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
            .not('status', 'in', '("resolved","closed","cancelled")')
     }
     if (filter.resolvedInPeriod && filter.period) {
-      const start = periodStart(filter.period).toISOString()
-      q = q.gte('resolved_at', start).not('resolved_at', 'is', null)
+      const { start, end } = resolvePeriodParam(filter.period)
+      q = q.gte('resolved_at', start.toISOString()).lte('resolved_at', end.toISOString()).not('resolved_at', 'is', null)
     }
     if (filter.createdInPeriod && filter.period) {
-      q = q.gte('created_at', periodStart(filter.period).toISOString())
+      const { start, end } = resolvePeriodParam(filter.period)
+      q = q.gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
     }
 
     q = q.order('created_at', { ascending: false }).limit(50)
@@ -114,8 +127,18 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
     const { data, error } = await q
     if (error) return { data: [], error: error.message }
 
+    type RequestQueryRow = {
+      id: string; title: string; status: string; priority: string
+      created_at: string; resolved_at: string | null
+      assigned_to: string | null; team_id: string | null
+      resolution_due_at: string | null; responded_at: string | null
+      assignee: { full_name: string | null } | null
+      team: { name: string } | null
+      service: { name: string } | null
+    }
+
     return {
-      data: (data ?? []).map((r: any) => ({
+      data: ((data ?? []) as RequestQueryRow[]).map((r) => ({
         id: r.id, title: r.title, status: r.status, priority: r.priority,
         created_at: r.created_at, resolved_at: r.resolved_at,
         assigned_to: r.assigned_to, team_id: r.team_id,
@@ -125,8 +148,8 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
         service_name: r.service?.name ?? null,
       })),
     }
-  } catch (e: any) {
-    return { data: [], error: e.message }
+  } catch (e) {
+    return { data: [], error: e instanceof Error ? e.message : String(e) }
   }
 }
 
@@ -147,7 +170,7 @@ type DrawerTask = {
   team_name: string | null
 }
 
-async function getFilteredTasks(filter: DrawerFilter): Promise<{
+async function getFilteredTasks(filter: DrawerFilter, orgId: string): Promise<{
   data: DrawerTask[]
   error?: string
 }> {
@@ -164,9 +187,10 @@ async function getFilteredTasks(filter: DrawerFilter): Promise<{
         assignee:profiles!tasks_assignee_id_fkey(full_name),
         team:teams(name)
       `)
+      .eq('org_id', orgId)
 
-    if (filter.status?.length)   q = q.in('status', filter.status)
-    if (filter.priority)         q = q.eq('priority', filter.priority)
+    if (filter.status?.length)   q = q.in('status', filter.status as TaskStatus[])
+    if (filter.priority)         q = q.eq('priority', filter.priority as TaskPriority)
     if (filter.teamId)           q = q.eq('team_id', filter.teamId)
     if (filter.assignedTo)       q = q.eq('assignee_id', filter.assignedTo)
     if (filter.taskType)         q = q.eq('task_type', filter.taskType)
@@ -178,11 +202,12 @@ async function getFilteredTasks(filter: DrawerFilter): Promise<{
            .not('status', 'in', '("done","cancelled")')
     }
     if (filter.taskCompletedInPeriod && filter.period) {
-      const start = periodStart(filter.period).toISOString()
-      q = q.gte('completed_at', start).not('completed_at', 'is', null)
+      const { start, end } = resolvePeriodParam(filter.period)
+      q = q.gte('completed_at', start.toISOString()).lte('completed_at', end.toISOString()).not('completed_at', 'is', null)
     }
     if (filter.createdInPeriod && filter.period) {
-      q = q.gte('created_at', periodStart(filter.period).toISOString())
+      const { start, end } = resolvePeriodParam(filter.period)
+      q = q.gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
     }
 
     q = q.order('created_at', { ascending: false }).limit(50)
@@ -190,8 +215,16 @@ async function getFilteredTasks(filter: DrawerFilter): Promise<{
     const { data, error } = await q
     if (error) return { data: [], error: error.message }
 
+    type TaskQueryRow = {
+      id: string; title: string; status: string; priority: string; task_type: string
+      created_at: string; completed_at: string | null; due_date: string | null
+      assignee_id: string | null; team_id: string | null
+      assignee: { full_name: string | null } | null
+      team: { name: string } | null
+    }
+
     return {
-      data: (data ?? []).map((t: any) => ({
+      data: ((data ?? []) as TaskQueryRow[]).map((t) => ({
         id: t.id, title: t.title, status: t.status, priority: t.priority,
         task_type: t.task_type, created_at: t.created_at,
         completed_at: t.completed_at, due_date: t.due_date,
@@ -200,7 +233,7 @@ async function getFilteredTasks(filter: DrawerFilter): Promise<{
         team_name: t.team?.name ?? null,
       })),
     }
-  } catch (e: any) {
-    return { data: [], error: e.message }
+  } catch (e) {
+    return { data: [], error: e instanceof Error ? e.message : String(e) }
   }
 }

@@ -1,7 +1,7 @@
 -- Search & list-sort performance indexes (perf audit H4, H5)
 --
--- Scope: CognixDesk-owned tables only (requests, tasks). This database is the
--- dedicated CognixDesk Supabase project and contains no HRMS tables.
+-- Scope: Citykart Desk-owned tables only (requests, tasks). This database is the
+-- dedicated Citykart Desk Supabase project and contains no HRMS tables.
 --
 -- NOTE on M4 (approval_workflow_steps): intentionally NOT added. The table already
 -- has UNIQUE (workflow_id, step_order) from the initial schema, which Postgres backs

@@ -1,6 +1,9 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { toCSV } from './csv'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyClient = { from: (t: string) => any }
+
 export const MAX_EXPORT_ROWS = 10000
 
 const STATUS_LABELS: Record<string, string> = {
@@ -60,7 +63,7 @@ export interface ExportFilters {
 export async function exportRequestsCSV(orgId: string, f?: ExportFilters): Promise<string> {
   // Service-role client (needed so this also works from the scheduled-report path) — so the
   // org_id filter MUST be applied explicitly to keep the export scoped to one tenant.
-  const admin = createAdminClient() as unknown as any
+  const admin = createAdminClient() as unknown as AnyClient
 
   let query = admin
     .from('requests')
@@ -88,7 +91,16 @@ export async function exportRequestsCSV(orgId: string, f?: ExportFilters): Promi
     )
   }
 
-  const rows = (data ?? []).map((r: any) => ({
+  type RequestExportRow = {
+    id: string; title: string; status: string; priority: string
+    created_at: string; updated_at: string; resolution_due_at: string | null
+    service: { name: string } | null
+    requester: { full_name: string } | null
+    assignee: { full_name: string } | null
+    team: { name: string } | null
+  }
+
+  const rows = ((data ?? []) as RequestExportRow[]).map((r) => ({
     id: r.id,
     title: r.title,
     status: labelStatus(r.status),
@@ -121,7 +133,7 @@ export async function exportRequestsCSV(orgId: string, f?: ExportFilters): Promi
 
 export async function exportTasksCSV(orgId: string, f?: ExportFilters): Promise<string> {
   // Service-role client — apply org_id filter explicitly to keep the export tenant-scoped.
-  const admin = createAdminClient() as unknown as any
+  const admin = createAdminClient() as unknown as AnyClient
 
   let query = admin
     .from('tasks')
@@ -147,7 +159,14 @@ export async function exportTasksCSV(orgId: string, f?: ExportFilters): Promise<
     )
   }
 
-  const rows = (data ?? []).map((t: any) => ({
+  type TaskExportRow = {
+    id: string; title: string; status: string; priority: string
+    due_date: string | null; created_at: string; updated_at: string
+    assignee: { full_name: string } | null
+    request: { title: string } | null
+  }
+
+  const rows = ((data ?? []) as TaskExportRow[]).map((t) => ({
     id: t.id,
     title: t.title,
     status: labelStatus(t.status),
@@ -174,10 +193,76 @@ export async function exportTasksCSV(orgId: string, f?: ExportFilters): Promise<
   return toCSV(rows, columns)
 }
 
+const PROJECT_STATUS_LABELS: Record<string, string> = {
+  not_started: 'Not Started',
+  in_progress: 'In Progress',
+  blocked:     'Blocked',
+  done:        'Done',
+  cancelled:   'Cancelled',
+}
+
+export async function exportProjectsCSV(orgId: string): Promise<string> {
+  const admin = createAdminClient() as unknown as AnyClient
+
+  const { data, error } = await admin
+    .from('projects')
+    .select(
+      'id,name,description,priority,status,start_date,target_date,owner:profiles!projects_owner_id_fkey(full_name),functional_owner:profiles!projects_functional_owner_id_fkey(full_name),team:teams(name)'
+    )
+    .eq('org_id', orgId)
+    .is('archived_at', null)
+    .order('created_at', { ascending: false })
+    .limit(MAX_EXPORT_ROWS + 1)
+
+  if (error) throw new Error(error.message)
+
+  if ((data ?? []).length > MAX_EXPORT_ROWS) {
+    throw new Error(
+      `Export exceeds the ${MAX_EXPORT_ROWS.toLocaleString()} row limit. Please apply filters to narrow the result.`
+    )
+  }
+
+  type ProjectExportRow = {
+    id: string; name: string; description: string | null; priority: string; status: string
+    start_date: string | null; target_date: string | null
+    owner: { full_name: string } | null
+    functional_owner: { full_name: string } | null
+    team: { name: string } | null
+  }
+
+  const rows = ((data ?? []) as ProjectExportRow[]).map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description ?? '',
+    priority: p.priority,
+    tech_owner: p.owner?.full_name ?? '',
+    functional_owner: p.functional_owner?.full_name ?? '',
+    team: p.team?.name ?? '',
+    status: PROJECT_STATUS_LABELS[p.status] ?? p.status,
+    start_date: fmtDate(p.start_date),
+    target_date: fmtDate(p.target_date),
+  }))
+
+  const columns = [
+    { key: 'id',               label: 'ID' },
+    { key: 'name',             label: 'Name' },
+    { key: 'description',      label: 'Description' },
+    { key: 'priority',         label: 'Priority' },
+    { key: 'tech_owner',       label: 'Tech Owner' },
+    { key: 'functional_owner', label: 'Functional Owner' },
+    { key: 'team',             label: 'Team' },
+    { key: 'status',           label: 'Status' },
+    { key: 'start_date',       label: 'Start Date' },
+    { key: 'target_date',      label: 'Target Date' },
+  ]
+
+  return toCSV(rows, columns)
+}
+
 // One row per approval, org-scoped via the related request (approvals has no org_id).
 // Service-role client (needed by the scheduled-report path) so the org filter is explicit.
 export async function exportApprovalsCSV(orgId: string, f?: ExportFilters): Promise<string> {
-  const admin = createAdminClient() as unknown as any
+  const admin = createAdminClient() as unknown as AnyClient
 
   let query = admin
     .from('approvals')
@@ -201,24 +286,38 @@ export async function exportApprovalsCSV(orgId: string, f?: ExportFilters): Prom
     )
   }
 
+  type DecisionRow = {
+    approval_id: string
+    step_order: number
+    decision: string
+    decided_at: string | null
+    decider: { full_name: string | null } | null
+  }
+  type ApprovalExportRow = {
+    id: string; status: string; current_step: number | null
+    created_at: string; updated_at: string
+    request: { request_no: string; title: string; org_id: string } | null
+    workflow: { name: string } | null
+  }
+
   // Fetch decisions for the selected approvals and summarise them per row.
-  const ids = (data ?? []).map((a: any) => a.id)
+  const ids = ((data ?? []) as ApprovalExportRow[]).map((a) => a.id)
   const { data: decisions } = ids.length
     ? await admin
         .from('approval_decisions')
         .select('approval_id,step_order,decision,decided_at,decider:profiles!approval_decisions_decided_by_fkey(full_name)')
         .in('approval_id', ids)
         .order('step_order', { ascending: true })
-    : { data: [] }
+    : { data: [] as DecisionRow[] }
 
-  const decisionsByApproval = new Map<string, any[]>()
-  for (const d of decisions ?? []) {
+  const decisionsByApproval = new Map<string, DecisionRow[]>()
+  for (const d of (decisions ?? []) as DecisionRow[]) {
     const list = decisionsByApproval.get(d.approval_id) ?? []
     list.push(d)
     decisionsByApproval.set(d.approval_id, list)
   }
 
-  const rows = (data ?? []).map((a: any) => ({
+  const rows = ((data ?? []) as ApprovalExportRow[]).map((a) => ({
     request: a.request ? `${a.request.request_no} — ${a.request.title}` : '',
     workflow: a.workflow?.name ?? '',
     status: labelStatus(a.status),

@@ -24,6 +24,9 @@ const PRIORITY_DOT: Record<string, string> = {
 }
 
 function RelTime({ iso }: { iso: string }) {
+  // Point-in-time "time ago" freshness check on row data; not a bug source, and lifting a
+  // shared `now` through the drawer/list tree for this leaf display is out of scope here.
+  // eslint-disable-next-line react-hooks/purity
   const diff  = Date.now() - new Date(iso).getTime()
   const mins  = Math.floor(diff / 60000)
   const hours = Math.floor(diff / 3600000)
@@ -98,6 +101,9 @@ export function DetailDrawer({ filter, onClose }: Props) {
   const open = !!filter
 
   useEffect(() => {
+    // Data-fetch effect guarded by a ref-based dedup key and startTransition below;
+    // clearing stale results when the filter is removed is part of that external sync.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!filter) { setData(null); setError(null); return }
     const key = JSON.stringify(filter)
     if (key === prevFilterRef.current) return

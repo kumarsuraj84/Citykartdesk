@@ -7,17 +7,20 @@ import {
 } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { getCurrentProfile, getTeamMembers } from '@/lib/queries/profiles'
-import { getRequestById, getRequestActivity, getRequestComments, getRequestCollaborators, getRelatedRequests, getCsatSurveyForRequest } from '@/lib/queries/requests'
+import { getRequestById, getRequestActivity, getRequestComments, getRequestCollaborators, getRelatedRequests, getSubRequests, getCsatSurveyForRequest } from '@/lib/queries/requests'
 import { getRequestAttachments } from '@/lib/queries/attachments'
 import { getApprovalsForRequest } from '@/lib/queries/approvals'
 import { ApprovalPanel } from '@/components/requests/ApprovalPanel'
 import { RelatedRequestsPanel } from '@/components/requests/RelatedRequestsPanel'
+import { SubRequestList } from '@/components/requests/SubRequestList'
 import { CsatSurvey } from '@/components/requests/CsatSurvey'
 import { SLABadge } from '@/components/requests/SLABadge'
 import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
 import { RequestSidebarPanel } from '@/components/requests/RequestSidebarPanel'
 import { RequestTasksTab } from '@/components/requests/RequestTasksTab'
 import { getTasksForRequest } from '@/lib/queries/tasks'
+import { getAllProjectsMini } from '@/lib/queries/projects'
+import { ProjectCell } from '@/components/requests/ProjectCell'
 import { CommentForm } from '@/components/requests/CommentForm'
 import { AttachmentChips } from '@/components/requests/AttachmentChips'
 import { AttachmentUpload } from '@/components/requests/AttachmentUpload'
@@ -33,7 +36,6 @@ import type {
   RequestCommentWithAuthor,
   FormField,
   FormSection,
-  RequestCollaborator,
 } from '@/types'
 
 interface PageProps {
@@ -74,36 +76,6 @@ function formatDuration(ms: number): string {
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
-
-function SidebarRow({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-2.5">
-      <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
-      <div className="min-w-0 text-right">{children}</div>
-    </div>
-  )
-}
-
-function TicketRow({
-  label,
-  value,
-}: {
-  label: string
-  value: React.ReactNode
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 px-4 py-2.5">
-      <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
-      <div className="min-w-0 text-right text-xs font-medium text-foreground">{value}</div>
-    </div>
-  )
-}
 
 function TicketCell({
   label,
@@ -365,7 +337,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
 
   // Phase 1: everything that only needs `id` runs in parallel.
   // teamMembers and csatSurvey are gated on request data so they stay in Phase 2.
-  const [request, activity, comments, attachments, collaborators, approvals, linkedTasks, activeTimer, relatedRequests] = await Promise.all([
+  const [request, activity, comments, attachments, collaborators, approvals, linkedTasks, activeTimer, relatedRequests, subRequests, allProjects] = await Promise.all([
     getRequestById(id),
     getRequestActivity(id),
     getRequestComments(id),
@@ -375,13 +347,18 @@ export default async function RequestDetailPage({ params }: PageProps) {
     getTasksForRequest(id),
     getActiveTimer(id),
     getRelatedRequests(id),
+    getSubRequests(id),
+    getAllProjectsMini(),
   ])
 
   if (!request) notFound()
 
+  const linkedProject = allProjects.find((p) => p.id === (request as { project_id?: string | null }).project_id) ?? null
+
   const isAgent =
     profile.role === 'manager' ||
     profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
     profile.team_members.some((m) => m.team_id === request.team_id)
   const isRequester = request.requester_id === profile.id
   const canManage   = isAgent
@@ -392,8 +369,6 @@ export default async function RequestDetailPage({ params }: PageProps) {
     canManage ? getTeamMembers(request.team_id) : Promise.resolve([]),
     isRequester ? getCsatSurveyForRequest(id) : Promise.resolve(null),
   ])
-
-  const approval = approvals[0] ?? null
 
   // Show Approvals tab if the service has a predefined workflow OR any ad-hoc approval was sent
   const hasApprovalWorkflow = Boolean(
@@ -507,8 +482,13 @@ export default async function RequestDetailPage({ params }: PageProps) {
             className="border-t border-border"
           />
           {request.assignee && (
-            <TicketCell label="Assigned To" value={request.assignee.full_name} className="border-t border-border col-span-2" />
+            <TicketCell label="Assigned To" value={request.assignee.full_name} className="border-t border-border" />
           )}
+          <TicketCell
+            label="Project"
+            value={<ProjectCell requestId={request.id} value={linkedProject} allProjects={allProjects} />}
+            className={`border-t border-border${request.assignee ? '' : ' col-span-2'}`}
+          />
         </div>
       </div>
 
@@ -769,6 +749,12 @@ export default async function RequestDetailPage({ params }: PageProps) {
         teamMembers={teamMembers}
         initialCollaborators={collaborators}
       />
+      <SubRequestList
+        parentRequestId={request.id}
+        initialSubRequests={subRequests}
+        canManage={canManage}
+        teamMembers={teamMembers}
+      />
       <RelatedRequestsPanel
         requestId={request.id}
         initialRelated={relatedRequests}
@@ -821,7 +807,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
             requestId={request.id}
             viewerId={profile.id}
             isAgent={isAgent}
-            isManager={profile.role === 'manager' || profile.role === 'admin'}
+            isManager={profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'}
             isAssignedToViewer={request.assigned_to === profile.id}
             isTerminal={isTerminal}
             activeTimer={activeTimer}

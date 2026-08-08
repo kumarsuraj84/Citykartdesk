@@ -4,12 +4,13 @@ import { revalidatePath, refresh } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
-import { notify } from '@/lib/notifications'
+import { notify, type NotifyInput } from '@/lib/notifications'
 import {
   getTaskById,
   getTaskComments,
   getTaskActivity,
   getSubtasks,
+  getTaskDependencies,
 } from '@/lib/queries/tasks'
 import { getEnabledModules } from '@/lib/queries/profiles'
 import type { TaskStatus, TaskPriority, TaskType } from '@/types'
@@ -30,25 +31,37 @@ export async function fetchSubtasks(parentTaskId: string) {
 // ── Load task panel data (for client-side panel opening) ─────────────────────
 
 export async function loadTaskPanelData(taskId: string) {
-  const [task, comments, activity, subtasks] = await Promise.all([
+  const [task, comments, activity, subtasks, dependencies] = await Promise.all([
     getTaskById(taskId),
     getTaskComments(taskId),
     getTaskActivity(taskId),
     getSubtasks(taskId),
+    getTaskDependencies(taskId),
   ])
 
   let linkedRequest: { id: string; request_no: string; title: string } | null = null
-  if (task?.request_id) {
+  let linkedProject: { id: string; name: string } | null = null
+  if (task?.request_id || task?.project_id) {
     const supabase = await createClient()
-    const { data } = await supabase
-      .from('requests')
-      .select('id, request_no, title')
-      .eq('id', task.request_id)
-      .single()
-    linkedRequest = data ?? null
+    if (task.request_id) {
+      const { data } = await supabase
+        .from('requests')
+        .select('id, request_no, title')
+        .eq('id', task.request_id)
+        .single()
+      linkedRequest = data ?? null
+    }
+    if (task.project_id) {
+      const { data } = await supabase
+        .from('projects')
+        .select('id, name')
+        .eq('id', task.project_id)
+        .single()
+      linkedProject = data ?? null
+    }
   }
 
-  return { task, comments, activity, subtasks, linkedRequest }
+  return { task, comments, activity, subtasks, dependencies, linkedRequest, linkedProject }
 }
 
 type ActionResult = { error?: string }
@@ -90,6 +103,8 @@ export async function createTask(data: {
   taskType?: TaskType
   parentTaskId?: string
   requestId?: string
+  projectId?: string
+  milestoneId?: string
 }): Promise<{ data?: { id: string }; error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
@@ -110,10 +125,12 @@ export async function createTask(data: {
       team_id: data.teamId || null,
       task_type: data.taskType ?? (data.teamId ? 'team' : 'personal'),
       created_by: profile.id,
-      org_id: (profile as any).org_id ?? null,
+      org_id: profile.org_id ?? null,
       status: data.status ?? 'open',
       parent_task_id: data.parentTaskId || null,
       request_id: data.requestId || null,
+      project_id: data.projectId || null,
+      milestone_id: data.milestoneId || null,
     })
     .select('id')
     .single()
@@ -182,7 +199,7 @@ export async function updateTaskStatus(
 
   // Notify on completion
   if (newStatus === 'done') {
-    const notifications: Parameters<typeof notify>[0][] = []
+    const notifications: NotifyInput[] = []
 
     // Notify the task creator if different from the actor
     if (current.created_by && current.created_by !== profile.id) {
@@ -485,6 +502,101 @@ export async function createSubtask(
   revalidatePath(`/tasks/${parentTaskId}`)
   refresh()
   return { data: { id: task.id } }
+}
+
+// ── Task dependencies ("Blocked by") ──────────────────────────────────────────
+
+/** True if `target` can already reach `from` by following existing depends_on
+ *  edges — i.e. adding from→target would close a cycle. Bounded DFS since this
+ *  is a small per-org graph, not a risk of runaway recursion in practice. */
+async function wouldCreateCycle(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  from: string,
+  target: string
+): Promise<boolean> {
+  const visited = new Set<string>()
+  const stack = [target]
+  while (stack.length > 0) {
+    const current = stack.pop()!
+    if (current === from) return true
+    if (visited.has(current)) continue
+    visited.add(current)
+    if (visited.size > 500) break // safety valve, not expected to trigger
+    const { data: edges } = await supabase
+      .from('task_dependencies')
+      .select('depends_on_task_id')
+      .eq('task_id', current)
+    for (const e of edges ?? []) stack.push(e.depends_on_task_id)
+  }
+  return false
+}
+
+export async function addTaskDependency(
+  taskId: string,
+  query: string
+): Promise<ActionResult & { data?: { id: string; taskId: string; title: string; status: TaskStatus } }> {
+  const profile = await getCurrentProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+
+  const isAgentOrAbove =
+    profile.role === 'agent' ||
+    profile.role === 'manager' ||
+    profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
+    profile.team_members.length > 0
+  if (!isAgentOrAbove) return { error: 'Only agents and managers can link task dependencies.' }
+
+  const supabase = await createClient()
+
+  const { data: task } = await supabase.from('tasks').select('id, org_id').eq('id', taskId).single()
+  if (!task?.org_id) return { error: 'Could not determine org.' }
+
+  const safe = query.replace(/[%_]/g, '\\$&')
+  const { data: found } = await supabase
+    .from('tasks')
+    .select('id, title, status')
+    .ilike('title', `%${safe}%`)
+    .neq('id', taskId)
+    .limit(1)
+    .single()
+
+  if (!found) return { error: 'No matching task found.' }
+
+  if (await wouldCreateCycle(supabase, taskId, found.id)) {
+    return { error: `Adding this would create a circular dependency (${found.title} already depends on this task).` }
+  }
+
+  const { data: dep, error } = await supabase
+    .from('task_dependencies')
+    .insert({
+      org_id: task.org_id,
+      task_id: taskId,
+      depends_on_task_id: found.id,
+      created_by: profile.id,
+    })
+    .select('id')
+    .single()
+
+  if (error) {
+    if (error.code === '23505') return { error: 'This dependency already exists.' }
+    return { error: error.message }
+  }
+
+  revalidatePath(`/tasks/${taskId}`)
+  refresh()
+  return { data: { id: dep.id, taskId: found.id, title: found.title, status: found.status } }
+}
+
+export async function removeTaskDependency(dependencyId: string): Promise<ActionResult> {
+  const profile = await getCurrentProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.from('task_dependencies').delete().eq('id', dependencyId)
+  if (error) return { error: error.message }
+
+  refresh()
+  return {}
 }
 
 // ── Toggle subtask done ───────────────────────────────────────────────────────

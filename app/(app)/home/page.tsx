@@ -1,9 +1,9 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
 import {
-  ArrowRight, Inbox, Clock, CheckCircle2, LayoutGrid, Plus,
+  ArrowRight, Inbox, CheckCircle2, LayoutGrid, Plus,
   AlertTriangle, ListTodo, CalendarClock, Users, ShieldCheck,
-  FileText, TrendingUp, Zap, Bell, Circle, Timer, Star,
+  FileText, Zap, Bell, Circle, Star, FolderKanban, Flag,
 } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { getCurrentProfile, getEnabledModules } from '@/lib/queries/profiles'
@@ -11,6 +11,8 @@ import { autoCloseRequests } from '@/lib/actions/requests'
 import { createClient } from '@/lib/supabase/server'
 import { StatusBadge } from '@/components/requests/RequestBadges'
 import { SLABadge } from '@/components/requests/SLABadge'
+import { getHomeProjectsSummary, type HomeProjectsSummary } from '@/lib/queries/projects'
+import { ProjectStatusBadge } from '@/components/projects/ProjectStatusBadge'
 import type { RequestStatus, RequestPriority } from '@/types'
 
 /* ── types ──────────────────────────────────────────────────────────────────── */
@@ -35,6 +37,27 @@ type MyTask = {
   id: string; title: string; status: string; priority: string
   due_date: string | null; task_type: string; request_id: string | null
   request: { request_no: string } | null
+}
+
+type NeedsAttentionRequest = {
+  id: string; request_no: string; title: string
+  status: RequestStatus; updated_at: string
+  resolution_due_at: string | null; response_due_at: string | null
+}
+
+// Shape of the JSON payload returned by the get_home_dashboard RPC (see
+// supabase/migrations/20240101000044_get_home_dashboard.sql). The RPC's
+// generated return type is generic `Json`, so we narrow it to the fields
+// this page actually reads.
+interface HomeDashboardData {
+  counts?: Record<string, number>
+  my_requests?: MyRequest[]
+  needs_attention?: NeedsAttentionRequest[]
+  my_queue?: QueueRequest[]
+  tasks_overdue?: MyTask[]
+  tasks_today?: MyTask[]
+  tasks_upcoming?: MyTask[]
+  tasks_open?: MyTask[]
 }
 
 /* ── KPI card ────────────────────────────────────────────────────────────────── */
@@ -93,19 +116,25 @@ function SectionHeader({ icon: Icon, title, count, href, accentClass }: {
 /* ── request row ─────────────────────────────────────────────────────────────── */
 
 function RequestRow({ req, showRequester, showService }: {
-  req: (QueueRequest | MyRequest) & { requester?: { full_name: string } | null }
+  req: {
+    id: string; request_no: string; title: string
+    status: RequestStatus; priority?: RequestPriority
+    resolution_due_at: string | null; response_due_at: string | null
+    requester?: { full_name: string } | null
+    service?: { name: string; icon: string | null } | null
+  }
   showRequester?: boolean; showService?: boolean
 }) {
   const priorityColor: Record<string, string> = {
     critical: 'bg-destructive', high: 'bg-warning', medium: 'bg-warning/60', low: 'bg-muted-foreground/40',
   }
-  const icon = showService ? ((req as MyRequest).service?.icon ?? '📋') : null
+  const icon = showService ? (req.service?.icon ?? '📋') : null
   return (
     <Link href={`/requests/${req.id}`}
       className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors group">
       {icon
         ? <span className="shrink-0 text-base leading-none w-5 text-center">{icon}</span>
-        : <span className={`h-2 w-2 shrink-0 rounded-full mt-0.5 ${priorityColor[req.priority] ?? 'bg-muted-foreground/40'}`} />
+        : <span className={`h-2 w-2 shrink-0 rounded-full mt-0.5 ${(req.priority && priorityColor[req.priority]) ?? 'bg-muted-foreground/40'}`} />
       }
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
@@ -260,25 +289,29 @@ function DashboardSkeleton() {
 
 async function DashboardBody({
   dashPromise,
+  projectsSummaryPromise,
   hasRequests,
   hasTasks,
+  hasProjects,
   isAgent,
   isManager,
   tab,
 }: {
-  dashPromise: Promise<any>
+  dashPromise: Promise<HomeDashboardData | null>
+  projectsSummaryPromise: Promise<HomeProjectsSummary>
   hasRequests: boolean
   hasTasks: boolean
+  hasProjects: boolean
   isAgent: boolean
   isManager: boolean
   tab: string
 }) {
-  const dashData = await dashPromise
+  const [dashData, projectsSummary] = await Promise.all([dashPromise, projectsSummaryPromise])
 
   const counts         = dashData?.counts ?? {}
-  const myRequests     = (dashData?.my_requests     ?? []) as MyRequest[]
-  const needsAttention = (dashData?.needs_attention ?? []) as { id: string; request_no: string; title: string; status: RequestStatus; updated_at: string; resolution_due_at: string | null; response_due_at: string | null }[]
-  const myQueue        = (dashData?.my_queue        ?? []) as QueueRequest[]
+  const myRequests     = dashData?.my_requests     ?? []
+  const needsAttention = dashData?.needs_attention ?? []
+  const myQueue        = dashData?.my_queue        ?? []
 
   const myOpenCount             = counts.my_open            ?? 0
   const resolvedCount           = counts.resolved           ?? 0
@@ -294,10 +327,10 @@ async function DashboardBody({
   const teamTasksOpen           = counts.team_tasks_open    ?? 0
   const teamTasksOverdue        = counts.team_tasks_overdue ?? 0
 
-  const overdueTaskItems  = (dashData?.tasks_overdue  ?? []) as MyTask[]
-  const todayTaskItems    = (dashData?.tasks_today    ?? []) as MyTask[]
-  const upcomingTaskItems = (dashData?.tasks_upcoming ?? []) as MyTask[]
-  const openTaskItems     = (dashData?.tasks_open     ?? []) as MyTask[]
+  const overdueTaskItems  = dashData?.tasks_overdue  ?? []
+  const todayTaskItems    = dashData?.tasks_today    ?? []
+  const upcomingTaskItems = dashData?.tasks_upcoming ?? []
+  const openTaskItems     = dashData?.tasks_open     ?? []
 
   const hasUrgentRequests = slaBreachedCount > 0 || pendingApprovalCount > 0 || needsAttentionCount > 0
   const hasUrgentTasks    = myTasksOverdue > 0 || myTasksDueToday > 0
@@ -306,11 +339,15 @@ async function DashboardBody({
     overdueTaskItems.length + todayTaskItems.length +
     upcomingTaskItems.length + openTaskItems.length
 
+  const projectsAtRiskCount = projectsSummary.atRisk.length
+
   const TABS = [
     { id: 'requests' as const, label: 'Requests', icon: FileText, show: hasRequests,
       badge: isAgent ? myQueue.length : myOpenCount },
     { id: 'tasks' as const, label: 'Tasks', icon: ListTodo, show: hasTasks && isAgent,
       badge: myTasksOverdue + myTasksDueToday },
+    { id: 'projects' as const, label: 'Projects', icon: FolderKanban, show: hasProjects,
+      badge: projectsAtRiskCount },
   ].filter(t => t.show)
 
   const showTabs = TABS.length > 1
@@ -318,7 +355,7 @@ async function DashboardBody({
   return (
     <>
       {/* urgency pill — rendered inline above the tab bar */}
-      {((tab === 'requests' && hasUrgentRequests) || (tab === 'tasks' && hasUrgentTasks)) && (
+      {((tab === 'requests' && hasUrgentRequests) || (tab === 'tasks' && hasUrgentTasks) || (tab === 'projects' && projectsAtRiskCount > 0)) && (
         <div className="flex justify-end">
           <div className="flex items-center gap-1.5 rounded-full border border-destructive/30 bg-destructive/5 px-2.5 py-1 shrink-0">
             <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
@@ -447,7 +484,7 @@ async function DashboardBody({
                     <SectionHeader icon={Bell} title="Needs Your Attention" count={needsAttentionCount}
                       href="/requests?status=waiting_user" accentClass="text-warning" />
                     <div className="divide-y divide-border">
-                      {needsAttention.map(r => <RequestRow key={r.id} req={r as any} showService />)}
+                      {needsAttention.map(r => <RequestRow key={r.id} req={r} showService />)}
                     </div>
                   </div>
                 )}
@@ -497,7 +534,7 @@ async function DashboardBody({
                       <Star className="h-4 w-4 text-warning" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-[12px] font-bold text-warning">Today's Focus</p>
+                      <p className="text-[12px] font-bold text-warning">Today&apos;s Focus</p>
                       <p className="text-[11px] text-warning/80 mt-0.5">
                         {hasOverdue && `${myTasksOverdue} overdue task${myTasksOverdue > 1 ? 's' : ''}`}
                         {hasOverdue && hasToday && ' and '}
@@ -589,6 +626,48 @@ async function DashboardBody({
               </div>
             )
           })()}
+
+          {/* PROJECTS TAB */}
+          {tab === 'projects' && hasProjects && (
+            <div className="space-y-4">
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <KpiCard label="Active"          value={projectsSummary.activeCount}          sublabel="Projects in flight"    accent="#1B2559" href="/projects" />
+                <KpiCard label="Blocked"         value={projectsSummary.blockedCount}          sublabel="Needs unblocking"      accent="#EF4444" href="/projects" danger />
+                <KpiCard label="Milestones Due"  value={projectsSummary.milestonesDueSoon}      sublabel="Within 7 days"         accent="#F97316" href="/projects" />
+                <KpiCard label="Overdue"         value={projectsSummary.milestonesOverdue}      sublabel="Past target date"      accent="#EF4444" href="/projects" danger />
+              </div>
+
+              <div className="overflow-hidden rounded-xl border border-border bg-card">
+                <SectionHeader icon={Flag} title="At Risk" count={projectsSummary.atRisk.length}
+                  href="/projects" accentClass="text-destructive" />
+                {projectsSummary.atRisk.length > 0 ? (
+                  <div className="divide-y divide-border">
+                    {projectsSummary.atRisk.map((p) => (
+                      <Link key={p.id} href={`/projects/${p.id}`}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors group">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[12px] font-medium text-foreground">{p.name}</p>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                            <ProjectStatusBadge status={p.status} size="sm" />
+                            {p.target_date && (
+                              <span className="text-[10px] text-destructive font-semibold">
+                                Target {new Date(p.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — passed
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <InlineEmpty icon={CheckCircle2} text="No projects blocked or past their target date." />
+                )}
+              </div>
+
+            </div>
+          )}
 
         </div>
 
@@ -747,6 +826,50 @@ async function DashboardBody({
             </>
           )}
 
+          {tab === 'projects' && (
+            <>
+              <section>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Zap className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Quick Actions</span>
+                </div>
+                <div className="space-y-1.5">
+                  <QuickAction href="/projects" icon={FolderKanban} label="All Projects" sublabel="View every project" />
+                </div>
+              </section>
+
+              <section>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <FolderKanban className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Portfolio Health</span>
+                </div>
+                <div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2.5">
+                    <span className="text-[11px] text-muted-foreground">Active projects</span>
+                    <span className="text-[12px] font-bold tabular-nums">{projectsSummary.activeCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2.5">
+                    <span className="text-[11px] text-muted-foreground">Blocked</span>
+                    <span className={`text-[12px] font-bold tabular-nums ${projectsSummary.blockedCount > 0 ? 'text-destructive' : ''}`}>
+                      {projectsSummary.blockedCount}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2.5">
+                    <span className="text-[11px] text-muted-foreground">Milestones overdue</span>
+                    <span className={`text-[12px] font-bold tabular-nums ${projectsSummary.milestonesOverdue > 0 ? 'text-destructive' : ''}`}>
+                      {projectsSummary.milestonesOverdue}
+                    </span>
+                  </div>
+                  <div className="px-3 py-2.5">
+                    <Link href="/admin/reports" className="text-[11px] font-semibold text-primary hover:underline">
+                      Project analytics →
+                    </Link>
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
+
         </div>
       </div>
     </>
@@ -771,10 +894,13 @@ export default async function HomePage({
 
   const hasRequests = enabledMods.includes('requests')
   const hasTasks    = enabledMods.includes('tasks')
+  const hasProjects = enabledMods.includes('projects')
   const isAgent     = profile.team_members.length > 0
   const isManager   = profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'
   const defaultTab  = hasRequests ? 'requests' : hasTasks ? 'tasks' : 'requests'
-  const tab         = (sp.tab === 'tasks' && hasTasks) ? 'tasks' : defaultTab
+  const tab         = (sp.tab === 'tasks' && hasTasks) ? 'tasks'
+                     : (sp.tab === 'projects' && hasProjects) ? 'projects'
+                     : defaultTab
 
   // Compute greeting immediately — no DB call needed
   const now      = new Date()
@@ -785,13 +911,18 @@ export default async function HomePage({
 
   // Start the RPC without awaiting — it resolves while React streams the shell
   const supabase    = await createClient()
-  const dashPromise = (supabase as any)
-    .rpc('get_home_dashboard', {
-      p_is_manager: isManager,
-      p_is_agent:   isAgent,
-      p_has_tasks:  hasTasks,
-    })
-    .then((r: any) => r.data)
+  const dashPromise: Promise<HomeDashboardData | null> = Promise.resolve(
+    supabase
+      .rpc('get_home_dashboard', {
+        p_is_manager: isManager,
+        p_is_agent:   isAgent,
+        p_has_tasks:  hasTasks,
+      })
+      .then((r) => r.data as HomeDashboardData | null)
+  )
+  const projectsSummaryPromise: Promise<HomeProjectsSummary> = hasProjects
+    ? getHomeProjectsSummary()
+    : Promise.resolve({ activeCount: 0, blockedCount: 0, milestonesOverdue: 0, milestonesDueSoon: 0, atRisk: [] })
 
   return (
     <div className="space-y-4 pb-6">
@@ -808,8 +939,10 @@ export default async function HomePage({
       <Suspense fallback={<DashboardSkeleton />}>
         <DashboardBody
           dashPromise={dashPromise}
+          projectsSummaryPromise={projectsSummaryPromise}
           hasRequests={hasRequests}
           hasTasks={hasTasks}
+          hasProjects={hasProjects}
           isAgent={isAgent}
           isManager={isManager}
           tab={tab}

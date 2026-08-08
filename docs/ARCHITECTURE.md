@@ -1,13 +1,12 @@
-# CognixDesk — Architecture Reference
+# Citykart Desk — Architecture Reference
 
 > **Purpose of this document.** A single, durable place to load full project context
 > from any device (desktop or mobile). It was reconstructed from the source of truth —
-> the code in this repo, the 47 Supabase migrations, and the companion `cognix-owner`
-> repo — plus the project briefing. Companion docs:
+> the code in this repo and the 66 Supabase migrations — plus the project briefing.
+> Companion doc:
 > - [`DATABASE.md`](./DATABASE.md) — complete schema (tables, enums, RPCs, RLS, indexes).
-> - [`OWNER-PORTAL.md`](./OWNER-PORTAL.md) — the operator control plane (`cognix-owner`).
 
-Last reconstructed: 2026-06-21.
+Last reconstructed: 2026-08-06.
 
 ---
 
@@ -15,59 +14,36 @@ Last reconstructed: 2026-06-21.
 
 These are hard rules for anyone (human or AI) working in this repo:
 
-1. **🚫 HRMS is off-limits.** HRMS is a separate codebase that *shares the same
-   Supabase database*. Any schema migration or RLS change must be **scoped only to
-   tables CognixDesk owns**. Never touch HRMS tables.
-2. **✋ Ask before any risky change.** Confirm before migrations, RLS changes, or
+1. **✋ Ask before any risky change.** Confirm before migrations, RLS changes, or
    anything destructive.
-3. **📖 This is not the Next.js you know.** Next.js 16 has breaking changes. **Read
+2. **📖 This is not the Next.js you know.** Next.js 16 has breaking changes. **Read
    `node_modules/next/dist/docs/` before writing any Next.js code.** Heed deprecation
    notices. (See `AGENTS.md`.)
-4. **⚠️ Edge middleware lives in `proxy.ts`, not `middleware.ts`.** Creating a
+3. **⚠️ Edge middleware lives in `proxy.ts`, not `middleware.ts`.** Creating a
    `middleware.ts` will conflict and crash the server.
-5. **🔑 Never hardcode the service-role key** in a shell command line or commit.
-6. **🛠️ Build with `node node_modules/next/dist/bin/next build`** — not
+4. **🔑 Never hardcode the service-role key** in a shell command line or commit.
+5. **🛠️ Build with `node node_modules/next/dist/bin/next build`** — not
    `npm run build` / `npx next build` (the `.bin/next` shim is broken on Node v26).
 
-### Backend topology (verified 2026-06-21 — code + owner confirmation)
-**Two separate Supabase projects** (plus a Railway REST gateway) — this is the single
-most important safety fact in the ecosystem:
-
-| Supabase project | Hosts | Used by | Status |
-|---|---|---|---|
-| **`kxvdlvarjvtqijzvmegk`** | **HRMS + Owner Portal auth** (shared) | owner portal `ownerClient.ts`; HRMS | 🚫 **OFF-LIMITS** — HRMS data lives here |
-| **`jhdzjzrimjjtqwnkrwha`** | **CognixDesk** (dedicated) | owner portal `cognixClient.ts`; the CognixDesk app | ✅ Safe — contains the tables in `DATABASE.md`, no HRMS |
-| Railway REST `hrmsapi-production-7125.up.railway.app` | HRMS REST gateway (backed by `kxvdlvarjvtqijzvmegk`) | owner portal `ownerApi.ts` | 🚫 HRMS — do not call/modify |
-
-**Implications:**
-- ✅ **CognixDesk schema work is inherently HRMS-safe.** CognixDesk is a *physically
-  separate* Supabase project (`jhdzjzrimjjtqwnkrwha`); a CognixDesk migration cannot
-  reach HRMS tables — they're in a different database. The "shared DB" risk does **not**
-  apply to CognixDesk schema changes.
-- ⚠️ **The danger surface is the Owner Portal**, because it connects to *both* projects.
-  Any operation it performs against `kxvdlvarjvtqijzvmegk` (its `ownerClient`, or the
-  Railway HRMS API via `ownerApi`) can affect HRMS. **Treat all owner-portal code paths
-  that touch `kxvdlvarjvtqijzvmegk` / `ownerApi` / the Railway URL as off-limits.**
-- The CognixDesk app's production `NEXT_PUBLIC_SUPABASE_URL` is set in Vercel (not
-  committed; repo shows only local CLI id `Flow_Desk`). It points at
-  `jhdzjzrimjjtqwnkrwha`.
+### Backend topology
+Citykart Desk is a **standalone, single-tenant, in-house application** running against
+a single local Supabase project (Postgres + Auth + REST, run locally via the Supabase
+CLI/Docker — no hosted project, no shared database, no other product touches this
+instance). There is exactly one organization (`CityKart`) seeded in the database, and
+all users belong to it. There is no owner portal, no self-serve signup, and no external
+system shares this database.
 
 ---
 
-## 1. What CognixDesk is
+## 1. What Citykart Desk is
 
-CognixDesk is a **multi-tenant service-desk / ITSM SaaS** (think Jira Service
-Management / Freshservice): service catalog, tickets ("requests"), tasks, multi-step
-approvals, SLAs with business-hours-aware escalation, knowledge base, CSAT, reporting,
-and a large org-admin surface.
-
-It is one of three sub-products in the broader ecosystem:
-
-| Product | Repo / location | Stack | Role |
-|---|---|---|---|
-| **CognixDesk** | `suraj2build/cognix` (this repo) | Next.js 16 App Router | The service-desk app — end users + org admins |
-| **Owner Portal** | `suraj2build/cognix-owner` | Vite + React SPA | SaaS operator control plane (manage orgs, modules, licensing, signups) |
-| **HRMS** | *separate repo* | *separate* | HR management system. **Do not touch.** Shares Supabase (boundary to-confirm). |
+Citykart Desk is a **single-tenant, in-house service-desk / ITSM app** (think an
+internal Jira Service Management / Freshservice, run entirely on Citykart's own
+infrastructure): service catalog, tickets ("requests"), tasks, multi-step approvals,
+SLAs with business-hours-aware escalation, knowledge base, CSAT, reporting, and an
+org-admin surface. There is exactly one seeded organization (`CityKart`); nobody
+self-signs-up, and there is no separate operator/owner portal or external system
+sharing the database.
 
 ---
 
@@ -77,17 +53,17 @@ It is one of three sub-products in the broader ecosystem:
 |---|---|
 | Framework | Next.js **16.2.9**, App Router (React Server Components + Server Actions), React 19 |
 | Language | TypeScript |
-| Database | Supabase (PostgreSQL), region **ap-south-1** (Mumbai) |
+| Database | Supabase (PostgreSQL), run **locally** via the Supabase CLI/Docker |
 | Auth | Supabase Auth; session refresh in `proxy.ts` (Edge) |
 | Styling | Tailwind CSS 4 + shadcn/ui (`@base-ui/react`), `lucide-react` icons |
 | Forms | `react-hook-form` + `zod` |
-| Email | Resend (gated by `RESEND_API_KEY` / `EMAIL_ENABLED`) |
-| Deployment | Vercel, pinned to **`bom1`** (Mumbai) via `vercel.json` to match Supabase region |
+| Email | Resend (optional, gated by `RESEND_API_KEY` / `EMAIL_ENABLED`) |
+| Deployment | Local only — no Vercel/hosted deployment |
 | Monitoring | Vercel Speed Insights; `error_reports` table for client-side capture |
 
 Key config files: `next.config.ts` (Turbopack; `ignoreBuildErrors` + `ignoreDuringBuilds`
 both **on** by design — types are generated after migrations, lint runs separately),
-`vercel.json` (`{ "regions": ["bom1"] }`), `.nvmrc` (Node 20).
+`.nvmrc` (Node 20), `supabase/config.toml` (local Supabase stack).
 
 ---
 
@@ -95,32 +71,29 @@ both **on** by design — types are generated after migrations, lint runs separa
 
 ### 3.1 Edge layer — `proxy.ts`
 Runs on (almost) every request. Responsibilities:
-1. **Session refresh** via `supabase.auth.getUser()` (never `getSession()` — per Supabase docs).
-2. **Auth redirects**: unauthenticated → `/login?next=…`; authenticated on `/login`,
-   `/`, or `/signup*` → `/home`.
-3. **Module gating**: for `/requests`, `/services`, `/tasks`, `/approvals` it looks up
-   the user's `org_id`, then uses a service-role client to check
-   `org_module_access.enabled` + `valid_until`. Disabled/expired → redirect to `/home`
-   (and `/trial-expired` exists for ended trials).
+1. **Session refresh** via `supabase.auth.getClaims()` (falls back to `getUser()` — never
+   `getSession()` — per Supabase docs).
+2. **Auth redirects**: unauthenticated → `/login?next=…`; authenticated on `/login` or
+   `/` → `/home`.
 
-Public/auth routes and static assets bypass the gating. Matcher excludes
+There is no per-module licensing/gating anymore — the single seeded org has every
+module enabled, so any authenticated user can reach any route their role allows.
+Public/auth routes and static assets bypass the redirect logic. Matcher excludes
 `_next/static`, `_next/image`, `favicon.ico`.
 
 ### 3.2 Route groups (`app/`)
-- **`(marketing)`** — public landing + `/legal/{privacy,terms}`.
-- **`(auth)`** — `/login`, `/signup`, `/forgot-password`, `/reset-password`,
-  `/request-access`. Redirects logged-in users to `/home`.
+- **`(auth)`** — `/login`, `/forgot-password`, `/reset-password`. No public signup —
+  accounts are created by an admin. Redirects logged-in users to `/home`.
 - **`(app)`** — the authenticated product. Layout bootstraps the shell (see §4).
   Core: `/home`, `/requests` + `/requests/[id]`, `/tasks` + `/tasks/[id]`,
   `/approvals`, `/services` (+ category/subcategory routes), `/notifications`,
-  `/profile`, `/trial-expired`.
+  `/profile`.
 - **`(app)/admin`** — large org-admin surface: `users`, `teams`, `roles`, `org`,
   `departments`, `locations`, `master-data`, `categories`, `services`,
   `request-config` (SLA, business hours, holidays, alert/escalation rules),
   `task-config`, `routing`, `approvals` (workflow builder), `runbooks`,
   `knowledge-base`, `monitoring`, `reports`, `audit`, `settings`.
-- **`demo`** — standalone demo mode (no auth), seeded data, demo banner.
-- **`api`** — `auth/callback` (OTP/OAuth code exchange), `api/health`,
+- **`api`** — `auth/callback` (OAuth/recovery code exchange), `api/health`,
   `api/alerts/run`, `api/escalation/run`, `api/admin/audit`.
 
 ### 3.3 Supabase clients (`lib/supabase/`)
@@ -137,8 +110,6 @@ Public/auth routes and static assets bypass the gating. Matcher excludes
 The app is tuned for the cross-region round-trip cost between the Edge and Supabase
 Mumbai. Patterns to preserve:
 
-- **Region pinning** — Vercel `bom1` matches Supabase `ap-south-1` (Day 2), eliminating
-  cross-region latency.
 - **Deferred layout bootstrap** (`app/(app)/layout.tsx`) — blocks render on only **2**
   queries (`getEnabledModules()` + `getTrialInfo()`). It kicks off `navCountsPromise`
   and `notificationsPromise` **without awaiting**, and passes the *promises* to
@@ -207,13 +178,13 @@ Helpers: `lib/notifications.ts`, `lib/activity.ts`, `lib/email/*`.
 ## 6. Code map
 
 ```
-proxy.ts                     Edge: session refresh + auth redirects + module gating
+proxy.ts                     Edge: session refresh + auth redirects
 app/(app)/layout.tsx         App shell bootstrap, deferred nav counts/notifications
 app/(app)/home/page.tsx      Home dashboard (Suspense streaming, get_home_dashboard RPC)
 app/(app)/requests/[id]/     Request detail (2-phase parallel fetch)
 app/(app)/admin/**           Org-admin surface
 app/api/{alerts,escalation}/run   Cron endpoints (x-cron-secret)
-lib/actions/**               Server actions (requests, tasks, approvals, signup, auth, admin/*, owner/*)
+lib/actions/**               Server actions (requests, tasks, approvals, auth, admin/*)
 lib/queries/**               Read layer (profiles, requests, tasks, approvals, services, analytics, …)
 lib/sla/business-hours.ts    SLA deadline computation
 lib/routing/assign.ts        Auto-assignment strategies
@@ -224,7 +195,7 @@ lib/constants/**             request-transitions (SSoT), styles/labels, canned r
 lib/supabase/{server,client,admin}.ts   Supabase clients
 components/{layout,requests,tasks,forms,admin,analytics,ui}/   UI
 types/{index,database}.ts    Domain types + generated Supabase types
-supabase/migrations/**       47 migrations (see DATABASE.md §evolution)
+supabase/migrations/**       66 migrations (see DATABASE.md §evolution)
 ```
 
 ---

@@ -8,11 +8,11 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
-    if (!error) {
-      return NextResponse.redirect(`${origin}${next}`)
-    }
+    await supabase.auth.exchangeCodeForSession(code)
   }
 
-  return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`)
+  // Admin-generated links (invite/recovery) carry tokens in the URL hash fragment
+  // instead of a `code` query param — the server never sees a hash fragment, so
+  // forward to `next` regardless and let the client-side page pick it up.
+  return NextResponse.redirect(`${origin}${next}`)
 }

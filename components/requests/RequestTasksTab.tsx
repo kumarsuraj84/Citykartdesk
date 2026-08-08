@@ -68,8 +68,6 @@ interface RequestTasksTabProps {
 
 export function RequestTasksTab({
   requestId,
-  requestNo,
-  requestTitle,
   teamId,
   initialTasks,
   canManage,

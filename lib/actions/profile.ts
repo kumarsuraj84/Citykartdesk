@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import type { TablesUpdate } from '@/types/database'
 
 export async function updateProfile(data: {
   full_name?: string
@@ -29,7 +30,7 @@ export async function updateProfile(data: {
     return { error: 'Full name must be at least 2 characters.' }
   }
 
-  const updateData: Record<string, string> = {}
+  const updateData: Pick<TablesUpdate<'profiles'>, 'full_name' | 'avatar_url'> = {}
   if (trimmedName) updateData.full_name = trimmedName
   if (data.avatar_url !== undefined) updateData.avatar_url = data.avatar_url
 

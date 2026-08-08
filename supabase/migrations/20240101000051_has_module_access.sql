@@ -7,7 +7,7 @@
 -- behaviour of letting org-less users through). The middleware falls back to the legacy
 -- two-query path if this function is absent, so deploy order does not matter.
 --
--- Scope: CognixDesk-owned tables only.
+-- Scope: Citykart Desk-owned tables only.
 
 CREATE OR REPLACE FUNCTION has_module_access(p_module module_slug)
 RETURNS BOOLEAN

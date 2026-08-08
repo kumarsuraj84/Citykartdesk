@@ -27,12 +27,15 @@ export async function searchUsersForDelegation(
 export async function searchManagersForApproval(
   query: string
 ): Promise<{ id: string; full_name: string; role: string }[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const admin = createAdminClient() as unknown as any
+  const profile = await getCurrentProfile()
+  if (!profile || !profile.org_id) return []
+
+  const admin = createAdminClient()
   const safe = query.replace(/[%_]/g, '\\$&').trim()
   const { data } = await admin
     .from('profiles')
     .select('id, full_name, role')
+    .eq('org_id', profile.org_id)
     .eq('is_active', true)
     .ilike('full_name', `%${safe}%`)
     .order('full_name')
@@ -53,8 +56,7 @@ export async function sendAdHocApproval(
   if (!profile) return { error: 'Not authenticated.' }
 
   const supabase = await createClient()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const admin = createAdminClient() as unknown as any
+  const admin = createAdminClient()
 
   const { data: req } = await supabase
     .from('requests')
@@ -63,7 +65,7 @@ export async function sendAdHocApproval(
     .single()
   if (!req) return { error: 'Request not found.' }
 
-  const onTeam = profile.team_members.some((m: any) => m.team_id === req.team_id)
+  const onTeam = profile.team_members.some((m) => m.team_id === req.team_id)
   if (!['manager', 'admin'].includes(profile.role) && !onTeam)
     return { error: 'Unauthorized.' }
 
@@ -129,7 +131,6 @@ export async function sendAdHocApproval(
   }).catch(() => {})
 
   // Notify all approvers at once
-  const approverMap = new Map((approvers as any[]).map((a: any) => [a.id, a.full_name]))
   for (const uid of approverIds) {
     notify({
       recipientId: uid,
@@ -176,13 +177,12 @@ async function resolveApprovalContext(approvalId: string) {
 
   if (isParallel) {
     // Parallel mode: find this user's step (any step assigned to them without a decision yet)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const admin = createAdminClient() as unknown as any
+    const admin = createAdminClient()
     const { data: decisions } = await admin
       .from('approval_decisions')
       .select('step_order')
       .eq('approval_id', approvalId)
-    const decidedSteps = new Set((decisions ?? []).map((d: any) => d.step_order))
+    const decidedSteps = new Set((decisions ?? []).map((d) => d.step_order))
 
     const myStep = steps.find(
       (s) =>
@@ -214,8 +214,7 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
   if ('error' in ctx) return { error: ctx.error }
 
   const { approval, steps, currentStep, profile, supabase, isParallel, decidedSteps } = ctx
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const admin = createAdminClient() as unknown as any
+  const admin = createAdminClient()
 
   // Record the decision
   const { error: decisionError } = await admin.from('approval_decisions').insert({
@@ -392,8 +391,7 @@ export async function rejectApproval(approvalId: string, comment?: string): Prom
   if ('error' in ctx) return { error: ctx.error }
 
   const { approval, currentStep, profile, supabase } = ctx
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const admin = createAdminClient() as unknown as any
+  const admin = createAdminClient()
 
   const { error: decisionError } = await admin.from('approval_decisions').insert({
     approval_id: approvalId,

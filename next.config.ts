@@ -13,6 +13,11 @@ const nextConfig: NextConfig = {
       dynamic: 30,
       static: 180,
     },
+    // Off: this dev-only cache stores fetch() responses (including Supabase's internal
+    // REST calls) across HMR reloads, overriding even `no-store`, and only partially
+    // clears on full reload — causes stale/inconsistent data after schema or RLS changes
+    // during local dev. No effect on production.
+    serverComponentsHmrCache: false,
   },
   typescript: {
     // Tables added in migrations after types were generated — safe to skip

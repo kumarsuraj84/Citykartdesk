@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import {
   Paperclip, X, Sparkles, CheckCircle2, ClipboardList, ShieldCheck, MinusCircle,
   ExternalLink, Reply, ReplyAll, Forward, Archive, MessageSquare, Eye, EyeOff,
-  Star, AlertTriangle, Send, Clock, Zap, ArrowUpRight, Flame, ChevronDown,
+  Star, AlertTriangle, Send, Zap, Flame,
 } from 'lucide-react'
 import { approveAndCreate, reclassifyReview, type WorkPayload } from '@/lib/actions/intake/work'
 import { rejectReview } from '@/lib/actions/intake/reviews'
@@ -76,7 +76,7 @@ function avatarColor(seed: string): string {
 }
 
 export function ReviewClient({
-  review, attachments, thread, services, teams, profileId,
+  review, attachments, thread, services, teams,
 }: {
   review: IntakeReviewDetail
   attachments: Attachment[]

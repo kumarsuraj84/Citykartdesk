@@ -58,7 +58,6 @@ export async function POST(req: NextRequest) {
   const workerUrl = process.env.INTAKE_WORKER_URL
   const workerSecret = process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
   if (workerUrl && workerSecret) {
-    console.log(`[gmail-webhook] forwarding to worker: channelId=${channel.id}, historyId=${historyId}`)
     fetch(`${workerUrl}/intake/gmail-sync`, {
       method: 'POST',
       headers: {
@@ -67,9 +66,6 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({ channelId: channel.id, historyId }),
     })
-      .then(r => {
-        console.log(`[gmail-webhook] worker response: ${r.status}`)
-      })
       .catch(err => {
         console.error(`[gmail-webhook] worker call failed`, err)
       })

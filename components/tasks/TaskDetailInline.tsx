@@ -14,10 +14,11 @@ import {
 import { SourceCell } from '@/components/ui/SourceCell'
 import { TaskActivityFeed } from './TaskActivityFeed'
 import { SubtaskList } from './SubtaskList'
+import { TaskDependencyList } from './TaskDependencyList'
 import { formatRelativeTime } from '@/lib/utils'
 import type { TaskWithDetails, TaskCommentWithAuthor, TaskActivityWithActor } from '@/types'
 import type { TaskStatus } from '@/types'
-import type { TaskAttachment, TaskIntakeContext } from '@/lib/queries/tasks'
+import type { TaskAttachment, TaskIntakeContext, TaskDependency } from '@/lib/queries/tasks'
 
 type ProfileMini = { id: string; full_name: string }
 
@@ -26,6 +27,7 @@ interface TaskDetailInlineProps {
   comments: TaskCommentWithAuthor[]
   activity: TaskActivityWithActor[]
   subtasks: TaskWithDetails[]
+  dependencies?: { blockedBy: TaskDependency[]; blocking: TaskDependency[] }
   profiles: ProfileMini[]
   assignees: ProfileMini[]
   attachments: TaskAttachment[]
@@ -81,7 +83,7 @@ function fmtDate(iso: string | null) {
 }
 
 export function TaskDetailInline({
-  task, comments, activity, subtasks, profiles,
+  task, comments, activity, subtasks, dependencies, profiles,
   assignees: initialAssignees, attachments, intakeContext,
   currentUserId, currentUserName,
 }: TaskDetailInlineProps) {
@@ -368,6 +370,17 @@ export function TaskDetailInline({
           <div className="rounded-xl border border-border bg-background/50 px-4 py-3">
             <SubtaskList parentTaskId={task.id} initialSubtasks={subtasks} profiles={profiles} />
           </div>
+
+          {/* Dependencies */}
+          {dependencies && (
+            <div className="rounded-xl border border-border bg-background/50 px-4 py-3">
+              <TaskDependencyList
+                taskId={task.id}
+                initialBlockedBy={dependencies.blockedBy}
+                initialBlocking={dependencies.blocking}
+              />
+            </div>
+          )}
         </div>
 
         {/* Right column — Activities / Timeline */}

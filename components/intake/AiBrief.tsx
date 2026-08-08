@@ -32,6 +32,9 @@ export function AiBrief({ subject, bodyText, fromAddress }: AiBriefProps) {
 
   useEffect(() => {
     let cancelled = false
+    // Async data-fetch effect (calls the AI brief server action) with a cancellation
+    // guard below — resetting state to start a new fetch, not a plain prop mirror.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     setBrief(null)
     setHidden(false)

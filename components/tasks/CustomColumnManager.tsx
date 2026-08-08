@@ -3,8 +3,8 @@
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Plus, X, ChevronDown, Type, Hash, Calendar, List,
-  CheckSquare, LayoutList, Trash2, Settings2, GripVertical,
+  Plus, X, Type, Hash, Calendar, List,
+  CheckSquare, LayoutList, Trash2,
 } from 'lucide-react'
 import { createCustomField, updateCustomField, deleteCustomField } from '@/lib/actions/tasks'
 import type { CustomField, CustomFieldType, CustomFieldOption } from '@/types'
@@ -265,8 +265,11 @@ function EditFieldModal({
   }
 
   function handleDelete() {
+    if (!confirm('Delete this custom field? It will be removed from all tasks.')) return
+    setError(null)
     startTransition(async () => {
-      await deleteCustomField(field.id)
+      const result = await deleteCustomField(field.id)
+      if (result.error) { setError(result.error); return }
       onDelete()
     })
   }
@@ -372,7 +375,7 @@ export function CustomColumnManager({ teamId, fields, onFieldsChange }: CustomCo
       <button
         onClick={() => setShowAdd(true)}
         title="Add custom column"
-        className="flex items-center gap-1 rounded-lg border border-dashed border-border bg-background/60 px-3 py-1.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
+        className="flex items-center gap-1 rounded-lg border border-dashed border-white/25 px-3 py-1.5 text-xs text-primary-foreground/85 hover:border-white/50 hover:text-primary-foreground transition-colors"
       >
         <Plus className="h-3.5 w-3.5" />
         Add column

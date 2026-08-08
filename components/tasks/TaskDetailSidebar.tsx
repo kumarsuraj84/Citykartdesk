@@ -3,7 +3,7 @@
 import { useTransition } from 'react'
 import { updateTaskStatus, updateTaskField } from '@/lib/actions/tasks'
 import type { TaskWithDetails } from '@/types'
-import type { TaskStatus, TaskPriority } from '@/types'
+import type { TaskStatus } from '@/types'
 import { formatRelativeTime } from '@/lib/utils'
 
 interface TaskDetailSidebarProps {

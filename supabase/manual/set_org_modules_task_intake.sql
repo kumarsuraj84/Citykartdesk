@@ -5,7 +5,7 @@
 -- (shared dashboards, no dedicated nav).
 --
 -- Edit the slug below to match your org, then run in the Supabase SQL editor
--- against the CognixDesk project (jhdzjzrimjjtqwnkrwha).
+-- against the Citykart Desk project (jhdzjzrimjjtqwnkrwha).
 -- To find the slug:  select id, name, slug from organizations order by created_at desc;
 
 do $$

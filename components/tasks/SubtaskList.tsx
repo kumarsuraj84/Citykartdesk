@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition, useRef, useEffect } from 'react'
-import { ChevronDown, Plus, Loader2, Trash2, User, Flag, Calendar, UserRound } from 'lucide-react'
+import { ChevronDown, Plus, Trash2, User, Flag, Calendar, UserRound } from 'lucide-react'
 import { createSubtask, toggleSubtaskDone, deleteTask } from '@/lib/actions/tasks'
 import type { TaskWithDetails, TaskPriority } from '@/types'
 
@@ -79,7 +79,7 @@ function InlineSubtaskAddRow({
     return () => document.removeEventListener('mousedown', close)
   }, [showAssignee, showDate, showPriority])
 
-  function openPicker(btnRef: React.RefObject<HTMLButtonElement | null>, setter: (v: boolean) => void, others: ((v: boolean) => void)[]) {
+  function openPicker(btnRef: React.RefObject<HTMLButtonElement | null>, setter: React.Dispatch<React.SetStateAction<boolean>>, others: React.Dispatch<React.SetStateAction<boolean>>[]) {
     others.forEach(s => s(false))
     if (btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect()
@@ -258,6 +258,7 @@ export function SubtaskList({ parentTaskId, initialSubtasks, profiles = [] }: Su
   const [subtasks, setSubtasks] = useState<TaskWithDetails[]>(initialSubtasks)
   const [adding, setAdding] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const [, startTransition] = useTransition()
 
   function handleToggle(subtask: TaskWithDetails) {
@@ -271,9 +272,21 @@ export function SubtaskList({ parentTaskId, initialSubtasks, profiles = [] }: Su
   }
 
   function handleDelete(subtaskId: string) {
+    const removed = subtasks.find((s) => s.id === subtaskId)
+    const removedIndex = subtasks.findIndex((s) => s.id === subtaskId)
+    setDeleteError('')
     setSubtasks((prev) => prev.filter((s) => s.id !== subtaskId))
     startTransition(async () => {
-      await deleteTask(subtaskId)
+      const result = await deleteTask(subtaskId)
+      if (result.error && removed) {
+        setSubtasks((prev) => {
+          if (prev.some((s) => s.id === subtaskId)) return prev
+          const next = [...prev]
+          next.splice(Math.min(removedIndex, next.length), 0, removed)
+          return next
+        })
+        setDeleteError(result.error)
+      }
     })
   }
 
@@ -331,6 +344,8 @@ export function SubtaskList({ parentTaskId, initialSubtasks, profiles = [] }: Su
           <Plus className="h-3.5 w-3.5" />
         </button>
       </div>
+
+      {deleteError && <p className="mb-1.5 text-xs text-red-500">{deleteError}</p>}
 
       {/* Table */}
       {!collapsed && (

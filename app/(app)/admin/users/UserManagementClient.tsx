@@ -1,15 +1,25 @@
 'use client'
 
-import { useState, useTransition, useMemo, useRef, useEffect } from 'react'
+import { useState, useTransition, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, UserPlus, ChevronDown, Pencil } from 'lucide-react'
-import { updateUserRole, toggleUserActive, updateUserProfile, inviteUser, setUserTeams } from '@/lib/actions/admin/users'
-import type { UserWithTeams, Department, Location, CostCenter, ProfileMini, TeamOption } from './page'
+import { X, UserPlus, ChevronDown, Pencil, KeyRound, Send } from 'lucide-react'
+import {
+  updateUserRole,
+  toggleUserActive,
+  updateUserProfile,
+  inviteUser,
+  setUserTeams,
+  adminSendPasswordReset,
+  adminSetPassword,
+} from '@/lib/actions/admin/users'
+import type { UserWithTeams, Department, Location, CostCenter, JobFunction, Designation, ProfileMini, TeamOption } from './page'
 import type { UserRole } from '@/types'
 
 const ROLE_STYLES: Record<UserRole, string> = {
+  platform_owner: 'text-purple-700 bg-purple-50 border-purple-300 font-bold',
   admin:   'text-red-700 bg-red-50 border-red-200',
   manager: 'text-orange-700 bg-orange-50 border-orange-200',
+  agent:   'text-blue-700 bg-blue-50 border-blue-200',
   user:    'text-slate-600 bg-slate-50 border-slate-200',
 }
 
@@ -36,6 +46,97 @@ function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' }) {
   )
 }
 
+// ─── Password reset (admin-only) ───────────────────────────────────────────────
+
+function PasswordSection({ userId, email }: { userId: string; email: string | null }) {
+  const [pending, startTransition] = useTransition()
+  const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null)
+  const [showDirectSet, setShowDirectSet] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+
+  function handleSendReset() {
+    setMessage(null)
+    startTransition(async () => {
+      const result = await adminSendPasswordReset(email ?? '')
+      setMessage(
+        result.error
+          ? { type: 'error', text: result.error }
+          : { type: 'success', text: `Reset link sent to ${email}.` }
+      )
+    })
+  }
+
+  function handleSetPassword() {
+    setMessage(null)
+    startTransition(async () => {
+      const result = await adminSetPassword(userId, newPassword)
+      if (result.error) {
+        setMessage({ type: 'error', text: result.error })
+        return
+      }
+      setMessage({ type: 'success', text: 'Password updated.' })
+      setNewPassword('')
+      setShowDirectSet(false)
+    })
+  }
+
+  return (
+    <section className="space-y-3">
+      <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Password</h3>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={handleSendReset}
+          disabled={pending || !email}
+          className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+        >
+          <Send className="h-3.5 w-3.5" />
+          Send reset email
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowDirectSet(s => !s)}
+          className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-muted transition-colors"
+        >
+          <KeyRound className="h-3.5 w-3.5" />
+          Set password directly
+        </button>
+      </div>
+
+      {showDirectSet && (
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={newPassword}
+            onChange={e => setNewPassword(e.target.value)}
+            placeholder="Min. 8 characters"
+            className="input-field flex-1"
+          />
+          <button
+            type="button"
+            onClick={handleSetPassword}
+            disabled={pending || newPassword.length < 8}
+            className="btn-gradient disabled:opacity-40 shrink-0"
+          >
+            Set
+          </button>
+        </div>
+      )}
+
+      {message && (
+        <p className={`text-xs rounded-lg px-3 py-2 border ${
+          message.type === 'error'
+            ? 'text-red-600 bg-red-50 border-red-100'
+            : 'text-emerald-700 bg-emerald-50 border-emerald-100'
+        }`}>
+          {message.text}
+        </p>
+      )}
+    </section>
+  )
+}
+
 // ─── Edit Drawer ──────────────────────────────────────────────────────────────
 
 interface EditDrawerProps {
@@ -43,6 +144,8 @@ interface EditDrawerProps {
   departments: Department[]
   locations: Location[]
   costCenters: CostCenter[]
+  jobFunctions: JobFunction[]
+  designations: Designation[]
   profiles: ProfileMini[]
   teams: TeamOption[]
   isAdmin: boolean
@@ -50,7 +153,7 @@ interface EditDrawerProps {
   onClose: () => void
 }
 
-function EditDrawer({ user, departments, locations, costCenters, profiles, teams, isAdmin, currentUserId, onClose }: EditDrawerProps) {
+function EditDrawer({ user, departments, locations, costCenters, jobFunctions, designations, profiles, teams, isAdmin, currentUserId, onClose }: EditDrawerProps) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -61,6 +164,8 @@ function EditDrawer({ user, departments, locations, costCenters, profiles, teams
     department_id?: string | null
     location_id?: string | null
     cost_center_id?: string | null
+    function_id?: string | null
+    designation_id?: string | null
     employee_id?: string | null
     job_title?: string | null
     manager_id?: string | null
@@ -75,6 +180,8 @@ function EditDrawer({ user, departments, locations, costCenters, profiles, teams
     department_id: orgUser.department_id ?? '',
     location_id:   orgUser.location_id ?? '',
     cost_center_id:orgUser.cost_center_id ?? '',
+    function_id:   orgUser.function_id ?? '',
+    designation_id:orgUser.designation_id ?? '',
     manager_id:    orgUser.manager_id ?? '',
     role:          user.role as UserRole,
   })
@@ -103,11 +210,13 @@ function EditDrawer({ user, departments, locations, costCenters, profiles, teams
           department_id: form.department_id || null,
           location_id:   form.location_id || null,
           cost_center_id:form.cost_center_id || null,
+          function_id:   form.function_id || null,
+          designation_id:form.designation_id || null,
           manager_id:    form.manager_id || null,
         }),
         isAdmin && !isSelf && form.role !== user.role
           ? updateUserRole(user.id, form.role)
-          : Promise.resolve({}),
+          : Promise.resolve<{ error?: string }>({}),
         setUserTeams(user.id, selectedTeams),
       ])
       const err = r1.error ?? r2.error ?? r3.error
@@ -171,6 +280,9 @@ function EditDrawer({ user, departments, locations, costCenters, profiles, teams
             </section>
           )}
 
+          {/* Password */}
+          {isAdmin && !isSelf && <PasswordSection userId={user.id} email={user.email} />}
+
           {/* Teams */}
           <section className="space-y-3">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Teams</h3>
@@ -210,6 +322,12 @@ function EditDrawer({ user, departments, locations, costCenters, profiles, teams
               <Field label="Cost Center">
                 <SelectField value={form.cost_center_id} onChange={v => set('cost_center_id', v)} options={costCenters.map(c => ({ value: c.id, label: c.name }))} placeholder="No cost center" />
               </Field>
+              <Field label="Function">
+                <SelectField value={form.function_id} onChange={v => set('function_id', v)} options={jobFunctions.map(f => ({ value: f.id, label: f.name }))} placeholder="No function" />
+              </Field>
+              <Field label="Designation">
+                <SelectField value={form.designation_id} onChange={v => set('designation_id', v)} options={designations.map(d => ({ value: d.id, label: d.name }))} placeholder="No designation" />
+              </Field>
             </div>
           </section>
 
@@ -237,24 +355,31 @@ function EditDrawer({ user, departments, locations, costCenters, profiles, teams
 function ToggleActiveButton({ user }: { user: UserWithTeams }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
   function handleToggle() {
+    if (user.is_active && !confirm(`Deactivate ${user.full_name}? They will no longer be able to log in.`)) return
+    setError(null)
     startTransition(async () => {
-      await toggleUserActive(user.id, !user.is_active)
+      const result = await toggleUserActive(user.id, !user.is_active)
+      if (result.error) { setError(result.error); return }
       router.refresh()
     })
   }
   return (
-    <button
-      onClick={handleToggle}
-      disabled={pending}
-      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-        user.is_active
-          ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
-          : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-      }`}
-    >
-      {user.is_active ? 'Deactivate' : 'Reactivate'}
-    </button>
+    <div>
+      <button
+        onClick={handleToggle}
+        disabled={pending}
+        className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 ${
+          user.is_active
+            ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+            : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+        }`}
+      >
+        {user.is_active ? 'Deactivate' : 'Reactivate'}
+      </button>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
   )
 }
 
@@ -524,11 +649,13 @@ interface Props {
   departments: Department[]
   locations: Location[]
   costCenters: CostCenter[]
+  jobFunctions: JobFunction[]
+  designations: Designation[]
   profiles: ProfileMini[]
   teams: TeamOption[]
 }
 
-export function UserManagementClient({ initialUsers, currentUserId, isAdmin, departments, locations, costCenters, profiles, teams }: Props) {
+export function UserManagementClient({ initialUsers, currentUserId, isAdmin, departments, locations, costCenters, jobFunctions, designations, profiles, teams }: Props) {
   const [search, setSearch] = useState('')
   const [editUser, setEditUser] = useState<UserWithTeams | null>(null)
   const [showInvite, setShowInvite] = useState(false)
@@ -609,6 +736,8 @@ export function UserManagementClient({ initialUsers, currentUserId, isAdmin, dep
           departments={departments}
           locations={locations}
           costCenters={costCenters}
+          jobFunctions={jobFunctions}
+          designations={designations}
           profiles={profiles}
           teams={teams}
           isAdmin={isAdmin}

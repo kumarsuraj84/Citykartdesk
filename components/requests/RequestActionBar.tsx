@@ -22,6 +22,8 @@ function ElapsedTimer({ startedAt }: { startedAt: string }) {
 
   useEffect(() => {
     const base = Date.now() - new Date(startedAt).getTime()
+    // Seeds the live interval timer set up right below — external (clock) sync, not derived prop state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setElapsed(Math.floor(base / 1000))
     const id = setInterval(() => setElapsed((s) => s + 1), 1000)
     return () => clearInterval(id)

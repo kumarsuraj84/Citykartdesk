@@ -10,7 +10,7 @@
 -- This drops the stale permissive policies. Each table either already has an
 -- org-scoped replacement (noted below) or gets one created here first.
 --
--- Apply against the CognixDesk Supabase project (jhdzjzrimjjtqwnkrwha).
+-- Apply against the Citykart Desk Supabase project (jhdzjzrimjjtqwnkrwha).
 
 -- profiles  → replaced by profiles_select (033): org_id = current_org_id() OR id = auth.uid()
 DROP POLICY IF EXISTS "profiles_read" ON profiles;

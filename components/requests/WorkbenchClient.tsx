@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { Fragment, useState, useTransition } from 'react'
 import Link from 'next/link'
 import {
   CheckSquare,
@@ -9,15 +9,34 @@ import {
   User,
   X,
   ChevronDown,
+  ChevronRight,
   CheckCircle2,
   Loader2,
 } from 'lucide-react'
-import { bulkAssignRequests, bulkUpdateStatus } from '@/lib/actions/requests'
+import { bulkAssignRequests, bulkUpdateStatus, bulkChangePriority } from '@/lib/actions/requests'
 import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
 import { SLABadge } from '@/components/requests/SLABadge'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { STATUS_LABELS } from '@/lib/constants/requests'
 import { formatRelativeTime } from '@/lib/utils'
-import type { RequestWithRelations, RequestStatus } from '@/types'
+import type { RequestWithRelations, RequestStatus, RequestPriority } from '@/types'
+
+// ── Group-by-status config — order + accent dot, consistent with the badge hues
+// already used in StatusBadge/RequestBoardView. ─────────────────────────────────
+const STATUS_GROUP_ORDER: RequestStatus[] = [
+  'open', 'assigned', 'in_progress', 'waiting_user', 'pending_approval', 'resolved',
+]
+
+const STATUS_DOT: Record<RequestStatus, string> = {
+  open:             'bg-blue-500',
+  assigned:         'bg-sky-500',
+  in_progress:      'bg-indigo-500',
+  waiting_user:     'bg-orange-500',
+  pending_approval: 'bg-violet-500',
+  resolved:         'bg-emerald-500',
+  closed:           'bg-slate-400',
+  cancelled:        'bg-red-500',
+}
 
 // ── Agent-eligible bulk statuses ──────────────────────────────────────────────
 const BULK_STATUSES: { value: RequestStatus; label: string }[] = [
@@ -25,6 +44,13 @@ const BULK_STATUSES: { value: RequestStatus; label: string }[] = [
   { value: 'waiting_user', label: 'Waiting on User' },
   { value: 'resolved',     label: 'Resolved' },
   { value: 'cancelled',    label: 'Cancelled' },
+]
+
+const BULK_PRIORITIES: { value: RequestPriority; label: string }[] = [
+  { value: 'low',    label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high',   label: 'High' },
+  { value: 'urgent', label: 'Urgent' },
 ]
 
 // ── Request card (table row) ──────────────────────────────────────────────────
@@ -118,25 +144,36 @@ function WorkbenchRow({
   )
 }
 
-// ── Bulk action bar ───────────────────────────────────────────────────────────
+// ── Group header ──────────────────────────────────────────────────────────────
 
-function BulkActionBar({
+function GroupHeader({
+  status,
   count,
-  teamMembers,
-  onClear,
-  onComplete,
+  sharePct,
+  collapsed,
+  onToggle,
 }: {
+  status: RequestStatus
   count: number
-  teamMembers: { id: string; full_name: string }[]
-  onClear: () => void
-  onComplete: () => void
+  sharePct: number
+  collapsed: boolean
+  onToggle: () => void
 }) {
-  const [isPending, startTransition] = useTransition()
-  const [assignOpen, setAssignOpen]   = useState(false)
-  const [statusOpen, setStatusOpen]   = useState(false)
-  const [error, setError]             = useState<string | null>(null)
-
-  return null // rendered by parent via props callback — see WorkbenchClient
+  const dot = STATUS_DOT[status]
+  return (
+    <button
+      onClick={onToggle}
+      className="flex w-full items-center gap-2 border-b border-border bg-muted/30 px-4 py-1.5 text-left select-none hover:opacity-80 transition-opacity"
+    >
+      {collapsed ? <ChevronRight className="h-3 w-3 text-muted-foreground" /> : <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+      <span className={`inline-block h-2 w-2 rounded-full ${dot}`} />
+      <span className="text-[11px] font-semibold text-foreground">{STATUS_LABELS[status]}</span>
+      <span className="text-[11px] text-muted-foreground">{count}</span>
+      <span className="ml-2 h-1 w-24 shrink-0 overflow-hidden rounded-full bg-muted">
+        <span className={`block h-full rounded-full ${dot}`} style={{ width: `${sharePct}%` }} />
+      </span>
+    </button>
+  )
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -147,6 +184,8 @@ interface WorkbenchClientProps {
   viewerId: string
   emptyTitle: string
   emptyDescription: string
+  /** Group rows by status with a collapsible header + share bar — only makes sense when the list spans multiple statuses (e.g. the "active" filter), mirrors TaskTable's grouping. */
+  groupByStatus?: boolean
 }
 
 export function WorkbenchClient({
@@ -155,12 +194,28 @@ export function WorkbenchClient({
   viewerId,
   emptyTitle,
   emptyDescription,
+  groupByStatus = false,
 }: WorkbenchClientProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [isPending, startTransition] = useTransition()
   const [bulkError, setBulkError] = useState<string | null>(null)
   const [assignOpen, setAssignOpen] = useState(false)
   const [statusOpen, setStatusOpen] = useState(false)
+  const [priorityOpen, setPriorityOpen] = useState(false)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<RequestStatus>>(new Set())
+
+  function toggleGroup(status: RequestStatus) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(status)) next.delete(status)
+      else next.add(status)
+      return next
+    })
+  }
+
+  const groups = groupByStatus
+    ? STATUS_GROUP_ORDER.map((status) => ({ status, items: requests.filter((r) => r.status === status) })).filter((g) => g.items.length > 0)
+    : []
 
   const allSelected = requests.length > 0 && selected.size === requests.length
   const someSelected = selected.size > 0 && !allSelected
@@ -187,6 +242,7 @@ export function WorkbenchClient({
     setBulkError(null)
     setAssignOpen(false)
     setStatusOpen(false)
+    setPriorityOpen(false)
   }
 
   function handleBulkAssign(assigneeId: string | null) {
@@ -209,6 +265,20 @@ export function WorkbenchClient({
     setBulkError(null)
     startTransition(async () => {
       const result = await bulkUpdateStatus(ids, status)
+      if (result.failed.length > 0) {
+        setBulkError(`${result.failed.length} request(s) could not be updated.`)
+      } else {
+        clearSelection()
+      }
+    })
+  }
+
+  function handleBulkPriority(priority: RequestPriority) {
+    const ids = Array.from(selected)
+    setPriorityOpen(false)
+    setBulkError(null)
+    startTransition(async () => {
+      const result = await bulkChangePriority(ids, priority)
       if (result.failed.length > 0) {
         setBulkError(`${result.failed.length} request(s) could not be updated.`)
       } else {
@@ -268,14 +338,36 @@ export function WorkbenchClient({
 
         {/* Rows */}
         <div className={isPending ? 'opacity-60 pointer-events-none' : ''}>
-          {requests.map((req) => (
-            <WorkbenchRow
-              key={req.id}
-              request={req}
-              selected={selected.has(req.id)}
-              onToggle={toggleOne}
-            />
-          ))}
+          {groupByStatus ? (
+            groups.map(({ status, items }) => (
+              <Fragment key={status}>
+                <GroupHeader
+                  status={status}
+                  count={items.length}
+                  sharePct={requests.length > 0 ? (items.length / requests.length) * 100 : 0}
+                  collapsed={collapsedGroups.has(status)}
+                  onToggle={() => toggleGroup(status)}
+                />
+                {!collapsedGroups.has(status) && items.map((req) => (
+                  <WorkbenchRow
+                    key={req.id}
+                    request={req}
+                    selected={selected.has(req.id)}
+                    onToggle={toggleOne}
+                  />
+                ))}
+              </Fragment>
+            ))
+          ) : (
+            requests.map((req) => (
+              <WorkbenchRow
+                key={req.id}
+                request={req}
+                selected={selected.has(req.id)}
+                onToggle={toggleOne}
+              />
+            ))
+          )}
         </div>
       </div>
 
@@ -294,7 +386,7 @@ export function WorkbenchClient({
             <div className="relative">
               <button
                 type="button"
-                onClick={() => { setAssignOpen((v) => !v); setStatusOpen(false) }}
+                onClick={() => { setAssignOpen((v) => !v); setStatusOpen(false); setPriorityOpen(false) }}
                 className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
                 disabled={isPending}
               >
@@ -337,7 +429,7 @@ export function WorkbenchClient({
             <div className="relative">
               <button
                 type="button"
-                onClick={() => { setStatusOpen((v) => !v); setAssignOpen(false) }}
+                onClick={() => { setStatusOpen((v) => !v); setAssignOpen(false); setPriorityOpen(false) }}
                 className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
                 disabled={isPending}
               >
@@ -355,6 +447,35 @@ export function WorkbenchClient({
                         className="w-full rounded-lg px-3 py-2 text-left text-xs text-foreground hover:bg-muted transition-colors"
                       >
                         {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Change Priority */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => { setPriorityOpen((v) => !v); setAssignOpen(false); setStatusOpen(false) }}
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+                disabled={isPending}
+              >
+                Change Priority
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+              {priorityOpen && (
+                <div className="absolute bottom-full left-0 mb-2 min-w-[140px] rounded-xl border border-border bg-card shadow-lg">
+                  <div className="p-1">
+                    {BULK_PRIORITIES.map((p) => (
+                      <button
+                        key={p.value}
+                        type="button"
+                        onClick={() => handleBulkPriority(p.value)}
+                        className="w-full rounded-lg px-3 py-2 text-left text-xs text-foreground hover:bg-muted transition-colors"
+                      >
+                        {p.label}
                       </button>
                     ))}
                   </div>

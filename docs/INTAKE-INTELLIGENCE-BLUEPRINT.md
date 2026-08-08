@@ -206,7 +206,7 @@ All additive — no `ALTER`/`DROP` on existing module tables except the optional
             └───────────────▲───────────────────────────────────┬──────────────────────┘
                             │ reads/writes (RLS, user session)   │ notify(), audit
                             │                                     ▼
-                   ┌────────┴───────────────── Supabase (CognixDesk: jhdz…) ────────────┐
+                   ┌────────┴───────────────── Supabase (Citykart Desk: jhdz…) ────────────┐
                    │  intake schema (RLS) · public (requests/tasks/…) · Storage · Vault  │
                    └────────▲───────────────────────────────────────────────────────────┘
                             │ service-role (bypasses RLS, sets org_id explicitly)
@@ -254,7 +254,7 @@ only ever *calls* existing actions.
 - **No edits to existing module code** for Phases A–F (work creation uses public actions).
   The single optional touch (§3.4 nullable column) is additive and deferred to D.
 - **RLS-first + permission action_keys** on every table and action (defence in depth).
-- **HRMS untouched:** Intake lives only in the CognixDesk project (`jhdz…`); the worker uses
+- **HRMS untouched:** Intake lives only in the Citykart Desk project (`jhdz…`); the worker uses
   that project's service-role only. Zero contact with HRMS / `kxvd…`.
 - **Idempotent ingestion** (unique external ids) → safe re-polling, no duplicate work.
 - **Worker isolation:** off-Vercel; its failure never blocks the UI or other modules.

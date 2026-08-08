@@ -125,6 +125,7 @@ export function AvatarUpload({
   return (
     <div className="relative h-16 w-16 shrink-0">
       {preview ? (
+        // eslint-disable-next-line @next/next/no-img-element -- preview can be a local blob: object URL (unsupported by next/image) or a Supabase storage URL not in next.config's remote patterns
         <img
           src={preview}
           alt="Avatar"

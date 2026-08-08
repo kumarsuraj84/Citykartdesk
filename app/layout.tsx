@@ -18,10 +18,15 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    template: '%s — CognixDesk',
-    default: 'CognixDesk',
+    template: '%s — Citykart Desk',
+    default: 'Citykart Desk',
   },
   description: 'Modern service management platform',
+  icons: {
+    icon: '/citykart-desk-icon.png',
+    shortcut: '/citykart-desk-icon.png',
+    apple: '/citykart-desk-icon.png',
+  },
 }
 
 export default function RootLayout({

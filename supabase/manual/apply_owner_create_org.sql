@@ -1,4 +1,4 @@
--- owner_create_org — create a CognixDesk organization directly from the
+-- owner_create_org — create a Citykart Desk organization directly from the
 -- operator portal's "New Organization" form.
 --
 -- The owner portal talks to this project with the ANON key (no per-user auth),
@@ -8,7 +8,7 @@
 -- RLS (the original 401), which is why direct .insert() did not work.
 --
 -- Apply via the Supabase SQL editor (or `supabase db execute`) against the
--- CognixDesk project (jhdzjzrimjjtqwnkrwha).
+-- Citykart Desk project (jhdzjzrimjjtqwnkrwha).
 
 -- The signature changed (added p_modules), so drop the old overloads first to
 -- avoid an ambiguous-function error at call time.

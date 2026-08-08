@@ -128,7 +128,7 @@ function AlertRuleForm({
     e.preventDefault()
     setError(null)
     startTransition(async () => {
-      const result = await onSubmit({ ...form, is_active: true })
+      await onSubmit({ ...form, is_active: true })
       // onSubmit handles closing
     })
   }
@@ -164,11 +164,12 @@ function AlertRuleForm({
           <label className="text-xs font-medium text-muted-foreground">Entity</label>
           <select
             value={form.entity_type}
-            onChange={(e) => set('entity_type', e.target.value as 'request' | 'task')}
+            onChange={(e) => set('entity_type', e.target.value as 'request' | 'task' | 'milestone')}
             className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="task">Task</option>
             <option value="request">Request</option>
+            <option value="milestone">Milestone</option>
           </select>
         </div>
 
@@ -325,7 +326,7 @@ export function AlertRulesClient({ initialRules }: { initialRules: AlertRule[] }
                 initial={{
                   name: rule.name,
                   alert_type: rule.alert_type as AlertRuleData['alert_type'],
-                  entity_type: rule.entity_type as 'request' | 'task',
+                  entity_type: rule.entity_type as 'request' | 'task' | 'milestone',
                   threshold_minutes: rule.threshold_minutes,
                   notify_roles: rule.notify_roles,
                   notify_assignee: rule.notify_assignee,

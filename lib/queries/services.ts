@@ -72,7 +72,7 @@ export async function getCategoriesWithSubCategories(): Promise<ServiceCategoryW
       *,
       sub_categories:service_sub_categories (
         *,
-        services (${SERVICE_CARD_SELECT})
+        services (${SERVICE_SELECT})
       )
     `)
     .eq('is_active', true)
@@ -86,7 +86,7 @@ export async function getCategoriesWithSubCategories(): Promise<ServiceCategoryW
     sub_categories: (cat.sub_categories ?? [])
       .filter((sc: ServiceSubCategory) => sc.is_active)
       .sort((a: ServiceSubCategory, b: ServiceSubCategory) => a.sort_order - b.sort_order)
-      .map((sc: ServiceSubCategoryWithServices) => ({
+      .map((sc) => ({
         ...sc,
         services: ((sc.services ?? []) as ServiceWithRelations[])
           .filter((s) => s.is_active && allowedStatuses.includes((s as ServiceWithRelations & { status?: string }).status ?? 'published'))
@@ -104,7 +104,7 @@ export async function getCategoryBySlug(slug: string): Promise<ServiceCategoryWi
       *,
       sub_categories:service_sub_categories (
         *,
-        services (${SERVICE_CARD_SELECT})
+        services (${SERVICE_SELECT})
       )
     `)
     .eq('slug', slug)
@@ -118,7 +118,7 @@ export async function getCategoryBySlug(slug: string): Promise<ServiceCategoryWi
     sub_categories: (data.sub_categories ?? [])
       .filter((sc: ServiceSubCategory) => sc.is_active)
       .sort((a: ServiceSubCategory, b: ServiceSubCategory) => a.sort_order - b.sort_order)
-      .map((sc: ServiceSubCategoryWithServices) => ({
+      .map((sc) => ({
         ...sc,
         services: ((sc.services ?? []) as ServiceWithRelations[])
           .filter((s) => s.is_active && allowedStatuses.includes((s as ServiceWithRelations & { status?: string }).status ?? 'published'))

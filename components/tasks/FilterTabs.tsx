@@ -16,7 +16,7 @@ const FILTERS = [
   { value: 'all',           label: 'All Tasks',          group: 'Team' },
 ]
 
-export function FilterDropdown() {
+export function FilterDropdown({ basePath = '/tasks' }: { basePath?: string } = {}) {
   const sp = useSearchParams()
   const router = useRouter()
   const active = sp.get('filter') ?? 'my_tasks'
@@ -38,7 +38,7 @@ export function FilterDropdown() {
     const params = new URLSearchParams(sp.toString())
     params.set('filter', value)
     params.delete('page')
-    router.push(`/tasks?${params.toString()}`)
+    router.push(`${basePath}?${params.toString()}`)
     setOpen(false)
   }
 

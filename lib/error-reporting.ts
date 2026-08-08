@@ -1,5 +1,6 @@
 'use client'
 import { createClient } from '@/lib/supabase/client'
+import type { Json } from '@/types/database'
 
 export async function reportError(opts: {
   error_type: 'crash' | 'error' | 'feedback'
@@ -19,13 +20,13 @@ export async function reportError(opts: {
       org_id = profile?.org_id ?? null
     }
 
-    await (supabase as any).from('error_reports').insert({
-      app: 'cognixdesk',
+    await supabase.from('error_reports').insert({
+      app: 'citykart-desk',
       error_type: opts.error_type,
       message: opts.message,
       stack: opts.stack ?? null,
       url: opts.url ?? (typeof window !== 'undefined' ? window.location.href : null),
-      metadata: opts.metadata ?? {},
+      metadata: (opts.metadata ?? {}) as Json,
       org_id,
       user_id: user?.id ?? null,
     })

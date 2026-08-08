@@ -145,12 +145,13 @@ export type NavCounts = {
   tasks: number
   approvals: number
   notifications: number
+  projects: number
 }
 
 export const getNavCounts = cache(async function (userId: string): Promise<NavCounts> {
   const supabase = await createClient()
 
-  const [requestsRes, tasksRes, approvalsRes, notifRes] = await Promise.all([
+  const [requestsRes, tasksRes, approvalsRes, notifRes, projectsRes] = await Promise.all([
     supabase
       .from('requests')
       .select('*', { count: 'exact', head: true })
@@ -171,6 +172,12 @@ export const getNavCounts = cache(async function (userId: string): Promise<NavCo
       .select('*', { count: 'exact', head: true })
       .eq('user_id', userId)
       .is('read_at', null),
+    supabase
+      .from('projects')
+      .select('*', { count: 'exact', head: true })
+      .eq('owner_id', userId)
+      .is('archived_at', null)
+      .not('status', 'in', '("done","cancelled")'),
   ])
 
   return {
@@ -178,5 +185,6 @@ export const getNavCounts = cache(async function (userId: string): Promise<NavCo
     tasks: tasksRes.count ?? 0,
     approvals: approvalsRes.count ?? 0,
     notifications: notifRes.count ?? 0,
+    projects: projectsRes.count ?? 0,
   }
 })

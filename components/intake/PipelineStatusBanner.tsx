@@ -24,6 +24,8 @@ export function PipelineStatusBanner() {
   }, [])
 
   useEffect(() => {
+    // Kicks off the initial fetch that feeds the adaptive polling loop below — network sync, not derived state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh()
   }, [refresh])
 

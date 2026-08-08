@@ -1,15 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-// Map route prefixes to the module slug required to access them
-const MODULE_ROUTES: [string, string][] = [
-  ['/requests',  'requests'],
-  ['/services',  'services'],
-  ['/tasks',     'tasks'],
-  ['/approvals', 'approvals'],
-  ['/intake',    'intake'],
-]
-
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -55,17 +46,14 @@ export async function proxy(request: NextRequest) {
   const isAuthRoute =
     pathname.startsWith('/login') ||
     pathname.startsWith('/auth') ||
-    pathname.startsWith('/signup') ||
     pathname.startsWith('/forgot-password') ||
-    pathname.startsWith('/reset-password') ||
-    pathname === '/' ||
-    pathname.startsWith('/legal') ||
-    pathname.startsWith('/demo')
+    pathname.startsWith('/reset-password')
 
+  // Unauthenticated visitors to '/' or any non-auth route → /login
   if (!userId && !isAuthRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
-    url.searchParams.set('next', pathname)
+    if (pathname !== '/') url.searchParams.set('next', pathname)
     return NextResponse.redirect(url)
   }
 
@@ -82,61 +70,10 @@ export async function proxy(request: NextRequest) {
   }
 
   // Logged-in users hitting the landing page → go to home
-  if (userId && (pathname === '/' || pathname.startsWith('/signup'))) {
+  if (userId && pathname === '/') {
     const url = request.nextUrl.clone()
     url.pathname = '/home'
     return NextResponse.redirect(url)
-  }
-
-  // ── Module gating ──────────────────────────────────────────
-  if (userId) {
-    const matched = MODULE_ROUTES.find(([prefix]) => pathname.startsWith(prefix))
-    if (matched) {
-      const [, requiredModule] = matched
-
-      // Fast path: single RPC resolves org + module access in one round-trip.
-      let isEnabled: boolean | null = null
-      const { data: rpcResult, error: rpcError } = await supabase.rpc('has_module_access', {
-        p_module: requiredModule,
-      })
-      if (!rpcError) {
-        isEnabled = rpcResult === true
-      } else {
-        // Fallback (e.g. migration 051 not yet applied): legacy two-query path.
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('org_id')
-          .eq('id', userId)
-          .single()
-
-        if (!profile?.org_id) {
-          isEnabled = true // org-less users pass through, matching prior behaviour
-        } else {
-          const adminClient = createServerClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!,
-            { cookies: { getAll: () => [], setAll: () => {} } }
-          )
-          const { data: access } = await adminClient
-            .from('org_module_access')
-            .select('enabled, valid_until')
-            .eq('org_id', profile.org_id)
-            .eq('module', requiredModule)
-            .maybeSingle()
-
-          const now = new Date().toISOString()
-          isEnabled =
-            access?.enabled === true &&
-            (access.valid_until === null || access.valid_until > now)
-        }
-      }
-
-      if (!isEnabled) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/home'
-        return NextResponse.redirect(url)
-      }
-    }
   }
 
   return supabaseResponse

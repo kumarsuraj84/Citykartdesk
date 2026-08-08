@@ -131,6 +131,7 @@ export async function uploadAttachment(
   const isAgent =
     profile.role === 'manager' ||
     profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
     profile.team_members.some((m) => m.team_id === request.team_id)
 
   if (!isRequester && !isAgent) {
@@ -220,6 +221,7 @@ export async function deleteAttachment(
   const isAgent =
     profile.role === 'manager' ||
     profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
     (request ? profile.team_members.some((m) => m.team_id === request.team_id) : false)
 
   if (!isUploader && !isAgent) {

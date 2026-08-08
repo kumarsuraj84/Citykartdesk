@@ -14,7 +14,7 @@
 -- collaborator clause on requests_select (via the existing SECURITY DEFINER
 -- is_request_collaborator) is safe — the only cross-table links are opaque DEFINER calls.
 --
--- Scope: CognixDesk-owned tables only.
+-- Scope: Citykart Desk-owned tables only.
 
 -- 1. DEFINER helper: may the caller add/see collaborators on this request?
 --    Reads requests with RLS bypassed → referencing it in collaborator policies does NOT

@@ -3,10 +3,10 @@
 import { useState, useCallback } from 'react'
 import {
   AlertTriangle, TrendingUp, TrendingDown, Clock,
-  CheckCircle2, Users, ListTodo, BarChart2, Link2, User,
+  Users, ListTodo, BarChart2, Link2, User,
 } from 'lucide-react'
 import {
-  KpiCard, LineAreaChart, HorizBar, AgingBar, DonutChart,
+  KpiCard, LineAreaChart, AgingBar, DonutChart,
   PRIORITY_COLORS,
 } from '@/components/analytics/Charts'
 import { fmtHours } from '@/lib/utils/fmt'
@@ -80,7 +80,7 @@ const STATUS_LABELS_TASK: Record<string, string> = {
 export function TaskDashboard({ data }: { data: TaskAnalyticsData }) {
   const [drawer, setDrawer] = useState<DrawerFilter | null>(null)
   const close = useCallback(() => setDrawer(null), [])
-  const periodLabel = data.period === '7d' ? 'last 7 days' : data.period === '30d' ? 'last 30 days' : 'last 90 days'
+  const periodLabel = data.periodLabel
 
   return (
     <>
@@ -226,8 +226,8 @@ export function TaskDashboard({ data }: { data: TaskAnalyticsData }) {
             <div className="space-y-1">
               <StatRow label="Open Tasks"         value={String(data.totalOpen)}    onClick={() => setDrawer({ title: 'Open Tasks', status: ['open','in_progress'], _module: 'tasks' })} />
               <StatRow label="Overdue"            value={String(data.totalOverdue)} highlight={data.totalOverdue > 0 ? 'danger' : undefined} onClick={() => setDrawer({ title: 'Overdue Tasks', taskOverdue: true, _module: 'tasks' })} />
-              <StatRow label={`Created (${data.period})`}   value={String(data.totalCreatedInPeriod)} onClick={() => setDrawer({ title: 'Created Tasks', createdInPeriod: true, period: data.period, _module: 'tasks' })} />
-              <StatRow label={`Completed (${data.period})`} value={String(data.totalCompletedInPeriod)} highlight="good" onClick={() => setDrawer({ title: 'Completed Tasks', taskCompletedInPeriod: true, period: data.period, _module: 'tasks' })} />
+              <StatRow label={`Created (${periodLabel})`}   value={String(data.totalCreatedInPeriod)} onClick={() => setDrawer({ title: 'Created Tasks', createdInPeriod: true, period: data.period, _module: 'tasks' })} />
+              <StatRow label={`Completed (${periodLabel})`} value={String(data.totalCompletedInPeriod)} highlight="good" onClick={() => setDrawer({ title: 'Completed Tasks', taskCompletedInPeriod: true, period: data.period, _module: 'tasks' })} />
               <StatRow label="Avg Completion"      value={fmtHours(data.avgCompletionHours)} />
               <StatRow label="Median Completion"   value={fmtHours(data.medianCompletionHours)} />
             </div>

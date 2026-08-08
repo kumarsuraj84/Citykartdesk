@@ -26,7 +26,7 @@ export function TrialBanner({ daysLeft }: TrialBannerProps) {
           ? 'Your free trial expires today. '
           : `Your free trial expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}. `}
         <a
-          href="mailto:sales@cognixdesk.app"
+          href="mailto:sales@citykart.org"
           className="underline underline-offset-2 hover:opacity-80"
         >
           Contact us to upgrade →

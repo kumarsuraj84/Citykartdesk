@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { TaskWithDetails, TaskPriority } from '@/types'
 
@@ -95,7 +95,8 @@ export function TaskCalendarView({ tasks, onTaskClick }: TaskCalendarViewProps) 
   function toggleDayExpanded(dateStr: string) {
     setExpandedDays(prev => {
       const next = new Set(prev)
-      next.has(dateStr) ? next.delete(dateStr) : next.add(dateStr)
+      if (next.has(dateStr)) next.delete(dateStr)
+      else next.add(dateStr)
       return next
     })
   }

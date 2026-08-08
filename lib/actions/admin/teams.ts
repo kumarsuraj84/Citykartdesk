@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 
-type AnyClient = { from: (t: string) => any }
 type ActionResult<T = undefined> = { error?: string; data?: T }
 
 // ── Guard: admin-only ─────────────────────────────────────────────────────────
@@ -12,26 +11,65 @@ type ActionResult<T = undefined> = { error?: string; data?: T }
 async function requireAdmin() {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (profile.role !== 'admin') return { error: 'Admin role required.' }
+  if (!['admin','platform_owner'].includes(profile.role)) return { error: 'Admin role required.' }
   return { profile }
 }
 
 // ── createTeam ────────────────────────────────────────────────────────────────
+
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .slice(0, 80)
+}
+
+function prefixify(name: string): string {
+  const letters = name.toUpperCase().replace(/[^A-Z]/g, '')
+  return (letters.slice(0, 3) || 'TM').padEnd(2, 'X')
+}
 
 export async function createTeam(name: string): Promise<ActionResult<{ id: string }>> {
   const guard = await requireAdmin()
   if (guard.error) return { error: guard.error }
   if (!name.trim()) return { error: 'Team name is required.' }
 
-  const admin = createAdminClient() as unknown as AnyClient
+  const admin = createAdminClient()
+  const orgId = guard.profile!.org_id
+  if (!orgId) return { error: 'No organization context.' }
+
+  const { data: department } = await admin
+    .from('departments')
+    .select('id')
+    .eq('org_id', orgId)
+    .order('name')
+    .limit(1)
+    .maybeSingle()
+
+  if (!department) return { error: 'Create a department first before adding teams.' }
+
+  const trimmed = name.trim()
+  const baseSlug = slugify(trimmed) || `team-${Date.now()}`
+  const basePrefix = prefixify(trimmed)
 
   const { data, error } = await admin
     .from('teams')
-    .insert({ name: name.trim() })
+    .insert({
+      name: trimmed,
+      slug: baseSlug,
+      prefix: basePrefix,
+      department_id: department.id,
+      org_id: orgId,
+    })
     .select('id')
     .single()
 
-  if (error) return { error: error.message }
+  if (error) {
+    if (error.code === '23505') return { error: 'A team with a similar name already exists — try a different name.' }
+    return { error: error.message }
+  }
 
   revalidatePath('/admin/teams')
   return { data: { id: data.id } }
@@ -44,7 +82,7 @@ export async function updateTeam(id: string, name: string): Promise<ActionResult
   if (guard.error) return { error: guard.error }
   if (!name.trim()) return { error: 'Team name is required.' }
 
-  const admin = createAdminClient() as unknown as AnyClient
+  const admin = createAdminClient()
 
   const { error } = await admin
     .from('teams')
@@ -63,7 +101,7 @@ export async function deleteTeam(id: string): Promise<ActionResult> {
   const guard = await requireAdmin()
   if (guard.error) return { error: guard.error }
 
-  const admin = createAdminClient() as unknown as AnyClient
+  const admin = createAdminClient()
 
   // Check for members
   const { count: memberCount } = await admin
@@ -99,11 +137,21 @@ export async function addTeamMember(teamId: string, userId: string): Promise<Act
   const guard = await requireAdmin()
   if (guard.error) return { error: guard.error }
 
-  const admin = createAdminClient() as unknown as AnyClient
+  const admin = createAdminClient()
+
+  // team_members.org_id is NOT NULL with no DB default — resolve it from the
+  // parent team rather than trusting the caller's session org.
+  const { data: team } = await admin
+    .from('teams')
+    .select('org_id')
+    .eq('id', teamId)
+    .maybeSingle()
+
+  if (!team?.org_id) return { error: 'Team not found or has no organization context.' }
 
   const { error } = await admin
     .from('team_members')
-    .insert({ team_id: teamId, user_id: userId })
+    .insert({ team_id: teamId, user_id: userId, org_id: team.org_id })
 
   if (error) return { error: error.message }
 
@@ -117,7 +165,7 @@ export async function removeTeamMember(teamId: string, userId: string): Promise<
   const guard = await requireAdmin()
   if (guard.error) return { error: guard.error }
 
-  const admin = createAdminClient() as unknown as AnyClient
+  const admin = createAdminClient()
 
   const { error } = await admin
     .from('team_members')

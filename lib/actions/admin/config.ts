@@ -15,7 +15,7 @@ export async function updateSLATier(
   data: { response_hours?: number | null; resolution_hours?: number | null; escalation_pct?: number }
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   // RLS-respecting client + explicit org filter: SLA tiers are per-org (migration 048).
   // Previously this used the service-role client and updated WHERE priority = X with no org
@@ -39,7 +39,7 @@ export async function updateAppSetting(
   value: string
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin
@@ -59,7 +59,7 @@ export async function createTaskTemplate(data: {
   teamId?: string
 }): Promise<{ data?: { id: string }; error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { data: tmpl, error } = await admin
@@ -83,7 +83,7 @@ export async function updateTaskTemplate(
   data: { name?: string; description?: string }
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -98,7 +98,7 @@ export async function updateTaskTemplate(
 
 export async function deleteTaskTemplate(id: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('task_templates').delete().eq('id', id)
@@ -117,7 +117,7 @@ export async function upsertTemplateItem(data: {
   position?: number
 }): Promise<{ data?: { id: string }; error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const payload = {
@@ -143,7 +143,7 @@ export async function upsertTemplateItem(data: {
 
 export async function deleteTemplateItem(id: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('task_template_items').delete().eq('id', id)
@@ -159,7 +159,7 @@ export async function updateBusinessHours(
   data: { start_time: string; end_time: string; is_active: boolean }
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin
@@ -180,7 +180,7 @@ export async function createHoliday(data: {
   is_recurring: boolean
 }): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('holidays').insert({
@@ -196,7 +196,7 @@ export async function createHoliday(data: {
 
 export async function deleteHoliday(id: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('holidays').delete().eq('id', id)
@@ -214,7 +214,7 @@ export async function createEscalationRule(data: {
   notify_roles: string[]
 }): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('sla_escalation_rules').insert({
@@ -234,7 +234,7 @@ export async function updateEscalationRule(
   data: Partial<{ name: string; tier: string; trigger_pct: number; notify_roles: string[] }>
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('sla_escalation_rules').update(data).eq('id', id)
@@ -245,7 +245,7 @@ export async function updateEscalationRule(
 
 export async function deleteEscalationRule(id: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('sla_escalation_rules').delete().eq('id', id)
@@ -259,7 +259,7 @@ export async function deleteEscalationRule(id: string): Promise<{ error?: string
 export type AlertRuleData = {
   name: string
   alert_type: 'due_soon' | 'overdue' | 'unassigned' | 'sla_warning' | 'sla_breached' | 'daily_digest'
-  entity_type: 'request' | 'task'
+  entity_type: 'request' | 'task' | 'milestone'
   threshold_minutes?: number | null
   notify_roles: string[]
   notify_assignee: boolean
@@ -270,7 +270,7 @@ export type AlertRuleData = {
 
 export async function createAlertRule(data: AlertRuleData): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('alert_rules').insert({
@@ -295,7 +295,7 @@ export async function updateAlertRule(
   data: Partial<AlertRuleData>
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('alert_rules').update(data).eq('id', id)
@@ -306,7 +306,7 @@ export async function updateAlertRule(
 
 export async function deleteAlertRule(id: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('alert_rules').delete().eq('id', id)
@@ -317,7 +317,7 @@ export async function deleteAlertRule(id: string): Promise<{ error?: string }> {
 
 export async function toggleAlertRule(id: string, is_active: boolean): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('alert_rules').update({ is_active }).eq('id', id)
@@ -332,7 +332,7 @@ export async function toggleAlertRule(id: string, is_active: boolean): Promise<{
 
 export async function createTag(data: { name: string; color: string }): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('tags').insert({ name: data.name.trim(), color: data.color })
@@ -346,7 +346,7 @@ export async function updateTag(
   data: Partial<{ name: string; color: string; is_active: boolean }>
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('tags').update(data).eq('id', id)
@@ -357,7 +357,7 @@ export async function updateTag(
 
 export async function deleteTag(id: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('tags').delete().eq('id', id)
@@ -373,7 +373,7 @@ export async function updateRequestPriority(
   data: Partial<{ name: string; color: string; sla_multiplier: number; is_active: boolean; display_order: number }>
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('request_priorities').update(data).eq('id', id)
@@ -389,7 +389,7 @@ export async function updateRetentionPolicy(
   data: { retention_days: number; archive_after_days?: number | null; purge_after_days?: number | null }
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || profile.role !== 'admin') return { error: 'Unauthorized.' }
+  if (!profile || !['admin','platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin

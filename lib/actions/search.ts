@@ -1,7 +1,7 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getCurrentProfile } from '@/lib/queries/profiles'
 
 export type SearchResult = {
   id: string
@@ -25,34 +25,38 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
   const empty: GroupedSearchResults = { requests: [], tasks: [], services: [], users: [], approvals: [] }
   if (query.trim().length < 2) return empty
 
+  const profile = await getCurrentProfile()
+  if (!profile || !profile.org_id) return empty
+  const orgId = profile.org_id
+
   const q = query.trim()
   const ql = q.toLowerCase()
   const like = `%${q}%`
 
-  // Use admin client to bypass RLS — pages the user navigates to still enforce RLS
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = createAdminClient() as unknown as { from: (t: string) => any }
+  // Admin client bypasses RLS, so every query below scopes to orgId explicitly.
+  const db = createAdminClient()
 
   // ── 1. Profiles matching the query (for person-based lookups) ──────────────
   const { data: matchingProfiles } = await db
     .from('profiles')
     .select('id, full_name, role')
+    .eq('org_id', orgId)
     .ilike('full_name', like)
     .limit(10)
 
-  const profileIds: string[] = (matchingProfiles ?? []).map((p: any) => p.id)
+  const profileIds: string[] = (matchingProfiles ?? []).map((p) => p.id)
 
   // ── 2. Requests ────────────────────────────────────────────────────────────
   // Run separate queries per searchable column, then merge + dedupe
   const [rByNo, rByTitle, rByDesc, rByRequester, rByAssignee] = await Promise.all([
-    db.from('requests').select('id,request_no,title,status,assigned_to,requester_id').ilike('request_no', like).limit(6),
-    db.from('requests').select('id,request_no,title,status,assigned_to,requester_id').ilike('title', like).limit(6),
-    db.from('requests').select('id,request_no,title,status,assigned_to,requester_id').ilike('description', like).limit(4),
+    db.from('requests').select('id,request_no,title,status,assigned_to,requester_id').eq('org_id', orgId).ilike('request_no', like).limit(6),
+    db.from('requests').select('id,request_no,title,status,assigned_to,requester_id').eq('org_id', orgId).ilike('title', like).limit(6),
+    db.from('requests').select('id,request_no,title,status,assigned_to,requester_id').eq('org_id', orgId).ilike('description', like).limit(4),
     profileIds.length > 0
-      ? db.from('requests').select('id,request_no,title,status,assigned_to,requester_id').in('requester_id', profileIds).limit(4)
+      ? db.from('requests').select('id,request_no,title,status,assigned_to,requester_id').eq('org_id', orgId).in('requester_id', profileIds).limit(4)
       : { data: [] },
     profileIds.length > 0
-      ? db.from('requests').select('id,request_no,title,status,assigned_to,requester_id').in('assigned_to', profileIds).limit(4)
+      ? db.from('requests').select('id,request_no,title,status,assigned_to,requester_id').eq('org_id', orgId).in('assigned_to', profileIds).limit(4)
       : { data: [] },
   ])
 
@@ -65,20 +69,20 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
     ...(rByAssignee.data ?? []),
   ]
   const seenR = new Set<string>()
-  const uniqueReqs = allRaw.filter((r: any) => { if (seenR.has(r.id)) return false; seenR.add(r.id); return true }).slice(0, 8)
+  const uniqueReqs = allRaw.filter((r) => { if (seenR.has(r.id)) return false; seenR.add(r.id); return true }).slice(0, 8)
 
   // Bulk-fetch names for requester/assignee IDs
-  const personIds = [...new Set(uniqueReqs.flatMap((r: any) => [r.requester_id, r.assigned_to].filter(Boolean)))]
+  const personIds = [...new Set(uniqueReqs.flatMap((r) => [r.requester_id, r.assigned_to].filter((id): id is string => Boolean(id))))]
   const { data: nameRows } = personIds.length > 0
     ? await db.from('profiles').select('id, full_name').in('id', personIds)
     : { data: [] }
-  const nameMap = new Map((nameRows ?? []).map((p: any) => [p.id, p.full_name]))
+  const nameMap = new Map<string, string>((nameRows ?? []).map((p) => [p.id, p.full_name]))
 
-  const requests: SearchResult[] = uniqueReqs.map((r: any) => ({
+  const requests: SearchResult[] = uniqueReqs.map((r) => ({
     id: r.id,
     type: 'request' as const,
     title: r.title,
-    subtitle: nameMap.get(r.assigned_to) ?? nameMap.get(r.requester_id),
+    subtitle: (r.assigned_to ? nameMap.get(r.assigned_to) : undefined) ?? nameMap.get(r.requester_id),
     href: `/requests/${r.id}`,
     meta: r.status,
     badge: r.request_no,
@@ -86,19 +90,19 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
 
   // ── 3. Tasks ───────────────────────────────────────────────────────────────
   const [tByTitle, tByDesc, tByAssignee, tByLinkedReqNo] = await Promise.all([
-    db.from('tasks').select('id,title,status,assignee_id,request_id').ilike('title', like).limit(6),
-    db.from('tasks').select('id,title,status,assignee_id,request_id').ilike('description', like).limit(4),
+    db.from('tasks').select('id,title,status,assignee_id,request_id').eq('org_id', orgId).ilike('title', like).limit(6),
+    db.from('tasks').select('id,title,status,assignee_id,request_id').eq('org_id', orgId).ilike('description', like).limit(4),
     profileIds.length > 0
-      ? db.from('tasks').select('id,title,status,assignee_id,request_id').in('assignee_id', profileIds).limit(4)
+      ? db.from('tasks').select('id,title,status,assignee_id,request_id').eq('org_id', orgId).in('assignee_id', profileIds).limit(4)
       : { data: [] },
     // tasks linked to a request whose request_no matches
-    db.from('requests').select('id,request_no').ilike('request_no', like).limit(8),
+    db.from('requests').select('id,request_no').eq('org_id', orgId).ilike('request_no', like).limit(8),
   ])
 
   // Get request IDs that match the number search, then find tasks linked to them
-  const linkedReqIds = (tByLinkedReqNo.data ?? []).map((r: any) => r.id)
+  const linkedReqIds = (tByLinkedReqNo.data ?? []).map((r) => r.id)
   const tByLinked = linkedReqIds.length > 0
-    ? await db.from('tasks').select('id,title,status,assignee_id,request_id').in('request_id', linkedReqIds).limit(6)
+    ? await db.from('tasks').select('id,title,status,assignee_id,request_id').eq('org_id', orgId).in('request_id', linkedReqIds).limit(6)
     : { data: [] }
 
   const allTRaw = [
@@ -108,23 +112,23 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
     ...(tByLinked.data ?? []),
   ]
   const seenT = new Set<string>()
-  const uniqueTasks = allTRaw.filter((t: any) => { if (seenT.has(t.id)) return false; seenT.add(t.id); return true }).slice(0, 8)
+  const uniqueTasks = allTRaw.filter((t) => { if (seenT.has(t.id)) return false; seenT.add(t.id); return true }).slice(0, 8)
 
   // Fetch assignee names + linked request_no
-  const taskPersonIds = [...new Set(uniqueTasks.map((t: any) => t.assignee_id).filter(Boolean))]
-  const taskReqIds = [...new Set(uniqueTasks.map((t: any) => t.request_id).filter(Boolean))]
+  const taskPersonIds = [...new Set(uniqueTasks.map((t) => t.assignee_id).filter((id): id is string => Boolean(id)))]
+  const taskReqIds = [...new Set(uniqueTasks.map((t) => t.request_id).filter((id): id is string => Boolean(id)))]
   const [{ data: taskNames }, { data: taskReqs }] = await Promise.all([
     taskPersonIds.length > 0 ? db.from('profiles').select('id,full_name').in('id', taskPersonIds) : { data: [] },
     taskReqIds.length > 0 ? db.from('requests').select('id,request_no').in('id', taskReqIds) : { data: [] },
   ])
-  const taskNameMap = new Map((taskNames ?? []).map((p: any) => [p.id, p.full_name]))
-  const taskReqMap = new Map((taskReqs ?? []).map((r: any) => [r.id, r.request_no]))
+  const taskNameMap = new Map<string, string>((taskNames ?? []).map((p) => [p.id, p.full_name]))
+  const taskReqMap = new Map<string, string>((taskReqs ?? []).map((r) => [r.id, r.request_no]))
 
-  const tasks: SearchResult[] = uniqueTasks.map((t: any) => ({
+  const tasks: SearchResult[] = uniqueTasks.map((t) => ({
     id: t.id,
     type: 'task' as const,
     title: t.title,
-    subtitle: taskNameMap.get(t.assignee_id) ?? (t.request_id ? `${taskReqMap.get(t.request_id)}` : undefined),
+    subtitle: (t.assignee_id ? taskNameMap.get(t.assignee_id) : undefined) ?? (t.request_id ? taskReqMap.get(t.request_id) : undefined),
     href: `/tasks/${t.id}`,
     meta: t.status,
   }))
@@ -133,18 +137,19 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
   const { data: svcData } = await db
     .from('services')
     .select('id,name,slug,category_id')
+    .eq('org_id', orgId)
     .or(`name.ilike.${like},description.ilike.${like}`)
     .eq('is_active', true)
     .limit(5)
 
   // Fetch category names
-  const catIds = [...new Set((svcData ?? []).map((s: any) => s.category_id).filter(Boolean))]
+  const catIds = [...new Set((svcData ?? []).map((s) => s.category_id).filter(Boolean))]
   const { data: catData } = catIds.length > 0
-    ? await db.from('service_categories').select('id,name').in('id', catIds)
+    ? await db.from('service_categories').select('id,name').eq('org_id', orgId).in('id', catIds)
     : { data: [] }
-  const catMap = new Map((catData ?? []).map((c: any) => [c.id, c.name]))
+  const catMap = new Map((catData ?? []).map((c) => [c.id, c.name]))
 
-  const services: SearchResult[] = (svcData ?? []).map((s: any) => ({
+  const services: SearchResult[] = (svcData ?? []).map((s) => ({
     id: s.id,
     type: 'service' as const,
     title: s.name,
@@ -153,7 +158,7 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
   }))
 
   // ── 5. People ──────────────────────────────────────────────────────────────
-  const users: SearchResult[] = (matchingProfiles ?? []).slice(0, 5).map((p: any) => ({
+  const users: SearchResult[] = (matchingProfiles ?? []).slice(0, 5).map((p) => ({
     id: p.id,
     type: 'user' as const,
     title: p.full_name,
@@ -167,22 +172,24 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
     .select('id,status,request_id')
     .limit(50)
 
-  // Fetch request info for matched approvals
-  const allReqIds = [...new Set((appData ?? []).map((a: any) => a.request_id).filter(Boolean))]
+  // Fetch request info for matched approvals — org-scoped here since
+  // `approvals` itself has no org_id column, only a request_id FK.
+  const allReqIds = [...new Set((appData ?? []).map((a) => a.request_id).filter(Boolean))]
   const { data: appReqs } = allReqIds.length > 0
-    ? await db.from('requests').select('id,request_no,title').in('id', allReqIds)
+    ? await db.from('requests').select('id,request_no,title').eq('org_id', orgId).in('id', allReqIds)
     : { data: [] }
-  const appReqMap = new Map((appReqs ?? []).map((r: any) => [r.id, r]))
+  const appReqMap = new Map((appReqs ?? []).map((r) => [r.id, r]))
 
   const approvals: SearchResult[] = (appData ?? [])
-    .map((a: any) => ({ a, req: appReqMap.get(a.request_id) }))
-    .filter(({ a, req }: any) =>
+    .filter((a) => appReqMap.has(a.request_id))
+    .map((a) => ({ a, req: appReqMap.get(a.request_id) }))
+    .filter(({ a, req }) =>
       req?.title?.toLowerCase().includes(ql) ||
       req?.request_no?.toLowerCase().includes(ql) ||
       a.status?.toLowerCase().includes(ql)
     )
     .slice(0, 5)
-    .map(({ a, req }: any) => ({
+    .map(({ a, req }) => ({
       id: a.id,
       type: 'approval' as const,
       title: req?.title ?? 'Approval',

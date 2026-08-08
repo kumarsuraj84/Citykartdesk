@@ -66,6 +66,7 @@ export async function uploadTaskAttachment(
     task.assignee_id === profile.id ||
     profile.role === 'manager' ||
     profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
     profile.team_members.some((m) => m.team_id === task.team_id)
 
   if (!canAttach) return { error: 'You do not have permission to attach files to this task.' }

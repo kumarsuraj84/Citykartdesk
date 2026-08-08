@@ -14,9 +14,11 @@ export default async function PlatformSettingsPage() {
   const [
     { data: autoCloseRow },
     { data: retentionPolicies },
+    { data: org },
   ] = await Promise.all([
     supabase.from('app_settings').select('value').eq('key', 'auto_close_days').single(),
     supabase.from('retention_policies').select('*').order('entity_type'),
+    supabase.from('organizations').select('desktime_credential_ref, desktime_connected_at').eq('id', profile.org_id!).single(),
   ])
 
   const autoCloseDays = parseInt(autoCloseRow?.value ?? '7', 10)
@@ -36,6 +38,10 @@ export default async function PlatformSettingsPage() {
         integrationStatus={{
           resendKeySet:    resendKey != null,
           resendKeyMasked: keyMasked,
+        }}
+        deskTimeStatus={{
+          connected:   org?.desktime_credential_ref != null,
+          connectedAt: org?.desktime_connected_at ?? null,
         }}
       />
     </div>

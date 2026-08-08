@@ -21,9 +21,10 @@ export async function savePermissionOverrides(
     .single()
 
   if (!orgRow?.org_id) return { error: 'No organisation found' }
+  const orgId = orgRow.org_id
 
   const rows = overrides.map((o) => ({
-    org_id:     orgRow.org_id,
+    org_id:     orgId,
     role_key:   o.role_key,
     action_key: o.action_key,
     allowed:    o.allowed,

@@ -1,15 +1,17 @@
 import Link from 'next/link'
-import { Search, Plus, Inbox } from 'lucide-react'
+import { Search, Plus, Inbox, LayoutList, Columns3 } from 'lucide-react'
 import { Suspense } from 'react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ExportButton } from '@/components/requests/ExportButton'
 import { exportRequests } from '@/lib/actions/export'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { redirect } from 'next/navigation'
-import { getCurrentProfile } from '@/lib/queries/profiles'
+import { getCurrentProfile, getAllProfiles } from '@/lib/queries/profiles'
 import { getRequests } from '@/lib/queries/requests'
 import { SLABadge } from '@/components/requests/SLABadge'
 import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
+import { WorkbenchClient } from '@/components/requests/WorkbenchClient'
+import { RequestBoardView } from '@/components/requests/RequestBoardView'
 import { Pagination } from '@/components/ui/Pagination'
 import { SourceCell } from '@/components/ui/SourceCell'
 import { formatRelativeTime } from '@/lib/utils'
@@ -19,6 +21,7 @@ import type { AssignedToFilter } from '@/lib/queries/requests'
 interface PageProps {
   searchParams: Promise<{
     view?: string
+    layout?: string
     status?: string
     q?: string
     assigned?: string
@@ -39,6 +42,18 @@ const FILTER_TABS: { label: string; value: string }[] = [
   { label: 'Closed',          value: 'closed' },
   { label: 'All',             value: '' },
 ]
+
+function SortLink({ col, label, current, dir, base }: { col: string; label: string; current: string; dir: string; base: string }) {
+  const isActive = current === col
+  const nextDir = isActive && dir === 'desc' ? 'asc' : 'desc'
+  const url = `${base}&sort=${col}&dir=${nextDir}`
+  return (
+    <Link href={url} className={`flex items-center gap-1 text-xs font-semibold uppercase tracking-wide transition-colors ${isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+      {label}
+      <span className="text-[10px]">{isActive ? (dir === 'desc' ? '↓' : '↑') : ''}</span>
+    </Link>
+  )
+}
 
 function QueueRow({ request }: { request: RequestWithRelations }) {
   const source = (request as { source_metadata?: { created_via?: string } | null }).source_metadata?.created_via ?? null
@@ -109,19 +124,21 @@ export default async function RequestsPage({ searchParams }: PageProps) {
   const isAgent =
     profile.team_members.length > 0 ||
     profile.role === 'manager' ||
-    profile.role === 'admin'
+    profile.role === 'admin' ||
+    profile.role === 'platform_owner'
 
   const rawView =
     params.view === 'queue' && isAgent ? 'queue'
     : params.view === 'collaborated' ? 'collaborated'
     : 'mine'
+  const layout: 'table' | 'board' = params.layout === 'board' ? 'board' : 'table'
   const rawStatus   = params.status as string | undefined
   const q           = params.q
   const rawAssigned = params.assigned
   const requesterId = isAgent ? (params.requester_id ?? undefined) : undefined
   const page        = Math.max(1, parseInt(params.page ?? '1', 10) || 1)
   const pageSize    = [25, 50, 100].includes(parseInt(params.pageSize ?? '50', 10))
-    ? parseInt(params.pageSize!, 10)
+    ? parseInt(params.pageSize ?? '50', 10)
     : 50
 
   const sortCol = ['updated_at', 'created_at', 'priority', 'status'].includes(params.sort ?? '') ? params.sort! : 'updated_at'
@@ -135,18 +152,24 @@ export default async function RequestsPage({ searchParams }: PageProps) {
       ? (rawAssigned as AssignedToFilter)
       : undefined
 
-  const result = await getRequests({
-    view: rawView,
-    userId: profile.id,
-    status: statusFilter,
-    q: q || undefined,
-    assignedTo,
-    requesterId,
-    page,
-    pageSize,
-    sort: sortCol as any,
-    dir: sortDir,
-  })
+  const showWorkbench = rawView === 'queue' && isAgent
+  const isBoard = showWorkbench && layout === 'board'
+
+  const [result, assignableUsers] = await Promise.all([
+    getRequests({
+      view: rawView,
+      userId: profile.id,
+      status: statusFilter,
+      q: q || undefined,
+      assignedTo,
+      requesterId,
+      page: isBoard ? 1 : page,
+      pageSize: isBoard ? 200 : pageSize,
+      sort: sortCol,
+      dir: sortDir,
+    }),
+    showWorkbench ? getAllProfiles() : Promise.resolve([]),
+  ])
   const requests = result.data
 
   // ── URL builders ─────────────────────────────────────────────────────────────
@@ -167,18 +190,6 @@ export default async function RequestsPage({ searchParams }: PageProps) {
     if (q) p.set('q', q)
     if (a) p.set('assigned', a)
     return `/requests?${p.toString()}`
-  }
-
-  function SortLink({ col, label, current, dir, base }: { col: string; label: string; current: string; dir: string; base: string }) {
-    const isActive = current === col
-    const nextDir = isActive && dir === 'desc' ? 'asc' : 'desc'
-    const url = `${base}&sort=${col}&dir=${nextDir}`
-    return (
-      <Link href={url} className={`flex items-center gap-1 text-xs font-semibold uppercase tracking-wide transition-colors ${isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
-        {label}
-        <span className="text-[10px]">{isActive ? (dir === 'desc' ? '↓' : '↑') : ''}</span>
-      </Link>
-    )
   }
 
   return (
@@ -228,6 +239,32 @@ export default async function RequestsPage({ searchParams }: PageProps) {
           )
         })}
       </div>
+
+      {/* ── Table / Board layout toggle (queue view only) ── */}
+      {showWorkbench && (
+        <div className="flex gap-0.5 rounded-md border border-border bg-muted/50 p-0.5 w-fit">
+          {([
+            { value: 'table', label: 'Table', Icon: LayoutList },
+            { value: 'board', label: 'Board', Icon: Columns3 },
+          ] as const).map(({ value: v, label, Icon }) => {
+            const href = `/requests?view=queue&layout=${v}${statusFilter && statusFilter !== 'active' ? `&status=${statusFilter}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`
+            return (
+              <Link
+                key={v}
+                href={href}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-[11px] font-semibold transition-all ${
+                  layout === v
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Icon className="h-3 w-3" />
+                {label}
+              </Link>
+            )
+          })}
+        </div>
+      )}
 
       {/* ── Queue assignment quick-filters ── */}
       {rawView === 'queue' && (
@@ -295,7 +332,28 @@ export default async function RequestsPage({ searchParams }: PageProps) {
       </div>
 
       {/* ── Request list ── */}
-      {requests.length === 0 ? (
+      {showWorkbench && layout === 'board' ? (
+        requests.length === 0 ? (
+          <div className="rounded-lg border border-[#E8E8F0] bg-white">
+            <EmptyState
+              icon={q ? Search : Inbox}
+              title="No requests found"
+              description={q ? 'Try adjusting your search or filters.' : 'No requests match the selected filters.'}
+            />
+          </div>
+        ) : (
+          <RequestBoardView requests={requests} />
+        )
+      ) : showWorkbench ? (
+        <WorkbenchClient
+          requests={requests}
+          teamMembers={assignableUsers}
+          viewerId={profile.id}
+          emptyTitle="No requests found"
+          emptyDescription={q ? 'Try adjusting your search or filters.' : 'No requests match the selected filters.'}
+          groupByStatus={statusFilter === 'active'}
+        />
+      ) : requests.length === 0 ? (
         <div className="rounded-lg border border-[#E8E8F0] bg-white">
           <EmptyState
             icon={q ? Search : Inbox}
@@ -336,15 +394,17 @@ export default async function RequestsPage({ searchParams }: PageProps) {
         </div>
       )}
 
-      <Suspense>
-        <Pagination
-          page={result.page}
-          totalPages={result.totalPages}
-          total={result.total}
-          pageSize={result.pageSize}
-          basePath="/requests"
-        />
-      </Suspense>
+      {layout !== 'board' && (
+        <Suspense>
+          <Pagination
+            page={result.page}
+            totalPages={result.totalPages}
+            total={result.total}
+            pageSize={result.pageSize}
+            basePath="/requests"
+          />
+        </Suspense>
+      )}
     </div>
   )
 }

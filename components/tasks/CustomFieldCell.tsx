@@ -87,7 +87,13 @@ export function CustomFieldCell({ taskId, field, value, onUpdate }: Props) {
   const [, startTransition] = useTransition()
   const cellRef = useRef<HTMLTableCellElement>(null)
 
-  useEffect(() => { setLocalVal(value) }, [value])
+  // Re-sync local edit state when the underlying field value prop changes.
+  // Adjusting state during render (React's documented pattern) instead of an effect.
+  const [prevValue, setPrevValue] = useState(value)
+  if (prevValue !== value) {
+    setPrevValue(value)
+    setLocalVal(value)
+  }
 
   function save(newVal: CustomFieldValue['value']) {
     setLocalVal(newVal)

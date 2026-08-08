@@ -1,6 +1,6 @@
 # Railway Deployment & Cutover
 
-CognixDesk runs as an always-on container on Railway (no serverless cold
+Citykart Desk runs as an always-on container on Railway (no serverless cold
 starts). This replaces the previous Vercel serverless deployment.
 
 ## Why Railway

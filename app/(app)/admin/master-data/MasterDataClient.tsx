@@ -219,11 +219,13 @@ function PrioritiesTab({ priorities }: { priorities: RequestPriority[] }) {
 
   function saveEdit(id: string) {
     setError('')
+    const current = items.find((p) => p.id === id)
+    if (!current) return
     const update = {
-      name: editValues.name,
-      color: editValues.color,
-      sla_multiplier: editValues.sla_multiplier,
-      is_active: editValues.is_active,
+      name: editValues.name ?? current.name,
+      color: editValues.color ?? current.color,
+      sla_multiplier: editValues.sla_multiplier ?? current.sla_multiplier,
+      is_active: editValues.is_active ?? current.is_active,
     }
     setItems((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...update } : p))
@@ -425,7 +427,7 @@ export function MasterDataClient({ tags, requestPriorities }: Props) {
       <div>
         <h1 className="text-xl font-bold tracking-tight text-foreground">Master Data</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Manage global reference data used across CognixDesk — tags, priorities, and classification values.
+          Manage global reference data used across Citykart Desk — tags, priorities, and classification values.
         </p>
       </div>
 

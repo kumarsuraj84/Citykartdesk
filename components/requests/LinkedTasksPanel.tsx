@@ -43,7 +43,6 @@ interface LinkedTasksPanelProps {
 export function LinkedTasksPanel({
   requestId,
   requestNo,
-  requestTitle,
   teamId,
   initialTasks,
   canManage,

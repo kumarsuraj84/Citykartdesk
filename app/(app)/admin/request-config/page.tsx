@@ -100,7 +100,7 @@ export default async function RequestConfigPage({
               Default response and resolution targets by priority. Individual services can override these.
             </p>
           </div>
-          <SLAConfigClient initialConfig={slaConfig} />
+          <SLAConfigClient initialConfig={slaConfig ?? []} />
 
           {/* Priority reference */}
           <div className="space-y-3">

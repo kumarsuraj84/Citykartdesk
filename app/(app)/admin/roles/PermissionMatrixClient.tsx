@@ -138,7 +138,7 @@ function NewRoleModal({ onClose, onCreated }: {
               </select>
               <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             </div>
-            <p className="mt-1 text-[10px] text-muted-foreground">New role inherits the base role's defaults. You can edit after creating.</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">New role inherits the base role&apos;s defaults. You can edit after creating.</p>
           </div>
         </div>
 

@@ -6,7 +6,7 @@
 --   "all"    -> idx_notifications_user_unarchived  (WHERE archived_at IS NULL)
 --   "unread" -> idx_notifications_active_unread     (WHERE archived_at IS NULL AND read_at IS NULL)
 --
--- Scope: CognixDesk-owned table only.
+-- Scope: Citykart Desk-owned table only.
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user_archived
   ON notifications (user_id, created_at DESC)

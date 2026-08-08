@@ -1,9 +1,9 @@
--- Error reports submitted from CognixDesk app
+-- Error reports submitted from Citykart Desk app
 CREATE TABLE error_reports (
   id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id       UUID        REFERENCES organizations(id) ON DELETE SET NULL,
   user_id      UUID        REFERENCES profiles(id) ON DELETE SET NULL,
-  app          TEXT        NOT NULL DEFAULT 'cognixdesk',
+  app          TEXT        NOT NULL DEFAULT 'citykart-desk',
   error_type   TEXT        NOT NULL,  -- 'crash' | 'error' | 'feedback'
   message      TEXT        NOT NULL,
   stack        TEXT,

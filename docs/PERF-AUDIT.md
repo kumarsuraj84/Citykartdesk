@@ -1,6 +1,6 @@
-# CognixDesk — Performance Audit (2026-06-21)
+# Citykart Desk — Performance Audit (2026-06-21)
 
-Scope: CognixDesk app (`cognix` repo) + its dedicated Supabase project
+Scope: Citykart Desk app (`cognix` repo) + its dedicated Supabase project
 `jhdzjzrimjjtqwnkrwha`. HRMS untouched/out of scope. Findings below were produced by a
 three-track audit (data-fetching, caching/rendering, database) and then **manually
 verified** against the code — items that didn't hold up, or whose suggested fix is unsafe
@@ -17,7 +17,7 @@ Suspense streaming, `DeferredSidebar`/`DeferredNotificationBell`, and `React.cac
 
 All findings below were implemented on branch `claude/exciting-wright-pen1cy` and verified
 with a real `next build` (deps installed locally). Migrations are committed but **must be
-applied to the CognixDesk Supabase project manually** (they are not auto-run).
+applied to the Citykart Desk Supabase project manually** (they are not auto-run).
 
 | Item | Status |
 |---|---|
@@ -35,7 +35,7 @@ applied to the CognixDesk Supabase project manually** (they are not auto-run).
 | Bonus — CSV export cross-org leak + broken approvals export | ✅ org-scoped; approvals export rewritten |
 
 **⚠️ Apply to DB:** migrations `20240101000047` (indexes) and `20240101000048`
-(per-org SLA config). Additive, idempotent, CognixDesk-only.
+(per-org SLA config). Additive, idempotent, Citykart Desk-only.
 
 **Remaining low-priority (not yet done):** drop `count:'exact'` on large request lists in
 favour of cursoring/estimates; partial index for the notifications "all" view; optional
@@ -82,7 +82,7 @@ calendar minutes ≈ 15–20k iterations per request creation/reopen.
 `lib/actions/search.ts` runs `.ilike('description', …)` on `requests` and `tasks`, but only
 `title` has a `gin_trgm` index (`idx_requests_title_trgm`, `idx_tasks_title_trgm`). The
 description match falls back to a sequential scan.
-- **Fix (migration, CognixDesk tables only):**
+- **Fix (migration, Citykart Desk tables only):**
   ```sql
   CREATE INDEX IF NOT EXISTS idx_requests_description_trgm
     ON requests USING gin (description gin_trgm_ops) WHERE description IS NOT NULL;
@@ -176,7 +176,7 @@ index.
 
 ## Suggested execution order
 1. **H1 + H2** column projections (pure win, no schema change, no risk).
-2. **H4 + H5 + M4** index migration (one file, CognixDesk tables only — needs your OK).
+2. **H4 + H5 + M4** index migration (one file, Citykart Desk tables only — needs your OK).
 3. **H3** SLA rewrite + config caching.
 4. **M1** lazy-load task views; **M2** bound the dropdowns.
 5. **Bonus bugs** in `admin.ts` (confirm intended scope first).

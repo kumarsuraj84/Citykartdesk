@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const db = createAdminClient() as unknown as any
+  const db = createAdminClient()
 
   // Fetch open requests with an SLA deadline
   const { data: requests, error: reqError } = await db
@@ -42,8 +42,9 @@ export async function GET(req: NextRequest) {
 
   // Cache managers/admins per org so we fetch them once per org instead of once per fired
   // escalation event (service-role bypasses RLS, so org_id filter is required for isolation).
-  const managersByOrg = new Map<string, string[]>()
-  async function getOrgManagers(orgId: string): Promise<string[]> {
+  const managersByOrg = new Map<string | null, string[]>()
+  async function getOrgManagers(orgId: string | null): Promise<string[]> {
+    if (!orgId) return []
     const cached = managersByOrg.get(orgId)
     if (cached) return cached
     const { data } = await db
@@ -51,7 +52,7 @@ export async function GET(req: NextRequest) {
       .select('id')
       .eq('org_id', orgId)
       .in('role', ['manager', 'admin'])
-    const ids = (data ?? []).map((m: { id: string }) => m.id)
+    const ids = (data ?? []).map((m) => m.id)
     managersByOrg.set(orgId, ids)
     return ids
   }
@@ -110,7 +111,7 @@ export async function GET(req: NextRequest) {
         recipientIds.map((recipientId) => ({
           recipientId,
           actorId,
-          type: notifType as any,
+          type: notifType,
           title,
           body,
           requestId: req.id,

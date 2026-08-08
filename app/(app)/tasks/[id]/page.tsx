@@ -4,7 +4,7 @@ import { ChevronLeft } from 'lucide-react'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import {
   getTaskById, getTaskComments, getTaskActivity, getSubtasks, getAllProfiles,
-  getTaskAssignees, getTaskAttachments, getTaskIntakeContext,
+  getTaskAssignees, getTaskAttachments, getTaskIntakeContext, getTaskDependencies,
 } from '@/lib/queries/tasks'
 
 // This page provides a shareable direct URL for a task.
@@ -23,10 +23,11 @@ export default async function TaskDetailPage({ params }: PageProps) {
   const task = await getTaskById(id)
   if (!task) notFound()
 
-  const [comments, activity, subtasks, profiles, assignees, attachments, intakeContext] = await Promise.all([
+  const [comments, activity, subtasks, dependencies, profiles, assignees, attachments, intakeContext] = await Promise.all([
     getTaskComments(id),
     getTaskActivity(id),
     getSubtasks(id),
+    getTaskDependencies(id),
     getAllProfiles(),
     getTaskAssignees(id),
     getTaskAttachments(id),
@@ -48,6 +49,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         comments={comments}
         activity={activity}
         subtasks={subtasks}
+        dependencies={dependencies}
         profiles={profiles}
         assignees={assignees}
         attachments={attachments}

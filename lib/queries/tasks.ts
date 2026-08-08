@@ -158,6 +158,44 @@ export async function getSubtasks(parentTaskId: string): Promise<TaskWithDetails
   return (data ?? []) as TaskWithDetails[]
 }
 
+export type TaskDependency = {
+  id: string
+  taskId: string
+  title: string
+  status: TaskStatus
+}
+
+/** "Blocked by" (this task depends on) and "Blocking" (other tasks depend on this one). */
+export async function getTaskDependencies(taskId: string): Promise<{ blockedBy: TaskDependency[]; blocking: TaskDependency[] }> {
+  const supabase = await createClient()
+  const [{ data: blockedByRows }, { data: blockingRows }] = await Promise.all([
+    supabase
+      .from('task_dependencies')
+      .select('id, depends_on_task_id, task:tasks!task_dependencies_depends_on_task_id_fkey (id, title, status)')
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('task_dependencies')
+      .select('id, task_id, task:tasks!task_dependencies_task_id_fkey (id, title, status)')
+      .eq('depends_on_task_id', taskId)
+      .order('created_at', { ascending: true }),
+  ])
+
+  type DependencyRow = { id: string; task: { id: string; title: string; status: TaskStatus } | null }
+
+  const toDep = (row: DependencyRow): TaskDependency => ({
+    id: row.id,
+    taskId: row.task!.id,
+    title: row.task!.title,
+    status: row.task!.status,
+  })
+
+  return {
+    blockedBy: ((blockedByRows ?? []) as DependencyRow[]).filter((r) => r.task).map(toDep),
+    blocking: ((blockingRows ?? []) as DependencyRow[]).filter((r) => r.task).map(toDep),
+  }
+}
+
 export async function getTaskComments(taskId: string): Promise<TaskCommentWithAuthor[]> {
   const supabase = await createClient()
   const { data } = await supabase
@@ -297,6 +335,21 @@ export async function getTasksForRequest(requestId: string): Promise<TaskWithDet
       creator:profiles!tasks_created_by_fkey (id, full_name)
     `)
     .eq('request_id', requestId)
+    .is('parent_task_id', null)
+    .order('created_at', { ascending: false })
+  return (data ?? []) as TaskWithDetails[]
+}
+
+export async function getTasksForProject(projectId: string): Promise<TaskWithDetails[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('tasks')
+    .select(`
+      *,
+      assignee:profiles!tasks_assignee_id_fkey (id, full_name),
+      creator:profiles!tasks_created_by_fkey (id, full_name)
+    `)
+    .eq('project_id', projectId)
     .is('parent_task_id', null)
     .order('created_at', { ascending: false })
   return (data ?? []) as TaskWithDetails[]

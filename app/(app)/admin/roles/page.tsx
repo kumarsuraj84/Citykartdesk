@@ -199,7 +199,7 @@ export default async function RolesPage({
       {tab === 'overview' && (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            CognixDesk uses 5 hierarchical roles. Each role inherits the capabilities of roles below it.
+            Citykart Desk uses 5 hierarchical roles. Each role inherits the capabilities of roles below it.
           </p>
           <div className="space-y-3">
             {ROLES.map((role) => {
@@ -281,7 +281,6 @@ export default async function RolesPage({
       {tab === 'permissions' && (
         <PermissionMatrixClient
           matrix={PERMISSION_MATRIX}
-          systemRoles={[...ROLES]}
           customRoles={customRoleRows ?? []}
           overrides={overrides}
           canEdit={canEdit}

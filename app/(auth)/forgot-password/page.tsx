@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useTransition } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -52,11 +53,9 @@ function ForgotPasswordForm() {
             It expires in 1 hour.
           </p>
         </div>
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/login">
-            <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
-            Back to sign in
-          </Link>
+        <Button variant="ghost" size="sm" render={<Link href="/login" />}>
+          <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+          Back to sign in
         </Button>
       </div>
     )
@@ -116,9 +115,14 @@ export default function ForgotPasswordPage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-8">
         <div className="space-y-2 text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground text-xl font-bold">
-            F
-          </div>
+          <Image
+            src="/citykart-desk-icon.png"
+            alt="Citykart Desk"
+            width={56}
+            height={56}
+            className="mx-auto rounded-xl"
+            priority
+          />
           <h1 className="text-2xl font-semibold tracking-tight">Reset your password</h1>
           <p className="text-sm text-muted-foreground">
             Enter your email and we&apos;ll send you a reset link.

@@ -504,7 +504,8 @@ export async function getInboxMessages(opts: {
     const snippet = typeof m.body_text === 'string'
       ? m.body_text.replace(/\s+/g, ' ').trim().slice(0, 160)
       : null
-    const { body_text: _omit, ...rest } = m
+    const rest = { ...m } as Record<string, unknown>
+    delete rest.body_text
     return { ...rest, review, snippet }
   })
   return { data: normalised as InboxMessage[], page, pageSize }

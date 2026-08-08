@@ -13,7 +13,7 @@ type ActionResult<T = undefined> = T extends undefined
 async function requireAdminOrManager() {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (profile.role !== 'admin' && profile.role !== 'manager') {
+  if (profile.role !== 'admin' && profile.role !== 'manager' && profile.role !== 'platform_owner') {
     return { error: 'Admin or manager role required.' }
   }
   return { profile }
