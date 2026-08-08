@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import { Manrope, JetBrains_Mono } from 'next/font/google'
 import { Toaster } from 'sonner'
-import { SpeedInsights } from '@vercel/speed-insights/next'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import './globals.css'
 
@@ -54,7 +53,6 @@ export default function RootLayout({
       <body className="h-full">
         <ErrorBoundary>{children}</ErrorBoundary>
         <Toaster richColors position="bottom-right" />
-        <SpeedInsights />
       </body>
     </html>
   )

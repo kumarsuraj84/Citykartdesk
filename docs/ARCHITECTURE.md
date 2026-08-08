@@ -61,7 +61,7 @@ sharing the database.
 | Forms | `react-hook-form` + `zod` |
 | Email | Resend (optional, gated by `RESEND_API_KEY` / `EMAIL_ENABLED`) |
 | Deployment | Local only — no Vercel/hosted deployment |
-| Monitoring | Vercel Speed Insights; `error_reports` table for client-side capture |
+| Monitoring | `error_reports` table for client-side capture; `/api/health` for uptime checks |
 
 Key config files: `next.config.ts` (Turbopack; `ignoreBuildErrors` + `ignoreDuringBuilds`
 both **on** by design — types are generated after migrations, lint runs separately),
