@@ -1,6 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Emits a self-contained .next/standalone server (only the node_modules it
+  // actually needs) — the Dockerfile copies just that output, not the full
+  // repo + node_modules, into the runtime image. See docs/RAILWAY-DEPLOYMENT.md.
+  output: 'standalone',
+  // The floating route-info badge is dev-only UI (never ships to production) and
+  // doesn't affect render performance — off because it visually collided with the
+  // sidebar's own bottom-left user avatar.
+  devIndicators: false,
   turbopack: {
     root: __dirname,
   },
