@@ -12,7 +12,7 @@ import {
 
 type ThemeValue = 'light' | 'petrol' | 'bordeaux' | 'slate' | 'pastel' | 'dark'
 
-const THEME_STORAGE_KEY = 'cognix-theme'
+const THEME_STORAGE_KEY = 'citykart-theme'
 
 const THEME_OPTIONS: { value: ThemeValue; label: string; hint: string; swatch: string }[] = [
   { value: 'light', label: 'Blue', hint: 'Default royal blue', swatch: '#1A4D8F' },

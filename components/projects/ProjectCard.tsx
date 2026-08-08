@@ -3,14 +3,14 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { Calendar } from 'lucide-react'
 import { updateProject } from '@/lib/actions/projects'
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_STYLES } from './ProjectStatusBadge'
-import { PROJECT_PRIORITY_STYLES } from './ProjectPriorityBadge'
+import { PROJECT_PRIORITY_STYLES, PROJECT_PRIORITY_ORDER as PRIORITY_ORDER } from './ProjectPriorityBadge'
 import type { ProjectWithDetails, ProjectProgress, ProjectStatus, ProjectPriority } from '@/types'
 
 const STATUS_ORDER: ProjectStatus[] = ['not_started', 'in_progress', 'blocked', 'done', 'cancelled']
-const PRIORITY_ORDER: ProjectPriority[] = ['P1', 'P2', 'P3']
 const badgeSelectCls = 'appearance-none rounded px-2 py-0.5 text-[11px] font-semibold hover:opacity-80 focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer'
 
 function AvatarInitial({ name }: { name: string }) {
@@ -35,7 +35,8 @@ export function ProjectCard({ project, progress, profiles = [] }: {
   function patch(data: Parameters<typeof updateProject>[1]) {
     setIsSaving(true)
     startTransition(async () => {
-      await updateProject(project.id, data)
+      const r = await updateProject(project.id, data)
+      if (r.error) { toast.error(r.error); setIsSaving(false); return }
       router.refresh()
       setIsSaving(false)
     })
@@ -55,7 +56,7 @@ export function ProjectCard({ project, progress, profiles = [] }: {
           <select
             value={project.priority}
             onChange={(e) => patch({ priority: e.target.value as ProjectPriority })}
-            className={`${badgeSelectCls} ${PROJECT_PRIORITY_STYLES[project.priority]}`}
+            className={`chip-3d appearance-none text-[11px] font-semibold focus:outline-none focus:ring-1 focus:ring-ring ${PROJECT_PRIORITY_STYLES[project.priority]}`}
           >
             {PRIORITY_ORDER.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>

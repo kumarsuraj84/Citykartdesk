@@ -15,24 +15,40 @@ export async function markMessageRead(
   messageId: string,
   isRead: boolean,
 ): Promise<{ error?: string }> {
+  const profile = await getCurrentProfile()
+  if (!profile) return { error: 'Unauthorized.' }
+
   const supabase = (await createClient()) as unknown as AnyClient
-  const { error } = await supabase
+  // RLS silently returns zero rows (not an error) when the caller can't see this
+  // message — .select().maybeSingle() lets us tell "updated" from "no-op" apart.
+  const { data, error } = await supabase
     .from('intake_messages')
     .update({ is_read: isRead })
     .eq('id', messageId)
-  return { error: error?.message }
+    .select('id')
+    .maybeSingle()
+  if (error) return { error: error.message }
+  if (!data) return { error: 'Message not found.' }
+  return {}
 }
 
 export async function archiveMessage(
   messageId: string,
   archived: boolean,
 ): Promise<{ error?: string }> {
+  const profile = await getCurrentProfile()
+  if (!profile) return { error: 'Unauthorized.' }
+
   const supabase = (await createClient()) as unknown as AnyClient
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('intake_messages')
     .update({ is_archived: archived })
     .eq('id', messageId)
-  return { error: error?.message }
+    .select('id')
+    .maybeSingle()
+  if (error) return { error: error.message }
+  if (!data) return { error: 'Message not found.' }
+  return {}
 }
 
 // ── Internal notes ────────────────────────────────────────────────────────────
@@ -61,8 +77,21 @@ export async function addNote(
 }
 
 export async function deleteNote(noteId: string): Promise<{ error?: string }> {
-  const supabase = (await createClient()) as unknown as AnyClient
-  const { error } = await supabase.from('intake_notes').delete().eq('id', noteId)
+  const profile = await getCurrentProfile()
+  if (!profile || !canReview(profile.role)) return { error: 'Unauthorized.' }
+
+  const admin = createAdminClient() as unknown as AnyClient
+  // Scope to the caller's org (admin client bypasses RLS) — a note only carries
+  // its own org_id, not the message's, so this is the note's own org, not a join.
+  const { data: note } = await admin
+    .from('intake_notes')
+    .select('id')
+    .eq('id', noteId)
+    .eq('org_id', profile.org_id)
+    .maybeSingle()
+  if (!note) return { error: 'Note not found.' }
+
+  const { error } = await admin.from('intake_notes').delete().eq('id', noteId)
   return { error: error?.message }
 }
 
@@ -128,7 +157,16 @@ export async function sendFromMessage(
   payload: SendPayload,
 ): Promise<{ ok: boolean; error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile) return { ok: false, error: 'Unauthorized.' }
+  if (!profile || !canReview(profile.role)) return { ok: false, error: 'Unauthorized.' }
+
+  const admin = createAdminClient() as unknown as AnyClient
+  const { data: msg } = await admin
+    .from('intake_messages')
+    .select('id')
+    .eq('id', messageId)
+    .eq('org_id', profile.org_id)
+    .maybeSingle()
+  if (!msg) return { ok: false, error: 'Message not found.' }
 
   const rawUrl  = process.env.INTAKE_WORKER_URL
   const secret  = process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET

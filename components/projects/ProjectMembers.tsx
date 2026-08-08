@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { UserPlus, X } from 'lucide-react'
 import { addProjectMember, removeProjectMember } from '@/lib/actions/projects'
 import type { ProjectMemberWithProfile } from '@/types'
@@ -44,14 +45,16 @@ export function ProjectMembers({
   function add(userId: string) {
     setOpen(false)
     startTransition(async () => {
-      await addProjectMember(projectId, userId)
+      const r = await addProjectMember(projectId, userId)
+      if (r.error) { toast.error(r.error); return }
       router.refresh()
     })
   }
 
   function remove(userId: string) {
     startTransition(async () => {
-      await removeProjectMember(projectId, userId)
+      const r = await removeProjectMember(projectId, userId)
+      if (r.error) { toast.error(r.error); return }
       router.refresh()
     })
   }

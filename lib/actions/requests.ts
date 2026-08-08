@@ -1253,11 +1253,16 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
 
   const workflowId = req.services?.approval_workflow_id ?? null
 
-  // Check for existing approval record
-  const { data: existing } = await supabase
+  // Check for an existing *pending* approval only — approvals.request_id has no
+  // unique constraint (migration 031 deliberately allows multiple sequential
+  // approval rounds per request), so an unfiltered check would permanently
+  // block resubmission after a prior round was approved/rejected. Matches
+  // sendAdHocApproval's check in lib/actions/approvals.ts.
+  const { data: existing } = await admin
     .from('approvals')
     .select('id')
     .eq('request_id', requestId)
+    .eq('status', 'pending')
     .maybeSingle()
 
   if (existing) return { error: 'An approval is already in progress for this request.' }
@@ -1274,12 +1279,14 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
     const { error: wfErr } = await admin
       .from('approvals')
       .insert({ request_id: requestId, workflow_id: defaultWorkflow.id, status: 'pending' })
-    if (wfErr) return { error: wfErr.message }
+    // 23505 = the approvals_one_pending_per_request unique index rejected a
+    // second concurrent submission that slipped past the check above.
+    if (wfErr) return { error: wfErr.code === '23505' ? 'An approval is already in progress for this request.' : wfErr.message }
   } else {
     const { error: wfErr } = await admin
       .from('approvals')
       .insert({ request_id: requestId, workflow_id: workflowId, status: 'pending' })
-    if (wfErr) return { error: wfErr.message }
+    if (wfErr) return { error: wfErr.code === '23505' ? 'An approval is already in progress for this request.' : wfErr.message }
   }
 
   const { error: stErr } = await admin

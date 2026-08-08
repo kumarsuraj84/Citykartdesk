@@ -12,6 +12,25 @@ export async function proxy(request: NextRequest) {
     /\.(svg|png|jpg|jpeg|gif|webp|ico)$/.test(pathname)
   if (isPublicAsset) return NextResponse.next({ request })
 
+  // ── Fast path: cron/webhook/health API routes authenticate themselves ──────
+  // These are called by Railway's cron-tick.mjs, Google Pub/Sub, and Microsoft
+  // Graph — none of which carry a Supabase session cookie, so the default
+  // "no session → redirect to /login" rule below would otherwise intercept
+  // them before their own x-cron-secret / worker-secret / webhook-token check
+  // ever runs. Deliberately an exact-match allowlist, not a `/api/*` prefix —
+  // every other API route (e.g. /api/admin/audit, /api/intake/oauth/*) must
+  // stay under normal session gating.
+  const PUBLIC_API_ROUTES = new Set([
+    '/api/health',
+    '/api/alerts/run',
+    '/api/escalation/run',
+    '/api/desktime/sync',
+    '/api/intake/cron/classify',
+    '/api/intake/webhook/gmail',
+    '/api/intake/webhook/outlook',
+  ])
+  if (PUBLIC_API_ROUTES.has(pathname)) return NextResponse.next({ request })
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -76,7 +95,19 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  return supabaseResponse
+  // Forward the already-verified user id to the page/layout render so
+  // getCurrentProfile() (lib/queries/profiles.ts) doesn't have to make its own
+  // redundant auth round-trip to re-verify the exact same session. `.set()`
+  // (not merge) overwrites any client-forged copy of this header on the
+  // incoming request — the value here is always ours, never the caller's.
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-verified-user-id', userId ?? '')
+  const finalResponse = NextResponse.next({ request: { headers: requestHeaders } })
+  // Carry forward any session-refresh cookies getClaims() queued via setAll()
+  // above — without this, replacing supabaseResponse here would silently drop
+  // the refreshed auth cookie and the browser would never receive it.
+  supabaseResponse.cookies.getAll().forEach((c) => finalResponse.cookies.set(c))
+  return finalResponse
 }
 
 export const config = {

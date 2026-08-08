@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notify } from '@/lib/notifications'
+import { verifyCronSecret } from '@/lib/cron-auth'
 
 export async function GET(req: NextRequest) {
-  // Auth check: CRON_SECRET must be set and must match — no secret = no access
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) {
+  const verified = verifyCronSecret(req)
+  if (verified === null) {
     return NextResponse.json({ error: 'CRON_SECRET is not configured.' }, { status: 503 })
   }
-  const headerSecret = req.headers.get('x-cron-secret')
-  if (headerSecret !== cronSecret) {
+  if (!verified) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

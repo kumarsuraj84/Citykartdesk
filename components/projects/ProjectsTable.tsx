@@ -3,10 +3,11 @@
 import { useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { ArrowUpDown, Search } from 'lucide-react'
 import { updateProject } from '@/lib/actions/projects'
-import { ProjectStatusBadge, PROJECT_STATUS_LABELS, PROJECT_STATUS_STYLES } from './ProjectStatusBadge'
-import { PROJECT_PRIORITY_STYLES } from './ProjectPriorityBadge'
+import { PROJECT_STATUS_LABELS, PROJECT_STATUS_STYLES } from './ProjectStatusBadge'
+import { PROJECT_PRIORITY_STYLES, PROJECT_PRIORITY_ORDER as PRIORITY_ORDER } from './ProjectPriorityBadge'
 import type { ProjectWithDetails, ProjectProgress, ProjectStatus, ProjectPriority } from '@/types'
 
 type SortKey = 'name' | 'owner' | 'status' | 'progress' | 'target_date' | 'days_since_update'
@@ -24,7 +25,6 @@ function daysSince(dateStr: string | undefined): number | null {
 
 const TD = 'border-r border-border/60 last:border-r-0'
 const STATUS_ORDER: ProjectStatus[] = ['not_started', 'in_progress', 'blocked', 'done', 'cancelled']
-const PRIORITY_ORDER: ProjectPriority[] = ['P1', 'P2', 'P3']
 const selectCls = 'w-full rounded border border-transparent bg-transparent px-1.5 py-1 text-xs hover:border-border focus:border-border focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer truncate'
 const dateCls = 'w-full rounded border border-transparent bg-transparent px-1 py-1 text-xs text-muted-foreground hover:border-border focus:border-border focus:outline-none focus:ring-1 focus:ring-ring'
 
@@ -106,7 +106,8 @@ export function ProjectsTable({
   function patch(id: string, data: Parameters<typeof updateProject>[1]) {
     setSavingId(id)
     startTransition(async () => {
-      await updateProject(id, data)
+      const r = await updateProject(id, data)
+      if (r.error) { toast.error(r.error); setSavingId((cur) => (cur === id ? null : cur)); return }
       router.refresh()
       setSavingId((cur) => (cur === id ? null : cur))
     })
@@ -137,10 +138,11 @@ export function ProjectsTable({
     })
   }, [projects, sortKey, sortAsc, progressByProject, latestUpdateByProject])
 
-  const chipBtn = (active: boolean) =>
-    `rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-      active ? 'border-primary bg-primary text-white' : 'border-border bg-card text-muted-foreground hover:bg-muted'
-    }`
+  // Same raised glossy pill as the Export/Upload buttons — the bg-* half of `styles`
+  // is invisible under the chip's own gradient background, only its text-* colors the
+  // label and dot; "active" adds a colored ring instead of swapping fills.
+  const chipCls = (active: boolean, styles: string) =>
+    `chip-3d ${styles} ${active ? 'ring-2 ring-offset-1 ring-current' : ''}`
 
   return (
     <div className="space-y-3">
@@ -164,15 +166,24 @@ export function ProjectsTable({
         </select>
         <div className="flex flex-wrap gap-1.5">
           {STATUS_ORDER.map((s) => (
-            <button key={s} className={chipBtn(statusFilter === s)} onClick={() => updateParams({ status: statusFilter === s ? null : s })}>
-              <ProjectStatusBadge status={s} size="sm" />
+            <button
+              key={s}
+              className={chipCls(statusFilter === s, PROJECT_STATUS_STYLES[s])}
+              onClick={() => updateParams({ status: statusFilter === s ? null : s })}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+              {PROJECT_STATUS_LABELS[s]}
             </button>
           ))}
         </div>
         <div className="flex flex-wrap gap-1.5">
           {PRIORITY_ORDER.map((p) => (
-            <button key={p} className={chipBtn(priorityFilter === p)} onClick={() => updateParams({ priority: priorityFilter === p ? null : p })}>
-              <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold ${PROJECT_PRIORITY_STYLES[p]}`}>{p}</span>
+            <button
+              key={p}
+              className={chipCls(priorityFilter === p, PROJECT_PRIORITY_STYLES[p])}
+              onClick={() => updateParams({ priority: priorityFilter === p ? null : p })}
+            >
+              {p}
             </button>
           ))}
         </div>
@@ -252,7 +263,7 @@ export function ProjectsTable({
                       <select
                         value={p.priority}
                         onChange={(e) => patch(p.id, { priority: e.target.value as ProjectPriority })}
-                        className={`${selectCls} ${PROJECT_PRIORITY_STYLES[p.priority]}`}
+                        className={`chip-3d w-full appearance-none text-xs focus:outline-none focus:ring-1 focus:ring-ring ${PROJECT_PRIORITY_STYLES[p.priority]}`}
                       >
                         {PRIORITY_ORDER.map((pr) => <option key={pr} value={pr}>{pr}</option>)}
                       </select>

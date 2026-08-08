@@ -1,4 +1,4 @@
-# Cognix Intake — Classification Redesign (signal hierarchy + catalog-bound taxonomy)
+# Citykart Desk Intake — Classification Redesign (signal hierarchy + catalog-bound taxonomy)
 
 > **Status:** FOR APPROVAL — design only, no engine code changed yet.
 > **Trigger:** A payment notification (`payments-noreply@google.com`, "Your prepayment

@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import {
   X, Loader2, ChevronDown, User, Calendar, Flag,
   Circle, CheckCircle2, XCircle, Clock, ExternalLink,
@@ -140,37 +141,60 @@ export function TaskDetailPanel({
     const val = titleValue.trim()
     if (!val || val === task.title) { setEditingTitle(false); return }
     startTransition(async () => {
-      await updateTaskField(task.id, 'title', val)
+      const result = await updateTaskField(task.id, 'title', val)
+      if (result?.error) { toast.error(result.error); setTitleValue(task.title); setEditingTitle(false); return }
       setEditingTitle(false)
     })
   }
 
   function saveDesc() {
+    const prev = task.description ?? ''
     startTransition(async () => {
-      await updateTaskField(task.id, 'description', descValue.trim() || null)
+      const result = await updateTaskField(task.id, 'description', descValue.trim() || null)
+      if (result?.error) { toast.error(result.error); setDescValue(prev); setEditingDesc(false); return }
       setEditingDesc(false)
     })
   }
 
   function changeStatus(value: TaskStatus) {
+    const prev = localStatus
     setLocalStatus(value); setOpenDrop(null)
-    startTransition(async () => { await updateTaskStatus(task.id, value) })
+    startTransition(async () => {
+      const result = await updateTaskStatus(task.id, value)
+      if (result?.error) { toast.error(result.error); setLocalStatus(prev) }
+    })
   }
   function changePriority(value: TaskPriority) {
+    const prev = localPriority
     setLocalPriority(value); setOpenDrop(null)
-    startTransition(async () => { await updateTaskField(task.id, 'priority', value) })
+    startTransition(async () => {
+      const result = await updateTaskField(task.id, 'priority', value)
+      if (result?.error) { toast.error(result.error); setLocalPriority(prev) }
+    })
   }
   function changeAssignee(value: string | null) {
+    const prev = localAssigneeId
     setLocalAssigneeId(value); setOpenDrop(null)
-    startTransition(async () => { await updateTaskField(task.id, 'assignee_id', value) })
+    startTransition(async () => {
+      const result = await updateTaskField(task.id, 'assignee_id', value)
+      if (result?.error) { toast.error(result.error); setLocalAssigneeId(prev) }
+    })
   }
   function changeDueDate(value: string) {
+    const prev = localDueDate
     const v = value || null; setLocalDueDate(v); setOpenDrop(null)
-    startTransition(async () => { await updateTaskField(task.id, 'due_date', v) })
+    startTransition(async () => {
+      const result = await updateTaskField(task.id, 'due_date', v)
+      if (result?.error) { toast.error(result.error); setLocalDueDate(prev) }
+    })
   }
   function changeProject(project: { id: string; name: string } | null) {
+    const prev = localProject
     setLocalProject(project); setOpenDrop(null)
-    startTransition(async () => { await attachToProject('task', task.id, project?.id ?? null) })
+    startTransition(async () => {
+      const result = await attachToProject('task', task.id, project?.id ?? null)
+      if (result?.error) { toast.error(result.error); setLocalProject(prev) }
+    })
   }
 
   const statusCfg    = STATUS_CONFIG[localStatus]

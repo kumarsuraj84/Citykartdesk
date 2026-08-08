@@ -2,8 +2,12 @@
 
 import { useState, useTransition, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, Loader2, Plus, User, Calendar, Users } from 'lucide-react'
+import { X, Loader2, Plus, User, Calendar, Users, Flag, Link2 } from 'lucide-react'
 import { createProject } from '@/lib/actions/projects'
+import { PROJECT_PRIORITY_STYLES, PROJECT_PRIORITY_ORDER as PRIORITY_ORDER } from './ProjectPriorityBadge'
+import type { ProjectPriority } from '@/types'
+
+const chipSelectCls = 'appearance-none rounded border border-border bg-transparent px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer'
 
 interface NewProjectPanelProps {
   profiles: { id: string; full_name: string }[]
@@ -18,13 +22,14 @@ export function NewProjectPanel({ profiles, teams, currentUserId, onCreated }: N
   const [name, setName]               = useState('')
   const [description, setDescription] = useState('')
   const [ownerId, setOwnerId]         = useState(currentUserId)
+  const [functionalOwnerId, setFunctionalOwnerId] = useState('')
+  const [priority, setPriority]       = useState<ProjectPriority>('P2')
   const [teamId, setTeamId]           = useState('')
   const [startDate, setStartDate]     = useState('')
   const [targetDate, setTargetDate]   = useState('')
+  const [referenceNotes, setReferenceNotes] = useState('')
   const [error, setError]             = useState<string | null>(null)
   const [isPending, startTransition]  = useTransition()
-
-  const [openDrop, setOpenDrop] = useState<'owner' | 'team' | null>(null)
 
   const nameRef = useRef<HTMLInputElement>(null)
 
@@ -39,16 +44,10 @@ export function NewProjectPanel({ profiles, teams, currentUserId, onCreated }: N
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
-  useEffect(() => {
-    if (!openDrop) return
-    const onDown = () => setOpenDrop(null)
-    setTimeout(() => document.addEventListener('mousedown', onDown), 0)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [openDrop])
-
   function reset() {
-    setName(''); setDescription(''); setOwnerId(currentUserId); setTeamId('')
-    setStartDate(''); setTargetDate(''); setError(null); setOpenDrop(null)
+    setName(''); setDescription(''); setOwnerId(currentUserId); setFunctionalOwnerId('')
+    setPriority('P2'); setTeamId(''); setStartDate(''); setTargetDate('')
+    setReferenceNotes(''); setError(null)
   }
 
   function handleClose() { setOpen(false); reset() }
@@ -61,9 +60,12 @@ export function NewProjectPanel({ profiles, teams, currentUserId, onCreated }: N
         name: name.trim(),
         description: description.trim() || undefined,
         ownerId,
+        functionalOwnerId: functionalOwnerId || undefined,
+        priority,
         teamId: teamId || undefined,
         startDate: startDate || undefined,
         targetDate: targetDate || undefined,
+        referenceNotes: referenceNotes.trim() || undefined,
       })
       if (result.error) {
         setError(result.error)
@@ -75,9 +77,6 @@ export function NewProjectPanel({ profiles, teams, currentUserId, onCreated }: N
       }
     })
   }
-
-  const currentOwner = profiles.find((p) => p.id === ownerId)
-  const currentTeam  = teams.find((t) => t.id === teamId)
 
   return (
     <>
@@ -126,57 +125,53 @@ export function NewProjectPanel({ profiles, teams, currentUserId, onCreated }: N
 
                 <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/60">
                   {/* Owner */}
-                  <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => setOpenDrop(openDrop === 'owner' ? null : 'owner')}
-                      className="flex items-center gap-1 rounded border border-border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+                  <div className="flex items-center gap-1">
+                    <User className="h-3 w-3 text-muted-foreground" />
+                    <select
+                      value={ownerId}
+                      onChange={(e) => setOwnerId(e.target.value)}
+                      className={chipSelectCls}
                     >
-                      <User className="h-3 w-3" />
-                      {currentOwner?.full_name ?? 'Owner'}
-                    </button>
-                    {openDrop === 'owner' && (
-                      <div className="absolute left-0 top-full z-50 mt-1 w-44 max-h-56 overflow-y-auto rounded-xl border border-border bg-card shadow-lg py-1">
-                        {profiles.map((p) => (
-                          <button
-                            key={p.id}
-                            onClick={() => { setOwnerId(p.id); setOpenDrop(null) }}
-                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 ${p.id === ownerId ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}
-                          >
-                            {p.full_name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                      {profiles.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Functional owner */}
+                  <div className="flex items-center gap-1">
+                    <User className="h-3 w-3 text-muted-foreground" />
+                    <select
+                      value={functionalOwnerId}
+                      onChange={(e) => setFunctionalOwnerId(e.target.value)}
+                      className={chipSelectCls}
+                    >
+                      <option value="">No functional owner</option>
+                      {profiles.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Priority */}
+                  <div className="flex items-center gap-1">
+                    <Flag className="h-3 w-3 text-muted-foreground" />
+                    <select
+                      value={priority}
+                      onChange={(e) => setPriority(e.target.value as ProjectPriority)}
+                      className={`chip-3d appearance-none text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-ring ${PROJECT_PRIORITY_STYLES[priority]}`}
+                    >
+                      {PRIORITY_ORDER.map((p) => <option key={p} value={p}>{p}</option>)}
+                    </select>
                   </div>
 
                   {/* Team */}
-                  <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => setOpenDrop(openDrop === 'team' ? null : 'team')}
-                      className="flex items-center gap-1 rounded border border-border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+                  <div className="flex items-center gap-1">
+                    <Users className="h-3 w-3 text-muted-foreground" />
+                    <select
+                      value={teamId}
+                      onChange={(e) => setTeamId(e.target.value)}
+                      className={chipSelectCls}
                     >
-                      <Users className="h-3 w-3" />
-                      {currentTeam?.name ?? 'No team'}
-                    </button>
-                    {openDrop === 'team' && (
-                      <div className="absolute left-0 top-full z-50 mt-1 w-44 max-h-56 overflow-y-auto rounded-xl border border-border bg-card shadow-lg py-1">
-                        <button
-                          onClick={() => { setTeamId(''); setOpenDrop(null) }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50"
-                        >
-                          No team
-                        </button>
-                        {teams.map((t) => (
-                          <button
-                            key={t.id}
-                            onClick={() => { setTeamId(t.id); setOpenDrop(null) }}
-                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 ${t.id === teamId ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}
-                          >
-                            {t.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                      <option value="">No team</option>
+                      {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
                   </div>
 
                   {/* Start date */}
@@ -202,6 +197,20 @@ export function NewProjectPanel({ profiles, teams, currentUserId, onCreated }: N
                       className="bg-transparent text-xs text-foreground outline-none"
                     />
                   </label>
+                </div>
+
+                <div className="space-y-1 border-t border-border/60 pt-3">
+                  <label className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                    <Link2 className="h-3 w-3" />
+                    References / inspiration (optional)
+                  </label>
+                  <textarea
+                    value={referenceNotes}
+                    onChange={(e) => setReferenceNotes(e.target.value)}
+                    placeholder="Links, notes, or examples this project is based on…"
+                    rows={2}
+                    className="w-full resize-none rounded-lg border border-border bg-muted/30 px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-ring"
+                  />
                 </div>
 
                 {error && (

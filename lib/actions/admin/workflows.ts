@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { getApprovalWorkflowWithSteps, type ApprovalWorkflowStep } from '@/lib/queries/admin'
 
 type ActionResult<T = undefined> = T extends undefined
   ? { error?: string }
@@ -24,11 +25,12 @@ async function requireAdminOrManager() {
 export async function createWorkflow(name: string): Promise<ActionResult<{ id: string }>> {
   const guard = await requireAdminOrManager()
   if ('error' in guard && guard.error) return { error: guard.error }
+  if (!guard.profile?.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('approval_workflows')
-    .insert({ name: name.trim() })
+    .insert({ name: name.trim(), org_id: guard.profile.org_id })
     .select('id')
     .single()
 
@@ -47,6 +49,7 @@ export async function updateWorkflow(id: string, name: string): Promise<ActionRe
     .from('approval_workflows')
     .update({ name: name.trim() })
     .eq('id', id)
+    .eq('org_id', guard.profile!.org_id!)
 
   if (error) return { error: error.message }
 
@@ -76,6 +79,7 @@ export async function deleteWorkflow(id: string): Promise<ActionResult> {
     .from('approval_workflows')
     .delete()
     .eq('id', id)
+    .eq('org_id', guard.profile!.org_id!)
 
   if (error) return { error: error.message }
 
@@ -84,6 +88,16 @@ export async function deleteWorkflow(id: string): Promise<ActionResult> {
 }
 
 // ── Workflow Steps ────────────────────────────────────────────────────────────
+
+/** Fetches a workflow's steps on demand — the list view never loads them upfront. */
+export async function fetchWorkflowSteps(workflowId: string): Promise<ActionResult<ApprovalWorkflowStep[]>> {
+  const guard = await requireAdminOrManager()
+  if ('error' in guard && guard.error) return { error: guard.error }
+
+  const workflow = await getApprovalWorkflowWithSteps(workflowId)
+  if (!workflow) return { error: 'Workflow not found.' }
+  return { data: workflow.steps }
+}
 
 type UpsertStepInput = {
   id?: string
@@ -107,6 +121,15 @@ export async function upsertWorkflowStep(input: UpsertStepInput): Promise<Action
 
   const admin = createAdminClient()
 
+  // approval_workflow_steps has no org_id of its own — scope via its parent workflow.
+  const { data: workflow } = await admin
+    .from('approval_workflows')
+    .select('id')
+    .eq('id', input.workflowId)
+    .eq('org_id', guard.profile!.org_id!)
+    .maybeSingle()
+  if (!workflow) return { error: 'Workflow not found.' }
+
   const payload = {
     workflow_id: input.workflowId,
     step_order: input.stepOrder,
@@ -117,6 +140,15 @@ export async function upsertWorkflowStep(input: UpsertStepInput): Promise<Action
   let id: string
 
   if (input.id) {
+    // Confirm the step being edited already belongs to that (in-org) workflow.
+    const { data: existingStep } = await admin
+      .from('approval_workflow_steps')
+      .select('id')
+      .eq('id', input.id)
+      .eq('workflow_id', input.workflowId)
+      .maybeSingle()
+    if (!existingStep) return { error: 'Step not found.' }
+
     const { data, error } = await admin
       .from('approval_workflow_steps')
       .update(payload)
@@ -144,6 +176,16 @@ export async function deleteWorkflowStep(stepId: string): Promise<ActionResult> 
   if ('error' in guard && guard.error) return { error: guard.error }
 
   const admin = createAdminClient()
+
+  // approval_workflow_steps has no org_id of its own — scope via its parent workflow.
+  const { data: existingStep } = await admin
+    .from('approval_workflow_steps')
+    .select('id, approval_workflows!inner(org_id)')
+    .eq('id', stepId)
+    .eq('approval_workflows.org_id', guard.profile!.org_id!)
+    .maybeSingle()
+  if (!existingStep) return { error: 'Step not found.' }
+
   const { error } = await admin
     .from('approval_workflow_steps')
     .delete()
@@ -165,10 +207,18 @@ export async function bindWorkflowToService(
   if ('error' in guard && guard.error) return { error: guard.error }
 
   const admin = createAdminClient()
+
+  // If binding to a workflow (not unbinding), confirm it's in-org before attaching it.
+  if (workflowId) {
+    const { data: workflow } = await admin.from('approval_workflows').select('id').eq('id', workflowId).eq('org_id', guard.profile!.org_id!).maybeSingle()
+    if (!workflow) return { error: 'Workflow not found.' }
+  }
+
   const { error } = await admin
     .from('services')
     .update({ approval_workflow_id: workflowId })
     .eq('id', serviceId)
+    .eq('org_id', guard.profile!.org_id!)
 
   if (error) return { error: error.message }
 

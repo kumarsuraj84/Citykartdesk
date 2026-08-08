@@ -1,3 +1,10 @@
+# NOTE: production scheduling now runs on Railway via `scripts/cron-tick.mjs`,
+# not the Vercel `vercel.json` crons this file was originally written for.
+# See docs/RAILWAY-DEPLOYMENT.md § "Scheduled jobs" for the current setup
+# (all four jobs, including desktime-sync and intake-classify, which the
+# original Vercel-era config below doesn't cover). The curl examples and
+# `x-cron-secret` header below are still accurate for local testing.
+
 # Escalation Cron Setup
 
 ## Vercel: add to vercel.json: crons entry with path /api/escalation/run and schedule */15 * * * *

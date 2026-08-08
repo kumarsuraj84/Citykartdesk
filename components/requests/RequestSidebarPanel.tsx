@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { Loader2, UserPlus, X, ChevronDown, History } from 'lucide-react'
 import {
   updateRequestStatus,
@@ -82,8 +83,12 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
   }, [open])
 
   function pick(next: RequestStatus) {
+    const prev = cur
     setCur(next); setOpen(false)
-    startTransition(async () => { await updateRequestStatus(requestId, next) })
+    startTransition(async () => {
+      const result = await updateRequestStatus(requestId, next)
+      if (result?.error) { toast.error(result.error); setCur(prev) }
+    })
   }
 
   return (
@@ -130,8 +135,12 @@ function PriorityRow({ requestId, priority, isAgent }: {
   }, [open])
 
   function pick(p: RequestPriority) {
+    const prev = cur
     setCur(p); setOpen(false)
-    startTransition(async () => { await changePriority(requestId, p) })
+    startTransition(async () => {
+      const result = await changePriority(requestId, p)
+      if (result?.error) { toast.error(result.error); setCur(prev) }
+    })
   }
 
   return (
@@ -179,8 +188,12 @@ function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMember
   }, [open])
 
   function pick(id: string | null, name: string | null) {
+    const prevId = curId, prevName = curName
     setCurId(id); setCurName(name); setOpen(false)
-    startTransition(async () => { await assignRequest(requestId, id) })
+    startTransition(async () => {
+      const result = await assignRequest(requestId, id)
+      if (result?.error) { toast.error(result.error); setCurId(prevId); setCurName(prevName) }
+    })
   }
 
   return (

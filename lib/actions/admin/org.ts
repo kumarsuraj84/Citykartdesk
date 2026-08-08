@@ -73,7 +73,7 @@ export async function updateDepartment(
   if ('head_user_id' in fields) update.head_user_id = fields.head_user_id || null
   if (fields.is_active !== undefined) update.is_active = fields.is_active
 
-  const { error } = await admin.from('departments').update(update).eq('id', id)
+  const { error } = await admin.from('departments').update(update).eq('id', id).eq('org_id', guard.profile!.org_id!)
   if (error) return { error: error.message }
   revalidatePath('/admin/org')
   return {}
@@ -84,7 +84,7 @@ export async function deleteDepartment(id: string): Promise<ActionResult> {
   if (guard.error) return { error: guard.error }
 
   const admin = createAdminClient()
-  const { error } = await admin.from('departments').delete().eq('id', id)
+  const { error } = await admin.from('departments').delete().eq('id', id).eq('org_id', guard.profile!.org_id!)
   if (error) return { error: error.message }
   revalidatePath('/admin/org')
   return {}
@@ -214,7 +214,7 @@ export async function updateLocation(
   if (fields.timezone !== undefined) update.timezone = fields.timezone
   if (fields.is_active !== undefined) update.is_active = fields.is_active
 
-  const { error } = await admin.from('locations').update(update).eq('id', id)
+  const { error } = await admin.from('locations').update(update).eq('id', id).eq('org_id', guard.profile!.org_id!)
   if (error) return { error: error.message }
   revalidatePath('/admin/org')
   return {}
@@ -225,7 +225,7 @@ export async function deleteLocation(id: string): Promise<ActionResult> {
   if (guard.error) return { error: guard.error }
 
   const admin = createAdminClient()
-  const { error } = await admin.from('locations').delete().eq('id', id)
+  const { error } = await admin.from('locations').delete().eq('id', id).eq('org_id', guard.profile!.org_id!)
   if (error) return { error: error.message }
   revalidatePath('/admin/org')
   return {}
@@ -317,7 +317,7 @@ export async function updateCostCenter(
   if ('department_id' in fields) update.department_id = fields.department_id || null
   if (fields.is_active !== undefined) update.is_active = fields.is_active
 
-  const { error } = await admin.from('cost_centers').update(update).eq('id', id)
+  const { error } = await admin.from('cost_centers').update(update).eq('id', id).eq('org_id', guard.profile!.org_id!)
   if (error) return { error: error.message }
   revalidatePath('/admin/org')
   return {}
@@ -328,7 +328,7 @@ export async function deleteCostCenter(id: string): Promise<ActionResult> {
   if (guard.error) return { error: guard.error }
 
   const admin = createAdminClient()
-  const { error } = await admin.from('cost_centers').delete().eq('id', id)
+  const { error } = await admin.from('cost_centers').delete().eq('id', id).eq('org_id', guard.profile!.org_id!)
   if (error) return { error: error.message }
   revalidatePath('/admin/org')
   return {}
@@ -481,7 +481,7 @@ export async function updateUserOrgFields(
   if ('job_title' in fields) update.job_title = fields.job_title?.trim() || null
   if ('manager_id' in fields) update.manager_id = fields.manager_id || null
 
-  const { error } = await admin.from('profiles').update(update).eq('id', userId)
+  const { error } = await admin.from('profiles').update(update).eq('id', userId).eq('org_id', guard.profile!.org_id!)
   if (error) return { error: error.message }
   revalidatePath('/admin/users')
   revalidatePath('/admin/org')

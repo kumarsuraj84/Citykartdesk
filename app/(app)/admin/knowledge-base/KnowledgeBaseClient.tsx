@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { BookOpen, Plus, Eye, ThumbsUp, ThumbsDown, Pencil, Archive, CheckCircle } from 'lucide-react'
-import { createKbArticle, updateKbArticle, archiveKbArticle } from '@/lib/actions/knowledge-base'
+import { createKbArticle, updateKbArticle, archiveKbArticle, getKbArticleContent } from '@/lib/actions/knowledge-base'
 
 type ArticleStatus = 'draft' | 'published' | 'archived'
 
@@ -35,6 +35,7 @@ export function KnowledgeBaseClient({ articles: initial }: KnowledgeBaseClientPr
   const [form, setForm]         = useState({ title: '', content: '', status: 'draft' as ArticleStatus })
   const [error, setError]       = useState<string | null>(null)
   const [isPending, start]      = useTransition()
+  const [isLoadingContent, setIsLoadingContent] = useState(false)
 
   function openNew() {
     setForm({ title: '', content: '', status: 'draft' })
@@ -46,9 +47,17 @@ export function KnowledgeBaseClient({ articles: initial }: KnowledgeBaseClientPr
     setForm({ title: a.title, content: '', status: a.status })
     setEditing(a.id)
     setError(null)
+    setIsLoadingContent(true)
+    start(async () => {
+      const res = await getKbArticleContent(a.id)
+      setIsLoadingContent(false)
+      if (res.error) { setError(res.error); return }
+      setForm((f) => ({ ...f, content: res.content ?? '' }))
+    })
   }
 
   function handleSave() {
+    if (isLoadingContent) return
     if (!form.title.trim()) { setError('Title is required.'); return }
     setError(null)
     start(async () => {
@@ -95,9 +104,10 @@ export function KnowledgeBaseClient({ articles: initial }: KnowledgeBaseClientPr
             <textarea
               value={form.content}
               onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-              placeholder="Write article content in Markdown…"
+              placeholder={isLoadingContent ? 'Loading…' : 'Write article content in Markdown…'}
+              disabled={isLoadingContent}
               rows={12}
-              className="mt-1 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+              className="mt-1 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono disabled:opacity-60"
             />
           </div>
           <div>
@@ -116,7 +126,7 @@ export function KnowledgeBaseClient({ articles: initial }: KnowledgeBaseClientPr
           <div className="flex gap-2 pt-1">
             <button
               onClick={handleSave}
-              disabled={isPending}
+              disabled={isPending || isLoadingContent}
               className="btn-gradient"
             >
               {isPending ? 'Saving…' : 'Save'}

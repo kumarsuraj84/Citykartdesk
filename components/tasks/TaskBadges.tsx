@@ -32,7 +32,7 @@ export function TaskPriorityBadge({ priority }: { priority: TaskPriority }) {
     low:    'Low',
   }
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${classes[priority]}`}>
+    <span className={`chip-3d text-xs font-medium ${classes[priority]}`}>
       {labels[priority]}
     </span>
   )

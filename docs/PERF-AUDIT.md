@@ -1,6 +1,6 @@
 # Citykart Desk — Performance Audit (2026-06-21)
 
-Scope: Citykart Desk app (`cognix` repo) + its dedicated Supabase project
+Scope: Citykart Desk app + its dedicated Supabase project
 `jhdzjzrimjjtqwnkrwha`. HRMS untouched/out of scope. Findings below were produced by a
 three-track audit (data-fetching, caching/rendering, database) and then **manually
 verified** against the code — items that didn't hold up, or whose suggested fix is unsafe

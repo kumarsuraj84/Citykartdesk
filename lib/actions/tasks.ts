@@ -14,7 +14,7 @@ import {
 } from '@/lib/queries/tasks'
 import { getEnabledModules } from '@/lib/queries/profiles'
 import type { TaskStatus, TaskPriority, TaskType } from '@/types'
-import type { Json } from '@/types/database'
+import type { Json, Database } from '@/types/database'
 
 // ── Fetch subtasks (for table row expand) ────────────────────────────────────
 
@@ -276,28 +276,39 @@ export async function updateTaskField(
 
   const updatedAt = new Date().toISOString()
 
-  // Each field gets its own typed update to satisfy supabase's strict typegen
+  // Each field gets its own typed update to satisfy supabase's strict typegen.
+  // `tasks_update` RLS silently matches zero rows (not an error) for a task the
+  // caller isn't the creator/assignee/team-member/manager-admin of — chaining
+  // .select().maybeSingle() lets us tell "updated" from "no-op" apart and
+  // return a real error instead of a false success.
   let updateError: string | undefined
+  let updatedRow: { id: string } | null = null
   if (field === 'title') {
-    const { error } = await supabase.from('tasks').update({ title: value ?? '', updated_at: updatedAt }).eq('id', taskId)
+    const { data, error } = await supabase.from('tasks').update({ title: value ?? '', updated_at: updatedAt }).eq('id', taskId).select('id').maybeSingle()
     if (error) updateError = error.message
+    updatedRow = data
   } else if (field === 'description') {
-    const { error } = await supabase.from('tasks').update({ description: value, updated_at: updatedAt }).eq('id', taskId)
+    const { data, error } = await supabase.from('tasks').update({ description: value, updated_at: updatedAt }).eq('id', taskId).select('id').maybeSingle()
     if (error) updateError = error.message
+    updatedRow = data
   } else if (field === 'priority') {
-    const { error } = await supabase.from('tasks').update({ priority: value as TaskPriority, updated_at: updatedAt }).eq('id', taskId)
+    const { data, error } = await supabase.from('tasks').update({ priority: value as TaskPriority, updated_at: updatedAt }).eq('id', taskId).select('id').maybeSingle()
     if (error) updateError = error.message
+    updatedRow = data
   } else if (field === 'due_date') {
-    const { error } = await supabase.from('tasks').update({ due_date: value, updated_at: updatedAt }).eq('id', taskId)
+    const { data, error } = await supabase.from('tasks').update({ due_date: value, updated_at: updatedAt }).eq('id', taskId).select('id').maybeSingle()
     if (error) updateError = error.message
+    updatedRow = data
   } else if (field === 'assignee_id') {
-    const { error } = await supabase.from('tasks').update({ assignee_id: value, updated_at: updatedAt }).eq('id', taskId)
+    const { data, error } = await supabase.from('tasks').update({ assignee_id: value, updated_at: updatedAt }).eq('id', taskId).select('id').maybeSingle()
     if (error) updateError = error.message
+    updatedRow = data
   }
 
   const error = updateError ? { message: updateError } : null
 
   if (error) return { error: error.message }
+  if (!updatedRow) return { error: 'Task not found, or you do not have permission to edit it.' }
 
   if (field === 'assignee_id') {
     const action = value ? 'assigned' : 'unassigned'
@@ -340,7 +351,11 @@ export async function updateTaskSource(taskId: string, source: string | null): P
     .from('tasks')
     .select('source_metadata')
     .eq('id', taskId)
-    .single()
+    .maybeSingle()
+
+  // tasks_select RLS returns null (not an error) for a task the caller can't
+  // see — without this check the update below would silently no-op.
+  if (!current) return { error: 'Task not found, or you do not have permission to edit it.' }
 
   const meta = { ...((current as { source_metadata?: Record<string, unknown> | null } | null)?.source_metadata ?? {}) }
   if (source) meta.created_via = source
@@ -362,11 +377,14 @@ export async function updateTaskTags(taskId: string, tags: string[]): Promise<Ac
   if (!profile) return { error: 'Not authenticated.' }
   const clean = Array.from(new Set(tags.map(t => t.trim()).filter(Boolean))).slice(0, 20)
   const supabase = await createClient()
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('tasks')
     .update({ tags: clean, updated_at: new Date().toISOString() } as never)
     .eq('id', taskId)
+    .select('id')
+    .maybeSingle()
   if (error) return { error: error.message }
+  if (!data) return { error: 'Task not found, or you do not have permission to edit it.' }
   revalidatePath('/tasks'); revalidatePath(`/tasks/${taskId}`)
   return {}
 }
@@ -376,11 +394,14 @@ export async function updateTaskDates(taskId: string, startDate: string | null, 
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
   const supabase = await createClient()
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('tasks')
     .update({ start_date: startDate || null, due_date: dueDate || null, updated_at: new Date().toISOString() } as never)
     .eq('id', taskId)
+    .select('id')
+    .maybeSingle()
   if (error) return { error: error.message }
+  if (!data) return { error: 'Task not found, or you do not have permission to edit it.' }
   revalidatePath('/tasks'); revalidatePath(`/tasks/${taskId}`)
   return {}
 }
@@ -592,8 +613,9 @@ export async function removeTaskDependency(dependencyId: string): Promise<Action
   if (!profile) return { error: 'Not authenticated.' }
 
   const supabase = await createClient()
-  const { error } = await supabase.from('task_dependencies').delete().eq('id', dependencyId)
+  const { data, error } = await supabase.from('task_dependencies').delete().eq('id', dependencyId).select('id').maybeSingle()
   if (error) return { error: error.message }
+  if (!data) return { error: 'Dependency not found, or you do not have permission to remove it.' }
 
   refresh()
   return {}
@@ -610,22 +632,29 @@ export async function toggleSubtaskDone(subtaskId: string, done: boolean): Promi
   const newStatus: TaskStatus = done ? 'done' : 'open'
   const completedAt = done ? new Date().toISOString() : null
 
-  const { error } = await supabase.from('tasks').update({
+  const { data, error } = await supabase.from('tasks').update({
     status: newStatus,
     completed_at: completedAt,
     updated_at: new Date().toISOString(),
-  }).eq('id', subtaskId)
+  }).eq('id', subtaskId).select('id').maybeSingle()
 
   if (error) return { error: error.message }
+  if (!data) return { error: 'Task not found, or you do not have permission to edit it.' }
 
   revalidatePath('/tasks')
   return {}
 }
 
 // ── Custom field management ───────────────────────────────────────────────────
+// Deliberately uses the RLS-respecting client, not the admin client — the RLS
+// policies on these two tables (migration 013) already implement the intended
+// authorization exactly (team members read; manager/admin/creator write field
+// definitions; a task's creator/assignee/manager/admin write its field values),
+// so there is no legitimate reason to bypass them here.
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyClient = { from: (t: string) => any }
+function isAgentOrAboveRole(role: string): boolean {
+  return role === 'agent' || role === 'manager' || role === 'admin' || role === 'platform_owner'
+}
 
 export async function createCustomField(data: {
   teamId: string
@@ -635,16 +664,18 @@ export async function createCustomField(data: {
 }): Promise<{ data?: { id: string }; error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
+  if (!isAgentOrAboveRole(profile.role) && profile.team_members.length === 0) {
+    return { error: 'You do not have permission to manage custom fields.' }
+  }
 
-  // Use admin client — field schema management bypasses RLS (same pattern as task_activity)
-  const admin = createAdminClient() as unknown as AnyClient
+  const supabase = await createClient()
 
-  const { count } = await admin
+  const { count } = await supabase
     .from('task_custom_fields')
     .select('id', { count: 'exact', head: true })
     .eq('team_id', data.teamId)
 
-  const { data: field, error } = await admin
+  const { data: field, error } = await supabase
     .from('task_custom_fields')
     .insert({
       team_id: data.teamId,
@@ -668,13 +699,16 @@ export async function updateCustomField(fieldId: string, data: {
 }): Promise<ActionResult> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
+  if (!isAgentOrAboveRole(profile.role) && profile.team_members.length === 0) {
+    return { error: 'You do not have permission to manage custom fields.' }
+  }
 
-  const admin = createAdminClient() as unknown as AnyClient
-  const update: Record<string, unknown> = {}
+  const supabase = await createClient()
+  const update: Database['public']['Tables']['task_custom_fields']['Update'] = {}
   if (data.name !== undefined) update.name = data.name.trim()
   if (data.options !== undefined) update.options = data.options
 
-  const { error } = await admin.from('task_custom_fields').update(update).eq('id', fieldId)
+  const { error } = await supabase.from('task_custom_fields').update(update).eq('id', fieldId)
   if (error) return { error: error.message }
   revalidatePath('/tasks')
   return {}
@@ -683,9 +717,12 @@ export async function updateCustomField(fieldId: string, data: {
 export async function deleteCustomField(fieldId: string): Promise<ActionResult> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
+  if (!isAgentOrAboveRole(profile.role) && profile.team_members.length === 0) {
+    return { error: 'You do not have permission to manage custom fields.' }
+  }
 
-  const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('task_custom_fields').delete().eq('id', fieldId)
+  const supabase = await createClient()
+  const { error } = await supabase.from('task_custom_fields').delete().eq('id', fieldId)
   if (error) return { error: error.message }
   revalidatePath('/tasks')
   return {}
@@ -699,8 +736,8 @@ export async function setCustomFieldValue(
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
 
-  const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin
+  const supabase = await createClient()
+  const { error } = await supabase
     .from('task_custom_field_values')
     .upsert(
       { task_id: taskId, field_id: fieldId, value, updated_at: new Date().toISOString() },

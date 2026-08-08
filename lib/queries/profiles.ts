@@ -1,15 +1,28 @@
 import { cache } from 'react'
+import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import type { ModuleSlug, ProfileWithTeams } from '@/types'
 
 export const getCurrentProfile = cache(async function (): Promise<ProfileWithTeams | null> {
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // proxy.ts already verified the session for this exact request and forwards the
+  // result via this header — trust it instead of re-verifying with a second
+  // supabase.auth.getUser() network round-trip (proxy.ts always sets it, even to ''
+  // when unauthenticated, so a *missing* header only happens for requests that
+  // somehow bypassed middleware — fall back to a real check in that case).
+  const forwardedUserId = (await headers()).get('x-verified-user-id')
+  let userId: string | null
+  if (forwardedUserId !== null) {
+    userId = forwardedUserId || null
+  } else {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    userId = user?.id ?? null
+  }
 
-  if (!user) return null
+  if (!userId) return null
 
   const { data } = await supabase
     .from('profiles')
@@ -22,7 +35,7 @@ export const getCurrentProfile = cache(async function (): Promise<ProfileWithTea
         team:teams (*)
       )
     `)
-    .eq('id', user.id)
+    .eq('id', userId)
     .single()
 
   return data as ProfileWithTeams | null

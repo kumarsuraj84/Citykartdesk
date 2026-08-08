@@ -401,7 +401,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
     <div className="flex flex-col" style={{ minHeight: '480px', maxHeight: '70vh' }}>
       {/* Scrollable message thread */}
       <div className="flex-1 overflow-y-auto p-5 space-y-4 min-h-0">
-        <AttachmentChips attachments={attachments} />
+        <AttachmentChips attachments={attachments} currentUserId={profile.id} canManageAll={isAgent} />
 
         {request.status === 'waiting_user' && isRequester && !isAgent && (
           <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">

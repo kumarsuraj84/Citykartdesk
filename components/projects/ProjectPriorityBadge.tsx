@@ -1,5 +1,7 @@
 import type { ProjectPriority } from '@/types'
 
+export const PROJECT_PRIORITY_ORDER: ProjectPriority[] = ['P1', 'P2', 'P3']
+
 export const PROJECT_PRIORITY_STYLES: Record<ProjectPriority, string> = {
   P1: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400',
   P2: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
@@ -7,10 +9,7 @@ export const PROJECT_PRIORITY_STYLES: Record<ProjectPriority, string> = {
 }
 
 export function ProjectPriorityBadge({ priority, size = 'md' }: { priority: ProjectPriority; size?: 'sm' | 'md' }) {
-  const base =
-    size === 'sm'
-      ? 'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap shrink-0'
-      : 'inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap shrink-0'
+  const base = size === 'sm' ? 'chip-3d text-[10px] font-semibold' : 'chip-3d text-[11px] font-semibold'
 
   return <span className={`${base} ${PROJECT_PRIORITY_STYLES[priority]}`}>{priority}</span>
 }

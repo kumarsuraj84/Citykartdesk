@@ -143,6 +143,31 @@ export async function getProjectProgress(projectId: string): Promise<ProjectProg
   return progress
 }
 
+/** Same result as calling getProjectProgress() once per id, but in 2 queries
+ * total instead of 2×N — use this for any list/table view of multiple projects
+ * (getProjectProgress itself stays as the single-project detail-page version). */
+export async function getProjectsProgress(projectIds: string[]): Promise<Record<string, ProjectProgress>> {
+  const result: Record<string, ProjectProgress> = {}
+  for (const id of projectIds) result[id] = emptyProgress()
+  if (projectIds.length === 0) return result
+
+  const supabase = await createClient()
+  const [{ data: taskRows }, { data: requestRows }] = await Promise.all([
+    supabase.from('tasks').select('project_id, status').in('project_id', projectIds),
+    supabase.from('requests').select('project_id, status').in('project_id', projectIds),
+  ])
+
+  for (const row of taskRows ?? []) {
+    if (!row.project_id) continue
+    bucketTasks(result[row.project_id], [{ status: row.status }])
+  }
+  for (const row of requestRows ?? []) {
+    if (!row.project_id) continue
+    bucketRequests(result[row.project_id], [{ status: row.status }])
+  }
+  return result
+}
+
 // ── Milestones ────────────────────────────────────────────────────────────────
 
 export async function getMilestonesForProject(projectId: string): Promise<MilestoneWithDetails[]> {
@@ -277,12 +302,17 @@ export type ProjectStats = {
 }
 
 /** Org-wide status counts + staleness signal for the Projects dashboard header —
- * scans every non-archived project, not just the current page. */
-export async function getProjectStats(): Promise<ProjectStats> {
+ * scans every non-archived project, not just the current page.
+ * `latestUpdateByProject` is optional — pass it in when the caller already fetched
+ * it (e.g. the /projects page needs it for the table too) to avoid running the
+ * same project_updates scan twice; omit it to have this function fetch it itself. */
+export async function getProjectStats(
+  latestUpdateByProject?: Record<string, { updateDate: string; updateText: string }>
+): Promise<ProjectStats> {
   const supabase = await createClient()
   const [{ data: projects }, latestUpdates] = await Promise.all([
     supabase.from('projects').select('id, status').is('archived_at', null),
-    getLatestUpdateByProject(),
+    latestUpdateByProject ? Promise.resolve(latestUpdateByProject) : getLatestUpdateByProject(),
   ])
 
   const rows = projects ?? []
@@ -300,5 +330,7 @@ export async function getProjectStats(): Promise<ProjectStats> {
     if (!latest || latest < fiveDaysAgo) stale++
   }
 
-  return { total: rows.length, inProgress, notStarted, blocked, done, stale }
+  // Matches the 4 displayed cards (In Progress/Not Started/Blocked/Done) — cancelled
+  // projects are deliberately excluded so "Total" always reconciles with what's shown.
+  return { total: inProgress + notStarted + blocked + done, inProgress, notStarted, blocked, done, stale }
 }

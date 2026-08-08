@@ -56,6 +56,24 @@ export async function createKbArticle(
   return { article: data }
 }
 
+export async function getKbArticleContent(id: string): Promise<{ error?: string; content?: string }> {
+  const profile = await getCurrentProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+  if (!['manager', 'admin', 'platform_owner'].includes(profile.role)) {
+    return { error: 'Only managers and admins can edit articles.' }
+  }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('kb_articles')
+    .select('content')
+    .eq('id', id)
+    .single()
+
+  if (error || !data) return { error: error?.message ?? 'Article not found.' }
+  return { content: data.content ?? '' }
+}
+
 export async function updateKbArticle(
   id: string,
   title: string,

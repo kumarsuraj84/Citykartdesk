@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { Bell, Check, CheckCheck, Archive } from 'lucide-react'
 import {
   markNotificationRead,
@@ -163,26 +164,41 @@ export function NotificationsClient({
   const [isPending, startTransition] = useTransition()
 
   function handleRead(id: string) {
+    const prevNotifications = notifications
+    const prevUnreadCount = unreadCount
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n))
     )
     setUnreadCount((c) => Math.max(0, c - 1))
-    startTransition(() => { void markNotificationRead(id) })
+    startTransition(async () => {
+      const result = await markNotificationRead(id)
+      if (result?.error) { toast.error(result.error); setNotifications(prevNotifications); setUnreadCount(prevUnreadCount) }
+    })
   }
 
   function handleArchive(id: string) {
+    const prevNotifications = notifications
+    const prevUnreadCount = unreadCount
     const wasUnread = notifications.find((n) => n.id === id && !n.read_at)
     setNotifications((prev) => prev.filter((n) => n.id !== id))
     if (wasUnread) setUnreadCount((c) => Math.max(0, c - 1))
-    startTransition(() => { void archiveNotification(id) })
+    startTransition(async () => {
+      const result = await archiveNotification(id)
+      if (result?.error) { toast.error(result.error); setNotifications(prevNotifications); setUnreadCount(prevUnreadCount) }
+    })
   }
 
   function handleMarkAll() {
+    const prevNotifications = notifications
+    const prevUnreadCount = unreadCount
     setNotifications((prev) =>
       prev.map((n) => ({ ...n, read_at: n.read_at ?? new Date().toISOString() }))
     )
     setUnreadCount(0)
-    startTransition(() => { void markAllNotificationsRead() })
+    startTransition(async () => {
+      const result = await markAllNotificationsRead()
+      if (result?.error) { toast.error(result.error); setNotifications(prevNotifications); setUnreadCount(prevUnreadCount) }
+    })
   }
 
   const visible = notifications.filter((n) => {

@@ -11,7 +11,7 @@ app.use(express.json({ limit: '2mb' }))
 
 // ── Health ─────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'cognix-api', ts: new Date().toISOString() })
+  res.json({ status: 'ok', service: 'citykart-api', ts: new Date().toISOString() })
 })
 
 // ── Intake Intelligence routes (Phase B: ingestion) ────────────────────────
@@ -19,7 +19,7 @@ app.use('/intake', intakeRouter)
 
 // ── Start ──────────────────────────────────────────────────────────────────
 app.listen(port, '0.0.0.0', () => {
-  log.info(`cognix-api listening on port ${port}`)
+  log.info(`citykart-api listening on port ${port}`)
 })
 
 // ── Scheduler: poll mailboxes on an interval (off-Vercel) ──────────────────

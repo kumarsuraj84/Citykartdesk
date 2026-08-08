@@ -131,7 +131,7 @@ export async function exportRequestsCSV(orgId: string, f?: ExportFilters): Promi
   return toCSV(rows, columns)
 }
 
-export async function exportTasksCSV(orgId: string, f?: ExportFilters): Promise<string> {
+export async function exportTasksCSV(orgId: string, f?: ExportFilters, teamIds?: string[]): Promise<string> {
   // Service-role client — apply org_id filter explicitly to keep the export tenant-scoped.
   const admin = createAdminClient() as unknown as AnyClient
 
@@ -141,6 +141,10 @@ export async function exportTasksCSV(orgId: string, f?: ExportFilters): Promise<
       'id,title,status,priority,due_date,created_at,updated_at,assignee:profiles!assignee_id(full_name),request:requests(title)'
     )
     .eq('org_id', orgId)
+
+  // Non-admin/manager callers only export the team(s) they're on, not the whole org
+  // (undefined = org-wide, an already-verified admin/manager caller).
+  if (teamIds) query = query.in('team_id', teamIds)
 
   if (f?.status)      query = query.eq('status', f.status)
   if (f?.priority)    query = query.eq('priority', f.priority)
@@ -201,16 +205,22 @@ const PROJECT_STATUS_LABELS: Record<string, string> = {
   cancelled:   'Cancelled',
 }
 
-export async function exportProjectsCSV(orgId: string): Promise<string> {
+export async function exportProjectsCSV(orgId: string, teamIds?: string[]): Promise<string> {
   const admin = createAdminClient() as unknown as AnyClient
 
-  const { data, error } = await admin
+  let query = admin
     .from('projects')
     .select(
       'id,name,description,priority,status,start_date,target_date,owner:profiles!projects_owner_id_fkey(full_name),functional_owner:profiles!projects_functional_owner_id_fkey(full_name),team:teams(name)'
     )
     .eq('org_id', orgId)
     .is('archived_at', null)
+
+  // Non-admin/manager callers only export the team(s) they're on, not the whole org
+  // (undefined = org-wide, an already-verified admin/manager caller).
+  if (teamIds) query = query.in('team_id', teamIds)
+
+  const { data, error } = await query
     .order('created_at', { ascending: false })
     .limit(MAX_EXPORT_ROWS + 1)
 

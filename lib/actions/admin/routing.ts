@@ -24,11 +24,13 @@ export async function createAssignmentRule(data: {
 }): Promise<{ id?: string; error?: string }> {
   const profile = await requireAdminOrManager()
   if (!profile) return { error: 'Unauthorized.' }
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { data: rule, error } = await admin
     .from('assignment_rules')
     .insert({
+      org_id: profile.org_id,
       name: data.name.trim(),
       scope_type: data.scope_type,
       scope_id: data.scope_id,
@@ -71,7 +73,7 @@ export async function updateAssignmentRule(
   if ('priority_filter' in data) payload.priority_filter = data.priority_filter || null
   if (data.is_active !== undefined) payload.is_active = data.is_active
 
-  const { error } = await admin.from('assignment_rules').update(payload).eq('id', id)
+  const { error } = await admin.from('assignment_rules').update(payload).eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.message }
   revalidatePath('/admin/routing')
   return {}
@@ -82,7 +84,7 @@ export async function deleteAssignmentRule(id: string): Promise<{ error?: string
   if (!profile) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('assignment_rules').delete().eq('id', id)
+  const { error } = await admin.from('assignment_rules').delete().eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.message }
   revalidatePath('/admin/routing')
   return {}
@@ -100,6 +102,7 @@ export async function toggleRuleActive(
     .from('assignment_rules')
     .update({ is_active: isActive })
     .eq('id', id)
+    .eq('org_id', profile.org_id)
   if (error) return { error: error.message }
   revalidatePath('/admin/routing')
   return {}

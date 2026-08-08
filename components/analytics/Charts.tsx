@@ -458,8 +458,8 @@ export function PriorityBadge({ priority }: { priority: string }) {
   const color = PRIORITY_COLORS[priority] ?? 'var(--muted-foreground)'
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"
-      style={{ background: color }}
+      className="chip-3d gap-1 text-[10px] font-bold uppercase tracking-wide"
+      style={{ color }}
     >
       {priority}
     </span>

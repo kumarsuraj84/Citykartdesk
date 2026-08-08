@@ -1,8 +1,18 @@
 # Citykart Desk — Database Reference (Supabase / PostgreSQL)
 
-> Reconstructed from `supabase/migrations/**` (66 migrations) + `supabase/seed.sql`.
-> Runs on a local Supabase instance (Postgres + Auth + REST via the Supabase CLI).
-> See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for how the app uses this schema.
+> Reconstructed from `supabase/migrations/**` (87 migrations as of `20240101000087`) +
+> `supabase/seed.sql`. Runs on a local Supabase instance (Postgres + Auth + REST via the
+> Supabase CLI). See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for how the app uses this
+> schema.
+>
+> **Not yet reflected below** (migrations 067–087, ~24 migrations added after this doc's
+> last full reconstruction): the Projects/Milestones module (`projects`, `milestones`,
+> `project_members`, `project_updates` and their RLS — migrations 072–077, 082–084), the
+> DeskTime integration (`desktime_credentials`, sync tables — migrations 078–079), Job
+> Functions/Designations master data (migration 081), request sub-requests and task
+> dependencies (068–069), plus assorted RLS-hardening and notification-enum migrations.
+> Read those migration files directly for now rather than trusting this doc's table list
+> to be exhaustive for anything added after 2026-08-06.
 
 ---
 
@@ -226,11 +236,11 @@
   `trg_requests_assign_no` BEFORE INSERT.
 - **`get_enabled_modules() → module_slug[]`** — SECURITY DEFINER; enabled modules for the
   caller's org.
-- **Owner RPCs** (called by `cognix-owner`): `owner_get_cognix_orgs`,
-  `owner_get_org_detail`, `owner_get_org_users`, `owner_get_signup_requests`,
-  `owner_approve_signup_request`, `owner_reject_signup_request`, `owner_get_module_access`,
-  `owner_toggle_module`, `owner_issue_license`, `owner_create_cognix_user`, etc. See
-  [`OWNER-PORTAL.md`](./OWNER-PORTAL.md).
+- **`owner_delete_org(...)`** — SECURITY DEFINER (migration `20240101000065_owner_delete_org.sql`).
+  The only surviving RPC from a since-removed multi-tenant owner-portal scaffolding; all
+  the other `owner_*` RPCs that scaffolding relied on (org listing, signup approval,
+  module-access toggling, etc.) no longer exist in the database — this is a
+  single-tenant app now (see `ARCHITECTURE.md` §0).
 
 ### Trigger functions
 - `handle_new_user()` — create `profiles` row on `auth.users` insert.

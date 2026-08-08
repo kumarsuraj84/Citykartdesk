@@ -151,7 +151,7 @@ export function ReviewClient({
     setIsRead(next)
     startTransition(async () => {
       const r = await markMessageRead(review.message_id, next)
-      if (r.error) toast.error(r.error)
+      if (r.error) { toast.error(r.error); setIsRead(!next) }
     })
   }
 
@@ -160,8 +160,8 @@ export function ReviewClient({
     setIsArchived(next)
     startTransition(async () => {
       const r = await archiveMessage(review.message_id, next)
-      if (r.error) toast.error(r.error)
-      else toast.success(next ? 'Message archived.' : 'Message unarchived.')
+      if (r.error) { toast.error(r.error); setIsArchived(!next); return }
+      toast.success(next ? 'Message archived.' : 'Message unarchived.')
     })
   }
 
@@ -337,7 +337,7 @@ export function ReviewClient({
         {/* Subject + pills */}
         <div>
           <div className="mb-2 flex flex-wrap items-center gap-1.5">
-            <span className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-bold capitalize ${PRIORITY_PILL[priority]}`}>
+            <span className={`chip-3d gap-0.5 text-[10px] font-bold capitalize ${PRIORITY_PILL[priority]}`}>
               <Flame className="h-2.5 w-2.5" /> {priority}
             </span>
             <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold capitalize ${TYPE_PILL[type]}`}>{type}</span>

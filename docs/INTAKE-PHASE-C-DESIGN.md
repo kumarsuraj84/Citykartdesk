@@ -1,4 +1,4 @@
-# Cognix Intake Intelligence — Phase C Design (Classification Layer + Review Center)
+# Citykart Desk Intake Intelligence — Phase C Design (Classification Layer + Review Center)
 
 > **Status:** FOR APPROVAL — no Phase C code written yet.
 > **Premise:** The accepted ingestion architecture (channels → poll → normalize → dedup →

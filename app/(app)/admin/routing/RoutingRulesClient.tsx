@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { GitFork, Plus, Pencil, Trash2, ChevronDown, X, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AssignmentRule } from '@/lib/queries/routing'
@@ -350,6 +351,7 @@ function RuleModal({
   categories: { id: string; name: string; parent_id: string | null }[]
   profiles: Pick<Profile, 'id' | 'full_name' | 'role'>[]
 }) {
+  const router = useRouter()
   const [form, setForm] = useState<FormState>(() => formStateFromRule(editRule))
   const [saving, startSave] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -410,6 +412,7 @@ function RuleModal({
       if (result.error) {
         setError(result.error)
       } else {
+        router.refresh()
         onClose()
       }
     })
@@ -667,12 +670,14 @@ export function RoutingRulesClient({
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [, startDelete] = useTransition()
 
-  // Keep rules in sync with server data after revalidation
-  // (server component will re-render with fresh data after revalidatePath)
-  // We just reflect server props on mount; optimistic updates handled per-card
-  useState(() => {
+  // Resync `rules` whenever the server sends fresh `initialRules` (after
+  // router.refresh() following a create/update, triggered by RuleModal.submit).
+  // Adjusted during render, not an effect — same pattern as ProjectsTable.tsx.
+  const [prevInitialRules, setPrevInitialRules] = useState(initialRules)
+  if (prevInitialRules !== initialRules) {
+    setPrevInitialRules(initialRules)
     setRules(initialRules)
-  })
+  }
 
   function openCreate() {
     setEditTarget(null)

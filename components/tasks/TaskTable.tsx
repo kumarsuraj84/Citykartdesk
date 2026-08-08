@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect, Fragment, useCallback, memo } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { ChevronDown, ChevronRight, Plus, Loader2, Link2, Settings2, Trash2, CheckSquare, Check, Calendar, X, UserRound, Flag } from 'lucide-react'
 import { createTask, fetchSubtasks, deleteTask, updateTaskStatus, updateTaskField } from '@/lib/actions/tasks'
 import { assignTaskMilestone } from '@/lib/actions/projects'
@@ -125,7 +126,8 @@ function StatusCell({ taskId, status, onUpdate }: { taskId: string; status: Task
   function pick(next: TaskStatus, close: () => void) {
     if (next === status) { close(); return }
     startTransition(async () => {
-      await updateTaskStatus(taskId, next)
+      const result = await updateTaskStatus(taskId, next)
+      if (result?.error) { toast.error(result.error); close(); return }
       onUpdate(next)
       close()
     })
@@ -176,7 +178,8 @@ function PriorityCell({ taskId, priority, onUpdate }: { taskId: string; priority
   function pick(next: string, close: () => void) {
     const resolved = normalizeTaskPriority(next)
     startTransition(async () => {
-      await updateTaskField(taskId, 'priority', resolved)
+      const result = await updateTaskField(taskId, 'priority', resolved)
+      if (result?.error) { toast.error(result.error); close(); return }
       onUpdate(resolved)
       close()
     })
@@ -185,7 +188,7 @@ function PriorityCell({ taskId, priority, onUpdate }: { taskId: string; priority
   return (
     <CellPopover
       trigger={
-        <span className={`flex items-center gap-1.5 text-[12px] font-medium hover:opacity-70 transition-opacity cursor-pointer ${p.color}`}>
+        <span className={`chip-3d gap-1.5 text-[12px] font-medium ${p.color}`}>
           {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : (
             <><span className={`h-2 w-2 rounded-full ${p.dot}`} />{p.label}<ChevronDown className="h-2.5 w-2.5 opacity-60" /></>
           )}
@@ -221,7 +224,8 @@ function DueDateCell({ taskId, dueDate, status, onUpdate }: {
   function save(val: string, close: () => void) {
     const iso = val ? new Date(val).toISOString() : null
     startTransition(async () => {
-      await updateTaskField(taskId, 'due_date', iso)
+      const result = await updateTaskField(taskId, 'due_date', iso)
+      if (result?.error) { toast.error(result.error); close(); return }
       onUpdate(iso)
       close()
     })
@@ -229,7 +233,8 @@ function DueDateCell({ taskId, dueDate, status, onUpdate }: {
 
   function clear(close: () => void) {
     startTransition(async () => {
-      await updateTaskField(taskId, 'due_date', null)
+      const result = await updateTaskField(taskId, 'due_date', null)
+      if (result?.error) { toast.error(result.error); close(); return }
       onUpdate(null)
       close()
     })
@@ -282,7 +287,8 @@ function AssigneeCell({ taskId, assignee, profiles, onUpdate }: {
 
   function pick(p: { id: string; full_name: string } | null, close: () => void) {
     startTransition(async () => {
-      await updateTaskField(taskId, 'assignee_id', p?.id ?? null)
+      const result = await updateTaskField(taskId, 'assignee_id', p?.id ?? null)
+      if (result?.error) { toast.error(result.error); close(); return }
       onUpdate(p)
       close()
     })
@@ -350,7 +356,8 @@ function MilestoneCell({ taskId, milestoneId, milestones, onUpdate }: {
   function pick(id: string | null, close: () => void) {
     if (id === milestoneId) { close(); return }
     startTransition(async () => {
-      await assignTaskMilestone(taskId, id)
+      const result = await assignTaskMilestone(taskId, id)
+      if (result?.error) { toast.error(result.error); close(); return }
       onUpdate(id)
       close()
     })
@@ -409,9 +416,11 @@ function TitleCell({ taskId, title, status, subtaskCount, onUpdate, onExpand, is
 
   function save() {
     if (!val.trim() || val === title) { setEditing(false); return }
+    const trimmed = val.trim()
     startTransition(async () => {
-      await updateTaskField(taskId, 'title', val.trim())
-      onUpdate(val.trim())
+      const result = await updateTaskField(taskId, 'title', trimmed)
+      if (result?.error) { toast.error(result.error); setVal(title); setEditing(false); return }
+      onUpdate(trimmed)
       setEditing(false)
     })
   }

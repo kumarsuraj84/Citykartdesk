@@ -2,15 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notify, type NotifyInput } from '@/lib/notifications'
 import { sendEmail } from '@/lib/email/send'
-import type { NotificationType, UserRole } from '@/types'
-
-// notify() requires NotificationType, but these alert-generated notifications
-// use values that predate the enum (see the `notification_type_gaps` migration
-// comment — they are known DB-insert no-ops, unrelated to this lint pass).
-type LegacyAlertNotificationType = 'task_due_soon' | 'task_overdue' | 'daily_digest'
-function asNotificationType(type: LegacyAlertNotificationType): NotificationType {
-  return type as unknown as NotificationType
-}
+import { verifyCronSecret } from '@/lib/cron-auth'
+import type { UserRole } from '@/types'
 
 // profiles has no `email` column in the generated schema — email is fetched
 // separately via getUserEmail(). `email` is selected here for backward
@@ -22,13 +15,11 @@ function formatDueDate(d: string | null): string {
 }
 
 export async function GET(req: NextRequest) {
-  // CRON_SECRET must be configured — no secret = no access (prevents open cron endpoints)
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) {
+  const verified = verifyCronSecret(req)
+  if (verified === null) {
     return NextResponse.json({ error: 'CRON_SECRET is not configured.' }, { status: 503 })
   }
-  const secret = req.headers.get('x-cron-secret')
-  if (secret !== cronSecret) {
+  if (!verified) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -49,13 +40,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, results })
   }
 
-  // Helper: get profiles by role
-  async function getProfilesByRoles(roles: string[]): Promise<RoleProfile[]> {
+  // Helper: get profiles by role, scoped to one org (service-role client
+  // bypasses RLS, so every query in this route must filter by org_id itself —
+  // alert_rules is per-org, and each rule's own org_id is the source of truth
+  // for every entity/recipient lookup inside its branch below).
+  async function getProfilesByRoles(roles: string[], orgId: string | null): Promise<RoleProfile[]> {
+    if (!orgId) return []
     // `email` is not part of the generated profiles Row type (no such column
     // exists on the table) — narrow-cast the response rather than the client.
     const { data } = (await admin
       .from('profiles')
       .select('id, email')
+      .eq('org_id', orgId)
       .in('role', roles as unknown as UserRole[])) as unknown as { data: RoleProfile[] | null }
     return data ?? []
   }
@@ -71,6 +67,7 @@ export async function GET(req: NextRequest) {
   }
 
   for (const rule of rules) {
+    if (!rule.org_id) continue // orphaned rule with no org context — nothing safe to scope its queries to
     try {
       if (rule.alert_type === 'due_soon' && rule.entity_type === 'task') {
         // Tasks due between now and now+threshold_minutes, not done/cancelled
@@ -78,6 +75,7 @@ export async function GET(req: NextRequest) {
         const { data: tasks } = await admin
           .from('tasks')
           .select('id, title, assignee_id, due_date, request_id')
+          .eq('org_id', rule.org_id)
           .not('status', 'in', '("done","cancelled")')
           .gte('due_date', now.toISOString())
           .lte('due_date', windowEnd.toISOString())
@@ -90,7 +88,7 @@ export async function GET(req: NextRequest) {
             .from('notifications')
             .select('id')
             .eq('task_id', task.id)
-            .eq('type', asNotificationType('task_due_soon'))
+            .eq('type', 'task_due_soon')
             .gte('created_at', cutoff.toISOString())
             .limit(1)
 
@@ -99,15 +97,15 @@ export async function GET(req: NextRequest) {
           const recipients: string[] = []
           if (rule.notify_assignee && task.assignee_id) recipients.push(task.assignee_id)
           if (rule.notify_roles?.length) {
-            const roleProfiles = await getProfilesByRoles(rule.notify_roles)
+            const roleProfiles = await getProfilesByRoles(rule.notify_roles, rule.org_id)
             recipients.push(...roleProfiles.map((p) => p.id))
           }
           const uniqueRecipients = [...new Set(recipients)]
 
-          const notifications = uniqueRecipients.map((recipientId: string) => ({
+          const notifications = uniqueRecipients.map((recipientId: string): NotifyInput => ({
             recipientId,
             actorId: recipientId,
-            type: asNotificationType('task_due_soon'),
+            type: 'task_due_soon',
             title: `Task due soon: ${task.title}`,
             body: `Due at ${formatDueDate(task.due_date)}`,
             taskId: task.id,
@@ -140,6 +138,7 @@ export async function GET(req: NextRequest) {
         const { data: tasks } = await admin
           .from('tasks')
           .select('id, title, assignee_id, due_date, request_id')
+          .eq('org_id', rule.org_id)
           .not('status', 'in', '("done","cancelled")')
           .lt('due_date', now.toISOString())
 
@@ -149,7 +148,7 @@ export async function GET(req: NextRequest) {
             .from('notifications')
             .select('id')
             .eq('task_id', task.id)
-            .eq('type', asNotificationType('task_overdue'))
+            .eq('type', 'task_overdue')
             .gte('created_at', todayStart.toISOString())
             .limit(1)
 
@@ -158,15 +157,15 @@ export async function GET(req: NextRequest) {
           const recipients: string[] = []
           if (rule.notify_assignee && task.assignee_id) recipients.push(task.assignee_id)
           if (rule.notify_roles?.length) {
-            const roleProfiles = await getProfilesByRoles(rule.notify_roles)
+            const roleProfiles = await getProfilesByRoles(rule.notify_roles, rule.org_id)
             recipients.push(...roleProfiles.map((p) => p.id))
           }
           const uniqueRecipients = [...new Set(recipients)]
 
-          const notifications = uniqueRecipients.map((recipientId: string) => ({
+          const notifications = uniqueRecipients.map((recipientId: string): NotifyInput => ({
             recipientId,
             actorId: recipientId,
-            type: asNotificationType('task_overdue'),
+            type: 'task_overdue',
             title: `Task overdue: ${task.title}`,
             body: `Was due at ${formatDueDate(task.due_date)}`,
             taskId: task.id,
@@ -200,6 +199,7 @@ export async function GET(req: NextRequest) {
         const { data: milestones } = await admin
           .from('milestones')
           .select('id, name, end_date, project_id, project:projects(id, name, owner_id)')
+          .eq('org_id', rule.org_id)
           .not('status', 'in', '("done","cancelled")')
           .gte('end_date', now.toISOString().slice(0, 10))
           .lte('end_date', windowEnd.toISOString().slice(0, 10))
@@ -225,7 +225,7 @@ export async function GET(req: NextRequest) {
           const { data: members } = await admin.from('project_members').select('user_id').eq('project_id', project.id)
           for (const m of members ?? []) recipients.add(m.user_id)
           if (rule.notify_roles?.length) {
-            const roleProfiles = await getProfilesByRoles(rule.notify_roles)
+            const roleProfiles = await getProfilesByRoles(rule.notify_roles, rule.org_id)
             for (const p of roleProfiles) recipients.add(p.id)
           }
 
@@ -263,6 +263,7 @@ export async function GET(req: NextRequest) {
         const { data: milestones } = await admin
           .from('milestones')
           .select('id, name, end_date, project_id, project:projects(id, name, owner_id)')
+          .eq('org_id', rule.org_id)
           .not('status', 'in', '("done","cancelled")')
           .lt('end_date', now.toISOString().slice(0, 10))
 
@@ -286,7 +287,7 @@ export async function GET(req: NextRequest) {
           const { data: members } = await admin.from('project_members').select('user_id').eq('project_id', project.id)
           for (const m of members ?? []) recipients.add(m.user_id)
           if (rule.notify_roles?.length) {
-            const roleProfiles = await getProfilesByRoles(rule.notify_roles)
+            const roleProfiles = await getProfilesByRoles(rule.notify_roles, rule.org_id)
             for (const p of roleProfiles) recipients.add(p.id)
           }
 
@@ -325,6 +326,7 @@ export async function GET(req: NextRequest) {
         const { data: requests } = await admin
           .from('requests')
           .select('id, title, created_at')
+          .eq('org_id', rule.org_id)
           .is('assigned_to', null)
           .not('status', 'in', '("resolved","cancelled","closed")')
           .lt('created_at', cutoff.toISOString())
@@ -341,7 +343,7 @@ export async function GET(req: NextRequest) {
 
           if (existing && existing.length > 0) continue
 
-          const roleProfiles = await getProfilesByRoles(rule.notify_roles ?? ['manager'])
+          const roleProfiles = await getProfilesByRoles(rule.notify_roles ?? ['manager'], rule.org_id)
           const notifications: NotifyInput[] = roleProfiles.map((p) => ({
             recipientId: p.id,
             actorId: p.id,
@@ -363,16 +365,20 @@ export async function GET(req: NextRequest) {
         // Only run at hour 8, once per day
         if (now.getHours() !== 8) continue
 
+        const managers = await getProfilesByRoles(rule.notify_roles ?? ['manager', 'admin'], rule.org_id)
+        if (managers.length === 0) continue
+
+        // notifications has no org_id of its own — "already sent today" is scoped
+        // by recipient instead, so one org firing its digest doesn't skip another's.
         const { data: existingDigest } = await admin
           .from('notifications')
           .select('id')
-          .eq('type', asNotificationType('daily_digest'))
+          .eq('type', 'daily_digest')
+          .in('user_id', managers.map((m) => m.id))
           .gte('created_at', todayStart.toISOString())
           .limit(1)
 
         if (existingDigest && existingDigest.length > 0) continue
-
-        const managers = await getProfilesByRoles(rule.notify_roles ?? ['manager', 'admin'])
 
         // Build summary counts
         const [
@@ -381,21 +387,25 @@ export async function GET(req: NextRequest) {
           { count: pendingApprovalsCount },
         ] = await Promise.all([
           admin.from('requests').select('id', { count: 'exact', head: true })
+            .eq('org_id', rule.org_id)
             .not('status', 'in', '("resolved","cancelled","closed")'),
           admin.from('tasks').select('id', { count: 'exact', head: true })
+            .eq('org_id', rule.org_id)
             .not('status', 'in', '("done","cancelled")')
             .lt('due_date', now.toISOString()),
-          admin.from('approvals').select('id', { count: 'exact', head: true })
-            .eq('status', 'pending'),
+          // approvals has no org_id of its own — scope via its parent request.
+          admin.from('approvals').select('id, request:requests!inner(org_id)', { count: 'exact', head: true })
+            .eq('status', 'pending')
+            .eq('request.org_id', rule.org_id),
         ])
 
         const digestTitle = `Daily Digest — ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`
         const digestBody = `Open requests: ${openRequestsCount ?? 0} | Overdue tasks: ${overdueTasksCount ?? 0} | Pending approvals: ${pendingApprovalsCount ?? 0}`
 
-        const notifications = managers.map((p) => ({
+        const notifications = managers.map((p): NotifyInput => ({
           recipientId: p.id,
           actorId: p.id,
-          type: asNotificationType('daily_digest'),
+          type: 'daily_digest',
           title: digestTitle,
           body: digestBody,
           link: '/home',

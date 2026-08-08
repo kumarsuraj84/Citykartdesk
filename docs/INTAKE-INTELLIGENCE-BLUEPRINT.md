@@ -1,9 +1,10 @@
-# Cognix Intake Intelligence — Architecture & Implementation Blueprint
+# Citykart Desk Intake Intelligence — Architecture & Implementation Blueprint
 
 > **Status:** FOR APPROVAL — no module code written yet. This blueprint covers the 10
 > required deliverables (architecture assessment → implementation plan) plus the
 > worker/deployment design and the zero-regression strategy.
-> **Scope:** built **inside** the existing Cognix Desk monorepo (`suraj2build/cognix`),
+> **Scope:** built **inside** the existing Citykart Desk monorepo (`suraj2build/cognix` at
+> the time this doc was written — since renamed),
 > reusing its RLS, RBAC, audit, notifications, tenancy, module-gating and design system.
 > **Companion context:** `docs/ARCHITECTURE.md`, `docs/DATABASE.md`.
 
@@ -11,7 +12,7 @@
 
 ## 1. Architecture assessment (current platform — what we build on)
 
-| Concern | How Cognix Desk does it today | Intake reuses it by… |
+| Concern | How Citykart Desk does it today | Intake reuses it by… |
 |---|---|---|
 | Tenancy | `org_id` on every domain table; `current_org_id()` (SECURITY DEFINER) in RLS | Same `org_id` + `current_org_id()` on all `intake.*` tables |
 | AuthZ (coarse) | `user_role` enum: `user, agent, manager, admin, platform_owner` | Reused as `role_key`s |

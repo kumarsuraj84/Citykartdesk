@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runDeskTimeSync } from '@/lib/desktime/sync'
+import { verifyCronSecret } from '@/lib/cron-auth'
 
-// Daily DeskTime pull for every connected org — see .claude/cron.md for the
-// scheduling convention this mirrors (CRON_SECRET + x-cron-secret header,
-// same as /api/alerts/run and /api/escalation/run).
+// Daily DeskTime pull for every connected org — see .claude/cron.md and
+// docs/RAILWAY-DEPLOYMENT.md for the scheduling convention this mirrors
+// (CRON_SECRET, checked via lib/cron-auth.ts — same as the other cron routes).
 export async function GET(req: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) {
+  const verified = verifyCronSecret(req)
+  if (verified === null) {
     return NextResponse.json({ error: 'CRON_SECRET is not configured.' }, { status: 503 })
   }
-  const secret = req.headers.get('x-cron-secret')
-  if (secret !== cronSecret) {
+  if (!verified) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

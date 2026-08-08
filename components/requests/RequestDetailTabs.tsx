@@ -52,8 +52,8 @@ export function RequestDetailTabs({
         document.querySelector<HTMLTextAreaElement>('textarea')?.focus()
       }, 0)
     }
-    window.addEventListener('cognix:focus-comment', handleFocusComment)
-    return () => window.removeEventListener('cognix:focus-comment', handleFocusComment)
+    window.addEventListener('citykart:focus-comment', handleFocusComment)
+    return () => window.removeEventListener('citykart:focus-comment', handleFocusComment)
   }, [])
 
   const TABS = ALL_TABS.filter((t) => {

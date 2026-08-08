@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition, useRef, useEffect } from 'react'
+import { toast } from 'sonner'
 import { ChevronDown, Plus, Trash2, User, Flag, Calendar, UserRound } from 'lucide-react'
 import { createSubtask, toggleSubtaskDone, deleteTask } from '@/lib/actions/tasks'
 import type { TaskWithDetails, TaskPriority } from '@/types'
@@ -263,11 +264,16 @@ export function SubtaskList({ parentTaskId, initialSubtasks, profiles = [] }: Su
 
   function handleToggle(subtask: TaskWithDetails) {
     const done = subtask.status !== 'done'
+    const prevStatus = subtask.status
     setSubtasks((prev) =>
       prev.map((s) => s.id === subtask.id ? { ...s, status: done ? 'done' : 'open' } : s)
     )
     startTransition(async () => {
-      await toggleSubtaskDone(subtask.id, done)
+      const result = await toggleSubtaskDone(subtask.id, done)
+      if (result?.error) {
+        toast.error(result.error)
+        setSubtasks((prev) => prev.map((s) => s.id === subtask.id ? { ...s, status: prevStatus } : s))
+      }
     })
   }
 

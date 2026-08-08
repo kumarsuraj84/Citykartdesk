@@ -95,17 +95,6 @@ export async function getTaskTemplates(teamId?: string): Promise<TaskTemplate[]>
   return (data ?? []) as TaskTemplate[]
 }
 
-export async function getTaskTemplateWithItems(templateId: string): Promise<TaskTemplate | null> {
-  const admin = (await createClient()) as unknown as AnyClient // RLS: org-scoped to caller
-  const [{ data: tmpl }, { data: items }] = await Promise.all([
-    admin.from('task_templates').select('*').eq('id', templateId).single(),
-    admin.from('task_template_items').select('*').eq('template_id', templateId)
-      .order('position', { ascending: true }),
-  ])
-  if (!tmpl) return null
-  return { ...tmpl, items: items ?? [] } as TaskTemplate
-}
-
 // ── Monitoring Stats ─────────────────────────────────────────────────────────
 
 export type MonitoringStats = {
@@ -233,15 +222,21 @@ export async function getAuditLogs(opts: {
   // the caller's org, so an org admin only sees their own org's audit trail. (Was using the
   // service-role client with no org filter — leaked cross-org audit content.)
   const admin = (await createClient()) as unknown as AnyClient
-  const page = opts.page ?? 1
-  const perPage = opts.perPage ?? 50
+  const page = Math.max(1, Math.trunc(opts.page ?? 1) || 1)
+  const perPage = Math.min(200, Math.max(1, Math.trunc(opts.perPage ?? 50) || 50))
   const entityType = opts.entityType ?? 'all'
+
+  // Bounded, not truly paginated at the SQL level (these are two independently-sorted
+  // tables merged in JS, so a page boundary can't be pushed into a single `.range()` on
+  // either one) — but `.limit(page * perPage)` caps memory/transfer to the requested
+  // page depth instead of the entire org's activity history, which is the actual risk.
+  const rowCap = page * perPage
 
   const applyFilters = (q: ReturnType<AnyClient['from']>) => {
     if (opts.actorId) q = q.eq('actor_id', opts.actorId)
     if (opts.dateFrom) q = q.gte('created_at', opts.dateFrom)
     if (opts.dateTo) q = q.lte('created_at', opts.dateTo)
-    return q
+    return q.order('created_at', { ascending: false }).limit(rowCap)
   }
 
   const [rawRequests, rawTasks] = await Promise.all([

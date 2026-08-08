@@ -51,7 +51,7 @@ function SLARow({ row }: RowProps) {
   if (!editing) {
     return (
       <div className="grid grid-cols-[140px_1fr_1fr_1fr_100px] items-center border-b border-border/50 last:border-0 px-4 py-3">
-        <span className={`inline-flex w-fit rounded-full border px-2.5 py-0.5 text-xs font-semibold ${style.badge}`}>
+        <span className={`chip-3d w-fit text-xs font-semibold ${style.badge}`}>
           {style.label}
         </span>
         <span className="text-sm text-foreground tabular-nums">
@@ -79,7 +79,7 @@ function SLARow({ row }: RowProps) {
   return (
     <div className="border-b border-border/50 last:border-0 px-4 py-3 bg-muted/20 space-y-3">
       <div className="flex items-center gap-3">
-        <span className={`inline-flex w-fit rounded-full border px-2.5 py-0.5 text-xs font-semibold ${style.badge}`}>
+        <span className={`chip-3d w-fit text-xs font-semibold ${style.badge}`}>
           {style.label}
         </span>
         <span className="text-xs text-muted-foreground">Editing</span>

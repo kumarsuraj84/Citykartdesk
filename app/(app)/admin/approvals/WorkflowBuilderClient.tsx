@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { toast } from 'sonner'
 import {
   Plus, Trash2, ChevronDown, ChevronRight, Edit2, Save,
   ArrowUp, ArrowDown, GitMerge, Link2, Unlink,
@@ -12,6 +13,7 @@ import {
   upsertWorkflowStep,
   deleteWorkflowStep,
   bindWorkflowToService,
+  fetchWorkflowSteps,
 } from '@/lib/actions/admin/workflows'
 import type { ApprovalWorkflowSummary, ApprovalWorkflowStep } from '@/lib/queries/admin'
 
@@ -210,6 +212,8 @@ function WorkflowCard({
   const [editingName, setEditingName] = useState(false)
   const [name, setName]             = useState(workflow.name)
   const [steps, setSteps]           = useState<ApprovalWorkflowStep[]>(workflow.steps)
+  const [stepsLoaded, setStepsLoaded] = useState(false)
+  const [loadingSteps, setLoadingSteps] = useState(false)
   const [showAddStep, setShowAddStep] = useState(false)
   const [newApproverType, setNewApproverType] = useState<'specific_user' | 'any_manager'>('any_manager')
   const [newApproverUserId, setNewApproverUserId] = useState('')
@@ -217,6 +221,20 @@ function WorkflowCard({
   const [deleteError, setDeleteError] = useState('')
   const [bindError, setBindError]   = useState('')
   const [isPending, start]          = useTransition()
+
+  function toggleExpanded() {
+    const next = !expanded
+    setExpanded(next)
+    if (next && !stepsLoaded) {
+      setLoadingSteps(true)
+      start(async () => {
+        const result = await fetchWorkflowSteps(workflow.id)
+        setLoadingSteps(false)
+        setStepsLoaded(true)
+        if (result.data) setSteps(result.data)
+      })
+    }
+  }
 
   function handleRename() {
     if (!name.trim() || name === workflow.name) { setEditingName(false); return }
@@ -275,6 +293,7 @@ function WorkflowCard({
     const b = steps[swapIdx]
 
     // Optimistically reorder
+    const prevSteps = steps
     const reordered = steps.map((s) => {
       if (s.id === a.id) return { ...s, step_order: b.step_order }
       if (s.id === b.id) return { ...s, step_order: a.step_order }
@@ -283,10 +302,14 @@ function WorkflowCard({
     setSteps(reordered)
 
     // Persist both
-    await Promise.all([
+    const [ra, rb] = await Promise.all([
       upsertWorkflowStep({ id: a.id, workflowId: workflow.id, stepOrder: b.step_order, approverType: a.approver_type, approverUserId: a.approver_user_id }),
       upsertWorkflowStep({ id: b.id, workflowId: workflow.id, stepOrder: a.step_order, approverType: b.approver_type, approverUserId: b.approver_user_id }),
     ])
+    if (ra.error || rb.error) {
+      toast.error(ra.error ?? rb.error ?? 'Failed to reorder step.')
+      setSteps(prevSteps)
+    }
   }
 
   async function handleBind(serviceId: string, currentlyBound: boolean) {
@@ -315,7 +338,7 @@ function WorkflowCard({
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50">
         <button
-          onClick={() => setExpanded(!expanded)}
+          onClick={toggleExpanded}
           className="text-muted-foreground hover:text-foreground"
         >
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -343,7 +366,7 @@ function WorkflowCard({
         )}
 
         <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-          {steps.length} step{steps.length !== 1 ? 's' : ''}
+          {workflow.step_count} step{workflow.step_count !== 1 ? 's' : ''}
         </span>
         {workflow.services.length > 0 && (
           <span className="rounded-full bg-blue-50 border border-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-600">
@@ -375,7 +398,9 @@ function WorkflowCard({
               Approval Steps
             </h3>
 
-            {steps.length === 0 ? (
+            {loadingSteps ? (
+              <p className="py-3 text-center text-xs text-muted-foreground">Loading steps…</p>
+            ) : steps.length === 0 ? (
               <p className="py-3 text-center text-xs text-muted-foreground">
                 No steps yet. Add a step below.
               </p>

@@ -95,7 +95,7 @@ export function RequestActionBar({
 
   function handleAddNote() {
     setShowActions(false)
-    window.dispatchEvent(new CustomEvent('cognix:focus-comment'))
+    window.dispatchEvent(new CustomEvent('citykart:focus-comment'))
   }
 
   function handleToggleTimer() {

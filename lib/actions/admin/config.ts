@@ -61,10 +61,13 @@ export async function createTaskTemplate(data: {
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
+
   const admin = createAdminClient() as unknown as AnyClient
   const { data: tmpl, error } = await admin
     .from('task_templates')
     .insert({
+      org_id: profile.org_id,
       name: data.name.trim(),
       description: data.description?.trim() || null,
       team_id: data.teamId || null,
@@ -90,7 +93,7 @@ export async function updateTaskTemplate(
   if (data.name !== undefined) update.name = data.name.trim()
   if (data.description !== undefined) update.description = data.description.trim() || null
 
-  const { error } = await admin.from('task_templates').update(update).eq('id', id)
+  const { error } = await admin.from('task_templates').update(update).eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.message }
   revalidatePath('/admin/task-config')
   return {}
@@ -101,7 +104,7 @@ export async function deleteTaskTemplate(id: string): Promise<{ error?: string }
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('task_templates').delete().eq('id', id)
+  const { error } = await admin.from('task_templates').delete().eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.message }
   revalidatePath('/admin/task-config')
   return {}
@@ -120,6 +123,11 @@ export async function upsertTemplateItem(data: {
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
+
+  // task_template_items has no org_id of its own — scope via its parent template.
+  const { data: template } = await admin.from('task_templates').select('id').eq('id', data.templateId).eq('org_id', profile.org_id).maybeSingle()
+  if (!template) return { error: 'Template not found.' }
+
   const payload = {
     template_id:      data.templateId,
     title:            data.title.trim(),
@@ -131,6 +139,16 @@ export async function upsertTemplateItem(data: {
 
   let result
   if (data.id) {
+    // Also confirm the item being edited already belongs to an in-org template —
+    // otherwise a caller who knows another org's item id could reassign it
+    // (via the template_id in payload) into this org's template.
+    const { data: existingItem } = await admin
+      .from('task_template_items')
+      .select('id, task_templates!inner(org_id)')
+      .eq('id', data.id)
+      .eq('task_templates.org_id', profile.org_id)
+      .maybeSingle()
+    if (!existingItem) return { error: 'Template item not found.' }
     result = await admin.from('task_template_items').update(payload).eq('id', data.id).select('id').single()
   } else {
     result = await admin.from('task_template_items').insert(payload).select('id').single()
@@ -146,6 +164,14 @@ export async function deleteTemplateItem(id: string): Promise<{ error?: string }
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
+  const { data: existingItem } = await admin
+    .from('task_template_items')
+    .select('id, task_templates!inner(org_id)')
+    .eq('id', id)
+    .eq('task_templates.org_id', profile.org_id)
+    .maybeSingle()
+  if (!existingItem) return { error: 'Template item not found.' }
+
   const { error } = await admin.from('task_template_items').delete().eq('id', id)
   if (error) return { error: error.message }
   revalidatePath('/admin/task-config')
@@ -271,9 +297,11 @@ export type AlertRuleData = {
 export async function createAlertRule(data: AlertRuleData): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('alert_rules').insert({
+    org_id: profile.org_id,
     name: data.name.trim(),
     alert_type: data.alert_type,
     entity_type: data.entity_type,
@@ -298,7 +326,7 @@ export async function updateAlertRule(
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('alert_rules').update(data).eq('id', id)
+  const { error } = await admin.from('alert_rules').update(data).eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.message }
   revalidatePath('/admin/request-config')
   return {}
@@ -309,7 +337,7 @@ export async function deleteAlertRule(id: string): Promise<{ error?: string }> {
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('alert_rules').delete().eq('id', id)
+  const { error } = await admin.from('alert_rules').delete().eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.message }
   revalidatePath('/admin/request-config')
   return {}
@@ -320,7 +348,7 @@ export async function toggleAlertRule(id: string, is_active: boolean): Promise<{
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('alert_rules').update({ is_active }).eq('id', id)
+  const { error } = await admin.from('alert_rules').update({ is_active }).eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.message }
   revalidatePath('/admin/request-config')
   return {}
@@ -333,9 +361,10 @@ export async function toggleAlertRule(id: string, is_active: boolean): Promise<{
 export async function createTag(data: { name: string; color: string }): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('tags').insert({ name: data.name.trim(), color: data.color })
+  const { error } = await admin.from('tags').insert({ org_id: profile.org_id, name: data.name.trim(), color: data.color })
   if (error) return { error: error.message }
   revalidatePath('/admin/master-data')
   return {}
@@ -349,7 +378,7 @@ export async function updateTag(
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('tags').update(data).eq('id', id)
+  const { error } = await admin.from('tags').update(data).eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.message }
   revalidatePath('/admin/master-data')
   return {}
@@ -360,7 +389,7 @@ export async function deleteTag(id: string): Promise<{ error?: string }> {
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('tags').delete().eq('id', id)
+  const { error } = await admin.from('tags').delete().eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.message }
   revalidatePath('/admin/master-data')
   return {}

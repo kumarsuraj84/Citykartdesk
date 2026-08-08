@@ -2,7 +2,9 @@
 
 > **Purpose of this document.** A single, durable place to load full project context
 > from any device (desktop or mobile). It was reconstructed from the source of truth —
-> the code in this repo and the 66 Supabase migrations — plus the project briefing.
+> the code in this repo and the Supabase migrations (87 as of `20240101000087`, up from
+> 66 at last full reconstruction — see `DATABASE.md`'s header note for what's not yet
+> reflected) — plus the project briefing.
 > Companion doc:
 > - [`DATABASE.md`](./DATABASE.md) — complete schema (tables, enums, RPCs, RLS, indexes).
 
@@ -195,7 +197,7 @@ lib/constants/**             request-transitions (SSoT), styles/labels, canned r
 lib/supabase/{server,client,admin}.ts   Supabase clients
 components/{layout,requests,tasks,forms,admin,analytics,ui}/   UI
 types/{index,database}.ts    Domain types + generated Supabase types
-supabase/migrations/**       66 migrations (see DATABASE.md §evolution)
+supabase/migrations/**       87 migrations (see DATABASE.md §evolution)
 ```
 
 ---

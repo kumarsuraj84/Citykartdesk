@@ -9,12 +9,25 @@
  * Required env:
  *   CRON_SECRET            shared secret, must match the web service's value
  *   CRON_TARGET_URL        base URL of the deployed app
- *                          (e.g. https://cognix-production-c9d7.up.railway.app)
+ *                          (e.g. https://citykart-desk-production.up.railway.app)
  *
  * Optional env:
- *   CRON_JOBS              comma-separated list of job paths to run.
+ *   CRON_JOBS              comma-separated list of jobs to run.
  *                          Defaults to "escalation,alerts".
+ *                          Known names (see JOB_PATHS below): escalation, alerts,
+ *                          desktime-sync, intake-classify. An unrecognized name
+ *                          falls back to the legacy `/api/<name>/run` shape.
  */
+
+// Known job name -> route path. `escalation`/`alerts` fit the legacy
+// `/api/<name>/run` convention; `desktime-sync`/`intake-classify` don't
+// (different route shapes), so they need an explicit mapping.
+const JOB_PATHS = {
+  escalation: '/api/escalation/run',
+  alerts: '/api/alerts/run',
+  'desktime-sync': '/api/desktime/sync',
+  'intake-classify': '/api/intake/cron/classify',
+}
 
 const secret = process.env.CRON_SECRET
 const baseUrl = (process.env.CRON_TARGET_URL ?? '').replace(/\/$/, '')
@@ -35,7 +48,8 @@ if (!baseUrl) {
 let failed = 0
 
 for (const job of jobs) {
-  const url = `${baseUrl}/api/${job}/run`
+  const path = JOB_PATHS[job] ?? `/api/${job}/run`
+  const url = `${baseUrl}${path}`
   const startedAt = Date.now()
   try {
     const res = await fetch(url, {

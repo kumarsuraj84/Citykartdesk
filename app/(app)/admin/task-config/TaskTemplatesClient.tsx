@@ -101,7 +101,7 @@ function TemplateItemRow({
     <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-background px-3 py-2 group">
       <GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/30" />
       <span className="flex-1 text-sm text-foreground">{item.title}</span>
-      <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${PRIORITY_STYLES[item.default_priority]}`}>
+      <span className={`chip-3d text-[10px] font-semibold ${PRIORITY_STYLES[item.default_priority]}`}>
         {item.default_priority}
       </span>
       {item.due_offset_days != null && (

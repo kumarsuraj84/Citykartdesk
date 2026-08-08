@@ -21,6 +21,7 @@ export async function starReview(
     .from('intake_reviews')
     .update({ is_starred: starred })
     .eq('id', reviewId)
+    .eq('org_id', profile.org_id)
 
   if (error) return { error: error.message }
   revalidatePath('/intake/inbox')
@@ -43,6 +44,7 @@ export async function escalateReview(
       escalation_note: escalated ? (note ?? null) : null,
     })
     .eq('id', reviewId)
+    .eq('org_id', profile.org_id)
 
   if (error) return { error: error.message }
   revalidatePath('/intake/inbox')

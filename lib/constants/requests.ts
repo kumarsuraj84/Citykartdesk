@@ -42,6 +42,14 @@ export const PRIORITY_BADGE_STYLES: Record<string, string> = {
   urgent: 'bg-red-100 text-red-700',
 }
 
+export const PRIORITY_LABELS: Record<string, string> = {
+  low: 'Low', medium: 'Medium', high: 'High', urgent: 'Urgent',
+}
+
+export const PRIORITY_ARROWS: Record<string, string> = {
+  low: '↓', medium: '→', high: '↑', urgent: '↑↑',
+}
+
 // ── Terminal statuses ─────────────────────────────────────────────────────────
 
 /** Statuses that end the request lifecycle — no further transitions allowed. */

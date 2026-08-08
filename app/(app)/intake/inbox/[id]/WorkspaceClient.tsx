@@ -145,7 +145,8 @@ export function WorkspaceClient({
     const next = !isRead
     setIsRead(next)
     startTransition(async () => {
-      await markMessageRead(message.id, next)
+      const r = await markMessageRead(message.id, next)
+      if (r.error) { toast.error(r.error); setIsRead(!next) }
     })
   }
 

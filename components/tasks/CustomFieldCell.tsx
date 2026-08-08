@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { toast } from 'sonner'
 import { Check, ChevronDown } from 'lucide-react'
 import { setCustomFieldValue } from '@/lib/actions/tasks'
 import type { CustomField, CustomFieldValue } from '@/types'
@@ -96,9 +97,17 @@ export function CustomFieldCell({ taskId, field, value, onUpdate }: Props) {
   }
 
   function save(newVal: CustomFieldValue['value']) {
+    const prev = localVal
     setLocalVal(newVal)
     onUpdate(field.id, newVal)
-    startTransition(async () => { await setCustomFieldValue(taskId, field.id, newVal) })
+    startTransition(async () => {
+      const result = await setCustomFieldValue(taskId, field.id, newVal)
+      if (result?.error) {
+        toast.error(result.error)
+        setLocalVal(prev)
+        onUpdate(field.id, prev)
+      }
+    })
   }
 
   const openPicker = useCallback((e: React.MouseEvent) => {

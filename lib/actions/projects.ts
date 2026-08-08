@@ -43,8 +43,11 @@ export async function createProject(data: {
   description?: string
   teamId?: string
   ownerId: string
+  functionalOwnerId?: string
+  priority?: ProjectPriority
   startDate?: string
   targetDate?: string
+  referenceNotes?: string
 }): Promise<{ data?: { id: string }; error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
@@ -68,10 +71,13 @@ export async function createProject(data: {
       description: data.description?.trim() || null,
       team_id: data.teamId || null,
       owner_id: data.ownerId,
+      functional_owner_id: data.functionalOwnerId || null,
+      priority: data.priority,
       created_by: profile.id,
       org_id: profile.org_id,
       start_date: data.startDate || null,
       target_date: data.targetDate || null,
+      reference_notes: data.referenceNotes?.trim() || null,
     })
     .select('id')
     .single()
@@ -195,6 +201,7 @@ export async function updateProject(
     teamId?: string | null
     startDate?: string | null
     targetDate?: string | null
+    referenceNotes?: string | null
   }
 ): Promise<ActionResult> {
   const profile = await getCurrentProfile()
@@ -211,7 +218,11 @@ export async function updateProject(
 
   const oldStatus = current.status as ProjectStatus
 
-  const { error } = await supabase
+  // projects_select is org-wide (any member can see any project), but
+  // projects_update is narrower (owner, or manager/admin/platform_owner) — so
+  // the pre-fetch above can't be used as a "found" proxy for "allowed to edit".
+  // Chaining .select().maybeSingle() onto the update lets us detect that gap.
+  const { data: updated, error } = await supabase
     .from('projects')
     .update({
       ...(data.name !== undefined ? { name: data.name.trim() } : {}),
@@ -223,10 +234,14 @@ export async function updateProject(
       ...(data.teamId !== undefined ? { team_id: data.teamId } : {}),
       ...(data.startDate !== undefined ? { start_date: data.startDate } : {}),
       ...(data.targetDate !== undefined ? { target_date: data.targetDate } : {}),
+      ...(data.referenceNotes !== undefined ? { reference_notes: data.referenceNotes?.trim() || null } : {}),
     })
     .eq('id', id)
+    .select('id')
+    .maybeSingle()
 
   if (error) return { error: error.message }
+  if (!updated) return { error: 'You do not have permission to edit this project.' }
 
   if (data.status !== undefined && data.status !== oldStatus && profile.org_id) {
     await logProjectActivity({
@@ -251,12 +266,15 @@ export async function archiveProject(id: string): Promise<ActionResult> {
   if (!profile) return { error: 'Not authenticated.' }
 
   const supabase = await createClient()
-  const { error } = await supabase
+  const { data: archived, error } = await supabase
     .from('projects')
     .update({ archived_at: new Date().toISOString() })
     .eq('id', id)
+    .select('id')
+    .maybeSingle()
 
   if (error) return { error: error.message }
+  if (!archived) return { error: 'You do not have permission to archive this project.' }
 
   if (profile.org_id) {
     await logProjectActivity({ projectId: id, orgId: profile.org_id, actorId: profile.id, action: 'archived' })
@@ -280,12 +298,15 @@ export async function attachToProject(
   const supabase = await createClient()
   const table = entity === 'task' ? 'tasks' : 'requests'
 
-  const { error } = await supabase
+  const { data: attached, error } = await supabase
     .from(table)
     .update({ project_id: projectId })
     .eq('id', id)
+    .select('id')
+    .maybeSingle()
 
   if (error) return { error: error.message }
+  if (!attached) return { error: `You do not have permission to edit this ${entity}.` }
 
   if (projectId) revalidatePath(`/projects/${projectId}`)
   revalidatePath(entity === 'task' ? '/tasks' : '/requests')
@@ -380,10 +401,13 @@ export async function deleteMilestone(id: string): Promise<ActionResult> {
   if (!profile) return { error: 'Not authenticated.' }
 
   const supabase = await createClient()
-  const { data: milestone } = await supabase.from('milestones').select('project_id').eq('id', id).single()
+  // milestones_select is org-wide but milestones_delete is manager/admin-only,
+  // so this pre-fetch is for the revalidatePath path, not an authorization check.
+  const { data: milestone } = await supabase.from('milestones').select('project_id').eq('id', id).maybeSingle()
 
-  const { error } = await supabase.from('milestones').delete().eq('id', id)
+  const { data: deleted, error } = await supabase.from('milestones').delete().eq('id', id).select('id').maybeSingle()
   if (error) return { error: error.message }
+  if (!deleted) return { error: 'You do not have permission to delete this enhancement.' }
 
   if (milestone) revalidatePath(`/projects/${milestone.project_id}`)
   refresh()
@@ -395,8 +419,9 @@ export async function assignTaskMilestone(taskId: string, milestoneId: string | 
   if (!profile) return { error: 'Not authenticated.' }
 
   const supabase = await createClient()
-  const { error } = await supabase.from('tasks').update({ milestone_id: milestoneId }).eq('id', taskId)
+  const { data, error } = await supabase.from('tasks').update({ milestone_id: milestoneId }).eq('id', taskId).select('id').maybeSingle()
   if (error) return { error: error.message }
+  if (!data) return { error: 'You do not have permission to edit this task.' }
 
   refresh()
   return {}
@@ -433,12 +458,15 @@ export async function removeProjectMember(projectId: string, userId: string): Pr
   if (!profile) return { error: 'Not authenticated.' }
 
   const supabase = await createClient()
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('project_members')
     .delete()
     .eq('project_id', projectId)
     .eq('user_id', userId)
+    .select('project_id')
+    .maybeSingle()
   if (error) return { error: error.message }
+  if (!data) return { error: 'You do not have permission to remove this member.' }
 
   revalidatePath(`/projects/${projectId}`)
   refresh()
@@ -484,8 +512,9 @@ export async function deleteProjectUpdate(id: string, projectId: string): Promis
   if (!profile) return { error: 'Not authenticated.' }
 
   const supabase = await createClient()
-  const { error } = await supabase.from('project_updates').delete().eq('id', id)
+  const { data, error } = await supabase.from('project_updates').delete().eq('id', id).select('id').maybeSingle()
   if (error) return { error: error.message }
+  if (!data) return { error: 'You do not have permission to delete this update.' }
 
   revalidatePath(`/projects/${projectId}`)
   refresh()

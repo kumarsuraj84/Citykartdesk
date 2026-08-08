@@ -2,15 +2,15 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { Trash2 } from 'lucide-react'
 import { updateMilestone, deleteMilestone } from '@/lib/actions/projects'
 import { NewTaskPanel } from '@/components/tasks/NewTaskPanel'
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_STYLES } from './ProjectStatusBadge'
-import { PROJECT_PRIORITY_STYLES } from './ProjectPriorityBadge'
+import { PROJECT_PRIORITY_STYLES, PROJECT_PRIORITY_ORDER as PRIORITY_ORDER } from './ProjectPriorityBadge'
 import type { MilestoneWithDetails, ProjectProgress, ProjectStatus, ProjectPriority } from '@/types'
 
 const STATUS_ORDER: ProjectStatus[] = ['not_started', 'in_progress', 'blocked', 'done', 'cancelled']
-const PRIORITY_ORDER: ProjectPriority[] = ['P1', 'P2', 'P3']
 
 function ProgressCell({ milestoneId, value, onSaving }: { milestoneId: string; value: number; onSaving: (v: boolean) => void }) {
   const router = useRouter()
@@ -19,11 +19,13 @@ function ProgressCell({ milestoneId, value, onSaving }: { milestoneId: string; v
 
   function commit(next: number) {
     const clamped = Math.max(0, Math.min(100, next))
+    const prev = value
     setLocal(clamped)
     if (clamped === value) return
     onSaving(true)
     startTransition(async () => {
-      await updateMilestone(milestoneId, { percentComplete: clamped })
+      const r = await updateMilestone(milestoneId, { percentComplete: clamped })
+      if (r.error) { toast.error(r.error); setLocal(prev); onSaving(false); return }
       router.refresh()
       onSaving(false)
     })
@@ -69,7 +71,8 @@ export function MilestoneTable({
   function patch(id: string, data: Parameters<typeof updateMilestone>[1]) {
     setSavingId(id)
     startTransition(async () => {
-      await updateMilestone(id, data)
+      const r = await updateMilestone(id, data)
+      if (r.error) { toast.error(r.error); setSavingId((cur) => (cur === id ? null : cur)); return }
       router.refresh()
       setSavingId((cur) => (cur === id ? null : cur))
     })
@@ -78,7 +81,8 @@ export function MilestoneTable({
   function handleDelete(m: MilestoneWithDetails) {
     if (!confirm(`Delete enhancement "${m.name}"? Linked tasks keep their status but lose this link.`)) return
     startTransition(async () => {
-      await deleteMilestone(m.id)
+      const r = await deleteMilestone(m.id)
+      if (r.error) { toast.error(r.error); return }
       router.refresh()
     })
   }
@@ -129,7 +133,7 @@ export function MilestoneTable({
                   <select
                     value={m.priority}
                     onChange={(e) => patch(m.id, { priority: e.target.value as ProjectPriority })}
-                    className={`${selectCls} ${PROJECT_PRIORITY_STYLES[m.priority]}`}
+                    className={`chip-3d w-full appearance-none text-xs focus:outline-none focus:ring-1 focus:ring-ring ${PROJECT_PRIORITY_STYLES[m.priority]}`}
                   >
                     {PRIORITY_ORDER.map((p) => <option key={p} value={p}>{p}</option>)}
                   </select>

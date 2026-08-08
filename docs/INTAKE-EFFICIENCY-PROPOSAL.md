@@ -1,4 +1,4 @@
-# Cognix Intake — Triage Efficiency Proposal (Action Layer)
+# Citykart Desk Intake — Triage Efficiency Proposal (Action Layer)
 
 > **Status:** FOR APPROVAL — diagnosis + phased plan, no module code written yet (the two
 > shipped changes referenced in §2 are the only code so far).
@@ -12,7 +12,7 @@
 ## 1. The problem (why intake doesn't feel like it's saving time)
 
 The owner's words: *"if I need to review this much, I'll just read the mail."* That is the
-correct diagnosis. Today Cognix Intake is **a classifier bolted onto a second inbox**:
+correct diagnosis. Today Citykart Desk's intake is **a classifier bolted onto a second inbox**:
 
 ```
 mail → classify (type/dept/priority/confidence)  ✅ good
@@ -55,7 +55,7 @@ Two changes landed before this doc and the rest builds on them:
 The market has moved past "classify + manual queue." The throughline is **"only touch the
 messages that need your brain"** — the AI acts *before* a human sees it.
 
-| Pattern | Source | Cognix gap |
+| Pattern | Source | Gap |
 |---|---|---|
 | **Auto-route before a human looks** — intent → category + team + queue automatically | [Front "Topics"](https://front.com/blog/ai-email-management); [Missive AI Rules](https://missiveapp.com/blog/autopilot-for-your-inbox-ai-rules-have-arrived) | No auto-routing; `suggested_department` never maps to a team/service |
 | **Chained auto-actions on arrival** — assign, label, create task, log to CRM | [Missive](https://missiveapp.com/blog/6-ways-to-use-ai-in-your-email-inbox) | Conversion is 100% manual |
@@ -64,7 +64,7 @@ messages that need your brain"** — the AI acts *before* a human sees it.
 | **Draft the reply** for routine threads — approve, don't compose | [Front/Superhuman Copilot](https://front.com/blog/ai-email-management) | No draft generation |
 | **Prioritize by urgency + importance + sentiment + VIP** | [BoldDesk](https://www.bolddesk.com/blogs/ai-email-triage); [Kommunicate](https://www.kommunicate.io/blog/ai-email-routing-and-prioritization/) | Queue is chronological |
 
-**Takeaway:** Cognix already owns the hard part — a clean, provider-agnostic, multi-stage
+**Takeaway:** Citykart Desk already owns the hard part — a clean, provider-agnostic, multi-stage
 pipeline. What's missing is the **action layer**. Everything below is additive and reuses
 existing infrastructure (RLS, audit, the public `createRequest`/`createTask` actions).
 

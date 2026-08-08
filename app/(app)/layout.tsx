@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { AppShell } from '@/components/layout/AppShell'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { getCurrentProfile, getEnabledModules, getTrialInfo, getNavCounts } from '@/lib/queries/profiles'
 import { getNotifications } from '@/lib/queries/notifications'
 import { TrialBanner } from '@/components/layout/TrialBanner'
@@ -59,7 +60,7 @@ export default async function AppLayout({
         navCountsPromise={navCountsPromise}
         notificationsPromise={notificationsPromise}
       >
-        {children}
+        <ErrorBoundary>{children}</ErrorBoundary>
       </AppShell>
     </>
   )

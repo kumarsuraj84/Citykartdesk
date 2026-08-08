@@ -1,35 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { verifyCronSecret } from '@/lib/cron-auth'
 import type { Json } from '@/types/database'
 
 function isJsonObject(v: Json | null | undefined): v is { [key: string]: Json | undefined } {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
-// Vercel cron: runs every 5 minutes (see vercel.json).
+// Runs on a schedule (see docs/RAILWAY-DEPLOYMENT.md — scripts/cron-tick.mjs's
+// `intake-classify` job, every few minutes).
 // Checks whether any intake_messages lack a final classification and, if so,
 // fires the worker's reclassify endpoint once.  The worker is idempotent —
 // it skips messages that already have is_final=true — so double-runs are safe.
-//
-// Auth: Vercel sets the Authorization header to `Bearer ${CRON_SECRET}` on
-// every cron invocation. We also accept the old x-cron-secret header so
-// manual test calls (curl -H "x-cron-secret: ...") keep working.
 export async function GET(req: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) {
+  const verified = verifyCronSecret(req)
+  if (verified === null) {
     return NextResponse.json({ error: 'CRON_SECRET is not configured.' }, { status: 503 })
   }
-
-  // Vercel cron sends: Authorization: Bearer <CRON_SECRET>
-  const authHeader = req.headers.get('authorization') ?? ''
-  const legacyHeader = req.headers.get('x-cron-secret') ?? ''
-  const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : legacyHeader
-  if (provided !== cronSecret) {
+  if (!verified) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const rawWorkerUrl = process.env.INTAKE_WORKER_URL
-  const workerSecret = process.env.INTAKE_WORKER_SECRET ?? cronSecret
+  const workerSecret = process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
   if (!rawWorkerUrl || !workerSecret) {
     return NextResponse.json({ skipped: true, reason: 'Worker not configured.' })
   }

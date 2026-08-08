@@ -7,17 +7,17 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { ExportButton } from '@/components/requests/ExportButton'
 import { exportProjects } from '@/lib/actions/export'
 import { getCurrentProfile, getAllProfiles } from '@/lib/queries/profiles'
-import { getProjects, getProjectProgress, getProjectStats, getAllTeamsMini, getLatestUpdateByProject } from '@/lib/queries/projects'
+import { getProjects, getProjectsProgress, getProjectStats, getAllTeamsMini, getLatestUpdateByProject } from '@/lib/queries/projects'
 import { NewProjectPanel } from '@/components/projects/NewProjectPanel'
 import { BulkUploadProjectsDialog } from '@/components/projects/BulkUploadProjectsDialog'
 import { ProjectCard } from '@/components/projects/ProjectCard'
 import { ProjectsTable } from '@/components/projects/ProjectsTable'
 import { ProjectStatsCards } from '@/components/projects/ProjectStatsCards'
 import { Pagination } from '@/components/ui/Pagination'
-import type { ProjectProgress, ProjectStatus, ProjectPriority } from '@/types'
+import { PROJECT_PRIORITY_ORDER as PRIORITIES } from '@/components/projects/ProjectPriorityBadge'
+import type { ProjectStatus, ProjectPriority } from '@/types'
 
 const STATUSES: ProjectStatus[] = ['not_started', 'in_progress', 'blocked', 'done', 'cancelled']
-const PRIORITIES: ProjectPriority[] = ['P1', 'P2', 'P3']
 
 interface PageProps {
   searchParams: Promise<{ layout?: string; page?: string; pageSize?: string; search?: string; status?: string; priority?: string; owner?: string }>
@@ -37,21 +37,19 @@ export default async function ProjectsPage({ searchParams }: PageProps) {
   const priority = PRIORITIES.includes(sp.priority as ProjectPriority) ? (sp.priority as ProjectPriority) : undefined
   const ownerId = sp.owner?.trim() || undefined
 
-  const [result, profiles, teams, latestUpdateByProject, stats] = await Promise.all([
-    getProjects({ page, pageSize, search, status, priority, ownerId }),
+  const projectsPromise = getProjects({ page, pageSize, search, status, priority, ownerId })
+  const latestUpdateByProjectPromise = getLatestUpdateByProject()
+
+  const [result, progressByProject, profiles, teams, latestUpdateByProject, stats] = await Promise.all([
+    projectsPromise,
+    projectsPromise.then((r) => getProjectsProgress(r.data.map((p) => p.id))),
     getAllProfiles(),
     getAllTeamsMini(),
-    getLatestUpdateByProject(),
-    getProjectStats(),
+    latestUpdateByProjectPromise,
+    latestUpdateByProjectPromise.then((u) => getProjectStats(u)),
   ])
 
   const projects = result.data
-  const progressByProject: Record<string, ProjectProgress> = {}
-  await Promise.all(
-    projects.map(async (p) => {
-      progressByProject[p.id] = await getProjectProgress(p.id)
-    })
-  )
 
   // Only the true zero-projects-in-the-org state gets the onboarding empty
   // state — a search/filter that matches nothing keeps the controls visible

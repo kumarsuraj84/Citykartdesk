@@ -75,8 +75,6 @@ export async function testStage2(): Promise<TestStage2Result> {
 // intake_classifications / intake_reviews rows as it processes, so polling these
 // counts shows real-time movement without any cross-service plumbing.
 export async function getReclassifyProgress(): Promise<ReclassifyProgress> {
-  const supabase = (await createClient()) as unknown as AnyClient
-
   const empty: ReclassifyProgress = {
     totalMessages: 0,
     classified: 0,
@@ -85,6 +83,17 @@ export async function getReclassifyProgress(): Promise<ReclassifyProgress> {
     avgConfidence: 0,
     stage2Attempts: 0,
   }
+
+  // RLS on intake_messages/intake_classifications already org-scopes every row
+  // (see migrations 053/055), so this check is defense-in-depth for consistency
+  // with this file's other two functions, not the only thing standing between
+  // an anonymous caller and cross-org data.
+  const profile = await getCurrentProfile()
+  if (!profile || !['agent', 'manager', 'admin', 'platform_owner'].includes(profile.role)) {
+    return empty
+  }
+
+  const supabase = (await createClient()) as unknown as AnyClient
 
   // Total ingested messages (the denominator).
   const { count: totalMessages } = await supabase

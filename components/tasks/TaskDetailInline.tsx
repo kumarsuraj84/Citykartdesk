@@ -3,6 +3,7 @@
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import {
   Loader2, Plus, X, Flag, Mail, ExternalLink, FileText,
   CalendarDays, Tag as TagIcon,
@@ -118,33 +119,84 @@ export function TaskDetailInline({
   function saveTitle() {
     const val = titleValue.trim()
     if (!val || val === task.title) { setEditingTitle(false); return }
-    startTransition(async () => { await updateTaskField(task.id, 'title', val); setEditingTitle(false); router.refresh() })
+    startTransition(async () => {
+      const result = await updateTaskField(task.id, 'title', val)
+      if (result?.error) { toast.error(result.error); setTitleValue(task.title); setEditingTitle(false); return }
+      setEditingTitle(false); router.refresh()
+    })
   }
   function saveDesc() {
     const val = descValue.trim()
-    startTransition(async () => { await updateTaskField(task.id, 'description', val || null); setEditingDesc(false); router.refresh() })
+    const prev = task.description ?? ''
+    startTransition(async () => {
+      const result = await updateTaskField(task.id, 'description', val || null)
+      if (result?.error) { toast.error(result.error); setDescValue(prev); setEditingDesc(false); return }
+      setEditingDesc(false); router.refresh()
+    })
   }
-  function changeStatus(v: string) { setStatus(v); startTransition(async () => { await updateTaskStatus(task.id, v as TaskStatus); router.refresh() }) }
-  function changePriority(v: string) { setPriority(v); startTransition(async () => { await updateTaskField(task.id, 'priority', v); router.refresh() }) }
-  function saveDates(s: string, d: string) { startTransition(async () => { await updateTaskDates(task.id, s || null, d || null); router.refresh() }) }
+  function changeStatus(v: string) {
+    const prev = status
+    setStatus(v)
+    startTransition(async () => {
+      const result = await updateTaskStatus(task.id, v as TaskStatus)
+      if (result?.error) { toast.error(result.error); setStatus(prev); return }
+      router.refresh()
+    })
+  }
+  function changePriority(v: string) {
+    const prev = priority
+    setPriority(v)
+    startTransition(async () => {
+      const result = await updateTaskField(task.id, 'priority', v)
+      if (result?.error) { toast.error(result.error); setPriority(prev); return }
+      router.refresh()
+    })
+  }
+  function saveDates(s: string, d: string) {
+    const prevStart = startDate, prevDue = dueDate
+    startTransition(async () => {
+      const result = await updateTaskDates(task.id, s || null, d || null)
+      if (result?.error) { toast.error(result.error); setStartDate(prevStart); setDueDate(prevDue); return }
+      router.refresh()
+    })
+  }
 
   function addAssignee(p: ProfileMini) {
     setAssignees(prev => [...prev, p]); setAssignOpen(false)
-    startTransition(async () => { await addTaskAssignee(task.id, p.id); router.refresh() })
+    startTransition(async () => {
+      const result = await addTaskAssignee(task.id, p.id)
+      if (result?.error) { toast.error(result.error); setAssignees(prev => prev.filter(a => a.id !== p.id)); return }
+      router.refresh()
+    })
   }
   function removeAssignee(id: string) {
+    const removed = assignees.find(a => a.id === id)
     setAssignees(prev => prev.filter(a => a.id !== id))
-    startTransition(async () => { await removeTaskAssignee(task.id, id); router.refresh() })
+    startTransition(async () => {
+      const result = await removeTaskAssignee(task.id, id)
+      if (result?.error) { toast.error(result.error); if (removed) setAssignees(prev => [...prev, removed]); return }
+      router.refresh()
+    })
   }
   function addTag() {
     const t = tagInput.trim()
     if (!t || tags.includes(t)) { setTagInput(''); return }
+    const prev = tags
     const next = [...tags, t]; setTags(next); setTagInput('')
-    startTransition(async () => { await updateTaskTags(task.id, next); router.refresh() })
+    startTransition(async () => {
+      const result = await updateTaskTags(task.id, next)
+      if (result?.error) { toast.error(result.error); setTags(prev); return }
+      router.refresh()
+    })
   }
   function removeTag(t: string) {
+    const prev = tags
     const next = tags.filter(x => x !== t); setTags(next)
-    startTransition(async () => { await updateTaskTags(task.id, next); router.refresh() })
+    startTransition(async () => {
+      const result = await updateTaskTags(task.id, next)
+      if (result?.error) { toast.error(result.error); setTags(prev); return }
+      router.refresh()
+    })
   }
 
   return (

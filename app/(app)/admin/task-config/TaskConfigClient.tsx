@@ -82,6 +82,7 @@ function TaskStatusBuilder({ initialStatuses }: { initialStatuses: TaskStatus[] 
   const [error, setError] = useState('')
 
   function move(index: number, dir: -1 | 1) {
+    const prev = statuses
     const next = [...statuses]
     const target = index + dir
     if (target < 0 || target >= next.length) return
@@ -89,7 +90,9 @@ function TaskStatusBuilder({ initialStatuses }: { initialStatuses: TaskStatus[] 
     next.forEach((s, i) => (s.display_order = i))
     setStatuses(next)
     start(async () => {
-      await reorderTaskStatuses(next.map((s) => s.id))
+      const result = await reorderTaskStatuses(next.map((s) => s.id))
+      if (result.error) { setError(result.error); setStatuses(prev); return }
+      setError('')
     })
   }
 
@@ -312,6 +315,7 @@ function TaskPriorityBuilder({ initialPriorities }: { initialPriorities: TaskPri
   const [error, setError] = useState('')
 
   function move(index: number, dir: -1 | 1) {
+    const prev = priorities
     const next = [...priorities]
     const target = index + dir
     if (target < 0 || target >= next.length) return
@@ -320,9 +324,12 @@ function TaskPriorityBuilder({ initialPriorities }: { initialPriorities: TaskPri
     setPriorities(next)
     // Reorder via individual updates
     start(async () => {
-      await Promise.all(
+      const results = await Promise.all(
         next.map((p, i) => updateTaskPriority(p.id, { display_order: i }))
       )
+      const failed = results.find((r) => r.error)
+      if (failed) { setError(failed.error!); setPriorities(prev); return }
+      setError('')
     })
   }
 

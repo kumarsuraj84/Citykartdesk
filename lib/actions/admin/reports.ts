@@ -34,11 +34,13 @@ async function requireAdminOrManager() {
 export async function getScheduledReports(): Promise<{ data?: ScheduledReport[]; error?: string }> {
   const profile = await requireAdminOrManager()
   if (!profile) return { error: 'Unauthorized.' }
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('scheduled_reports')
     .select('*')
+    .eq('org_id', profile.org_id)
     .order('created_at', { ascending: false })
 
   if (error) return { error: error.message }
@@ -55,11 +57,13 @@ export async function createScheduledReport(data: {
 }): Promise<{ data?: { id: string }; error?: string }> {
   const profile = await requireAdminOrManager()
   if (!profile) return { error: 'Unauthorized.' }
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const admin = createAdminClient()
   const { data: row, error } = await admin
     .from('scheduled_reports')
     .insert({
+      org_id: profile.org_id,
       name: data.name.trim(),
       report_type: data.report_type,
       frequency: data.frequency,
@@ -89,13 +93,14 @@ export async function updateScheduledReport(
 ): Promise<{ error?: string }> {
   const profile = await requireAdminOrManager()
   if (!profile) return { error: 'Unauthorized.' }
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const admin = createAdminClient()
   const update: Database['public']['Tables']['scheduled_reports']['Update'] = {
     ...data,
     filters: data.filters !== undefined ? (data.filters as unknown as Json) : undefined,
   }
-  const { error } = await admin.from('scheduled_reports').update(update).eq('id', id)
+  const { error } = await admin.from('scheduled_reports').update(update).eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.message }
   revalidatePath('/admin/reports')
   return {}
@@ -104,9 +109,10 @@ export async function updateScheduledReport(
 export async function deleteScheduledReport(id: string): Promise<{ error?: string }> {
   const profile = await requireAdminOrManager()
   if (!profile) return { error: 'Unauthorized.' }
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const admin = createAdminClient()
-  const { error } = await admin.from('scheduled_reports').delete().eq('id', id)
+  const { error } = await admin.from('scheduled_reports').delete().eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.message }
   revalidatePath('/admin/reports')
   return {}
@@ -115,15 +121,18 @@ export async function deleteScheduledReport(id: string): Promise<{ error?: strin
 export async function sendScheduledReport(id: string): Promise<{ error?: string }> {
   const profile = await requireAdminOrManager()
   if (!profile) return { error: 'Unauthorized.' }
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const admin = createAdminClient()
   const { data: report, error: fetchErr } = await admin
     .from('scheduled_reports')
     .select('*')
     .eq('id', id)
-    .single()
+    .eq('org_id', profile.org_id)
+    .maybeSingle()
 
-  if (fetchErr || !report) return { error: fetchErr?.message ?? 'Report not found.' }
+  if (fetchErr) return { error: fetchErr.message }
+  if (!report) return { error: 'Report not found.' }
   if (!report.org_id) return { error: 'Report has no organization context.' }
 
   const orgId = report.org_id

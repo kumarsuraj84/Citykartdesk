@@ -477,7 +477,7 @@ export function InboxList({
                         <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold capitalize ${TYPE_PILL[r.suggested_type] ?? 'border-slate-200 bg-slate-100 text-slate-500'}`}>{r.suggested_type}</span>
                       )}
                       {prio && (
-                        <span className={`inline-flex shrink-0 items-center gap-0.5 rounded border px-1.5 py-0.5 text-[9px] font-bold capitalize ${PRIORITY_PILL[prio] ?? 'border-slate-200 bg-slate-100 text-slate-500'}`}>
+                        <span className={`chip-3d shrink-0 gap-0.5 text-[9px] font-bold capitalize ${PRIORITY_PILL[prio] ?? 'text-slate-500'}`}>
                           <Flame className="h-2.5 w-2.5" />{prio}
                         </span>
                       )}

@@ -88,6 +88,7 @@ export async function updateTeam(id: string, name: string): Promise<ActionResult
     .from('teams')
     .update({ name: name.trim() })
     .eq('id', id)
+    .eq('org_id', guard.profile!.org_id!)
 
   if (error) return { error: error.message }
 
@@ -102,6 +103,9 @@ export async function deleteTeam(id: string): Promise<ActionResult> {
   if (guard.error) return { error: guard.error }
 
   const admin = createAdminClient()
+
+  const { data: team } = await admin.from('teams').select('id').eq('id', id).eq('org_id', guard.profile!.org_id!).maybeSingle()
+  if (!team) return { error: 'Team not found.' }
 
   // Check for members
   const { count: memberCount } = await admin
@@ -124,7 +128,7 @@ export async function deleteTeam(id: string): Promise<ActionResult> {
     return { error: 'Cannot delete a team with open requests.' }
   }
 
-  const { error } = await admin.from('teams').delete().eq('id', id)
+  const { error } = await admin.from('teams').delete().eq('id', id).eq('org_id', guard.profile!.org_id!)
   if (error) return { error: error.message }
 
   revalidatePath('/admin/teams')
@@ -140,11 +144,13 @@ export async function addTeamMember(teamId: string, userId: string): Promise<Act
   const admin = createAdminClient()
 
   // team_members.org_id is NOT NULL with no DB default — resolve it from the
-  // parent team rather than trusting the caller's session org.
+  // parent team rather than trusting the caller's session org. Also confirms
+  // the team belongs to the caller's own org before adding anyone to it.
   const { data: team } = await admin
     .from('teams')
     .select('org_id')
     .eq('id', teamId)
+    .eq('org_id', guard.profile!.org_id!)
     .maybeSingle()
 
   if (!team?.org_id) return { error: 'Team not found or has no organization context.' }
@@ -172,6 +178,7 @@ export async function removeTeamMember(teamId: string, userId: string): Promise<
     .delete()
     .eq('team_id', teamId)
     .eq('user_id', userId)
+    .eq('org_id', guard.profile!.org_id!)
 
   if (error) return { error: error.message }
 

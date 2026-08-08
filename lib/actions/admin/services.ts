@@ -90,6 +90,7 @@ export async function saveFormSections(
     .from('services')
     .update({ form_sections: normalised })
     .eq('id', serviceId)
+    .eq('org_id', guard.profile!.org_id!)
 
   if (error) {
     console.error('[saveFormSections]', error.code, error.message, error.details)

@@ -2,7 +2,7 @@
  * Shared badge primitives for request status, priority, and SLA.
  * All badge styles source from lib/constants/requests — no duplicates.
  */
-import { STATUS_LABELS, STATUS_STYLES, PRIORITY_BADGE_STYLES } from '@/lib/constants/requests'
+import { STATUS_LABELS, STATUS_STYLES, PRIORITY_BADGE_STYLES, PRIORITY_LABELS, PRIORITY_ARROWS } from '@/lib/constants/requests'
 import type { RequestStatus, RequestPriority } from '@/types'
 
 // ── Status Badge ──────────────────────────────────────────────────────────────
@@ -33,19 +33,11 @@ interface PriorityBadgeProps {
   size?: 'sm' | 'md'
 }
 
-const PRIORITY_LABELS: Record<string, string> = {
-  low: 'Low', medium: 'Medium', high: 'High', urgent: 'Urgent',
-}
-
-const PRIORITY_ARROWS: Record<string, string> = {
-  low: '↓', medium: '→', high: '↑', urgent: '↑↑',
-}
-
 export function PriorityBadge({ priority, size = 'md' }: PriorityBadgeProps) {
   const base =
     size === 'sm'
-      ? 'inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium whitespace-nowrap shrink-0'
-      : 'inline-flex items-center gap-1 rounded px-2.5 py-0.5 text-xs font-medium whitespace-nowrap shrink-0'
+      ? 'chip-3d gap-1 text-[11px] font-medium'
+      : 'chip-3d gap-1 text-xs font-medium'
 
   return (
     <span className={`${base} ${PRIORITY_BADGE_STYLES[priority] ?? 'bg-gray-100 text-gray-600'}`}>
