@@ -36,6 +36,19 @@ async function DeferredSidebar({
   return <Sidebar profile={profile} navVisibility={navVisibility} navCounts={navCounts} className="hidden lg:flex" />
 }
 
+async function DeferredMobileNav({
+  promise,
+  profile,
+  navVisibility,
+}: {
+  promise: Promise<NavCounts>
+  profile: ProfileWithTeams
+  navVisibility: NavVisibility
+}) {
+  const navCounts = await promise
+  return <MobileNav profile={profile} navVisibility={navVisibility} navCounts={navCounts} />
+}
+
 async function DeferredNotificationBell({
   navCountsPromise,
   notificationsPromise,
@@ -115,7 +128,9 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
         </main>
       </div>
 
-      <MobileNav navVisibility={navVisibility} />
+      <Suspense fallback={<MobileNav profile={profile} navVisibility={navVisibility} navCounts={ZERO_COUNTS} />}>
+        <DeferredMobileNav promise={navCountsPromise} profile={profile} navVisibility={navVisibility} />
+      </Suspense>
     </div>
   )
 }

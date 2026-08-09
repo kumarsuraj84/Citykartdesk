@@ -344,7 +344,7 @@ async function DashboardBody({
   const TABS = [
     { id: 'requests' as const, label: 'Requests', icon: FileText, show: hasRequests,
       badge: isAgent ? myQueue.length : myOpenCount },
-    { id: 'tasks' as const, label: 'Tasks', icon: ListTodo, show: hasTasks && isAgent,
+    { id: 'tasks' as const, label: 'Tasks', icon: ListTodo, show: hasTasks && (isAgent || isManager),
       badge: myTasksOverdue + myTasksDueToday },
     { id: 'projects' as const, label: 'Projects', icon: FolderKanban, show: hasProjects,
       badge: projectsAtRiskCount },
@@ -514,7 +514,7 @@ async function DashboardBody({
           })()}
 
           {/* TASKS TAB */}
-          {tab === 'tasks' && hasTasks && isAgent && (() => {
+          {tab === 'tasks' && hasTasks && (isAgent || isManager) && (() => {
             const hasOverdue = myTasksOverdue > 0
             const hasToday   = myTasksDueToday > 0
 

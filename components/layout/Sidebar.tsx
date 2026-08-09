@@ -8,7 +8,7 @@ import {
   BarChart3, Activity, Settings, Monitor, BookOpenText,
   Users, Tag, GitBranch, Building2, Database, Workflow,
   LogOut, BookOpen, KeyRound, ChevronDown, Sparkles, Filter,
-  PanelLeftClose, PanelLeftOpen, Timer,
+  PanelLeftClose, PanelLeftOpen, Timer, Table2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/actions/auth'
@@ -20,6 +20,8 @@ interface SidebarProps {
   navVisibility: NavVisibility
   navCounts: NavCounts
   className?: string
+  /** Used inside the mobile nav drawer: always renders expanded, no collapse toggle. */
+  forceExpanded?: boolean
 }
 
 type NavItem = {
@@ -43,7 +45,7 @@ function getInitials(name: string): string {
   return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-export function Sidebar({ profile, navVisibility, navCounts, className }: SidebarProps) {
+export function Sidebar({ profile, navVisibility, navCounts, className, forceExpanded }: SidebarProps) {
   const pathname = usePathname()
   const { isAdmin, isManager, isAgent, enabledModules } = navVisibility
   const has = (m: string) => enabledModules.includes(m as never)
@@ -87,6 +89,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className }: Sideba
       show: isManager || isAdmin,
       items: [
         { label: 'Dashboards', href: '/admin/reports',  icon: BarChart3 },
+        { label: 'Report Builder', href: '/admin/reports/pivot', icon: Table2 },
         { label: 'DeskTime',   href: '/admin/desktime',  icon: Timer     },
         { label: 'Audit Logs', href: '/admin/audit',    icon: Activity  },
       ],
@@ -151,6 +154,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className }: Sideba
   const [collapsed, setCollapsed]       = useState(false)
 
   useEffect(() => {
+    if (forceExpanded) return
     try {
       const saved = localStorage.getItem('fd-nav')
       if (saved) {
@@ -162,7 +166,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className }: Sideba
       }
       setCollapsed(localStorage.getItem('fd-nav-collapsed') === '1')
     } catch { /* ignore */ }
-  }, [])
+  }, [forceExpanded])
 
   function toggleCollapsed() {
     setCollapsed(prev => {
@@ -222,21 +226,25 @@ export function Sidebar({ profile, navVisibility, navCounts, className }: Sideba
     )
   }
 
+  const isCollapsed = !forceExpanded && collapsed
+
   return (
-    <aside className={cn('flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200', collapsed ? 'w-16' : 'w-[200px]', className)}>
+    <aside className={cn('flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200', isCollapsed ? 'w-16' : 'w-[200px]', className)}>
       {/* Collapse toggle */}
-      <div className={cn('flex shrink-0 items-center px-2 pt-2', collapsed ? 'justify-center' : 'justify-end')}>
-        <button
-          onClick={toggleCollapsed}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="grid h-7 w-7 place-items-center rounded-md text-sidebar-muted hover:bg-muted hover:text-foreground transition-colors"
-        >
-          {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-        </button>
-      </div>
+      {!forceExpanded && (
+        <div className={cn('flex shrink-0 items-center px-2 pt-2', isCollapsed ? 'justify-center' : 'justify-end')}>
+          <button
+            onClick={toggleCollapsed}
+            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="grid h-7 w-7 place-items-center rounded-md text-sidebar-muted hover:bg-muted hover:text-foreground transition-colors"
+          >
+            {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
+        </div>
+      )}
 
       {/* Collapsed icon rail — flat list of all items, tooltips on hover */}
-      {collapsed ? (
+      {isCollapsed ? (
         <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 space-y-1">
           {flatItems.map(item => {
             const Icon = item.icon
@@ -321,7 +329,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className }: Sideba
 
       {/* User footer */}
       <div className="shrink-0 border-t border-sidebar-border p-3">
-        {collapsed ? (
+        {isCollapsed ? (
           <div className="flex flex-col items-center gap-2">
             <div className="h-8 w-8 shrink-0 rounded-lg bg-gradient-to-br from-primary-glow to-primary grid place-items-center text-primary-foreground text-xs font-bold shadow-sm" title={profile.full_name}>
               {getInitials(profile.full_name)}
