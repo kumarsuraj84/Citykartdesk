@@ -4,11 +4,11 @@ import { useEffect, useState, useTransition } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import Image from 'next/image'
 import { Loader2, Lock, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { BrandLogo } from '@/components/layout/BrandLogo'
 import { resetPassword } from '@/lib/actions/auth'
 import { createClient } from '@/lib/supabase/client'
 
@@ -90,15 +90,8 @@ export default function ResetPasswordPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-8">
-        <div className="space-y-2 text-center">
-          <Image
-            src="/citykart-desk-icon.png"
-            alt="Citykart Desk"
-            width={56}
-            height={56}
-            className="mx-auto rounded-xl"
-            priority
-          />
+        <div className="space-y-4 text-center">
+          <BrandLogo height={110} className="justify-center" priority />
           <h1 className="text-2xl font-semibold tracking-tight">Set new password</h1>
           <p className="text-sm text-muted-foreground">
             Choose a strong password for your account.

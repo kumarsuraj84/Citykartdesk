@@ -5,11 +5,11 @@ import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import Image from 'next/image'
 import { Loader2, Mail, Lock, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { BrandLogo } from '@/components/layout/BrandLogo'
 import { signInWithPassword } from '@/lib/actions/auth'
 
 const passwordSchema = z.object({
@@ -130,15 +130,8 @@ export default function LoginPage() {
       <div className="w-full max-w-sm space-y-8">
 
         {/* Logo + heading */}
-        <div className="space-y-2 text-center">
-          <Image
-            src="/citykart-desk-logo-full.png"
-            alt="Citykart Desk"
-            width={220}
-            height={110}
-            className="mx-auto h-16 w-auto rounded-2xl"
-            priority
-          />
+        <div className="space-y-4 text-center">
+          <BrandLogo height={110} className="justify-center" priority />
           <h1 className="text-2xl font-semibold tracking-tight">Sign in to Citykart Desk</h1>
           <p className="text-sm text-muted-foreground">
             Your company&apos;s service management platform

@@ -1,11 +1,11 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { Sidebar } from './Sidebar'
 import { MobileNav } from './MobileNav'
 import { NotificationBell } from './NotificationBell'
 import { GlobalSearch } from './GlobalSearch'
 import { ThemeSwitcher } from './ThemeSwitcher'
+import { BrandLogo } from './BrandLogo'
 import type { ProfileWithTeams, NavVisibility, NotificationWithActor } from '@/types'
 import type { NavCounts } from '@/lib/queries/profiles'
 
@@ -71,21 +71,11 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
     <div className="flex h-screen flex-col overflow-hidden bg-background">
 
       {/* ── Dark top bar (full width) ─────────────────────────────────────── */}
-      <header className="flex h-14 shrink-0 items-center gap-4 px-4 border-b border-black/10 bg-[image:var(--gradient-nav)] z-40">
+      <header className="flex h-16 shrink-0 items-center gap-4 px-4 border-b border-black/10 bg-[image:var(--gradient-nav)] z-40">
 
         {/* Brand — matches sidebar width */}
-        <Link href="/home" className="flex w-[196px] shrink-0 items-center gap-2.5">
-          <Image
-            src="/citykart-desk-icon.png"
-            alt="Citykart Desk"
-            width={32}
-            height={32}
-            className="h-8 w-8 rounded-xl object-cover shadow-sm shrink-0"
-          />
-          <div className="leading-none">
-            <p className="font-extrabold text-[14px] tracking-tight text-white">Citykart Desk</p>
-            <p className="text-[8px] uppercase tracking-[0.18em] text-white/60 mt-0.5">Service Desk</p>
-          </div>
+        <Link href="/home" className="flex w-[196px] shrink-0 items-center">
+          <BrandLogo height={44} className="rounded-lg bg-white px-2.5 py-1.5 shadow-sm" priority />
         </Link>
 
         {/* Search — centred in remaining space */}
