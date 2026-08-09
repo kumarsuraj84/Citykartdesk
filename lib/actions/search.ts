@@ -5,7 +5,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 
 export type SearchResult = {
   id: string
-  type: 'request' | 'task' | 'service' | 'user' | 'approval'
+  type: 'request' | 'task' | 'project' | 'service' | 'user' | 'approval'
   title: string
   subtitle?: string
   href: string
@@ -16,13 +16,14 @@ export type SearchResult = {
 export type GroupedSearchResults = {
   requests: SearchResult[]
   tasks: SearchResult[]
+  projects: SearchResult[]
   services: SearchResult[]
   users: SearchResult[]
   approvals: SearchResult[]
 }
 
 export async function globalSearch(query: string): Promise<GroupedSearchResults> {
-  const empty: GroupedSearchResults = { requests: [], tasks: [], services: [], users: [], approvals: [] }
+  const empty: GroupedSearchResults = { requests: [], tasks: [], projects: [], services: [], users: [], approvals: [] }
   if (query.trim().length < 2) return empty
 
   const profile = await getCurrentProfile()
@@ -133,6 +134,54 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
     meta: t.status,
   }))
 
+  // ── 3b. Projects — matches the project itself (name/description/owner) as
+  // well as content nested inside it (milestone names, narrative status
+  // updates + blockers), so a hit deep inside a project still surfaces the
+  // project as the navigable result. ────────────────────────────────────────
+  const [pByName, pByDesc, pByOwner, pByMilestone, pByUpdate] = await Promise.all([
+    db.from('projects').select('id,name,status,priority,owner_id,functional_owner_id').eq('org_id', orgId).is('archived_at', null).ilike('name', like).limit(6),
+    db.from('projects').select('id,name,status,priority,owner_id,functional_owner_id').eq('org_id', orgId).is('archived_at', null).ilike('description', like).limit(4),
+    profileIds.length > 0
+      ? db.from('projects').select('id,name,status,priority,owner_id,functional_owner_id').eq('org_id', orgId).is('archived_at', null).or(`owner_id.in.(${profileIds.join(',')}),functional_owner_id.in.(${profileIds.join(',')})`).limit(4)
+      : { data: [] },
+    db.from('milestones').select('id,project_id').eq('org_id', orgId).ilike('name', like).limit(6),
+    db.from('project_updates').select('id,project_id').eq('org_id', orgId).or(`update_text.ilike.${like},blockers.ilike.${like}`).limit(6),
+  ])
+
+  // Milestone/update hits resolve to their parent project.
+  const nestedProjectIds = [...new Set([
+    ...(pByMilestone.data ?? []).map((m) => m.project_id),
+    ...(pByUpdate.data ?? []).map((u) => u.project_id),
+  ])]
+  const { data: nestedProjects } = nestedProjectIds.length > 0
+    ? await db.from('projects').select('id,name,status,priority,owner_id,functional_owner_id').eq('org_id', orgId).is('archived_at', null).in('id', nestedProjectIds)
+    : { data: [] }
+
+  const allPRaw = [
+    ...(pByName.data ?? []),
+    ...(pByDesc.data ?? []),
+    ...(pByOwner.data ?? []),
+    ...(nestedProjects ?? []),
+  ]
+  const seenP = new Set<string>()
+  const uniqueProjects = allPRaw.filter((p) => { if (seenP.has(p.id)) return false; seenP.add(p.id); return true }).slice(0, 8)
+
+  const projPersonIds = [...new Set(uniqueProjects.flatMap((p) => [p.owner_id, p.functional_owner_id].filter((id): id is string => Boolean(id))))]
+  const { data: projNames } = projPersonIds.length > 0
+    ? await db.from('profiles').select('id,full_name').in('id', projPersonIds)
+    : { data: [] }
+  const projNameMap = new Map<string, string>((projNames ?? []).map((p) => [p.id, p.full_name]))
+
+  const projects: SearchResult[] = uniqueProjects.map((p) => ({
+    id: p.id,
+    type: 'project' as const,
+    title: p.name,
+    subtitle: (p.owner_id ? projNameMap.get(p.owner_id) : undefined) ?? (p.functional_owner_id ? projNameMap.get(p.functional_owner_id) : undefined),
+    href: `/projects/${p.id}`,
+    meta: p.status,
+    badge: p.priority,
+  }))
+
   // ── 4. Services ────────────────────────────────────────────────────────────
   const { data: svcData } = await db
     .from('services')
@@ -198,5 +247,5 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
       meta: a.status,
     }))
 
-  return { requests, tasks, services, users, approvals }
+  return { requests, tasks, projects, services, users, approvals }
 }

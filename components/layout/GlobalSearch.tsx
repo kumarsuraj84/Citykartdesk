@@ -3,15 +3,15 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Search, Loader2, FileText, CheckSquare, LayoutGrid, User2,
+  Search, Loader2, FileText, CheckSquare, FolderKanban, LayoutGrid, User2,
   ClipboardCheck, X,
 } from 'lucide-react'
 import { globalSearch, type SearchResult, type GroupedSearchResults } from '@/lib/actions/search'
 
-const GROUP_ORDER: Array<keyof GroupedSearchResults> = ['requests', 'tasks', 'services', 'users', 'approvals']
+const GROUP_ORDER: Array<keyof GroupedSearchResults> = ['requests', 'tasks', 'projects', 'services', 'users', 'approvals']
 
 const EMPTY_RESULTS: GroupedSearchResults = {
-  requests: [], tasks: [], services: [], users: [], approvals: [],
+  requests: [], tasks: [], projects: [], services: [], users: [], approvals: [],
 }
 
 function ResultIcon({ type }: { type: SearchResult['type'] }) {
@@ -19,6 +19,7 @@ function ResultIcon({ type }: { type: SearchResult['type'] }) {
   switch (type) {
     case 'request':  return <FileText className={cls} />
     case 'task':     return <CheckSquare className={cls} />
+    case 'project':  return <FolderKanban className={cls} />
     case 'service':  return <LayoutGrid className={cls} />
     case 'user':     return <User2 className={cls} />
     case 'approval': return <ClipboardCheck className={cls} />
@@ -198,7 +199,7 @@ export function GlobalSearch({ dark = false }: { dark?: boolean }) {
               {GROUP_ORDER.map((groupKey) => {
                 const items = grouped[groupKey]
                 if (items.length === 0) return null
-                const groupLabel = { requests: 'Requests', tasks: 'Tasks', services: 'Services', users: 'People', approvals: 'Approvals' }[groupKey]
+                const groupLabel = { requests: 'Requests', tasks: 'Tasks', projects: 'Projects', services: 'Services', users: 'People', approvals: 'Approvals' }[groupKey]
                 let offset = 0
                 for (const k of GROUP_ORDER) { if (k === groupKey) break; offset += grouped[k].length }
                 return (
