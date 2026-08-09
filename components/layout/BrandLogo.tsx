@@ -1,8 +1,8 @@
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 
-// Source asset is 1774x887 (~2:1) on a light canvas.
-const ASPECT = 887 / 1774
+// Source asset is 1552x585 (~2.65:1), trimmed tight to the artwork.
+const ASPECT = 585 / 1552
 
 interface BrandLogoProps {
   /** Rendered height in px — width follows the logo's native aspect ratio. */

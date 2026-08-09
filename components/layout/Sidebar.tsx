@@ -50,21 +50,39 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
   const { isAdmin, isManager, isAgent, enabledModules } = navVisibility
   const has = (m: string) => enabledModules.includes(m as never)
 
+  // Order follows how each role actually opens this nav: Home is always the
+  // landing spot; managers/admins check Dashboards before anything else, so
+  // Analytics sits right below it; Workspace (the daily queue — Requests,
+  // Tasks, Approvals, Projects) comes next for every role that has any of
+  // it enabled; Intake is a specialized upstream tool for agents/managers;
+  // Administration and Queue are configuration/ops surfaces touched far less
+  // often, so they anchor the bottom.
   const sections: NavSection[] = [
     {
       key: 'home',
       items: [{ label: 'Home', href: '/home', icon: Home, exactMatch: true }],
     },
     {
+      key: 'analytics',
+      label: 'Analytics',
+      show: isManager || isAdmin,
+      items: [
+        { label: 'Dashboards', href: '/admin/reports',  icon: BarChart3 },
+        { label: 'Report Builder', href: '/admin/reports/pivot', icon: Table2 },
+        { label: 'DeskTime',   href: '/admin/desktime',  icon: Timer     },
+        { label: 'Audit Logs', href: '/admin/audit',    icon: Activity  },
+      ],
+    },
+    {
       key: 'workspace',
       label: 'Workspace',
       show: has('requests') || has('tasks') || has('approvals') || has('projects'),
       items: [
-        ...(has('projects')  ? [{ label: 'Projects',      href: '/projects',      icon: FolderKanban, countKey: 'projects'      as keyof NavCounts }] : []),
         ...(has('requests') ? [{ label: 'Requests',      href: '/requests',      icon: Inbox,       countKey: 'requests'      as keyof NavCounts }] : []),
         ...(has('tasks')    ? [{ label: 'Tasks',          href: '/tasks',         icon: ListTodo,    countKey: 'tasks'         as keyof NavCounts }] : []),
         ...(has('approvals') && (isAgent || isManager || isAdmin)
           ? [{ label: 'Approvals', href: '/approvals', icon: ShieldCheck, countKey: 'approvals' as keyof NavCounts }] : []),
+        ...(has('projects')  ? [{ label: 'Projects',      href: '/projects',      icon: FolderKanban, countKey: 'projects'      as keyof NavCounts }] : []),
         { label: 'Notifications', href: '/notifications', icon: Bell, countKey: 'notifications' as keyof NavCounts },
       ],
     },
@@ -84,17 +102,6 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
       ],
     },
     {
-      key: 'analytics',
-      label: 'Analytics',
-      show: isManager || isAdmin,
-      items: [
-        { label: 'Dashboards', href: '/admin/reports',  icon: BarChart3 },
-        { label: 'Report Builder', href: '/admin/reports/pivot', icon: Table2 },
-        { label: 'DeskTime',   href: '/admin/desktime',  icon: Timer     },
-        { label: 'Audit Logs', href: '/admin/audit',    icon: Activity  },
-      ],
-    },
-    {
       key: 'admin',
       label: 'Administration',
       show: isManager || isAdmin,
@@ -105,12 +112,6 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
             { label: 'Users',               href: '/admin/users', icon: Users    },
             { label: 'Teams',               href: '/admin/teams', icon: Users    },
             { label: 'Roles & Permissions', href: '/admin/roles', icon: KeyRound },
-          ],
-        },
-        {
-          label: 'Organization',
-          items: [
-            { label: 'Org Settings', href: '/admin/org', icon: Building2 },
           ],
         },
         ...(isAdmin && has('services') ? [{
@@ -124,6 +125,12 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
             ...(has('tasks')     ? [{ label: 'Task Templates', href: '/admin/task-config',    icon: ListTodo    }] : []),
           ],
         }] : []),
+        {
+          label: 'Organization',
+          items: [
+            { label: 'Org Settings', href: '/admin/org', icon: Building2 },
+          ],
+        },
         {
           label: 'System',
           items: [
