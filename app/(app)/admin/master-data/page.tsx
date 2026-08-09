@@ -6,7 +6,7 @@ import { MasterDataClient } from './MasterDataClient'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
 
-export const metadata = { title: 'Master Data — Citykart Desk Admin' }
+export const metadata = { title: 'Master Data' }
 
 export default async function MasterDataPage() {
   const profile = await getCurrentProfile()
