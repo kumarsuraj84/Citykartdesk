@@ -208,68 +208,6 @@ export async function deleteHoliday(id: string): Promise<{ error?: string }> {
   return {}
 }
 
-// ── SLA Escalation Rules ──────────────────────────────────────────────────────
-
-// Must match the requests.priority enum — app/api/escalation/run/route.ts matches a
-// rule's tier against a request's priority with a strict string compare, so any tier
-// outside this set can never fire. Also enforced by a DB CHECK constraint (migration
-// 20240101000095) — validated here too so the admin UI surfaces a clear error instead
-// of a raw constraint-violation message.
-const VALID_ESCALATION_TIERS = new Set(['low', 'medium', 'high', 'urgent'])
-
-export async function createEscalationRule(data: {
-  name: string
-  tier: string
-  trigger_pct: number
-  notify_roles: string[]
-}): Promise<{ error?: string }> {
-  const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
-  if (!VALID_ESCALATION_TIERS.has(data.tier)) {
-    return { error: `Tier must be one of: ${[...VALID_ESCALATION_TIERS].join(', ')}.` }
-  }
-
-  const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('sla_escalation_rules').insert({
-    name: data.name.trim(),
-    tier: data.tier,
-    trigger_pct: data.trigger_pct,
-    notify_roles: data.notify_roles,
-  })
-
-  if (error) return { error: error.message }
-  revalidatePath('/admin/request-config')
-  return {}
-}
-
-export async function updateEscalationRule(
-  id: string,
-  data: Partial<{ name: string; tier: string; trigger_pct: number; notify_roles: string[] }>
-): Promise<{ error?: string }> {
-  const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
-  if (data.tier !== undefined && !VALID_ESCALATION_TIERS.has(data.tier)) {
-    return { error: `Tier must be one of: ${[...VALID_ESCALATION_TIERS].join(', ')}.` }
-  }
-
-  const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('sla_escalation_rules').update(data).eq('id', id)
-  if (error) return { error: error.message }
-  revalidatePath('/admin/request-config')
-  return {}
-}
-
-export async function deleteEscalationRule(id: string): Promise<{ error?: string }> {
-  const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
-
-  const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('sla_escalation_rules').delete().eq('id', id)
-  if (error) return { error: error.message }
-  revalidatePath('/admin/request-config')
-  return {}
-}
-
 // ── Alert Rules ───────────────────────────────────────────────────────────────
 
 export type AlertRuleData = {

@@ -171,40 +171,14 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
     return { error: insertError?.message ?? 'Failed to create request.' }
   }
 
-  // Auto-assign via routing rules
+  // Business Rules: "created" trigger — assign/set priority/set status/notify
+  // per whatever rules match this request. Supersedes the old routing-rules-only
+  // auto-assign (see lib/rules/run.ts and Request Configuration → Business Rules).
   try {
-    const { resolveAssignee } = await import('@/lib/routing/assign')
-    const resolvedUserId = await resolveAssignee({
-      serviceId,
-      categoryId: service.category_id ?? null,
-      subCategoryId: service.sub_category_id ?? null,
-      priority: priority ?? null,
-    })
-    if (resolvedUserId) {
-      await admin
-        .from('requests')
-        .update({ assigned_to: resolvedUserId })
-        .eq('id', request.id)
-      await admin.from('request_activity').insert({
-        request_id: request.id,
-        actor_id:   resolvedUserId,
-        action:     'assigned',
-        metadata:   { assigned_to: resolvedUserId, via: 'routing_rule' },
-      })
-      if (resolvedUserId) {
-        notify([{
-          recipientId: resolvedUserId,
-          actorId: resolvedUserId,
-          type: 'request_assigned',
-          title: 'Request assigned to you',
-          body: title,
-          requestId: request.id,
-          link: '/requests/' + request.id,
-        }]).catch(() => {})
-      }
-    }
+    const { runRulesForTrigger } = await import('@/lib/rules/run')
+    await runRulesForTrigger('created', request.id)
   } catch (e) {
-    console.error('[createRequest] Auto-assign failed', e)
+    console.error('[createRequest] Business rules (created) failed', e)
   }
 
   // Activity log — creation must be recorded; surface failure to caller
@@ -465,6 +439,14 @@ export async function updateRequestStatus(
       console.error('[updateRequestStatus] Comment insert failed', commentError.message)
       // Status was updated and logged — do not roll back for a failed comment
     }
+  }
+
+  // Business Rules: "updated" trigger — status changes count as an edit.
+  try {
+    const { runRulesForTrigger } = await import('@/lib/rules/run')
+    await runRulesForTrigger('updated', requestId)
+  } catch (e) {
+    console.error('[updateRequestStatus] Business rules (updated) failed', e)
   }
 
   revalidatePath(`/requests/${requestId}`)
@@ -1080,6 +1062,17 @@ export async function changePriority(
       requestId,
       link: `/requests/${requestId}`,
     }).catch(() => {})
+  }
+
+  // Business Rules: "updated" trigger — a priority change counts as an edit.
+  // The rule engine's own set_priority/set_status actions write directly via the
+  // admin client rather than calling back into changePriority()/
+  // updateRequestStatus(), so this can't recurse into itself.
+  try {
+    const { runRulesForTrigger } = await import('@/lib/rules/run')
+    await runRulesForTrigger('updated', requestId)
+  } catch (e) {
+    console.error('[changePriority] Business rules (updated) failed', e)
   }
 
   revalidatePath(`/requests/${requestId}`)

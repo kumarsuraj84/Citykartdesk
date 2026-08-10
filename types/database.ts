@@ -423,6 +423,121 @@ export type Database = {
         }
         Relationships: []
       }
+      business_rule_events: {
+        Row: {
+          fired_at: string
+          id: string
+          request_id: string
+          rule_id: string
+        }
+        Insert: {
+          fired_at?: string
+          id?: string
+          request_id: string
+          rule_id: string
+        }
+        Update: {
+          fired_at?: string
+          id?: string
+          request_id?: string
+          rule_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_rule_events_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_rule_events_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "business_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_rules: {
+        Row: {
+          actions: Json
+          conditions: Json
+          created_at: string
+          created_by: string | null
+          description: string | null
+          execution_order: number
+          id: string
+          is_active: boolean
+          last_assigned_index: number
+          name: string
+          org_id: string
+          schedule_check: string | null
+          schedule_threshold: number | null
+          trigger: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          actions?: Json
+          conditions?: Json
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          execution_order?: number
+          id?: string
+          is_active?: boolean
+          last_assigned_index?: number
+          name: string
+          org_id: string
+          schedule_check?: string | null
+          schedule_threshold?: number | null
+          trigger: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          actions?: Json
+          conditions?: Json
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          execution_order?: number
+          id?: string
+          is_active?: boolean
+          last_assigned_index?: number
+          name?: string
+          org_id?: string
+          schedule_check?: string | null
+          schedule_threshold?: number | null
+          trigger?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_rules_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_rules_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cost_centers: {
         Row: {
           code: string | null
@@ -4762,6 +4877,7 @@ export type Database = {
         | "task_due_soon"
         | "task_overdue"
         | "daily_digest"
+        | "business_rule_notification"
       org_status: "trial" | "active" | "suspended" | "cancelled"
       project_priority: "P1" | "P2" | "P3"
       project_status:
@@ -5031,6 +5147,7 @@ export const Constants = {
         "task_due_soon",
         "task_overdue",
         "daily_digest",
+        "business_rule_notification",
       ],
       org_status: ["trial", "active", "suspended", "cancelled"],
       project_priority: ["P1", "P2", "P3"],

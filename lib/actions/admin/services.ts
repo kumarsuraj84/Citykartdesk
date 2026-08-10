@@ -283,6 +283,11 @@ export async function archiveService(id: string): Promise<ActionResult> {
 // key — a service that still has requests attached cannot be removed at the DB
 // level, so we check for that up front and return a clear, actionable error
 // instead of surfacing a raw Postgres FK-violation message.
+//
+// field_sla_overrides.service_id is ON DELETE CASCADE (unlike requests, which
+// blocks) — a service with configured Field SLA Matrix rows but zero requests
+// would otherwise be deletable with no warning, silently wiping that
+// configuration along with it. Blocked here the same way requests are.
 
 export async function deleteService(id: string): Promise<ActionResult> {
   const guard = await requireAdmin()
@@ -306,6 +311,17 @@ export async function deleteService(id: string): Promise<ActionResult> {
   if (requestCount && requestCount > 0) {
     return {
       error: `Cannot delete "${service.name}" — ${requestCount} request${requestCount === 1 ? '' : 's'} reference it. Archive it instead, or delete/reassign those requests first.`,
+    }
+  }
+
+  const { count: slaOverrideCount } = await supabase
+    .from('field_sla_overrides')
+    .select('id', { count: 'exact', head: true })
+    .eq('service_id', id)
+
+  if (slaOverrideCount && slaOverrideCount > 0) {
+    return {
+      error: `Cannot delete "${service.name}" — it has ${slaOverrideCount} Field SLA Matrix entr${slaOverrideCount === 1 ? 'y' : 'ies'} configured. Clear them from Request Configuration → Field SLA Matrix first, or archive the service instead.`,
     }
   }
 

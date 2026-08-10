@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ChevronLeft, Layers } from 'lucide-react'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { getServiceById } from '@/lib/queries/services'
+import { getFieldIdsWithSlaOverrides } from '@/lib/sla/matrix'
 import { SectionBuilder } from '@/components/admin/SectionBuilder'
 import type { FormField, FormSection } from '@/types'
 
@@ -17,7 +18,10 @@ export default async function AdminServiceEditorPage({ params }: PageProps) {
   if (!profile) redirect('/login')
   if (profile.role !== 'admin' && profile.role !== 'platform_owner') redirect('/home')
 
-  const service = await getServiceById(id)
+  const [service, fieldIdsWithSla] = await Promise.all([
+    getServiceById(id),
+    getFieldIdsWithSlaOverrides(id),
+  ])
   if (!service) notFound()
 
   // ── Resolve initial sections ─────────────────────────────────────────────
@@ -98,6 +102,7 @@ export default async function AdminServiceEditorPage({ params }: PageProps) {
         serviceId={service.id}
         serviceName={service.name}
         initialSections={initialSections}
+        fieldIdsWithSla={fieldIdsWithSla}
       />
     </div>
   )

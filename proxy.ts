@@ -24,6 +24,7 @@ export async function proxy(request: NextRequest) {
     '/api/health',
     '/api/alerts/run',
     '/api/escalation/run',
+    '/api/business-rules/run',
     '/api/desktime/sync',
     '/api/intake/cron/classify',
     '/api/intake/webhook/gmail',

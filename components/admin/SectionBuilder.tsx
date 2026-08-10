@@ -12,6 +12,10 @@ interface SectionBuilderProps {
   serviceId: string
   serviceName: string
   initialSections: FormSection[]
+  /** Field ids that have Field SLA Matrix entries configured — deleting one of these
+   *  orphans that SLA data (never destroyed, just unreachable), so deletion needs a
+   *  warning first instead of disappearing silently. */
+  fieldIdsWithSla?: string[]
 }
 
 type Selected = { s: string; f: string } | null
@@ -474,7 +478,9 @@ export function SectionBuilder({
   serviceId,
   serviceName,
   initialSections,
+  fieldIdsWithSla = [],
 }: SectionBuilderProps) {
+  const slaFieldIds = useMemo(() => new Set(fieldIdsWithSla), [fieldIdsWithSla])
   const [sections, setSections] = useState<FormSection[]>(initialSections)
   const [selected, setSelected] = useState<Selected>(null)
   const [isPending, startTransition] = useTransition()
@@ -789,6 +795,14 @@ export function SectionBuilder({
                             role="button"
                             onClick={(e) => {
                               e.stopPropagation()
+                              if (
+                                slaFieldIds.has(f.id) &&
+                                !confirm(
+                                  `"${f.label}" has Field SLA Matrix entries configured. Deleting this field won't remove that data from the database, but you won't be able to see or edit it anymore once the field is gone. Delete anyway?`
+                                )
+                              ) {
+                                return
+                              }
                               deleteField(section.id, f.id)
                             }}
                             className="grid h-6 w-6 place-items-center rounded hover:bg-destructive/10 hover:text-destructive"

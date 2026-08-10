@@ -8,7 +8,7 @@ import {
   BarChart3, Activity, Settings, Monitor, BookOpenText,
   Users, Tag, GitBranch, Building2, Database, Workflow,
   LogOut, BookOpen, KeyRound, ChevronDown, Sparkles, Filter,
-  PanelLeftClose, PanelLeftOpen, Timer, Table2,
+  PanelLeftClose, PanelLeftOpen, Timer, Table2, Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/actions/auth'
@@ -119,7 +119,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
           items: [
             { label: 'Service Catalog', href: '/admin/services',       icon: LayoutGrid },
             { label: 'Categories',      href: '/admin/categories',      icon: Tag        },
-            { label: 'Routing Rules',   href: '/admin/routing',         icon: GitBranch  },
+            { label: 'Business Rules',  href: '/admin/business-rules',  icon: Zap        },
             ...(has('approvals') ? [{ label: 'Approval Flows', href: '/admin/approvals',      icon: ShieldCheck }] : []),
             ...(has('requests')  ? [{ label: 'Request Config', href: '/admin/request-config', icon: Workflow    }] : []),
             ...(has('tasks')     ? [{ label: 'Task Templates', href: '/admin/task-config',    icon: ListTodo    }] : []),

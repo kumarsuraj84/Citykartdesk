@@ -142,22 +142,26 @@ git push -u origin master
 
 ### 2.5 Scheduled jobs (escalations, SLA alerts, DeskTime sync, intake classification)
 
-Four GET endpoints do the scheduled work, all gated by the `x-cron-secret`
+Five GET endpoints do the scheduled work, all gated by the `x-cron-secret`
 header matching `CRON_SECRET` (`/api/intake/cron/classify` additionally
 accepts Vercel's `Authorization: Bearer <CRON_SECRET>` convention, kept for
-back-compat — `cron-tick.mjs` uses `x-cron-secret` for all four):
+back-compat — `cron-tick.mjs` uses `x-cron-secret` for all five):
 
 - `/api/escalation/run` — escalates requests past their SLA deadline.
 - `/api/alerts/run` — fires configured alert rules.
+- `/api/business-rules/run` — evaluates schedule-trigger Business Rules
+  (Request Configuration → Business Rules) — e.g. "unassigned for N minutes"
+  or "N% of SLA elapsed" conditions. Created/edited-trigger rules run inline,
+  not from this cron.
 - `/api/desktime/sync` — pulls the last 3 days of DeskTime data for every org
   with a connected API key. Run once daily.
 - `/api/intake/cron/classify` — reclassifies any intake messages missing a
   final classification. Run every few minutes.
 
 `scripts/cron-tick.mjs` pings whichever of these are listed in `CRON_JOBS` by
-name (`escalation`, `alerts`, `desktime-sync`, `intake-classify` — see the
-`JOB_PATHS` map at the top of the script). Set it up as a **separate Railway
-service** in the same project:
+name (`escalation`, `alerts`, `business-rules`, `desktime-sync`,
+`intake-classify` — see the `JOB_PATHS` map at the top of the script). Set it
+up as a **separate Railway service** in the same project:
 
 1. Railway → **New Service → Empty Service** (or deploy the same repo again).
 2. **Settings → Deploy → Cron Schedule**: pick a schedule matching the jobs
@@ -175,9 +179,9 @@ service** in the same project:
    Railway dashboard.
 
 Each job's natural cadence is different, so in practice this means **up to
-four separate Railway cron services**, each with its own schedule and
-`CRON_JOBS` value — e.g. `CRON_JOBS=escalation,alerts` on a 15-minute
-service, `CRON_JOBS=desktime-sync` on a once-daily service, and
+five separate Railway cron services**, each with its own schedule and
+`CRON_JOBS` value — e.g. `CRON_JOBS=escalation,alerts,business-rules` on a
+15-minute service, `CRON_JOBS=desktime-sync` on a once-daily service, and
 `CRON_JOBS=intake-classify` on a 5-minute service (only needed if the intake
 module is in use).
 

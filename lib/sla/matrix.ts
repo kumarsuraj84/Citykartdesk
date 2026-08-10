@@ -84,3 +84,19 @@ export async function getFieldSlaMatrix(): Promise<FieldSlaMatrixRow[]> {
   }
   return rows
 }
+
+/**
+ * Distinct field ids on a service that have at least one Field SLA Matrix override
+ * configured. Used by the form builder to warn before deleting a field that would
+ * orphan that configuration — field_sla_overrides.field_id is a snapshot string, not
+ * an FK into services.form_sections, so deleting a field never cascades or errors;
+ * the override rows just become silently unreachable through the UI.
+ */
+export async function getFieldIdsWithSlaOverrides(serviceId: string): Promise<string[]> {
+  const supabase = (await createClient()) as unknown as AnyClient
+  const { data } = await supabase
+    .from('field_sla_overrides')
+    .select('field_id')
+    .eq('service_id', serviceId)
+  return Array.from(new Set((data ?? []).map((r: { field_id: string }) => r.field_id)))
+}

@@ -15,16 +15,18 @@
  *   CRON_JOBS              comma-separated list of jobs to run.
  *                          Defaults to "escalation,alerts".
  *                          Known names (see JOB_PATHS below): escalation, alerts,
- *                          desktime-sync, intake-classify. An unrecognized name
- *                          falls back to the legacy `/api/<name>/run` shape.
+ *                          business-rules, desktime-sync, intake-classify. An
+ *                          unrecognized name falls back to the legacy
+ *                          `/api/<name>/run` shape.
  */
 
-// Known job name -> route path. `escalation`/`alerts` fit the legacy
-// `/api/<name>/run` convention; `desktime-sync`/`intake-classify` don't
+// Known job name -> route path. `escalation`/`alerts`/`business-rules` fit the
+// legacy `/api/<name>/run` convention; `desktime-sync`/`intake-classify` don't
 // (different route shapes), so they need an explicit mapping.
 const JOB_PATHS = {
   escalation: '/api/escalation/run',
   alerts: '/api/alerts/run',
+  'business-rules': '/api/business-rules/run',
   'desktime-sync': '/api/desktime/sync',
   'intake-classify': '/api/intake/cron/classify',
 }

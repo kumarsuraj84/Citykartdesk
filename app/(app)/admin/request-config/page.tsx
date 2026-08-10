@@ -7,20 +7,18 @@ import { getFieldSlaMatrix } from '@/lib/sla/matrix'
 import { AppSettingsClient } from './AppSettingsClient'
 import { BusinessHoursClient } from './BusinessHoursClient'
 import { HolidayCalendarClient } from './HolidayCalendarClient'
-import { EscalationRulesClient } from './EscalationRulesClient'
 import { AlertRulesClient } from './AlertRulesClient'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { STATUS_LABELS } from '@/lib/constants/requests'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
 import type { RequestStatus } from '@/types'
 
-type Tab = 'field-sla' | 'lifecycle' | 'business-hours' | 'escalation' | 'alerts' | 'general'
+type Tab = 'field-sla' | 'lifecycle' | 'business-hours' | 'alerts' | 'general'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'field-sla',      label: 'Field SLA Matrix' },
   { id: 'lifecycle',      label: 'Lifecycle'       },
   { id: 'business-hours', label: 'Business Hours'  },
-  { id: 'escalation',     label: 'Escalation'      },
   { id: 'alerts',         label: 'Alert Rules'     },
   { id: 'general',        label: 'General'         },
 ]
@@ -48,10 +46,6 @@ export default async function RequestConfigPage({
         supabase.from('holidays').select('*').order('date'),
       ])
     : [{ data: null }, { data: null }]
-
-  const { data: escalationRules } = tab === 'escalation'
-    ? await supabase.from('sla_escalation_rules').select('*').order('trigger_pct')
-    : { data: null }
 
   const { data: alertRules } = tab === 'alerts'
     ? await supabase.from('alert_rules').select('*').order('created_at')
@@ -207,19 +201,6 @@ export default async function RequestConfigPage({
             </div>
             <HolidayCalendarClient initialHolidays={holidays ?? []} />
           </div>
-        </div>
-      )}
-
-      {/* ── Escalation ── */}
-      {tab === 'escalation' && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">SLA Escalation Rules</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Automatically notify roles when a request reaches a percentage of its SLA window.
-            </p>
-          </div>
-          <EscalationRulesClient initialRules={escalationRules ?? []} />
         </div>
       )}
 
