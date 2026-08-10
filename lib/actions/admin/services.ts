@@ -126,9 +126,10 @@ export type ServiceInput = {
   backup_owner_id?: string | null
   version?: string
   visibility?: 'all' | 'agents_only' | 'managers_only'
-  // Per-priority response/resolution hour overrides for this service. A priority
-  // tier omitted here (or with a null field) falls back to the org's global_sla_config
-  // default for that field at request-creation time — see createRequest.
+  // Per-priority response/resolution hour overrides for this service. A priority tier
+  // omitted here (or with a null field) falls back to a matching Field SLA Matrix
+  // override if one exists, or otherwise gets no SLA deadline — see
+  // lib/sla/resolve.ts resolveSlaDeadlines.
   sla_config?: SLAConfig
 }
 

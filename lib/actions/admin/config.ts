@@ -2,35 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
-
-// ── SLA config ────────────────────────────────────────────────────────────────
-
-export async function updateSLATier(
-  priority: 'low' | 'medium' | 'high' | 'urgent',
-  data: { response_hours?: number | null; resolution_hours?: number | null; escalation_pct?: number }
-): Promise<{ error?: string }> {
-  const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
-
-  // RLS-respecting client + explicit org filter: SLA tiers are per-org (migration 048).
-  // Previously this used the service-role client and updated WHERE priority = X with no org
-  // filter, so any org admin overwrote the single shared row for ALL orgs.
-  const supabase = (await createClient()) as unknown as AnyClient
-  const { error } = await supabase
-    .from('global_sla_config')
-    .update({ ...data, updated_by: profile.id, updated_at: new Date().toISOString() })
-    .eq('org_id', profile.org_id)
-    .eq('priority', priority)
-
-  if (error) return { error: error.message }
-  revalidatePath('/admin/request-config')
-  return {}
-}
 
 // ── App settings ──────────────────────────────────────────────────────────────
 

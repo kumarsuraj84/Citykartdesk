@@ -5,24 +5,61 @@ import { Check, Search, AlertTriangle } from 'lucide-react'
 import { upsertFieldSlaOverride } from '@/lib/actions/admin/sla-matrix'
 import type { FieldSlaMatrixRow } from '@/lib/sla/matrix'
 
-const PRIORITY_COLUMNS: { key: 'urgent' | 'high' | 'medium' | 'low'; label: string; cls: string }[] = [
-  { key: 'urgent', label: 'CRITICAL', cls: 'text-red-600' },
-  { key: 'high', label: 'HIGH', cls: 'text-orange-600' },
-  { key: 'medium', label: 'MED', cls: 'text-blue-600' },
-  { key: 'low', label: 'LOW', cls: 'text-slate-600' },
-]
+type Priority = 'urgent' | 'high' | 'medium' | 'low'
 
-function rowKey(r: Pick<FieldSlaMatrixRow, 'service_id' | 'field_id' | 'option_value'>): string {
+const PRIORITIES: Priority[] = ['urgent', 'high', 'medium', 'low']
+const PRIORITY_LABELS: Record<Priority, string> = { urgent: 'Urgent', high: 'High', medium: 'Medium', low: 'Low' }
+
+type Tier = { response_hours: number | null; resolution_hours: number | null }
+
+type MatrixItem = {
+  service_id: string
+  service_name: string
+  category_name: string
+  sub_category_name: string | null
+  field_id: string
+  field_label: string
+  option_value: string
+  option_label: string
+  tiers: Record<Priority, Tier>
+}
+
+function itemKey(r: Pick<FieldSlaMatrixRow, 'service_id' | 'field_id' | 'option_value'>): string {
   return `${r.service_id}::${r.field_id}::${r.option_value}`
 }
 
-interface CellProps {
-  row: FieldSlaMatrixRow
-  priority: (typeof PRIORITY_COLUMNS)[number]['key']
+function groupIntoItems(rows: FieldSlaMatrixRow[]): MatrixItem[] {
+  const byKey = new Map<string, MatrixItem>()
+  for (const row of rows) {
+    const key = itemKey(row)
+    let item = byKey.get(key)
+    if (!item) {
+      item = {
+        service_id: row.service_id,
+        service_name: row.service_name,
+        category_name: row.category_name,
+        sub_category_name: row.sub_category_name,
+        field_id: row.field_id,
+        field_label: row.field_label,
+        option_value: row.option_value,
+        option_label: row.option_label,
+        tiers: { urgent: { response_hours: null, resolution_hours: null }, high: { response_hours: null, resolution_hours: null }, medium: { response_hours: null, resolution_hours: null }, low: { response_hours: null, resolution_hours: null } },
+      }
+      byKey.set(key, item)
+    }
+    item.tiers[row.priority] = { response_hours: row.response_hours, resolution_hours: row.resolution_hours }
+  }
+  return Array.from(byKey.values())
 }
 
-function HoursCell({ row, priority }: CellProps) {
-  const initial = row.sla_config?.[priority]?.resolution_hours
+interface HoursInputProps {
+  item: MatrixItem
+  priority: Priority
+  field: 'response_hours' | 'resolution_hours'
+}
+
+function HoursInput({ item, priority, field }: HoursInputProps) {
+  const initial = item.tiers[priority][field]
   const [value, setValue] = useState(initial != null ? String(initial) : '')
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -39,19 +76,22 @@ function HoursCell({ row, priority }: CellProps) {
       return
     }
     startTransition(async () => {
+      const tier = item.tiers[priority]
       const result = await upsertFieldSlaOverride({
-        serviceId: row.service_id,
-        fieldId: row.field_id,
-        fieldLabel: row.field_label,
-        optionValue: row.option_value,
-        optionLabel: row.option_label,
+        serviceId: item.service_id,
+        fieldId: item.field_id,
+        fieldLabel: item.field_label,
+        optionValue: item.option_value,
+        optionLabel: item.option_label,
         priority,
-        resolutionHours: nextParsed,
+        responseHours: field === 'response_hours' ? nextParsed : tier.response_hours,
+        resolutionHours: field === 'resolution_hours' ? nextParsed : tier.resolution_hours,
       })
       if (result.error) {
         setError(result.error)
         return
       }
+      tier[field] = nextParsed
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     })
@@ -79,6 +119,41 @@ function HoursCell({ row, priority }: CellProps) {
   )
 }
 
+function MatrixItemRow({ item }: { item: MatrixItem }) {
+  const [priority, setPriority] = useState<Priority>('urgent')
+  return (
+    <tr className="border-b border-border/50 last:border-0 hover:bg-muted/20">
+      <td className="px-3 py-2 text-foreground">{item.category_name}</td>
+      <td className="px-3 py-2 text-muted-foreground">{item.sub_category_name ?? '—'}</td>
+      <td className="px-3 py-2">
+        <span className="text-foreground">{item.option_label}</span>
+        <span className="block text-xs text-muted-foreground/70">
+          {item.service_name} · {item.field_label}
+        </span>
+      </td>
+      <td className="px-3 py-2">
+        <select
+          value={priority}
+          onChange={(e) => setPriority(e.target.value as Priority)}
+          className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+        >
+          {PRIORITIES.map((p) => (
+            <option key={p} value={p}>
+              {PRIORITY_LABELS[p]}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="px-3 py-2">
+        <HoursInput key={`${itemKey(item)}::${priority}::response`} item={item} priority={priority} field="response_hours" />
+      </td>
+      <td className="px-3 py-2">
+        <HoursInput key={`${itemKey(item)}::${priority}::resolution`} item={item} priority={priority} field="resolution_hours" />
+      </td>
+    </tr>
+  )
+}
+
 const ALL = '__all__'
 
 export function FieldSlaMatrixClient({ rows }: { rows: FieldSlaMatrixRow[] }) {
@@ -86,27 +161,29 @@ export function FieldSlaMatrixClient({ rows }: { rows: FieldSlaMatrixRow[] }) {
   const [categoryFilter, setCategoryFilter] = useState(ALL)
   const [subCategoryFilter, setSubCategoryFilter] = useState(ALL)
 
+  const items = useMemo(() => groupIntoItems(rows), [rows])
+
   const categories = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.category_name))).sort(),
-    [rows]
+    () => Array.from(new Set(items.map((r) => r.category_name))).sort(),
+    [items]
   )
   const subCategories = useMemo(() => {
-    const inScope = categoryFilter === ALL ? rows : rows.filter((r) => r.category_name === categoryFilter)
+    const inScope = categoryFilter === ALL ? items : items.filter((r) => r.category_name === categoryFilter)
     return Array.from(new Set(inScope.map((r) => r.sub_category_name).filter((n): n is string => !!n))).sort()
-  }, [rows, categoryFilter])
+  }, [items, categoryFilter])
 
   function handleCategoryChange(next: string) {
     setCategoryFilter(next)
     // Reset sub-group whenever it no longer belongs to the newly selected group.
     if (next !== ALL) {
-      const stillValid = rows.some((r) => r.category_name === next && r.sub_category_name === subCategoryFilter)
+      const stillValid = items.some((r) => r.category_name === next && r.sub_category_name === subCategoryFilter)
       if (!stillValid) setSubCategoryFilter(ALL)
     }
   }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return rows.filter((r) => {
+    return items.filter((r) => {
       if (categoryFilter !== ALL && r.category_name !== categoryFilter) return false
       if (subCategoryFilter !== ALL && r.sub_category_name !== subCategoryFilter) return false
       if (!q) return true
@@ -115,9 +192,9 @@ export function FieldSlaMatrixClient({ rows }: { rows: FieldSlaMatrixRow[] }) {
         .toLowerCase()
         .includes(q)
     })
-  }, [rows, query, categoryFilter, subCategoryFilter])
+  }, [items, query, categoryFilter, subCategoryFilter])
 
-  if (rows.length === 0) {
+  if (items.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
         No dropdown, multi-select, or radio fields found on any service yet. Add one from a service&apos;s intake
@@ -177,12 +254,12 @@ export function FieldSlaMatrixClient({ rows }: { rows: FieldSlaMatrixRow[] }) {
           </button>
         )}
         <span className="ml-auto text-xs text-muted-foreground">
-          {filtered.length} of {rows.length} rows
+          {filtered.length} of {items.length} field values
         </span>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-        <table className="w-full min-w-[820px] border-collapse text-sm">
+        <table className="w-full min-w-[760px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
               <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -194,33 +271,20 @@ export function FieldSlaMatrixClient({ rows }: { rows: FieldSlaMatrixRow[] }) {
               <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Field / Value
               </th>
-              {PRIORITY_COLUMNS.map((p) => (
-                <th
-                  key={p.key}
-                  className={`px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide ${p.cls}`}
-                >
-                  {p.label} (hrs)
-                </th>
-              ))}
+              <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Type of Priority
+              </th>
+              <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Response SLA (hrs)
+              </th>
+              <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Resolution SLA (hrs)
+              </th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row) => (
-              <tr key={rowKey(row)} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
-                <td className="px-3 py-2 text-foreground">{row.category_name}</td>
-                <td className="px-3 py-2 text-muted-foreground">{row.sub_category_name ?? '—'}</td>
-                <td className="px-3 py-2">
-                  <span className="text-foreground">{row.option_label}</span>
-                  <span className="ml-1.5 text-xs text-muted-foreground/70">
-                    ({row.service_name} · {row.field_label})
-                  </span>
-                </td>
-                {PRIORITY_COLUMNS.map((p) => (
-                  <td key={p.key} className="px-3 py-2">
-                    <HoursCell row={row} priority={p.key} />
-                  </td>
-                ))}
-              </tr>
+            {filtered.map((item) => (
+              <MatrixItemRow key={itemKey(item)} item={item} />
             ))}
           </tbody>
         </table>

@@ -7,10 +7,10 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logActivity } from '@/lib/activity'
 import { notify, getRequestAudience, parseMentions } from '@/lib/notifications'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
-import { computeSLADeadline } from '@/lib/sla/business-hours'
 import { getEnabledModules } from '@/lib/queries/profiles'
 import { validateFieldValue } from '@/lib/validation/formFields'
-import { resolveFieldSlaTier } from '@/lib/sla/resolve'
+import { resolveSlaDeadlines } from '@/lib/sla/resolve'
+import { resolveFormSections } from '@/lib/forms/sections'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus } from '@/types'
 import type { Database, Json } from '@/types/database'
 
@@ -19,13 +19,6 @@ type RequestUpdate = Database['public']['Tables']['requests']['Update']
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 type ActionResult = { error?: string }
-
-function calcDeadline(hours: number | null | undefined, from: Date): string | null {
-  if (!hours) return null
-  const d = new Date(from)
-  d.setHours(d.getHours() + hours)
-  return d.toISOString()
-}
 
 // ── Create request ────────────────────────────────────────────────────────────
 
@@ -139,25 +132,18 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
   //      Field SLA Matrix (Request Configuration → Field SLA Matrix).
   //   2. services.sla_config — the service's own per-priority overrides, set via the
   //      "SLA Overrides" section on the service form.
-  //   3. global_sla_config — the org's default per-priority SLA.
-  // Restores the global SLA Targets screen's actual effect, which previously went
-  // unused because services.sla_config was never populated by any UI.
-  const fieldSlaTier = await resolveFieldSlaTier(supabase, serviceId, priority, allFields, parsedFormData)
-  const serviceSlaTier = (service.sla_config as unknown as SLAConfig | null)?.[priority]
-  let responseHours = fieldSlaTier?.response_hours ?? serviceSlaTier?.response_hours ?? null
-  let resolutionHours = fieldSlaTier?.resolution_hours ?? serviceSlaTier?.resolution_hours ?? null
-  if ((responseHours == null || resolutionHours == null) && orgId) {
-    const { data: globalTier } = await supabase
-      .from('global_sla_config')
-      .select('response_hours, resolution_hours')
-      .eq('org_id', orgId)
-      .eq('priority', priority)
-      .maybeSingle()
-    responseHours ??= globalTier?.response_hours ?? null
-    resolutionHours ??= globalTier?.resolution_hours ?? null
-  }
-  const responseDueAt = calcDeadline(responseHours, now)
-  const resolutionDueAt = calcDeadline(resolutionHours, now)
+  // No org-wide default beneath that (the old "SLA Targets" screen was removed) — a
+  // service/field with no explicit override gets no SLA deadline. Both deadlines are
+  // business-hours-aware (skip nights/weekends/holidays) from the moment they're first
+  // computed, so there's no separate flat estimate + later recompute step.
+  const { responseDueAt, resolutionDueAt } = await resolveSlaDeadlines(supabase, {
+    serviceId,
+    priority,
+    serviceSlaConfig: service.sla_config as unknown as SLAConfig | null,
+    allFields,
+    formData: parsedFormData,
+    from: now,
+  })
 
   const { data: request, error: insertError } = await supabase
     .from('requests')
@@ -183,24 +169,6 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
 
   if (insertError || !request) {
     return { error: insertError?.message ?? 'Failed to create request.' }
-  }
-
-  // Recompute resolution_due_at with business-hours-aware logic (skips nights,
-  // weekends, holidays) using the already-resolved resolutionHours (field override >
-  // service override > global default). Previously this re-derived the deadline from
-  // global_sla_config alone, unconditionally overwriting whatever service/field-level
-  // SLA the block above had just resolved.
-  if (resolutionHours != null) {
-    try {
-      const slaMinutes = Math.round(Number(resolutionHours) * 60)
-      const deadline = await computeSLADeadline(now, slaMinutes)
-      await supabase
-        .from('requests')
-        .update({ resolution_due_at: deadline.toISOString() })
-        .eq('id', request.id)
-    } catch (e) {
-      console.error('[createRequest] SLA deadline computation failed', e)
-    }
   }
 
   // Auto-assign via routing rules
@@ -385,31 +353,50 @@ export async function updateRequestStatus(
     }
   }
 
-  // REOPEN: recalculate resolution_due_at from current time and clear resolution timestamps
+  // REOPEN: recalculate resolution_due_at from current time and clear resolution timestamps.
+  // Uses the same field-override > service-override resolution as request creation — a
+  // reopened ticket should still get the SLA its selected field values/service imply, not
+  // just whatever the (removed) org-wide default used to say.
   if (newStatus === 'open' && (currentStatus === 'resolved' || currentStatus === 'closed')) {
     try {
       const priority = request.priority as RequestPriority
-      const { data: globalSla } = await supabase
-        .from('global_sla_config')
-        .select('resolution_hours')
-        .eq('priority', priority)
+      const { data: full } = await supabase
+        .from('requests')
+        .select('service_id, form_data, service:services(sla_config, form_sections, form_fields)')
+        .eq('id', requestId)
         .single()
 
-      if (globalSla?.resolution_hours) {
-        const slaMinutes = Math.round(Number(globalSla.resolution_hours) * 60)
-        const startAt = new Date()
-        const deadline = await computeSLADeadline(startAt, slaMinutes)
+      let resolutionDueAt: string | null = null
+      if (full) {
+        const svc = full.service as unknown as {
+          sla_config?: SLAConfig
+          form_sections?: FormSection[]
+          form_fields?: FormField[]
+        }
+        const allFields = resolveFormSections(svc).flatMap((s) => s.fields)
+        const resolved = await resolveSlaDeadlines(supabase, {
+          serviceId: full.service_id,
+          priority,
+          serviceSlaConfig: svc.sla_config ?? null,
+          allFields,
+          formData: (full.form_data ?? {}) as Record<string, unknown>,
+          from: new Date(),
+        })
+        resolutionDueAt = resolved.resolutionDueAt
+      }
+
+      if (resolutionDueAt) {
         await supabase
           .from('requests')
           .update({
-            resolution_due_at: deadline.toISOString(),
+            resolution_due_at: resolutionDueAt,
             resolved_at: null,
             closed_at: null,
             waiting_since: null,
           })
           .eq('id', requestId)
       } else {
-        // No global SLA config found — still clear the timestamps
+        // No applicable SLA config found — still clear the timestamps
         await supabase
           .from('requests')
           .update({ resolved_at: null, closed_at: null, waiting_since: null })
@@ -1013,7 +1000,7 @@ export async function changePriority(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, priority, team_id, status, created_at, waiting_since, assigned_to, service:services(sla_config)')
+    .select('id, priority, team_id, status, created_at, waiting_since, assigned_to, service_id, form_data, service:services(sla_config, form_sections, form_fields)')
     .eq('id', requestId)
     .single()
 
@@ -1030,13 +1017,25 @@ export async function changePriority(
   const oldPriority = request.priority as RequestPriority
   if (oldPriority === newPriority) return {}
 
-  // Recalculate SLA deadlines from created_at with new priority tier
-  const slaConfig = (request.service as unknown as { sla_config?: SLAConfig })?.sla_config
-  const slaTier = slaConfig?.[newPriority]
+  // Recalculate SLA deadlines from created_at with the new priority tier — same
+  // field-override > service-override resolution as request creation, so the request's
+  // already-selected field values still drive the deadline under the new priority.
+  const svc = request.service as unknown as {
+    sla_config?: SLAConfig
+    form_sections?: FormSection[]
+    form_fields?: FormField[]
+  }
+  const allFields = resolveFormSections(svc).flatMap((s) => s.fields)
   const createdAt = new Date(request.created_at)
 
-  let newResponseDue: string | null = calcDeadline(slaTier?.response_hours, createdAt)
-  let newResolutionDue: string | null = calcDeadline(slaTier?.resolution_hours, createdAt)
+  let { responseDueAt: newResponseDue, resolutionDueAt: newResolutionDue } = await resolveSlaDeadlines(supabase, {
+    serviceId: request.service_id,
+    priority: newPriority,
+    serviceSlaConfig: svc.sla_config ?? null,
+    allFields,
+    formData: (request.form_data ?? {}) as Record<string, unknown>,
+    from: createdAt,
+  })
 
   // Extend new deadlines by time already paused in waiting_user (if currently paused)
   if (request.waiting_since) {
@@ -1222,8 +1221,15 @@ export async function createSubRequest(
 
   const priority = opts?.priority ?? (parent.priority as RequestPriority)
   const now = new Date()
+  // Sub-requests have no dynamic-form submission of their own to check field-level
+  // overrides against — only the parent service's own SLA config applies.
   const slaConfig = (parent.service as unknown as { sla_config: SLAConfig } | null)?.sla_config
-  const slaTier = slaConfig?.[priority]
+  const { responseDueAt, resolutionDueAt } = await resolveSlaDeadlines(supabase, {
+    serviceId: parent.service_id,
+    priority,
+    serviceSlaConfig: slaConfig ?? null,
+    from: now,
+  })
 
   // Preserves the original requester on the sub-request (same person the parent
   // was raised for), which requests_insert's RLS (requester_id = auth.uid()) would
@@ -1243,8 +1249,8 @@ export async function createSubRequest(
       assigned_to: opts?.assignedTo ?? null,
       priority,
       status: 'open',
-      response_due_at: calcDeadline(slaTier?.response_hours, now),
-      resolution_due_at: calcDeadline(slaTier?.resolution_hours, now),
+      response_due_at: responseDueAt,
+      resolution_due_at: resolutionDueAt,
     })
     .select('id, request_no, title, status, priority, resolution_due_at')
     .single()

@@ -4,15 +4,6 @@ import { createClient } from '@/lib/supabase/server'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
 
-export type SLAConfigRow = {
-  id: string
-  priority: 'low' | 'medium' | 'high' | 'urgent'
-  response_hours: number | null
-  resolution_hours: number | null
-  escalation_pct: number
-  updated_at: string
-}
-
 export type TaskTemplate = {
   id: string
   name: string
@@ -31,20 +22,6 @@ export type TaskTemplateItem = {
   default_priority: 'low' | 'medium' | 'high' | 'urgent'
   due_offset_days: number | null
   position: number
-}
-
-const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 }
-
-export async function getGlobalSLAConfig(): Promise<SLAConfigRow[]> {
-  // RLS-respecting client: sla_config_select scopes to org_id = current_org_id(), so each
-  // org sees only its own SLA tiers (defaults are seeded per-org — migration 048).
-  const admin = (await createClient()) as unknown as AnyClient
-  const { data } = await admin
-    .from('global_sla_config')
-    .select('*')
-    .order('resolution_hours', { ascending: true })
-  const rows = (data ?? []) as SLAConfigRow[]
-  return rows.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 99) - (PRIORITY_ORDER[b.priority] ?? 99))
 }
 
 export type TaskStatusRow = {

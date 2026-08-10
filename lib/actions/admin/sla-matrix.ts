@@ -16,15 +16,17 @@ export type FieldSlaOverrideInput = {
   optionValue: string
   optionLabel: string
   priority: 'low' | 'medium' | 'high' | 'urgent'
-  /** Hours to resolution for this priority tier; null clears the override for that cell. */
+  /** Hours to first response for this priority tier; null clears it. */
+  responseHours: number | null
+  /** Hours to resolution for this priority tier; null clears it. */
   resolutionHours: number | null
 }
 
 /**
- * Upsert one cell of the Field SLA Matrix — a single priority tier's resolution hours
- * for one (service, field, option) row. Only resolution hours are matrix-editable
- * (response hours still come from the service/global SLA layers), matching the
- * single-number-per-priority-column shape of the matrix.
+ * Upsert one row of the Field SLA Matrix — one priority tier's response and resolution
+ * hours for one (service, field, option). Storage is still one field_sla_overrides row
+ * per (service, field, option) holding all 4 priorities in its sla_config JSONB, so this
+ * merges into the other 3 priorities' existing data rather than overwriting them.
  */
 export async function upsertFieldSlaOverride(input: FieldSlaOverrideInput): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
@@ -43,7 +45,7 @@ export async function upsertFieldSlaOverride(input: FieldSlaOverrideInput): Prom
 
   const existingConfig = (existing?.sla_config ?? {}) as SLAConfig
   const nextTier: SLATier = {
-    response_hours: existingConfig[input.priority]?.response_hours ?? null,
+    response_hours: input.responseHours,
     resolution_hours: input.resolutionHours,
   }
   const nextSlaConfig: SLAConfig = { ...existingConfig, [input.priority]: nextTier }
@@ -77,6 +79,7 @@ export async function upsertFieldSlaOverride(input: FieldSlaOverrideInput): Prom
       optionValue: input.optionValue,
       optionLabel: input.optionLabel,
       priority: input.priority,
+      responseHours: input.responseHours,
       resolutionHours: input.resolutionHours,
     },
   })

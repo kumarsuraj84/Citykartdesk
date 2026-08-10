@@ -2,8 +2,6 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
-import { getGlobalSLAConfig } from '@/lib/queries/admin'
-import { SLAConfigClient } from './SLAConfigClient'
 import { FieldSlaMatrixClient } from './FieldSlaMatrixClient'
 import { getFieldSlaMatrix } from '@/lib/sla/matrix'
 import { AppSettingsClient } from './AppSettingsClient'
@@ -16,10 +14,9 @@ import { STATUS_LABELS } from '@/lib/constants/requests'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
 import type { RequestStatus } from '@/types'
 
-type Tab = 'sla' | 'field-sla' | 'lifecycle' | 'business-hours' | 'escalation' | 'alerts' | 'general'
+type Tab = 'field-sla' | 'lifecycle' | 'business-hours' | 'escalation' | 'alerts' | 'general'
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'sla',            label: 'SLA Targets'    },
   { id: 'field-sla',      label: 'Field SLA Matrix' },
   { id: 'lifecycle',      label: 'Lifecycle'       },
   { id: 'business-hours', label: 'Business Hours'  },
@@ -38,12 +35,11 @@ export default async function RequestConfigPage({
   if (!['admin', 'manager', 'platform_owner'].includes(profile.role)) redirect('/home')
 
   const sp  = await searchParams
-  const tab = (TABS.find(t => t.id === sp.tab) ? sp.tab : 'sla') as Tab
+  const tab = (TABS.find(t => t.id === sp.tab) ? sp.tab : 'field-sla') as Tab
 
   // Fetch only what the active tab needs
   const supabase = await createClient()
 
-  const slaConfig = tab === 'sla' ? await getGlobalSLAConfig() : null
   const fieldSlaMatrix = tab === 'field-sla' ? await getFieldSlaMatrix() : null
 
   const [{ data: businessHours }, { data: holidays }] = tab === 'business-hours'
@@ -95,16 +91,19 @@ export default async function RequestConfigPage({
         })}
       </div>
 
-      {/* ── SLA Targets ── */}
-      {tab === 'sla' && (
+      {/* ── Field SLA Matrix ── */}
+      {tab === 'field-sla' && (
         <div className="space-y-6">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">SLA Targets by Priority</h2>
+            <h2 className="text-sm font-semibold text-foreground">Field-Level SLA Matrix</h2>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Default response and resolution targets by priority. Individual services can override these.
+              Response and resolution SLA hours for every dropdown/radio/multi-select value across the catalog,
+              by priority — e.g. two reasons under the same service can carry different targets. This is the
+              only SLA layer besides a service&apos;s own overrides — a service or field value with nothing set
+              here or on the service gets no SLA deadline.
             </p>
           </div>
-          <SLAConfigClient initialConfig={slaConfig ?? []} />
+          <FieldSlaMatrixClient rows={fieldSlaMatrix ?? []} />
 
           {/* Priority reference */}
           <div className="space-y-3">
@@ -126,22 +125,6 @@ export default async function RequestConfigPage({
               ))}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* ── Field SLA Matrix ── */}
-      {tab === 'field-sla' && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Field-Level SLA Matrix</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Set a different resolution-time SLA for individual dropdown/radio/multi-select values across the
-              catalog — e.g. two reasons under the same service can carry different targets. Only resolution
-              hours are set here; response-time SLA still comes from the service or org default. The most
-              specific match wins: field value → service → org default.
-            </p>
-          </div>
-          <FieldSlaMatrixClient rows={fieldSlaMatrix ?? []} />
         </div>
       )}
 

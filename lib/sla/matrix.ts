@@ -6,6 +6,9 @@ import type { FormField, SLAConfig } from '@/types'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
 
+const PRIORITIES = ['urgent', 'high', 'medium', 'low'] as const
+type Priority = (typeof PRIORITIES)[number]
+
 export type FieldSlaMatrixRow = {
   service_id: string
   service_name: string
@@ -15,14 +18,21 @@ export type FieldSlaMatrixRow = {
   field_label: string
   option_value: string
   option_label: string
-  sla_config: SLAConfig
+  priority: Priority
+  response_hours: number | null
+  resolution_hours: number | null
 }
 
 /**
  * Flattens the whole service catalog into one row per (service, option-bearing field,
- * leaf option value) — the "Service Group / Service Sub Group / Field / Priority hours"
- * matrix shown at Request Configuration → Field SLA Matrix. Joined with any existing
- * field_sla_overrides so the matrix loads pre-filled with saved hours.
+ * leaf option value, priority) — the long-format "Service Group / Service Sub Group /
+ * Field / Type of Priority / Response SLA / Resolution SLA" matrix shown at Request
+ * Configuration → Field SLA Matrix. Every field value always gets all 4 priority rows
+ * (even with no data yet) so admins can fill any of them in directly. Joined with any
+ * existing field_sla_overrides so the matrix loads pre-filled with saved hours.
+ *
+ * This is the only SLA layer besides a service's own sla_config — see
+ * lib/sla/resolve.ts resolveSlaDeadlines for how the two combine at request time.
  */
 export async function getFieldSlaMatrix(): Promise<FieldSlaMatrixRow[]> {
   const supabase = (await createClient()) as unknown as AnyClient
@@ -52,17 +62,23 @@ export async function getFieldSlaMatrix(): Promise<FieldSlaMatrixRow[]> {
     for (const field of optionFields) {
       for (const leaf of flattenLeafOptions(field.options)) {
         const key = `${service.id}::${field.id}::${leaf.value}`
-        rows.push({
-          service_id: service.id,
-          service_name: service.name,
-          category_name: service.category?.name ?? '—',
-          sub_category_name: service.sub_category?.name ?? null,
-          field_id: field.id,
-          field_label: field.label,
-          option_value: leaf.value,
-          option_label: leaf.label,
-          sla_config: overrideMap.get(key) ?? {},
-        })
+        const slaConfig = overrideMap.get(key) ?? {}
+        for (const priority of PRIORITIES) {
+          const tier = slaConfig[priority]
+          rows.push({
+            service_id: service.id,
+            service_name: service.name,
+            category_name: service.category?.name ?? '—',
+            sub_category_name: service.sub_category?.name ?? null,
+            field_id: field.id,
+            field_label: field.label,
+            option_value: leaf.value,
+            option_label: leaf.label,
+            priority,
+            response_hours: tier?.response_hours ?? null,
+            resolution_hours: tier?.resolution_hours ?? null,
+          })
+        }
       }
     }
   }

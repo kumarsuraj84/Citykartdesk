@@ -1,4 +1,5 @@
 import type { FormField, SLAConfig, SLATier } from '@/types'
+import { computeSLADeadline } from '@/lib/sla/business-hours'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -12,8 +13,10 @@ type FieldSlaOverrideRow = {
 /**
  * Resolve the tightest field-level SLA override that applies to a submitted request.
  * field_sla_overrides (migration 20240101000092) is the most specific SLA layer — more
- * specific than services.sla_config, which is more specific than global_sla_config. See
- * lib/actions/requests.ts createRequest for how the three layers stack.
+ * specific than services.sla_config. There is no org-wide default layer beneath it (the
+ * old global_sla_config-backed "SLA Targets" screen was removed — a service/field with no
+ * explicit override simply gets no SLA deadline). See resolveSlaDeadlines below for how
+ * every request-facing action (create, priority change, reopen) computes deadlines.
  *
  * A request can select more than one option value that carries an override (e.g. two
  * separate dropdown fields on the same form). When that happens, the tightest (minimum)
@@ -59,4 +62,46 @@ export async function resolveFieldSlaTier(
     response_hours: responseCandidates.length ? Math.min(...responseCandidates) : null,
     resolution_hours: resolutionCandidates.length ? Math.min(...resolutionCandidates) : null,
   }
+}
+
+/**
+ * Single source of truth for computing a request's response/resolution deadlines —
+ * used by createRequest, changePriority, the REOPEN path in updateRequestStatus, and
+ * createSubRequest so every place a request gets (or regets) an SLA deadline resolves
+ * the same two layers (field override > service override) and applies the same
+ * business-hours-aware calendar (nights/weekends/holidays excluded), instead of each
+ * call site re-deriving its own flat wall-clock estimate.
+ *
+ * `allFields`/`formData` are optional — omit them for contexts with no dynamic-form
+ * submission to check against (e.g. sub-requests), which simply skips the field-level
+ * layer and falls straight to the service-level config.
+ */
+export async function resolveSlaDeadlines(
+  supabase: AnyClient,
+  params: {
+    serviceId: string
+    priority: 'low' | 'medium' | 'high' | 'urgent'
+    serviceSlaConfig: SLAConfig | null | undefined
+    allFields?: FormField[]
+    formData?: Record<string, unknown>
+    from: Date
+  }
+): Promise<{ responseDueAt: string | null; resolutionDueAt: string | null }> {
+  const { serviceId, priority, serviceSlaConfig, allFields = [], formData = {}, from } = params
+
+  const fieldTier = await resolveFieldSlaTier(supabase, serviceId, priority, allFields, formData)
+  const serviceTier = serviceSlaConfig?.[priority]
+  const responseHours = fieldTier?.response_hours ?? serviceTier?.response_hours ?? null
+  const resolutionHours = fieldTier?.resolution_hours ?? serviceTier?.resolution_hours ?? null
+
+  const responseDueAt =
+    responseHours != null
+      ? (await computeSLADeadline(from, Math.round(Number(responseHours) * 60))).toISOString()
+      : null
+  const resolutionDueAt =
+    resolutionHours != null
+      ? (await computeSLADeadline(from, Math.round(Number(resolutionHours) * 60))).toISOString()
+      : null
+
+  return { responseDueAt, resolutionDueAt }
 }
