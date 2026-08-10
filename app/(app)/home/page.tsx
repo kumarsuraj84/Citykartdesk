@@ -339,7 +339,7 @@ async function DashboardBody({
     overdueTaskItems.length + todayTaskItems.length +
     upcomingTaskItems.length + openTaskItems.length
 
-  const projectsAtRiskCount = projectsSummary.atRisk.length
+  const projectsAtRiskCount = projectsSummary.atRiskCount
 
   const TABS = [
     { id: 'requests' as const, label: 'Requests', icon: FileText, show: hasRequests,
@@ -635,11 +635,11 @@ async function DashboardBody({
                 <KpiCard label="Active"          value={projectsSummary.activeCount}          sublabel="Projects in flight"    accent="#1B2559" href="/projects" />
                 <KpiCard label="Blocked"         value={projectsSummary.blockedCount}          sublabel="Needs unblocking"      accent="#EF4444" href="/projects" danger />
                 <KpiCard label="Milestones Due"  value={projectsSummary.milestonesDueSoon}      sublabel="Within 7 days"         accent="#F97316" href="/projects" />
-                <KpiCard label="Overdue"         value={projectsSummary.milestonesOverdue}      sublabel="Past target date"      accent="#EF4444" href="/projects" danger />
+                <KpiCard label="Milestones Overdue" value={projectsSummary.milestonesOverdue}   sublabel="Past target date"      accent="#EF4444" href="/projects" danger />
               </div>
 
               <div className="overflow-hidden rounded-xl border border-border bg-card">
-                <SectionHeader icon={Flag} title="At Risk" count={projectsSummary.atRisk.length}
+                <SectionHeader icon={Flag} title="At Risk" count={projectsSummary.atRiskCount}
                   href="/projects" accentClass="text-destructive" />
                 {projectsSummary.atRisk.length > 0 ? (
                   <div className="divide-y divide-border">
@@ -922,7 +922,7 @@ export default async function HomePage({
   )
   const projectsSummaryPromise: Promise<HomeProjectsSummary> = hasProjects
     ? getHomeProjectsSummary()
-    : Promise.resolve({ activeCount: 0, blockedCount: 0, milestonesOverdue: 0, milestonesDueSoon: 0, atRisk: [] })
+    : Promise.resolve({ activeCount: 0, blockedCount: 0, milestonesOverdue: 0, milestonesDueSoon: 0, atRiskCount: 0, atRisk: [] })
 
   return (
     <div className="space-y-4 pb-6">

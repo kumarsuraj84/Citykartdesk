@@ -213,6 +213,9 @@ export type HomeProjectsSummary = {
   blockedCount: number
   milestonesOverdue: number
   milestonesDueSoon: number
+  /** True count of at-risk projects — independent of how many are in the `atRisk` preview list below. */
+  atRiskCount: number
+  /** Preview list, capped to 5 for display — use `atRiskCount` for the real total. */
   atRisk: { id: string; name: string; status: ProjectStatus; target_date: string | null }[]
 }
 
@@ -237,15 +240,15 @@ export async function getHomeProjectsSummary(): Promise<HomeProjectsSummary> {
   const milestonesOverdue = milestonesArr.filter((m) => !!m.end_date && m.end_date < now).length
   const milestonesDueSoon = milestonesArr.filter((m) => !!m.end_date && m.end_date >= now && m.end_date <= sevenDaysOut).length
 
-  const atRisk = projectsArr
-    .filter((p) =>
-      p.status === 'blocked' ||
-      (p.target_date && p.target_date < now && p.status !== 'done' && p.status !== 'cancelled')
-    )
+  const atRiskAll = projectsArr.filter((p) =>
+    p.status === 'blocked' ||
+    (p.target_date && p.target_date < now && p.status !== 'done' && p.status !== 'cancelled')
+  )
+  const atRisk = atRiskAll
     .slice(0, 5)
     .map((p) => ({ id: p.id, name: p.name, status: p.status, target_date: p.target_date }))
 
-  return { activeCount, blockedCount, milestonesOverdue, milestonesDueSoon, atRisk }
+  return { activeCount, blockedCount, milestonesOverdue, milestonesDueSoon, atRiskCount: atRiskAll.length, atRisk }
 }
 
 export async function getAllProjectsMini(): Promise<Pick<Tables<'projects'>, 'id' | 'name'>[]> {
