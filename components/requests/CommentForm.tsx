@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useCallback } from 'react'
 import { Loader2, Send, ChevronDown, Paperclip, X, FileIcon, AlertCircle } from 'lucide-react'
-import { addComment } from '@/lib/actions/requests'
+import { addComment, deleteEmptyComment } from '@/lib/actions/requests'
 import { uploadAttachment } from '@/lib/actions/attachments'
 import { validateAttachment } from '@/lib/attachments/validate'
 import { CANNED_RESPONSES, CANNED_CATEGORIES } from '@/lib/constants/canned-responses'
@@ -57,7 +57,8 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!body.trim() && files.length === 0) return
+    const pendingBody = body.trim()
+    if (!pendingBody && files.length === 0) return
     setError(null)
     const pendingFiles = files
     startTransition(async () => {
@@ -73,6 +74,17 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
         fd.append('file', file)
         const uploadResult = await uploadAttachment(requestId, fd, result.commentId)
         if (uploadResult.error) uploadFailures++
+      }
+
+      // Nothing but attachments were posted and every one failed — the comment
+      // is now an empty bubble with nothing to show, so remove it instead of
+      // leaving it behind.
+      if (!pendingBody && uploadFailures === pendingFiles.length && pendingFiles.length > 0) {
+        await deleteEmptyComment(result.commentId)
+        setError('Attachment(s) failed to upload. Nothing was posted.')
+        setFiles([])
+        textareaRef.current?.focus()
+        return
       }
 
       setBody('')

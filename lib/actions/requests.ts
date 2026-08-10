@@ -962,6 +962,37 @@ export async function addComment(
   return { commentId: insertedComment.id }
 }
 
+// addComment inserts an empty-body comment as an attachment carrier when the
+// user posts files with no text — if every attachment upload then fails, that
+// leaves a permanent blank bubble with nothing to show for it. Called by
+// CommentForm only in that exact case (empty body, zero successful uploads),
+// scoped to the comment's own author so it can't be used to delete anyone
+// else's comment.
+export async function deleteEmptyComment(commentId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+  const profile = await getCurrentProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+
+  const { data: comment } = await supabase
+    .from('request_comments')
+    .select('id, request_id, author_id, body')
+    .eq('id', commentId)
+    .single()
+
+  if (!comment) return {}
+  if (comment.author_id !== profile.id || comment.body.trim() !== '') return { error: 'Cannot remove this comment.' }
+
+  const { count } = await supabase
+    .from('request_attachments')
+    .select('id', { count: 'exact', head: true })
+    .eq('comment_id', commentId)
+  if (count && count > 0) return {}
+
+  await supabase.from('request_comments').delete().eq('id', commentId)
+  revalidatePath(`/requests/${comment.request_id}`)
+  return {}
+}
+
 // ── Change priority ───────────────────────────────────────────────────────────
 
 export async function changePriority(

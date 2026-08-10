@@ -4,6 +4,7 @@ import { verifyCronSecret } from '@/lib/cron-auth'
 import { computeElapsedBusinessMinutes } from '@/lib/sla/business-hours'
 import { matchesConditions, type RuleCondition, type RuleEvaluationRequest } from '@/lib/rules/evaluate'
 import { executeActions, type RuleAction, type ActionRequest } from '@/lib/rules/actions'
+import type { SLAConfig, FormSection, FormField } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: { admin: { getUserById: (id: string) => any } } }
@@ -72,13 +73,12 @@ async function alreadyFired(admin: AnyClient, ruleId: string, requestId: string)
 async function fireRule(admin: AnyClient, rule: BusinessRuleRow, request: RawRequest): Promise<boolean> {
   if (await alreadyFired(admin, rule.id, request.id)) return false
 
-  const service = request.service as unknown as { category_id: string | null; sub_category_id: string | null } | null
   const evalRequest: RuleEvaluationRequest = {
     priority: request.priority,
     status: request.status,
     service_id: request.service_id,
-    category_id: service?.category_id ?? null,
-    sub_category_id: service?.sub_category_id ?? null,
+    category_id: request.service?.category_id ?? null,
+    sub_category_id: request.service?.sub_category_id ?? null,
     team_id: request.team_id,
     requester_id: request.requester_id,
     title: request.title,
@@ -92,6 +92,19 @@ async function fireRule(admin: AnyClient, rule: BusinessRuleRow, request: RawReq
     requester_id: request.requester_id,
     assigned_to: request.assigned_to,
     org_id: request.org_id,
+    status: request.status,
+    priority: request.priority,
+    service_id: request.service_id,
+    created_at: request.created_at,
+    form_data: request.form_data ?? {},
+    waiting_since: request.waiting_since,
+    response_due_at: request.response_due_at,
+    resolution_due_at: request.resolution_due_at,
+    service: {
+      sla_config: request.service?.sla_config ?? null,
+      form_sections: request.service?.form_sections ?? null,
+      form_fields: request.service?.form_fields ?? null,
+    },
   }
   await executeActions(admin, actionRequest, rule.actions ?? [], { ruleId: rule.id, ruleName: rule.name })
   await admin.from('business_rule_events').insert({ rule_id: rule.id, request_id: request.id })
@@ -110,12 +123,21 @@ type RawRequest = {
   assigned_to: string | null
   org_id: string
   created_at: string
+  form_data: Record<string, unknown> | null
+  waiting_since: string | null
+  response_due_at: string | null
   resolution_due_at: string | null
-  service: unknown
+  service: {
+    category_id: string | null
+    sub_category_id: string | null
+    sla_config: SLAConfig | null
+    form_sections: FormSection[] | null
+    form_fields: FormField[] | null
+  } | null
 }
 
 const REQUEST_SELECT =
-  'id, title, description, priority, status, service_id, team_id, requester_id, assigned_to, org_id, created_at, resolution_due_at, service:services(category_id, sub_category_id)'
+  'id, title, description, priority, status, service_id, team_id, requester_id, assigned_to, org_id, created_at, form_data, waiting_since, response_due_at, resolution_due_at, service:services(category_id, sub_category_id, sla_config, form_sections, form_fields)'
 
 async function runSlaPctElapsed(admin: AnyClient, rule: BusinessRuleRow, now: Date): Promise<number> {
   const { data: requests } = await admin

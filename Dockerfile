@@ -42,6 +42,13 @@ ENV NODE_ENV=production
 # process's local timezone. Without this the container defaults to UTC, which
 # silently shifts every "today"/"business hours" calculation by +5:30 relative
 # to India, where this app is actually used.
+#
+# No `tzdata` package needed here despite Alpine/musl lacking a system
+# zoneinfo database: Node's official Docker images ship full ICU with its own
+# embedded IANA tz data, so Date/Intl resolve TZ correctly independent of
+# /usr/share/zoneinfo. Verified directly: `node:20-alpine` with only
+# `TZ=Asia/Kolkata` set (no tzdata installed) correctly renders
+# 2026-01-01T00:00:00Z as 05:30 IST, not a UTC fallback.
 ENV TZ=Asia/Kolkata
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 

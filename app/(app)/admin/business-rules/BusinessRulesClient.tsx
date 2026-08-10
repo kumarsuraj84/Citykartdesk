@@ -396,7 +396,7 @@ function RuleEditor({
 
   function submit() {
     if (!form.name.trim()) { setError('Rule name is required.'); return }
-    if (form.trigger === 'schedule' && (!form.schedule_check || !form.schedule_threshold)) {
+    if (form.trigger === 'schedule' && (!form.schedule_check || form.schedule_threshold == null)) {
       setError('Schedule rules need a check type and threshold.')
       return
     }

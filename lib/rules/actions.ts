@@ -2,6 +2,9 @@ import { notify } from '@/lib/notifications'
 import { sendEmail } from '@/lib/email/send'
 import { logActivity } from '@/lib/activity'
 import { STATUS_LABELS } from '@/lib/constants/requests'
+import { resolveSlaDeadlines } from '@/lib/sla/resolve'
+import { resolveFormSections } from '@/lib/forms/sections'
+import type { SLAConfig, FormSection, FormField } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: { admin: { getUserById: (id: string) => any } } }
@@ -31,6 +34,23 @@ export type ActionRequest = {
   requester_id: string
   assigned_to: string | null
   org_id: string | null
+  // Needed by set_priority/set_status to recompute SLA deadlines and replicate
+  // the pause/resume + reopen bookkeeping that the interactive
+  // changePriority()/updateRequestStatus() actions already do — a raw status/
+  // priority write with none of that leaves stale or wrong due dates behind.
+  status: string
+  priority: string
+  service_id: string
+  created_at: string
+  form_data: Record<string, unknown>
+  waiting_since: string | null
+  response_due_at: string | null
+  resolution_due_at: string | null
+  service: {
+    sla_config: SLAConfig | null
+    form_sections: FormSection[] | null
+    form_fields: FormField[] | null
+  }
 }
 
 async function getUserEmail(admin: AnyClient, userId: string): Promise<string | null> {
@@ -105,7 +125,24 @@ async function runAssign(
 }
 
 async function runSetPriority(admin: AnyClient, request: ActionRequest, priority: string, ctx: RuleActionContext): Promise<void> {
-  await admin.from('requests').update({ priority }).eq('id', request.id)
+  // Recompute deadlines the same way the interactive changePriority() action
+  // does — from created_at, field override > service override, business-hours
+  // aware — instead of leaving the old priority's due dates in place under a
+  // new priority.
+  const allFields = resolveFormSections(request.service).flatMap((s) => s.fields)
+  const { responseDueAt, resolutionDueAt } = await resolveSlaDeadlines(admin, {
+    serviceId: request.service_id,
+    priority: priority as 'low' | 'medium' | 'high' | 'urgent',
+    serviceSlaConfig: request.service.sla_config,
+    allFields,
+    formData: request.form_data,
+    from: new Date(request.created_at),
+  })
+
+  await admin
+    .from('requests')
+    .update({ priority, response_due_at: responseDueAt, resolution_due_at: resolutionDueAt })
+    .eq('id', request.id)
   await logActivity({
     requestId: request.id,
     actorId: request.requester_id,
@@ -117,10 +154,47 @@ async function runSetPriority(admin: AnyClient, request: ActionRequest, priority
 async function runSetStatus(admin: AnyClient, request: ActionRequest, status: string, ctx: RuleActionContext): Promise<void> {
   if (!(status in STATUS_LABELS)) return // guard against a stale/invalid status baked into an old rule
 
+  const now = new Date()
+  const nowIso = now.toISOString()
   const update: Record<string, unknown> = { status }
-  const nowIso = new Date().toISOString()
+
   if (status === 'resolved') update.resolved_at = nowIso
   if (status === 'closed') update.closed_at = nowIso
+  if (status === 'open') {
+    update.resolved_at = null
+    update.closed_at = null
+  }
+
+  // Leaving waiting_user: extend both deadlines by the paused duration and
+  // clear waiting_since — same bookkeeping updateRequestStatus does.
+  if (request.status === 'waiting_user' && status !== 'waiting_user' && request.waiting_since) {
+    const pausedMs = now.getTime() - new Date(request.waiting_since).getTime()
+    if (request.response_due_at) {
+      update.response_due_at = new Date(new Date(request.response_due_at).getTime() + pausedMs).toISOString()
+    }
+    if (request.resolution_due_at) {
+      update.resolution_due_at = new Date(new Date(request.resolution_due_at).getTime() + pausedMs).toISOString()
+    }
+    update.waiting_since = null
+  }
+  if (status === 'waiting_user') update.waiting_since = nowIso
+
+  // Reopen (resolved/closed -> open): recompute resolution_due_at from now,
+  // same as the REOPEN branch in updateRequestStatus — otherwise a rule-driven
+  // reopen keeps whatever deadline (or null) the request had before it closed.
+  if (status === 'open' && (request.status === 'resolved' || request.status === 'closed')) {
+    const allFields = resolveFormSections(request.service).flatMap((s) => s.fields)
+    const resolved = await resolveSlaDeadlines(admin, {
+      serviceId: request.service_id,
+      priority: request.priority as 'low' | 'medium' | 'high' | 'urgent',
+      serviceSlaConfig: request.service.sla_config,
+      allFields,
+      formData: request.form_data,
+      from: now,
+    })
+    if (resolved.resolutionDueAt) update.resolution_due_at = resolved.resolutionDueAt
+    update.waiting_since = null
+  }
 
   await admin.from('requests').update(update).eq('id', request.id)
   await logActivity({
