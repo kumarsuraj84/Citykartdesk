@@ -13,8 +13,9 @@ import {
   CheckCircle2,
   EyeOff,
   Eye,
+  Trash2,
 } from 'lucide-react'
-import { upsertSubCategory, reorderSubCategories, toggleSubCategoryActive } from '@/lib/actions/admin/categories'
+import { upsertSubCategory, reorderSubCategories, toggleSubCategoryActive, deleteSubCategory } from '@/lib/actions/admin/categories'
 import type { ServiceSubCategory } from '@/types'
 
 interface SubCategoryManagerProps {
@@ -189,59 +190,104 @@ interface RowProps {
   onMoveUp: () => void
   onMoveDown: () => void
   onToggleActive: () => void
+  confirmingDelete: boolean
+  deletePending: boolean
+  deleteError: string | null
+  onRequestDelete: () => void
+  onConfirmDelete: () => void
+  onCancelDelete: () => void
 }
 
-function SubCategoryRow({ sc, isFirst, isLast, onEdit, onMoveUp, onMoveDown, onToggleActive }: RowProps) {
+function SubCategoryRow({
+  sc, isFirst, isLast, onEdit, onMoveUp, onMoveDown, onToggleActive,
+  confirmingDelete, deletePending, deleteError, onRequestDelete, onConfirmDelete, onCancelDelete,
+}: RowProps) {
   return (
     <div
-      className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
+      className={`rounded-xl border ${
         sc.is_active ? 'border-border bg-card' : 'border-border bg-muted/30 opacity-60'
       }`}
     >
-      {sc.icon && <span className="shrink-0 text-lg">{sc.icon}</span>}
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">{sc.name}</p>
-        {sc.description && (
-          <p className="truncate text-xs text-muted-foreground">{sc.description}</p>
-        )}
-        <p className="text-[10px] text-muted-foreground font-mono">{sc.slug}</p>
+      <div className="flex items-center gap-3 px-4 py-3">
+        {sc.icon && <span className="shrink-0 text-lg">{sc.icon}</span>}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-foreground">{sc.name}</p>
+          {sc.description && (
+            <p className="truncate text-xs text-muted-foreground">{sc.description}</p>
+          )}
+          <p className="text-[10px] text-muted-foreground font-mono">{sc.slug}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            onClick={onMoveUp}
+            disabled={isFirst}
+            className="rounded p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"
+            title="Move up"
+          >
+            <ChevronUp className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onMoveDown}
+            disabled={isLast}
+            className="rounded p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"
+            title="Move down"
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onToggleActive}
+            className="rounded p-1.5 text-muted-foreground hover:bg-muted"
+            title={sc.is_active ? 'Deactivate' : 'Activate'}
+          >
+            {sc.is_active ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </button>
+          <button
+            type="button"
+            onClick={onEdit}
+            className="ml-1 rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Edit"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onRequestDelete}
+            className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            title="Delete"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
-      <div className="flex shrink-0 items-center gap-0.5">
-        <button
-          type="button"
-          onClick={onMoveUp}
-          disabled={isFirst}
-          className="rounded p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"
-          title="Move up"
-        >
-          <ChevronUp className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={onMoveDown}
-          disabled={isLast}
-          className="rounded p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"
-          title="Move down"
-        >
-          <ChevronDown className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={onToggleActive}
-          className="rounded p-1.5 text-muted-foreground hover:bg-muted"
-          title={sc.is_active ? 'Deactivate' : 'Activate'}
-        >
-          {sc.is_active ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-        </button>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="ml-1 rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-          title="Edit"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
-      </div>
+
+      {confirmingDelete && (
+        <div className="border-t border-destructive/30 bg-destructive/5 px-4 py-3">
+          <p className="text-xs text-foreground">
+            Permanently delete <strong>{sc.name}</strong>? This cannot be undone. Services tagged with it will lose the tag but are not deleted.
+          </p>
+          {deleteError && <p className="mt-1 text-xs text-destructive">{deleteError}</p>}
+          <div className="mt-2 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onCancelDelete}
+              className="rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onConfirmDelete}
+              disabled={deletePending}
+              className="btn-danger rounded-lg px-3 py-1.5 text-xs disabled:opacity-60"
+            >
+              {deletePending ? 'Deleting…' : 'Delete Permanently'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -259,6 +305,9 @@ export function SubCategoryManager({
   const [editingId, setEditingId] = useState<string | 'new' | null>(null)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [, startTransition] = useTransition()
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deletePending, startDelete] = useTransition()
 
   function showToast(type: 'success' | 'error', message: string) {
     setToast({ type, message })
@@ -306,6 +355,21 @@ export function SubCategoryManager({
         showToast('error', result.error)
         // Revert
         setSubCategories((prev) => prev.map((s) => s.id === id ? { ...s, is_active: !newActive } : s))
+      }
+    })
+  }
+
+  function handleConfirmDelete() {
+    if (!confirmingDeleteId) return
+    setDeleteError(null)
+    startDelete(async () => {
+      const result = await deleteSubCategory(confirmingDeleteId, categoryId)
+      if (result.error) {
+        setDeleteError(result.error)
+      } else {
+        setSubCategories((prev) => prev.filter((s) => s.id !== confirmingDeleteId))
+        setConfirmingDeleteId(null)
+        showToast('success', 'Sub-category deleted.')
       }
     })
   }
@@ -361,6 +425,12 @@ export function SubCategoryManager({
               onMoveUp={() => move(i, -1)}
               onMoveDown={() => move(i, 1)}
               onToggleActive={() => handleToggleActive(sc.id)}
+              confirmingDelete={confirmingDeleteId === sc.id}
+              deletePending={deletePending}
+              deleteError={confirmingDeleteId === sc.id ? deleteError : null}
+              onRequestDelete={() => { setConfirmingDeleteId(sc.id); setDeleteError(null) }}
+              onConfirmDelete={handleConfirmDelete}
+              onCancelDelete={() => { setConfirmingDeleteId(null); setDeleteError(null) }}
             />
           )
         )}

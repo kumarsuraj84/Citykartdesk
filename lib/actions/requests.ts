@@ -9,6 +9,7 @@ import { notify, getRequestAudience, parseMentions } from '@/lib/notifications'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
 import { computeSLADeadline } from '@/lib/sla/business-hours'
 import { getEnabledModules } from '@/lib/queries/profiles'
+import { validateFieldValue } from '@/lib/validation/formFields'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus } from '@/types'
 import type { Database, Json } from '@/types/database'
 
@@ -87,17 +88,18 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
     : legacyFields
 
   // ── Server-side validation ─────────────────────────────────────────────────
+  // Source of truth — the client's DynamicForm runs the same check for instant
+  // feedback, but this is what actually gates the insert below.
+  //
+  // `file`-type fields are skipped here: request_attachments.request_id is a
+  // NOT NULL FK, so file values can only be uploaded *after* this request row
+  // exists — DynamicForm never puts them in form_data at all, uploading them
+  // in a follow-up step once it has a real requestId. Required-ness for file
+  // fields is therefore enforced client-side only (DynamicForm's validate()).
   for (const field of allFields) {
-    if (!field.required) continue
-    const val = parsedFormData[field.id]
-    if (
-      val === undefined ||
-      val === '' ||
-      val === false ||
-      (Array.isArray(val) && val.length === 0)
-    ) {
-      return { error: `${field.label} is required.` }
-    }
+    if (field.type === 'file') continue
+    const err = validateFieldValue(field, parsedFormData[field.id])
+    if (err) return { error: err }
   }
 
   // ── Request title ──────────────────────────────────────────────────────────

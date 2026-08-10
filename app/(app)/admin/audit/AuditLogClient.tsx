@@ -10,16 +10,20 @@ interface AuditLogClientProps {
   profiles: Pick<Profile, 'id' | 'full_name'>[]
 }
 
-function EntityBadge({ type }: { type: 'request' | 'task' }) {
+const ENTITY_BADGE_STYLE: Record<AuditEntry['entity_type'], string> = {
+  request: 'bg-blue-100 text-blue-700',
+  task: 'bg-purple-100 text-purple-700',
+  service: 'bg-amber-100 text-amber-700',
+  service_category: 'bg-amber-100 text-amber-700',
+  service_sub_category: 'bg-amber-100 text-amber-700',
+}
+
+function EntityBadge({ type }: { type: AuditEntry['entity_type'] }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-        type === 'request'
-          ? 'bg-blue-100 text-blue-700'
-          : 'bg-purple-100 text-purple-700'
-      }`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${ENTITY_BADGE_STYLE[type]}`}
     >
-      {type}
+      {type.replace(/_/g, ' ')}
     </span>
   )
 }
@@ -47,7 +51,7 @@ export function AuditLogClient({ initialEntries, profiles }: AuditLogClientProps
   const [loading, setLoading] = useState(false)
 
   // Filter state
-  const [entityType, setEntityType] = useState<'all' | 'request' | 'task'>('all')
+  const [entityType, setEntityType] = useState<'all' | 'request' | 'task' | 'catalog'>('all')
   const [actorId, setActorId] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -131,12 +135,13 @@ export function AuditLogClient({ initialEntries, profiles }: AuditLogClientProps
           <label className="text-xs font-medium text-gray-500">Entity Type</label>
           <select
             value={entityType}
-            onChange={(e) => setEntityType(e.target.value as 'all' | 'request' | 'task')}
+            onChange={(e) => setEntityType(e.target.value as 'all' | 'request' | 'task' | 'catalog')}
             className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">All</option>
             <option value="request">Requests</option>
             <option value="task">Tasks</option>
+            <option value="catalog">Service Catalog</option>
           </select>
         </div>
 

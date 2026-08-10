@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { logAdminAudit } from './audit'
 
 type ActionResult = { error?: string }
 
@@ -66,6 +67,12 @@ export async function createCategory(
     return { error: 'Failed to create category.' }
   }
 
+  await logAdminAudit({
+    orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
+    entityType: 'service_category', entityId: row.id, action: 'category_created',
+    metadata: { name: data.name.trim() },
+  })
+
   revalidatePath('/admin/categories')
   revalidatePath('/services')
   return { id: row.id }
@@ -80,15 +87,23 @@ export async function updateCategory(
 
   const supabase = await createClient()
 
+  const payload = {
+    ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+    ...(data.description !== undefined ? { description: data.description?.trim() || null } : {}),
+    ...(data.icon !== undefined ? { icon: data.icon?.trim() || null } : {}),
+  }
+
   const { error } = await supabase
     .from('service_categories')
-    .update({
-      ...(data.name !== undefined ? { name: data.name.trim() } : {}),
-      ...(data.description !== undefined ? { description: data.description?.trim() || null } : {}),
-      ...(data.icon !== undefined ? { icon: data.icon?.trim() || null } : {}),
-    })
+    .update(payload)
     .eq('id', id)
   if (error) return { error: error.message }
+
+  await logAdminAudit({
+    orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
+    entityType: 'service_category', entityId: id, action: 'category_updated',
+    metadata: payload,
+  })
 
   revalidatePath('/admin/categories')
   revalidatePath('/services')
@@ -109,6 +124,56 @@ export async function toggleCategoryActive(
     .eq('id', id)
 
   if (error) return { error: error.message }
+
+  await logAdminAudit({
+    orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
+    entityType: 'service_category', entityId: id,
+    action: isActive ? 'category_activated' : 'category_deactivated',
+  })
+
+  revalidatePath('/admin/categories')
+  revalidatePath('/services')
+  return {}
+}
+
+// ── deleteCategory ────────────────────────────────────────────────────────────
+// Hard delete. `services.category_id` is a NOT-NULL, RESTRICT-on-delete foreign
+// key — a category that still has services attached cannot be removed at the DB
+// level, so we check for that up front. Sub-categories cascade automatically.
+
+export async function deleteCategory(id: string): Promise<ActionResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return guard
+
+  const supabase = await createClient()
+
+  const { data: category, error: fetchError } = await supabase
+    .from('service_categories')
+    .select('name')
+    .eq('id', id)
+    .single()
+
+  if (fetchError || !category) return { error: 'Category not found.' }
+
+  const { count: serviceCount } = await supabase
+    .from('services')
+    .select('id', { count: 'exact', head: true })
+    .eq('category_id', id)
+
+  if (serviceCount && serviceCount > 0) {
+    return {
+      error: `Cannot delete "${category.name}" — ${serviceCount} service${serviceCount === 1 ? '' : 's'} still use it. Move or delete them first.`,
+    }
+  }
+
+  const { error } = await supabase.from('service_categories').delete().eq('id', id)
+  if (error) return { error: error.message }
+
+  await logAdminAudit({
+    orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
+    entityType: 'service_category', entityId: id, action: 'category_deleted',
+    metadata: { name: category.name },
+  })
 
   revalidatePath('/admin/categories')
   revalidatePath('/services')
@@ -158,6 +223,13 @@ export async function upsertSubCategory(
       .update(payload)
       .eq('id', input.id)
     if (error) return { error: error.message }
+
+    await logAdminAudit({
+      orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
+      entityType: 'service_sub_category', entityId: input.id, action: 'sub_category_updated',
+      metadata: { name: payload.name },
+    })
+
     revalidatePath(`/admin/categories/${input.categoryId}`)
     revalidatePath('/services')
     return { id: input.id }
@@ -169,6 +241,13 @@ export async function upsertSubCategory(
       .select('id')
       .single()
     if (error) return { error: error.message }
+
+    await logAdminAudit({
+      orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
+      entityType: 'service_sub_category', entityId: data.id, action: 'sub_category_created',
+      metadata: { name: payload.name, categoryId: input.categoryId },
+    })
+
     revalidatePath('/admin/categories')
     revalidatePath('/services')
     return { id: data.id }
@@ -197,6 +276,12 @@ export async function reorderSubCategories(
     )
   )
 
+  await logAdminAudit({
+    orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
+    entityType: 'service_sub_category', entityId: categoryId, action: 'sub_categories_reordered',
+    metadata: { orderedIds },
+  })
+
   revalidatePath('/admin/categories')
   revalidatePath('/services')
   return {}
@@ -219,6 +304,45 @@ export async function toggleSubCategoryActive(
 
   if (error) return { error: error.message }
 
+  await logAdminAudit({
+    orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
+    entityType: 'service_sub_category', entityId: id,
+    action: isActive ? 'sub_category_activated' : 'sub_category_deactivated',
+  })
+
+  revalidatePath('/admin/categories')
+  revalidatePath('/services')
+  return {}
+}
+
+// ── deleteSubCategory ─────────────────────────────────────────────────────────
+// Hard delete. `services.sub_category_id` is ON DELETE SET NULL, so this is
+// always safe — any services tagged with this sub-category simply lose the tag.
+
+export async function deleteSubCategory(id: string, categoryId: string): Promise<ActionResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return guard
+
+  const supabase = await createClient()
+
+  const { data: subCategory, error: fetchError } = await supabase
+    .from('service_sub_categories')
+    .select('name')
+    .eq('id', id)
+    .single()
+
+  if (fetchError || !subCategory) return { error: 'Sub-category not found.' }
+
+  const { error } = await supabase.from('service_sub_categories').delete().eq('id', id)
+  if (error) return { error: error.message }
+
+  await logAdminAudit({
+    orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
+    entityType: 'service_sub_category', entityId: id, action: 'sub_category_deleted',
+    metadata: { name: subCategory.name, categoryId },
+  })
+
+  revalidatePath(`/admin/categories/${categoryId}`)
   revalidatePath('/admin/categories')
   revalidatePath('/services')
   return {}

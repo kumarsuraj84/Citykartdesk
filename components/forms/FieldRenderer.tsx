@@ -1,24 +1,20 @@
 'use client'
 
+import { SearchableSelect } from '@/components/ui/searchable-select'
+import { PendingFileField } from '@/components/forms/PendingFileField'
 import type { FormField } from '@/types'
 
 interface FieldRendererProps {
   field: FormField
-  value: string | string[] | boolean
-  onChange: (value: string | string[] | boolean) => void
+  value: string | string[] | boolean | File[]
+  onChange: (value: string | string[] | boolean | File[]) => void
   error?: string
 }
 
 // Which field types are "compact" — can sit side-by-side
 export function isShortField(type: FormField['type']): boolean {
-  return ['text', 'number', 'date', 'select'].includes(type)
+  return ['text', 'number', 'date', 'select', 'email', 'phone'].includes(type)
 }
-
-const Chevron = () => (
-  <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-    <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
 
 export function FieldRenderer({ field, value, onChange, error }: FieldRendererProps) {
   const inputCls = [
@@ -48,6 +44,30 @@ export function FieldRenderer({ field, value, onChange, error }: FieldRendererPr
           />
         )
 
+      case 'email':
+        return (
+          <input
+            type="email"
+            id={field.id}
+            placeholder={field.placeholder ?? 'name@company.com'}
+            value={value as string}
+            onChange={(e) => onChange(e.target.value)}
+            className={inputCls}
+          />
+        )
+
+      case 'phone':
+        return (
+          <input
+            type="tel"
+            id={field.id}
+            placeholder={field.placeholder ?? '+1 555 123 4567'}
+            value={value as string}
+            onChange={(e) => onChange(e.target.value)}
+            className={inputCls}
+          />
+        )
+
       case 'textarea':
         return (
           <textarea
@@ -73,55 +93,27 @@ export function FieldRenderer({ field, value, onChange, error }: FieldRendererPr
 
       case 'select':
         return (
-          <div className="relative">
-            <select
-              id={field.id}
-              value={value as string}
-              onChange={(e) => onChange(e.target.value)}
-              className={`${inputCls} appearance-none pr-8 cursor-pointer`}
-            >
-              <option value="">-- Select {field.label} --</option>
-              {field.options?.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
-              <Chevron />
-            </span>
-          </div>
+          <SearchableSelect
+            id={field.id}
+            options={field.options ?? []}
+            value={value as string}
+            onChange={onChange}
+            placeholder={field.placeholder ?? `Search ${field.label.toLowerCase()}…`}
+            className={error ? 'border-destructive focus-visible:ring-destructive/20' : undefined}
+          />
         )
 
       case 'multiselect':
         return (
-          <div className="grid grid-cols-2 gap-2">
-            {field.options?.map((opt) => {
-              const selected = (value as string[]).includes(opt.value)
-              return (
-                <label
-                  key={opt.value}
-                  className={[
-                    'flex items-center gap-2.5 rounded-lg border px-3 py-2 cursor-pointer text-sm transition-colors select-none',
-                    selected
-                      ? 'border-ring bg-ring/5 text-foreground font-medium'
-                      : 'border-border hover:border-ring/50 text-muted-foreground hover:text-foreground',
-                  ].join(' ')}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected}
-                    onChange={(e) => {
-                      const current = value as string[]
-                      onChange(e.target.checked
-                        ? [...current, opt.value]
-                        : current.filter((v) => v !== opt.value))
-                    }}
-                    className="h-3.5 w-3.5 rounded accent-primary shrink-0"
-                  />
-                  {opt.label}
-                </label>
-              )
-            })}
-          </div>
+          <SearchableSelect
+            id={field.id}
+            multiple
+            options={field.options ?? []}
+            value={value as string[]}
+            onChange={onChange}
+            placeholder={field.placeholder ?? `Search ${field.label.toLowerCase()}…`}
+            className={error ? 'border-destructive focus-visible:ring-destructive/20' : undefined}
+          />
         )
 
       case 'checkbox':
@@ -171,6 +163,15 @@ export function FieldRenderer({ field, value, onChange, error }: FieldRendererPr
               )
             })}
           </div>
+        )
+
+      case 'file':
+        return (
+          <PendingFileField
+            id={field.id}
+            value={(value as File[] | undefined) ?? []}
+            onChange={onChange}
+          />
         )
 
       default:

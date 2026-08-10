@@ -14,8 +14,8 @@ export async function GET(req: NextRequest) {
   const actorId = searchParams.get('actorId') ?? undefined
   const entityTypeParam = searchParams.get('entityType') ?? 'all'
   const entityType = (
-    ['request', 'task', 'all'].includes(entityTypeParam) ? entityTypeParam : 'all'
-  ) as 'request' | 'task' | 'all'
+    ['request', 'task', 'catalog', 'all'].includes(entityTypeParam) ? entityTypeParam : 'all'
+  ) as 'request' | 'task' | 'catalog' | 'all'
   const dateFrom = searchParams.get('dateFrom') ?? undefined
   const dateTo = searchParams.get('dateTo') ?? undefined
 

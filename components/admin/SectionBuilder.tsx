@@ -3,6 +3,7 @@
 import { useState, useTransition, useCallback, useEffect, useMemo } from 'react'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { saveFormSections } from '@/lib/actions/admin/services'
+import { filterActiveOptions } from '@/lib/forms/options'
 import type { FormField, FormFieldType, FormFieldOption, FormSection } from '@/types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -25,6 +26,7 @@ const FIELD_LIBRARY: { type: FormFieldType; label: string; hint: string; icon: s
   { type: 'number',      label: 'Number',       hint: 'Numeric',      icon: '#'  },
   { type: 'date',        label: 'Date',         hint: 'Calendar',     icon: '◷'  },
   { type: 'email',       label: 'Email',        hint: 'Validated',    icon: '@'  },
+  { type: 'phone',       label: 'Phone',        hint: 'Validated',    icon: '☎'  },
   { type: 'file',        label: 'File upload',  hint: 'Attachments',  icon: '⇪'  },
   { type: 'toggle',      label: 'Yes / No',     hint: 'Boolean',      icon: '◐'  },
 ]
@@ -49,6 +51,7 @@ function newField(type: FormFieldType): FormField {
     number:      'Untitled number',
     date:        'Untitled date',
     email:       'Email address',
+    phone:       'Phone number',
     file:        'Attachments',
     toggle:      'Yes or no?',
     checkbox:    'Untitled checkbox',
@@ -100,6 +103,16 @@ function countLeaves(tree: OptTree): number {
   return n
 }
 
+function countActiveLeaves(tree: OptTree): number {
+  let n = 0
+  for (const node of tree) {
+    if (node.is_active === false) continue
+    if (!node.children?.length) n += node.label.trim() ? 1 : 0
+    else n += countActiveLeaves(node.children)
+  }
+  return n
+}
+
 function mapOptTree(
   tree: OptTree,
   path: Path,
@@ -119,13 +132,6 @@ function updateOptNode(tree: OptTree, path: Path, patch: Partial<FormFieldOption
   return mapOptTree(tree, parentPath, (arr) =>
     arr.map((n, i) => (i === idx ? { ...n, ...patch } : n)),
   )
-}
-
-function removeOptNode(tree: OptTree, path: Path): OptTree {
-  if (!path.length) return tree
-  const parentPath = path.slice(0, -1)
-  const idx = path[path.length - 1]
-  return mapOptTree(tree, parentPath, (arr) => arr.filter((_, i) => i !== idx))
 }
 
 function insertOptAfter(tree: OptTree, path: Path, node: FormFieldOption): OptTree {
@@ -196,9 +202,9 @@ function getValidationErrors(sections: FormSection[]): string[] {
     s.fields.forEach((f) => {
       if (!f.label.trim()) errors.push('A field is missing a label')
       if (f.type === 'select' || f.type === 'multiselect') {
-        const leaves = countLeaves(f.options ?? [])
-        if (leaves < 2)
-          errors.push(`"${f.label || 'Field'}" needs at least 2 selectable options`)
+        const activeLeaves = countActiveLeaves(f.options ?? [])
+        if (activeLeaves < 2)
+          errors.push(`"${f.label || 'Field'}" needs at least 2 active (non-archived) selectable options`)
       }
     })
   })
@@ -289,10 +295,11 @@ function OptionTreeEditor({
           const idx = path[path.length - 1]
           const canIndent = idx > 0
           const canOutdent = path.length > 1
+          const archived = node.is_active === false
           return (
             <li
               key={node.value}
-              className="flex items-center gap-1.5"
+              className={`flex items-center gap-1.5 ${archived ? 'opacity-50' : ''}`}
               style={{ paddingLeft: depth * 16 }}
             >
               <span
@@ -310,9 +317,14 @@ function OptionTreeEditor({
                 onChange={(e) =>
                   onChange((t) => updateOptNode(t, path, { label: e.target.value }))
                 }
-                className="min-w-0 flex-1 rounded-md border border-border bg-muted px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:bg-background"
+                className={`min-w-0 flex-1 rounded-md border border-border bg-muted px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:bg-background ${archived ? 'line-through' : ''}`}
                 placeholder={hasChildren ? 'Group label' : 'Option label'}
               />
+              {archived && (
+                <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  Archived
+                </span>
+              )}
               <div className="flex items-center gap-0.5 text-muted-foreground">
                 <IconBtn title="Move up" onClick={() => onChange((t) => moveOptSibling(t, path, -1))}>↑</IconBtn>
                 <IconBtn title="Move down" onClick={() => onChange((t) => moveOptSibling(t, path, 1))}>↓</IconBtn>
@@ -320,7 +332,11 @@ function OptionTreeEditor({
                 <IconBtn title="Indent" disabled={!canIndent} onClick={() => onChange((t) => indentOptNode(t, path))}>⇥</IconBtn>
                 <IconBtn title="Add child" onClick={() => onChange((t) => appendOptChild(t, path, newOpt()))}>+</IconBtn>
                 <IconBtn title="Add sibling" onClick={() => onChange((t) => insertOptAfter(t, path, newOpt()))}>↵</IconBtn>
-                <IconBtn title="Delete" danger onClick={() => onChange((t) => removeOptNode(t, path))}>✕</IconBtn>
+                {archived ? (
+                  <IconBtn title="Restore" onClick={() => onChange((t) => updateOptNode(t, path, { is_active: true }))}>↺</IconBtn>
+                ) : (
+                  <IconBtn title="Archive (cannot be deleted — historical requests may reference it)" danger onClick={() => onChange((t) => updateOptNode(t, path, { is_active: false }))}>⊘</IconBtn>
+                )}
               </div>
             </li>
           )
@@ -394,6 +410,9 @@ function PreviewField({ field }: { field: FormField }) {
       {field.type === 'email' && (
         <input type="email" placeholder={field.placeholder ?? 'name@company.com'} className={base} />
       )}
+      {field.type === 'phone' && (
+        <input type="tel" placeholder={field.placeholder ?? '+1 555 123 4567'} className={base} />
+      )}
       {field.type === 'number' && (
         <input type="number" placeholder={field.placeholder} className={base} />
       )}
@@ -434,12 +453,12 @@ function PreviewField({ field }: { field: FormField }) {
           <option value="" disabled>
             {field.placeholder ?? 'Select an option'}
           </option>
-          {renderSelectOptions(field.options ?? [])}
+          {renderSelectOptions(filterActiveOptions(field.options))}
         </select>
       )}
       {field.type === 'multiselect' && (
         <div className="rounded-md border border-border bg-muted p-2.5">
-          <MultiSelectTree tree={field.options ?? []} />
+          <MultiSelectTree tree={filterActiveOptions(field.options)} />
         </div>
       )}
       {field.help_text && (

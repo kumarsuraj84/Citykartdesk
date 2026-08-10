@@ -2,11 +2,12 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Check, X, Layers, Power } from 'lucide-react'
+import { Plus, Pencil, Check, X, Layers, Power, Trash2 } from 'lucide-react'
 import {
   createCategory,
   updateCategory,
   toggleCategoryActive,
+  deleteCategory,
 } from '@/lib/actions/admin/categories'
 import type { ServiceCategoryWithSubCategories } from '@/types'
 
@@ -19,6 +20,9 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
   const [error, setError] = useState('')
   const [pending, startTransition] = useTransition()
   const [togglePending, startToggle] = useTransition()
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+  const [deletePending, startDelete] = useTransition()
 
   function handleSave() {
     setError('')
@@ -42,6 +46,18 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
   function handleToggle() {
     startToggle(async () => {
       await toggleCategoryActive(cat.id, !cat.is_active)
+    })
+  }
+
+  function handleDeleteConfirm() {
+    setDeleteError('')
+    startDelete(async () => {
+      const result = await deleteCategory(cat.id)
+      if (result.error) {
+        setDeleteError(result.error)
+      } else {
+        setConfirmingDelete(false)
+      }
     })
   }
 
@@ -132,6 +148,13 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
                 <Power className="h-3 w-3" />
                 {cat.is_active ? 'Deactivate' : 'Activate'}
               </button>
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40"
+              >
+                <Trash2 className="h-3 w-3" />
+                Delete
+              </button>
               <Link
                 href={`/admin/categories/${cat.slug}`}
                 className="btn-gradient text-white"
@@ -143,6 +166,32 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
           </>
         )}
       </div>
+
+      {/* Delete confirmation */}
+      {confirmingDelete && (
+        <div className="border-t border-destructive/30 bg-destructive/5 px-5 py-4">
+          <p className="text-sm text-foreground">
+            Permanently delete <strong>{cat.name}</strong>? This cannot be undone.
+            {totalServices > 0 && ' Deletion will be blocked while services still use this category — move or delete them first.'}
+          </p>
+          {deleteError && <p className="mt-2 text-xs text-destructive">{deleteError}</p>}
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              onClick={() => { setConfirmingDelete(false); setDeleteError('') }}
+              className="btn-soft"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDeleteConfirm}
+              disabled={deletePending}
+              className="btn-danger disabled:opacity-60"
+            >
+              {deletePending ? 'Deleting…' : 'Delete Permanently'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Sub-category list */}
       {cat.sub_categories.length > 0 && (

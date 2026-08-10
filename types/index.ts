@@ -155,6 +155,7 @@ export type FormFieldType =
   | 'checkbox'
   | 'radio'
   | 'email'
+  | 'phone'
   | 'file'
   | 'toggle'
 
@@ -162,6 +163,11 @@ export type FormFieldOption = {
   value: string
   label: string
   children?: FormFieldOption[]
+  /** Archived options are hidden from new selections but never removed from the
+   *  array — historical requests read from a frozen form_sections_snapshot, so an
+   *  option that was in use when a request was submitted must keep resolving to
+   *  its label forever, even after being retired. Undefined/true = active. */
+  is_active?: boolean
 }
 
 export type FormField = {

@@ -2,20 +2,24 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Loader2, Send } from 'lucide-react'
 import { FieldRenderer, isShortField } from './FieldRenderer'
 import { createRequest } from '@/lib/actions/requests'
+import { uploadAttachment } from '@/lib/actions/attachments'
+import { validateFields } from '@/lib/validation/formFields'
 import type { FormField, FormSection, ServiceWithRelations } from '@/types'
 
 interface DynamicFormProps {
   service: ServiceWithRelations
 }
 
-type FieldValue = string | string[] | boolean
+type FieldValue = string | string[] | boolean | File[]
 
 function getDefaultValue(field: FormField): FieldValue {
   switch (field.type) {
-    case 'multiselect': return []
+    case 'multiselect':
+    case 'file':        return []
     case 'checkbox':    return false
     default:            return ''
   }
@@ -112,6 +116,8 @@ export function DynamicForm({ service }: DynamicFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [serverError, setServerError] = useState<string | null>(null)
+  const [attachmentWarning, setAttachmentWarning] = useState<string | null>(null)
+  const [createdRequestId, setCreatedRequestId] = useState<string | null>(null)
 
   const sections =
     Array.isArray(service.form_sections) && service.form_sections.length > 0
@@ -135,14 +141,7 @@ export function DynamicForm({ service }: DynamicFormProps) {
   }
 
   function validate(): boolean {
-    const newErrors: Record<string, string> = {}
-    for (const field of allFields) {
-      if (!field.required) continue
-      const val = values[field.id]
-      if (val === '' || val === false || (Array.isArray(val) && val.length === 0)) {
-        newErrors[field.id] = `${field.label} is required`
-      }
-    }
+    const newErrors = validateFields(allFields, values)
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -151,14 +150,48 @@ export function DynamicForm({ service }: DynamicFormProps) {
     e.preventDefault()
     if (!validate()) return
     setServerError(null)
+    setAttachmentWarning(null)
+
+    // File-type field values are File[] — they can't be JSON-serialized into
+    // form_data, and request_attachments.request_id is a NOT NULL FK, so files
+    // can only be uploaded once the request row exists. Strip them out here and
+    // upload them in a follow-up step after createRequest returns a real id.
+    const fileFields = allFields.filter((f) => f.type === 'file')
+    const submittableValues: Record<string, FieldValue> = { ...values }
+    for (const f of fileFields) delete submittableValues[f.id]
+
     const formData = new FormData()
     formData.set('service_id', service.id)
-    formData.set('form_data', JSON.stringify(values))
+    formData.set('form_data', JSON.stringify(submittableValues))
+
     startTransition(async () => {
       const result = await createRequest(formData)
       if (result.error) {
         setServerError(result.error)
-      } else if (result.requestId) {
+        return
+      }
+      if (!result.requestId) return
+
+      const pendingFiles = fileFields.flatMap((f) => (values[f.id] as File[] | undefined) ?? [])
+      if (pendingFiles.length === 0) {
+        router.push(`/requests/${result.requestId}`)
+        return
+      }
+
+      const failures: string[] = []
+      for (const file of pendingFiles) {
+        const fd = new FormData()
+        fd.append('file', file)
+        const uploadResult = await uploadAttachment(result.requestId, fd)
+        if (uploadResult.error) failures.push(`${file.name}: ${uploadResult.error}`)
+      }
+
+      if (failures.length > 0) {
+        setCreatedRequestId(result.requestId)
+        setAttachmentWarning(
+          `Request created, but ${failures.length} attachment${failures.length === 1 ? '' : 's'} failed to upload — ${failures.join('; ')}. You can retry from the request page.`
+        )
+      } else {
         router.push(`/requests/${result.requestId}`)
       }
     })
@@ -172,6 +205,21 @@ export function DynamicForm({ service }: DynamicFormProps) {
         <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">
           <span className="shrink-0">⚠</span>
           {serverError}
+        </div>
+      )}
+
+      {attachmentWarning && createdRequestId && (
+        <div className="flex flex-col gap-2 rounded-lg border border-amber-400/40 bg-amber-500/5 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-400">
+          <div className="flex items-start gap-2">
+            <span className="shrink-0">⚠</span>
+            {attachmentWarning}
+          </div>
+          <Link
+            href={`/requests/${createdRequestId}`}
+            className="self-start text-xs font-semibold underline underline-offset-2"
+          >
+            Continue to request →
+          </Link>
         </div>
       )}
 

@@ -201,7 +201,7 @@ export async function getRecentActivity(limit = 10): Promise<RecentActivityRow[]
 
 export type AuditEntry = {
   id: string
-  entity_type: 'request' | 'task'
+  entity_type: 'request' | 'task' | 'service' | 'service_category' | 'service_sub_category'
   entity_id: string
   action: string
   actor_name: string
@@ -210,26 +210,29 @@ export type AuditEntry = {
   entity_title?: string
 }
 
+const CATALOG_ENTITY_TYPES = ['service', 'service_category', 'service_sub_category'] as const
+
 export async function getAuditLogs(opts: {
   page?: number
   perPage?: number
   actorId?: string
-  entityType?: 'request' | 'task' | 'all'
+  entityType?: 'request' | 'task' | 'catalog' | 'all'
   dateFrom?: string
   dateTo?: string
 }): Promise<{ data: AuditEntry[]; count: number }> {
-  // RLS-respecting client: request_activity / task_activity SELECT policies scope rows to
-  // the caller's org, so an org admin only sees their own org's audit trail. (Was using the
-  // service-role client with no org filter — leaked cross-org audit content.)
+  // RLS-respecting client: request_activity / task_activity / admin_audit_log SELECT
+  // policies scope rows to the caller's org, so an org admin only sees their own org's
+  // audit trail. (Was using the service-role client with no org filter — leaked cross-org
+  // audit content.)
   const admin = (await createClient()) as unknown as AnyClient
   const page = Math.max(1, Math.trunc(opts.page ?? 1) || 1)
   const perPage = Math.min(200, Math.max(1, Math.trunc(opts.perPage ?? 50) || 50))
   const entityType = opts.entityType ?? 'all'
 
-  // Bounded, not truly paginated at the SQL level (these are two independently-sorted
-  // tables merged in JS, so a page boundary can't be pushed into a single `.range()` on
-  // either one) — but `.limit(page * perPage)` caps memory/transfer to the requested
-  // page depth instead of the entire org's activity history, which is the actual risk.
+  // Bounded, not truly paginated at the SQL level (these are independently-sorted tables
+  // merged in JS, so a page boundary can't be pushed into a single `.range()` on any one
+  // of them) — but `.limit(page * perPage)` caps memory/transfer to the requested page
+  // depth instead of the entire org's activity history, which is the actual risk.
   const rowCap = page * perPage
 
   const applyFilters = (q: ReturnType<AnyClient['from']>) => {
@@ -239,15 +242,20 @@ export async function getAuditLogs(opts: {
     return q.order('created_at', { ascending: false }).limit(rowCap)
   }
 
-  const [rawRequests, rawTasks] = await Promise.all([
-    entityType === 'task' ? Promise.resolve({ data: null }) : applyFilters(
+  const [rawRequests, rawTasks, rawAdmin] = await Promise.all([
+    entityType === 'task' || entityType === 'catalog' ? Promise.resolve({ data: null }) : applyFilters(
       admin.from('request_activity').select(
         'id,request_id,action,actor_id,metadata,created_at,profile:profiles!actor_id(full_name),request:requests(title)'
       )
     ),
-    entityType === 'request' ? Promise.resolve({ data: null }) : applyFilters(
+    entityType === 'request' || entityType === 'catalog' ? Promise.resolve({ data: null }) : applyFilters(
       admin.from('task_activity').select(
         'id,task_id,action,actor_id,metadata,created_at,profile:profiles!actor_id(full_name),task:tasks(title)'
+      )
+    ),
+    entityType === 'request' || entityType === 'task' ? Promise.resolve({ data: null }) : applyFilters(
+      admin.from('admin_audit_log').select(
+        'id,entity_type,entity_id,action,actor_id,metadata,created_at,profile:profiles!actor_id(full_name)'
       )
     ),
   ])
@@ -272,7 +280,22 @@ export async function getAuditLogs(opts: {
     metadata: row.metadata ?? {}, created_at: row.created_at, entity_title: row.task?.title,
   }))
 
-  const merged = [...requestEntries, ...taskEntries].sort(
+  const adminEntries: AuditEntry[] = (rawAdmin.data ?? []).map((row: {
+    id: string; entity_type: string; entity_id: string | null; action: string
+    metadata: Record<string, unknown>; created_at: string
+    profile: { full_name: string } | null
+  }) => ({
+    id: row.id,
+    entity_type: (CATALOG_ENTITY_TYPES as readonly string[]).includes(row.entity_type)
+      ? (row.entity_type as AuditEntry['entity_type'])
+      : 'service',
+    entity_id: row.entity_id ?? '',
+    action: row.action, actor_name: row.profile?.full_name ?? 'Unknown',
+    metadata: row.metadata ?? {}, created_at: row.created_at,
+    entity_title: typeof row.metadata?.name === 'string' ? row.metadata.name : undefined,
+  }))
+
+  const merged = [...requestEntries, ...taskEntries, ...adminEntries].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   )
 

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { logAdminAudit } from './audit'
 import type { FormSection } from '@/types'
 
 type ActionResult = { error?: string }
@@ -97,6 +98,12 @@ export async function saveFormSections(
     return { error: `Save failed: ${error.message}` }
   }
 
+  await logAdminAudit({
+    orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
+    entityType: 'service', entityId: serviceId, action: 'service_form_updated',
+    metadata: { section_count: normalised.length },
+  })
+
   revalidatePath(`/admin/services/${serviceId}`)
   revalidatePath(`/services`) // invalidate service catalog cache
 
@@ -181,6 +188,12 @@ export async function createService(
     return { error: 'Failed to create service.' }
   }
 
+  await logAdminAudit({
+    orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
+    entityType: 'service', entityId: row.id, action: 'service_created',
+    metadata: { name: data.name.trim() },
+  })
+
   revalidatePath('/admin/services')
   revalidatePath('/services')
   return { id: row.id }
@@ -222,6 +235,12 @@ export async function updateService(
     return { error: 'Failed to update service.' }
   }
 
+  await logAdminAudit({
+    orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
+    entityType: 'service', entityId: id, action: 'service_updated',
+    metadata: updatePayload,
+  })
+
   revalidatePath('/admin/services')
   revalidatePath('/services')
   return {}
@@ -241,6 +260,60 @@ export async function archiveService(id: string): Promise<ActionResult> {
     console.error('[archiveService]', error.message)
     return { error: 'Failed to archive service.' }
   }
+
+  await logAdminAudit({
+    orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
+    entityType: 'service', entityId: id, action: 'service_archived',
+  })
+
+  revalidatePath('/admin/services')
+  revalidatePath('/services')
+  return {}
+}
+
+// ── deleteService ─────────────────────────────────────────────────────────────
+// Hard delete. `requests.service_id` is a NOT-NULL, RESTRICT-on-delete foreign
+// key — a service that still has requests attached cannot be removed at the DB
+// level, so we check for that up front and return a clear, actionable error
+// instead of surfacing a raw Postgres FK-violation message.
+
+export async function deleteService(id: string): Promise<ActionResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return guard
+
+  const supabase = await createClient()
+
+  const { data: service, error: fetchError } = await supabase
+    .from('services')
+    .select('name')
+    .eq('id', id)
+    .single()
+
+  if (fetchError || !service) return { error: 'Service not found.' }
+
+  const { count: requestCount } = await supabase
+    .from('requests')
+    .select('id', { count: 'exact', head: true })
+    .eq('service_id', id)
+
+  if (requestCount && requestCount > 0) {
+    return {
+      error: `Cannot delete "${service.name}" — ${requestCount} request${requestCount === 1 ? '' : 's'} reference it. Archive it instead, or delete/reassign those requests first.`,
+    }
+  }
+
+  const { error } = await supabase.from('services').delete().eq('id', id)
+
+  if (error) {
+    console.error('[deleteService]', error.message)
+    return { error: 'Failed to delete service.' }
+  }
+
+  await logAdminAudit({
+    orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
+    entityType: 'service', entityId: id, action: 'service_deleted',
+    metadata: { name: service.name },
+  })
 
   revalidatePath('/admin/services')
   revalidatePath('/services')

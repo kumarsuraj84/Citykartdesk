@@ -2,15 +2,39 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Archive, Settings2, Tag } from 'lucide-react'
+import { Plus, Pencil, Archive, Settings2, Tag, Trash2, Copy } from 'lucide-react'
 import {
   createService,
   updateService,
   archiveService,
+  deleteService,
+  saveFormSections,
   type ServiceInput,
 } from '@/lib/actions/admin/services'
-import type { ServiceCategoryWithSubCategories, ServiceWithRelations, Team, Profile } from '@/types'
+import type { ServiceCategoryWithSubCategories, ServiceWithRelations, Team, Profile, FormField, FormSection } from '@/types'
 import type { ServiceSubCategory } from '@/types'
+
+// Mirrors the legacy → section migration in app/(app)/admin/services/[id]/page.tsx —
+// a service's intake form lives in `form_sections` (current) or, for older services,
+// a flat `form_fields` array. Duplicating must carry over whichever one is populated.
+function resolveFormSections(service: ServiceWithRelations): FormSection[] {
+  const sections = Array.isArray(service.form_sections) && service.form_sections.length > 0
+    ? (service.form_sections as unknown as FormSection[])
+    : null
+  if (sections) return sections
+
+  const legacyFields = Array.isArray(service.form_fields)
+    ? (service.form_fields as unknown as FormField[])
+    : []
+  if (legacyFields.length === 0) return []
+
+  return [{
+    id: 'section_migrated_0',
+    title: 'Request Details',
+    order: 0,
+    fields: legacyFields.map((f, i) => ({ ...f, order: i })),
+  }]
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -25,6 +49,7 @@ type Props = {
 type ModalMode =
   | { type: 'create' }
   | { type: 'edit'; service: ServiceWithRelations }
+  | { type: 'duplicate'; source: ServiceWithRelations }
   | null
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const
@@ -68,10 +93,11 @@ function ServiceModal({
   onClose: () => void
 }) {
   const isEdit = mode.type === 'edit'
-  const existing = isEdit ? mode.service : null
+  const isDuplicate = mode.type === 'duplicate'
+  const existing = isEdit ? mode.service : isDuplicate ? mode.source : null
   const existingAny = existing as (ServiceWithRelations & { status?: string; owner_id?: string | null; backup_owner_id?: string | null; version?: string; visibility?: string }) | null
 
-  const [name, setName] = useState(existing?.name ?? '')
+  const [name, setName] = useState(isDuplicate ? `${existing?.name ?? ''} (Copy)` : existing?.name ?? '')
   const [description, setDescription] = useState(existing?.description ?? '')
   const [icon, setIcon] = useState(existing?.icon ?? '')
   const [categoryId, setCategoryId] = useState(existing?.category_id ?? '')
@@ -84,7 +110,7 @@ function ServiceModal({
   const [status, setStatus] = useState<ServiceStatus>((existingAny?.status as ServiceStatus) ?? 'published')
   const [ownerId, setOwnerId] = useState(existingAny?.owner_id ?? '')
   const [backupOwnerId, setBackupOwnerId] = useState(existingAny?.backup_owner_id ?? '')
-  const [version, setVersion] = useState(existingAny?.version ?? '1.0')
+  const [version, setVersion] = useState(isDuplicate ? '1.0' : existingAny?.version ?? '1.0')
   const [visibility, setVisibility] = useState<ServiceVisibility>((existingAny?.visibility as ServiceVisibility) ?? 'all')
   const [error, setError] = useState('')
   const [pending, startTransition] = useTransition()
@@ -116,15 +142,29 @@ function ServiceModal({
     }
 
     startTransition(async () => {
-      const result = isEdit
+      const result: { error?: string; id?: string } = isEdit
         ? await updateService(existing!.id, data)
         : await createService(data)
 
       if (result.error) {
         setError(result.error)
-      } else {
-        onClose()
+        return
       }
+
+      // Duplicate: also clone the source service's intake form onto the new one
+      // (handles both current section-based and legacy flat-field services).
+      if (mode.type === 'duplicate' && result.id) {
+        const sourceSections = resolveFormSections(mode.source)
+        if (sourceSections.length > 0) {
+          const formResult = await saveFormSections(result.id, sourceSections)
+          if (formResult.error) {
+            setError(`Service created, but copying the form failed: ${formResult.error}`)
+            return
+          }
+        }
+      }
+
+      onClose()
     })
   }
 
@@ -133,8 +173,13 @@ function ServiceModal({
       <div className="w-full max-w-lg rounded-2xl border border-border bg-card shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="border-b border-border px-5 py-4 sticky top-0 bg-card z-10">
           <h2 className="text-base font-semibold text-foreground">
-            {isEdit ? 'Edit Service' : 'Create Service'}
+            {isEdit ? 'Edit Service' : isDuplicate ? `Duplicate "${mode.source.name}"` : 'Create Service'}
           </h2>
+          {isDuplicate && (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Pre-filled from the source service{resolveFormSections(mode.source).length > 0 ? ', including its intake form' : ''}.
+            </p>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 px-5 py-4">
@@ -347,7 +392,7 @@ function ServiceModal({
               disabled={pending}
               className="btn-gradient disabled:opacity-60"
             >
-              {pending ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Service'}
+              {pending ? 'Saving…' : isEdit ? 'Save Changes' : isDuplicate ? 'Create Duplicate' : 'Create Service'}
             </button>
           </div>
         </form>
@@ -362,12 +407,16 @@ function ServiceRow({
   service,
   profiles,
   onEdit,
+  onDuplicate,
   onArchive,
+  onDelete,
 }: {
   service: ServiceWithRelations
   profiles: ProfileMini[]
   onEdit: (s: ServiceWithRelations) => void
+  onDuplicate: (s: ServiceWithRelations) => void
   onArchive: (s: ServiceWithRelations) => void
+  onDelete: (s: ServiceWithRelations) => void
 }) {
   const svcAny = service as ServiceWithRelations & { status?: string; owner_id?: string | null; version?: string }
   const govStatus = (svcAny.status ?? 'published') as ServiceStatus
@@ -438,6 +487,13 @@ function ServiceRow({
           <Settings2 className="h-3 w-3" />
           Edit Form
         </Link>
+        <button
+          onClick={() => onDuplicate(service)}
+          className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-foreground hover:bg-muted"
+        >
+          <Copy className="h-3 w-3" />
+          Duplicate
+        </button>
         {service.is_active && (
           <button
             onClick={() => onArchive(service)}
@@ -447,6 +503,13 @@ function ServiceRow({
             Archive
           </button>
         )}
+        <button
+          onClick={() => onDelete(service)}
+          className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40"
+        >
+          <Trash2 className="h-3 w-3" />
+          Delete
+        </button>
       </div>
     </div>
   )
@@ -459,6 +522,9 @@ export default function ServicesAdminClient({ categories, teams, profiles }: Pro
   const [archiveTarget, setArchiveTarget] = useState<ServiceWithRelations | null>(null)
   const [archivePending, startArchive] = useTransition()
   const [archiveError, setArchiveError] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<ServiceWithRelations | null>(null)
+  const [deletePending, startDelete] = useTransition()
+  const [deleteError, setDeleteError] = useState('')
 
   function handleArchiveConfirm() {
     if (!archiveTarget) return
@@ -469,6 +535,19 @@ export default function ServicesAdminClient({ categories, teams, profiles }: Pro
         setArchiveError(result.error)
       } else {
         setArchiveTarget(null)
+      }
+    })
+  }
+
+  function handleDeleteConfirm() {
+    if (!deleteTarget) return
+    setDeleteError('')
+    startDelete(async () => {
+      const result = await deleteService(deleteTarget.id)
+      if (result.error) {
+        setDeleteError(result.error)
+      } else {
+        setDeleteTarget(null)
       }
     })
   }
@@ -543,7 +622,9 @@ export default function ServicesAdminClient({ categories, teams, profiles }: Pro
                               service={service}
                               profiles={profiles}
                               onEdit={(s) => setModal({ type: 'edit', service: s })}
+                              onDuplicate={(s) => setModal({ type: 'duplicate', source: s })}
                               onArchive={(s) => setArchiveTarget(s)}
+                              onDelete={(s) => setDeleteTarget(s)}
                             />
                           ))}
                         </div>
@@ -599,6 +680,37 @@ export default function ServicesAdminClient({ categories, teams, profiles }: Pro
                 className="btn-danger disabled:opacity-60"
               >
                 {archivePending ? 'Archiving…' : 'Archive'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation dialog */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-xl">
+            <h3 className="text-base font-semibold text-destructive">Delete service permanently?</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              <strong>{deleteTarget.name}</strong> will be permanently removed. This action cannot be undone.
+              If any requests reference it, deletion will be blocked — archive it instead in that case.
+            </p>
+            {deleteError && (
+              <p className="mt-2 text-xs text-destructive">{deleteError}</p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => { setDeleteTarget(null); setDeleteError('') }}
+                className="btn-soft"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deletePending}
+                className="btn-danger disabled:opacity-60"
+              >
+                {deletePending ? 'Deleting…' : 'Delete Permanently'}
               </button>
             </div>
           </div>
