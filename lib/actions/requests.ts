@@ -10,6 +10,7 @@ import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/reques
 import { computeSLADeadline } from '@/lib/sla/business-hours'
 import { getEnabledModules } from '@/lib/queries/profiles'
 import { validateFieldValue } from '@/lib/validation/formFields'
+import { resolveFieldSlaTier } from '@/lib/sla/resolve'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus } from '@/types'
 import type { Database, Json } from '@/types/database'
 
@@ -129,10 +130,34 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
 
   const priority = service.default_priority as RequestPriority
   const now = new Date()
-  const slaConfig = service.sla_config as unknown as SLAConfig
-  const slaTier = slaConfig?.[priority]
-  const responseDueAt = calcDeadline(slaTier?.response_hours, now)
-  const resolutionDueAt = calcDeadline(slaTier?.resolution_hours, now)
+  const { data: requesterProfile } = await supabase.from('profiles').select('org_id').eq('id', user.id).single()
+  const orgId = requesterProfile?.org_id
+
+  // SLA resolution, most specific layer wins field-by-field:
+  //   1. field_sla_overrides — a specific dropdown/radio value selected on this
+  //      submission (e.g. "Screen Repair" under Laptop Repair), configured via the
+  //      Field SLA Matrix (Request Configuration → Field SLA Matrix).
+  //   2. services.sla_config — the service's own per-priority overrides, set via the
+  //      "SLA Overrides" section on the service form.
+  //   3. global_sla_config — the org's default per-priority SLA.
+  // Restores the global SLA Targets screen's actual effect, which previously went
+  // unused because services.sla_config was never populated by any UI.
+  const fieldSlaTier = await resolveFieldSlaTier(supabase, serviceId, priority, allFields, parsedFormData)
+  const serviceSlaTier = (service.sla_config as unknown as SLAConfig | null)?.[priority]
+  let responseHours = fieldSlaTier?.response_hours ?? serviceSlaTier?.response_hours ?? null
+  let resolutionHours = fieldSlaTier?.resolution_hours ?? serviceSlaTier?.resolution_hours ?? null
+  if ((responseHours == null || resolutionHours == null) && orgId) {
+    const { data: globalTier } = await supabase
+      .from('global_sla_config')
+      .select('response_hours, resolution_hours')
+      .eq('org_id', orgId)
+      .eq('priority', priority)
+      .maybeSingle()
+    responseHours ??= globalTier?.response_hours ?? null
+    resolutionHours ??= globalTier?.resolution_hours ?? null
+  }
+  const responseDueAt = calcDeadline(responseHours, now)
+  const resolutionDueAt = calcDeadline(resolutionHours, now)
 
   const { data: request, error: insertError } = await supabase
     .from('requests')
@@ -141,7 +166,7 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
       service_id: serviceId,
       team_id: service.team_id,
       requester_id: user.id,
-      org_id: (await supabase.from('profiles').select('org_id').eq('id', user.id).single()).data?.org_id,
+      org_id: orgId,
       title,
       priority,
       form_data: parsedFormData as Json,
@@ -160,25 +185,22 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
     return { error: insertError?.message ?? 'Failed to create request.' }
   }
 
-  // Compute SLA deadline using business-hours-aware logic from global_sla_config
-  try {
-    const { data: globalSla } = await supabase
-      .from('global_sla_config')
-      .select('resolution_hours')
-      .eq('priority', priority)
-      .single()
-
-    if (globalSla?.resolution_hours) {
-      const slaMinutes = Math.round(Number(globalSla.resolution_hours) * 60)
-      const startAt = new Date()
-      const deadline = await computeSLADeadline(startAt, slaMinutes)
+  // Recompute resolution_due_at with business-hours-aware logic (skips nights,
+  // weekends, holidays) using the already-resolved resolutionHours (field override >
+  // service override > global default). Previously this re-derived the deadline from
+  // global_sla_config alone, unconditionally overwriting whatever service/field-level
+  // SLA the block above had just resolved.
+  if (resolutionHours != null) {
+    try {
+      const slaMinutes = Math.round(Number(resolutionHours) * 60)
+      const deadline = await computeSLADeadline(now, slaMinutes)
       await supabase
         .from('requests')
         .update({ resolution_due_at: deadline.toISOString() })
         .eq('id', request.id)
+    } catch (e) {
+      console.error('[createRequest] SLA deadline computation failed', e)
     }
-  } catch (e) {
-    console.error('[createRequest] SLA deadline computation failed', e)
   }
 
   // Auto-assign via routing rules
@@ -793,10 +815,11 @@ export async function removeCollaborator(
 export async function addComment(
   requestId: string,
   body: string,
-  isInternal: boolean
-): Promise<ActionResult> {
+  isInternal: boolean,
+  hasAttachments = false
+): Promise<ActionResult & { commentId?: string }> {
   const trimmed = body.trim()
-  if (!trimmed) return { error: 'Comment cannot be empty.' }
+  if (!trimmed && !hasAttachments) return { error: 'Comment cannot be empty.' }
 
   const supabase = await createClient()
   const profile = await getCurrentProfile()
@@ -828,14 +851,18 @@ export async function addComment(
       .is('responded_at', null)
   }
 
-  const { error: insertError } = await supabase.from('request_comments').insert({
-    request_id: requestId,
-    author_id: profile.id,
-    body: trimmed,
-    is_internal: internal,
-  })
+  const { data: insertedComment, error: insertError } = await supabase
+    .from('request_comments')
+    .insert({
+      request_id: requestId,
+      author_id: profile.id,
+      body: trimmed,
+      is_internal: internal,
+    })
+    .select('id')
+    .single()
 
-  if (insertError) return { error: insertError.message }
+  if (insertError || !insertedComment) return { error: insertError?.message ?? 'Failed to post comment.' }
 
   const commentActivity = await logActivity({
     requestId,
@@ -856,6 +883,7 @@ export async function addComment(
       : [audience.requesterId, audience.assigneeId, ...audience.collaboratorIds]
 
     const recipients = [...new Set(notifyIds.filter((id): id is string => id !== null && id !== profile.id))]
+    const notifBody = trimmed ? (trimmed.length > 120 ? trimmed.slice(0, 120) + '…' : trimmed) : '📎 Sent an attachment'
 
     if (recipients.length > 0) {
       notify(
@@ -866,7 +894,7 @@ export async function addComment(
           title: internal
             ? `${profile.full_name} posted an internal note`
             : `${profile.full_name} commented on a request`,
-          body: trimmed.length > 120 ? trimmed.slice(0, 120) + '…' : trimmed,
+          body: notifBody,
           requestId,
           link: `/requests/${requestId}?tab=conversations`,
         }))
@@ -962,7 +990,7 @@ export async function addComment(
   revalidatePath('/requests')
   revalidatePath('/home')
 
-  return {}
+  return { commentId: insertedComment.id }
 }
 
 // ── Change priority ───────────────────────────────────────────────────────────

@@ -36,7 +36,15 @@ function formatDate(iso: string | null): string {
 
 function toInputDate(iso: string | null): string {
   if (!iso) return ''
-  return new Date(iso).toISOString().slice(0, 10)
+  // Local-time calendar date, matching formatDate() above — using toISOString()
+  // (UTC) here instead disagreed with formatDate for any due_date that falls in
+  // the UTC/local offset gap, showing a different day in the edit input than in
+  // the read-only cell right next to it.
+  const d = new Date(iso)
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function AvatarInitial({ name }: { name: string }) {

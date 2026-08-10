@@ -11,8 +11,36 @@ import {
   saveFormSections,
   type ServiceInput,
 } from '@/lib/actions/admin/services'
-import type { ServiceCategoryWithSubCategories, ServiceWithRelations, Team, Profile, FormField, FormSection } from '@/types'
+import type { ServiceCategoryWithSubCategories, ServiceWithRelations, Team, Profile, FormField, FormSection, SLAConfig } from '@/types'
 import type { ServiceSubCategory } from '@/types'
+
+const SLA_PRIORITIES = ['urgent', 'high', 'medium', 'low'] as const
+type SlaDraft = Record<(typeof SLA_PRIORITIES)[number], { response: string; resolution: string }>
+
+function slaConfigToDraft(config: SLAConfig | null | undefined): SlaDraft {
+  const draft = {} as SlaDraft
+  for (const p of SLA_PRIORITIES) {
+    draft[p] = {
+      response: config?.[p]?.response_hours != null ? String(config[p]!.response_hours) : '',
+      resolution: config?.[p]?.resolution_hours != null ? String(config[p]!.resolution_hours) : '',
+    }
+  }
+  return draft
+}
+
+function draftToSlaConfig(draft: SlaDraft): SLAConfig {
+  const config: SLAConfig = {}
+  for (const p of SLA_PRIORITIES) {
+    const response = draft[p].response.trim()
+    const resolution = draft[p].resolution.trim()
+    if (!response && !resolution) continue
+    config[p] = {
+      response_hours: response ? parseFloat(response) : null,
+      resolution_hours: resolution ? parseFloat(resolution) : null,
+    }
+  }
+  return config
+}
 
 // Mirrors the legacy → section migration in app/(app)/admin/services/[id]/page.tsx —
 // a service's intake form lives in `form_sections` (current) or, for older services,
@@ -112,6 +140,9 @@ function ServiceModal({
   const [backupOwnerId, setBackupOwnerId] = useState(existingAny?.backup_owner_id ?? '')
   const [version, setVersion] = useState(isDuplicate ? '1.0' : existingAny?.version ?? '1.0')
   const [visibility, setVisibility] = useState<ServiceVisibility>((existingAny?.visibility as ServiceVisibility) ?? 'all')
+  const [slaDraft, setSlaDraft] = useState<SlaDraft>(() =>
+    slaConfigToDraft(existingAny?.sla_config as SLAConfig | null | undefined)
+  )
   const [error, setError] = useState('')
   const [pending, startTransition] = useTransition()
 
@@ -139,6 +170,7 @@ function ServiceModal({
       backup_owner_id: backupOwnerId || null,
       version: version.trim() || '1.0',
       visibility,
+      sla_config: draftToSlaConfig(slaDraft),
     }
 
     startTransition(async () => {
@@ -361,6 +393,39 @@ function ServiceModal({
                   ))}
                 </select>
               </div>
+            </div>
+          </div>
+
+          {/* SLA Overrides */}
+          <div className="border-t border-border pt-3">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">SLA Overrides</p>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Per-priority response/resolution targets for this service. Leave a field blank to inherit the organization&apos;s default for that priority (Admin → Request Config → SLA Targets).
+            </p>
+            <div className="space-y-2">
+              {SLA_PRIORITIES.map((p) => (
+                <div key={p} className="grid grid-cols-[70px_1fr_1fr] items-center gap-2">
+                  <span className="text-xs font-medium capitalize text-foreground">{p}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    value={slaDraft[p].response}
+                    onChange={(e) => setSlaDraft((prev) => ({ ...prev, [p]: { ...prev[p], response: e.target.value } }))}
+                    placeholder="Response (h) — org default"
+                    className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={slaDraft[p].resolution}
+                    onChange={(e) => setSlaDraft((prev) => ({ ...prev, [p]: { ...prev[p], resolution: e.target.value } }))}
+                    placeholder="Resolution (h) — org default"
+                    className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  />
+                </div>
+              ))}
             </div>
           </div>
 

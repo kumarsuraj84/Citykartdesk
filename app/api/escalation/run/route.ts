@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notify } from '@/lib/notifications'
 import { verifyCronSecret } from '@/lib/cron-auth'
+import { computeElapsedBusinessMinutes } from '@/lib/sla/business-hours'
 
 export async function GET(req: NextRequest) {
   const verified = verifyCronSecret(req)
@@ -56,13 +57,25 @@ export async function GET(req: NextRequest) {
     return ids
   }
 
-  for (const req of requests ?? []) {
-    const createdTs = new Date(req.created_at).getTime()
-    const deadlineTs = new Date(req.resolution_due_at).getTime()
-    const totalDuration = deadlineTs - createdTs
-    if (totalDuration <= 0) continue
+  const nowDate = new Date(now)
 
-    const pctElapsed = ((now - createdTs) / totalDuration) * 100
+  for (const req of requests ?? []) {
+    const createdAt = new Date(req.created_at)
+    const deadlineAt = new Date(req.resolution_due_at)
+    if (deadlineAt <= createdAt) continue
+
+    // Business-hours-aware: resolution_due_at itself is computed against the business-
+    // hours calendar (see lib/sla/business-hours.ts computeSLADeadline), so "% elapsed"
+    // must be too — otherwise a deadline spanning a weekend/holiday understates how much
+    // of the actual working-time budget has been consumed. Falls back to wall-clock
+    // percentage only if the calendar yields zero business minutes for this window (e.g.
+    // business hours not configured for this org) — such a request should still be able
+    // to escalate rather than never firing at all.
+    const totalBusinessMinutes = await computeElapsedBusinessMinutes(createdAt, deadlineAt)
+    const pctElapsed =
+      totalBusinessMinutes > 0
+        ? ((await computeElapsedBusinessMinutes(createdAt, nowDate)) / totalBusinessMinutes) * 100
+        : ((now - createdAt.getTime()) / (deadlineAt.getTime() - createdAt.getTime())) * 100
 
     for (const rule of rules ?? []) {
       if (rule.tier !== req.priority) continue

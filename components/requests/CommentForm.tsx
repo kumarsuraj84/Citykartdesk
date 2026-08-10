@@ -1,8 +1,10 @@
 'use client'
 
-import { useState, useTransition, useRef } from 'react'
-import { Loader2, Send, ChevronDown } from 'lucide-react'
+import { useState, useTransition, useRef, useCallback } from 'react'
+import { Loader2, Send, ChevronDown, Paperclip, X, FileIcon, AlertCircle } from 'lucide-react'
 import { addComment } from '@/lib/actions/requests'
+import { uploadAttachment } from '@/lib/actions/attachments'
+import { validateAttachment } from '@/lib/attachments/validate'
 import { CANNED_RESPONSES, CANNED_CATEGORIES } from '@/lib/constants/canned-responses'
 
 interface CommentFormProps {
@@ -10,29 +12,80 @@ interface CommentFormProps {
   canPostInternal: boolean
 }
 
+const ACCEPT = '.png,.jpg,.jpeg,.gif,.webp,.svg,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.mp4,.webm,.mp3,.wav'
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
   const [body, setBody]                      = useState('')
   const [isInternal, setIsInternal]          = useState(false)
+  const [files, setFiles]                    = useState<File[]>([])
+  const [fileError, setFileError]            = useState<string | null>(null)
   const [error, setError]                    = useState<string | null>(null)
   const [isPending, startTransition]         = useTransition()
   const [showCanned, setShowCanned]          = useState(false)
   const [cannedSearch, setCannedSearch]      = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const cannedRef   = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const addFiles = useCallback(async (incoming: File[]) => {
+    setFileError(null)
+    for (const file of incoming) {
+      const result = await validateAttachment(file)
+      if (!result.valid) {
+        setFileError(`"${file.name}": ${result.error ?? 'Invalid file.'}`)
+        return
+      }
+    }
+    setFiles((cur) => [...cur, ...incoming])
+  }, [])
+
+  function onFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(e.target.files ?? [])
+    if (picked.length) addFiles(picked)
+    e.target.value = ''
+  }
+
+  function removeFileAt(index: number) {
+    setFiles((cur) => cur.filter((_, i) => i !== index))
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!body.trim()) return
+    if (!body.trim() && files.length === 0) return
     setError(null)
+    const pendingFiles = files
     startTransition(async () => {
-      const result = await addComment(requestId, body, isInternal)
-      if (result.error) {
-        setError(result.error)
-      } else {
-        setBody('')
-        setIsInternal(false)
-        textareaRef.current?.focus()
+      const result = await addComment(requestId, body, isInternal, pendingFiles.length > 0)
+      if (result.error || !result.commentId) {
+        setError(result.error ?? 'Failed to post comment.')
+        return
       }
+
+      let uploadFailures = 0
+      for (const file of pendingFiles) {
+        const fd = new FormData()
+        fd.append('file', file)
+        const uploadResult = await uploadAttachment(requestId, fd, result.commentId)
+        if (uploadResult.error) uploadFailures++
+      }
+
+      setBody('')
+      setIsInternal(false)
+      setFiles([])
+      if (uploadFailures > 0) {
+        setError(
+          uploadFailures === pendingFiles.length
+            ? 'Comment posted, but the attachment(s) failed to upload.'
+            : `Comment posted, but ${uploadFailures} of ${pendingFiles.length} attachment(s) failed to upload.`
+        )
+      }
+      textareaRef.current?.focus()
     })
   }
 
@@ -83,8 +136,57 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
         />
       </div>
 
+      {fileError && (
+        <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          <span className="flex-1">{fileError}</span>
+          <button type="button" onClick={() => setFileError(null)} className="shrink-0 rounded-sm hover:text-red-900">
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
+
+      {files.length > 0 && (
+        <ul className="space-y-1">
+          {files.map((file, i) => (
+            <li
+              key={`${file.name}-${file.lastModified}-${i}`}
+              className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs"
+            >
+              <FileIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-foreground">{file.name}</span>
+              <span className="shrink-0 text-muted-foreground">{formatBytes(file.size)}</span>
+              <button
+                type="button"
+                onClick={() => removeFileAt(i)}
+                className="shrink-0 rounded-sm text-muted-foreground hover:text-destructive"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={ACCEPT}
+            multiple
+            className="hidden"
+            onChange={onFileInputChange}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            title="Attach files"
+            className="flex min-h-[36px] cursor-pointer select-none items-center gap-1.5 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+            Attach
+          </button>
           {canPostInternal && (
             <button
               type="button"
@@ -189,7 +291,7 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
 
         <button
           type="submit"
-          disabled={isPending || !body.trim()}
+          disabled={isPending || (!body.trim() && files.length === 0)}
           className="btn-gradient disabled:opacity-40"
         >
           {isPending ? (

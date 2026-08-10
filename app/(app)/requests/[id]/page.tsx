@@ -23,7 +23,6 @@ import { getAllProjectsMini } from '@/lib/queries/projects'
 import { ProjectCell } from '@/components/requests/ProjectCell'
 import { CommentForm } from '@/components/requests/CommentForm'
 import { AttachmentChips } from '@/components/requests/AttachmentChips'
-import { AttachmentUpload } from '@/components/requests/AttachmentUpload'
 import { RequestDetailTabs } from '@/components/requests/RequestDetailTabs'
 import { RequestActionBar } from '@/components/requests/RequestActionBar'
 import { getActiveTimer } from '@/lib/actions/requests'
@@ -34,6 +33,7 @@ import type {
   ActivityAction,
   RequestActivityWithActor,
   RequestCommentWithAuthor,
+  RequestAttachmentWithUploader,
   FormField,
   FormSection,
 } from '@/types'
@@ -122,7 +122,17 @@ function MetricCard({
   )
 }
 
-function CommentBubble({ comment }: { comment: RequestCommentWithAuthor }) {
+function CommentBubble({
+  comment,
+  attachments,
+  currentUserId,
+  canManageAll,
+}: {
+  comment: RequestCommentWithAuthor
+  attachments: RequestAttachmentWithUploader[]
+  currentUserId: string
+  canManageAll: boolean
+}) {
   const initial = comment.author.full_name.charAt(0).toUpperCase()
   return (
     <div
@@ -163,13 +173,20 @@ function CommentBubble({ comment }: { comment: RequestCommentWithAuthor }) {
               {formatRelativeTime(comment.created_at)}
             </span>
           </div>
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-            {comment.body.split(/(@\w+)/g).map((part, i) =>
-              /^@\w+$/.test(part) ? (
-                <span key={i} className="font-semibold text-primary">{part}</span>
-              ) : part
-            )}
-          </p>
+          {comment.body.trim() && (
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+              {comment.body.split(/(@\w+)/g).map((part, i) =>
+                /^@\w+$/.test(part) ? (
+                  <span key={i} className="font-semibold text-primary">{part}</span>
+                ) : part
+              )}
+            </p>
+          )}
+          {attachments.length > 0 && (
+            <div className="mt-2">
+              <AttachmentChips attachments={attachments} currentUserId={currentUserId} canManageAll={canManageAll} />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -397,12 +414,28 @@ export default async function RequestDetailPage({ params }: PageProps) {
     : null
 
   // ── Tab: Conversations ──────────────────────────────────────────────────────
+  // Attachments live inside the conversation, grouped by the reply they were sent
+  // with — no separate top-of-thread attachments block. Files with no comment_id
+  // were uploaded at request-submission time (a file-type intake field, before any
+  // comment existed) and render as part of a "request submitted" card at the very
+  // end of the (now latest-first) list, since that's the oldest event in the thread.
+  const attachmentsByComment = new Map<string, RequestAttachmentWithUploader[]>()
+  const submissionAttachments: RequestAttachmentWithUploader[] = []
+  for (const att of attachments) {
+    const commentId = (att as RequestAttachmentWithUploader & { comment_id: string | null }).comment_id
+    if (commentId) {
+      const list = attachmentsByComment.get(commentId) ?? []
+      list.push(att)
+      attachmentsByComment.set(commentId, list)
+    } else {
+      submissionAttachments.push(att)
+    }
+  }
+
   const conversationsTab = (
     <div className="flex flex-col" style={{ minHeight: '480px', maxHeight: '70vh' }}>
       {/* Scrollable message thread */}
       <div className="flex-1 overflow-y-auto p-5 space-y-4 min-h-0">
-        <AttachmentChips attachments={attachments} currentUserId={profile.id} canManageAll={isAgent} />
-
         {request.status === 'waiting_user' && isRequester && !isAgent && (
           <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
             <p className="text-sm font-semibold text-orange-900">Action needed</p>
@@ -412,7 +445,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
           </div>
         )}
 
-        {comments.length === 0 ? (
+        {comments.length === 0 && submissionAttachments.length === 0 ? (
           <div className="py-10 text-center">
             <p className="text-sm text-muted-foreground">No messages yet.</p>
             {!isTerminal && (
@@ -424,8 +457,26 @@ export default async function RequestDetailPage({ params }: PageProps) {
         ) : (
           <div className="space-y-3">
             {comments.map((comment) => (
-              <CommentBubble key={comment.id} comment={comment} />
+              <CommentBubble
+                key={comment.id}
+                comment={comment}
+                attachments={attachmentsByComment.get(comment.id) ?? []}
+                currentUserId={profile.id}
+                canManageAll={isAgent}
+              />
             ))}
+            {submissionAttachments.length > 0 && (
+              <div className="rounded-xl border border-border bg-muted/20 p-4">
+                <p className="mb-2 text-xs font-semibold text-muted-foreground">
+                  Attached when the request was submitted
+                </p>
+                <AttachmentChips
+                  attachments={submissionAttachments}
+                  currentUserId={profile.id}
+                  canManageAll={isAgent}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -434,7 +485,6 @@ export default async function RequestDetailPage({ params }: PageProps) {
       {!isTerminal ? (
         <div className="shrink-0 border-t border-border bg-card px-5 py-4 space-y-3">
           <CommentForm requestId={request.id} canPostInternal={isAgent} />
-          <AttachmentUpload requestId={request.id} />
         </div>
       ) : (
         <div className="shrink-0 border-t border-border bg-muted/20 px-5 py-3 text-center">

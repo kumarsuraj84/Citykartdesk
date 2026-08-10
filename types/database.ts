@@ -34,6 +34,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          org_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          org_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_audit_log_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_audit_log_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_applications: {
         Row: {
           created_at: string
@@ -915,6 +963,70 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      field_sla_overrides: {
+        Row: {
+          created_at: string
+          field_id: string
+          field_label: string
+          id: string
+          option_label: string
+          option_value: string
+          org_id: string
+          service_id: string
+          sla_config: Json
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          field_id: string
+          field_label: string
+          id?: string
+          option_label: string
+          option_value: string
+          org_id: string
+          service_id: string
+          sla_config?: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          field_id?: string
+          field_label?: string
+          id?: string
+          option_label?: string
+          option_value?: string
+          org_id?: string
+          service_id?: string
+          sla_config?: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_sla_overrides_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "field_sla_overrides_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "field_sla_overrides_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -2956,6 +3068,7 @@ export type Database = {
       }
       request_attachments: {
         Row: {
+          comment_id: string | null
           deleted_at: string | null
           file_name: string
           file_size: number
@@ -2968,6 +3081,7 @@ export type Database = {
           uploaded_by: string
         }
         Insert: {
+          comment_id?: string | null
           deleted_at?: string | null
           file_name: string
           file_size: number
@@ -2980,6 +3094,7 @@ export type Database = {
           uploaded_by: string
         }
         Update: {
+          comment_id?: string | null
           deleted_at?: string | null
           file_name?: string
           file_size?: number
@@ -2992,6 +3107,13 @@ export type Database = {
           uploaded_by?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "request_attachments_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "request_comments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "request_attachments_request_id_fkey"
             columns: ["request_id"]

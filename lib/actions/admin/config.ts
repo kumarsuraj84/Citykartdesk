@@ -41,10 +41,12 @@ export async function updateAppSetting(
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
+  // app_settings is a plain key/value table (key TEXT PRIMARY KEY, value TEXT) with
+  // no updated_at column — don't include one in the upsert payload.
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin
     .from('app_settings')
-    .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    .upsert({ key, value }, { onConflict: 'key' })
 
   if (error) return { error: error.message }
   revalidatePath('/admin/request-config')
@@ -233,6 +235,13 @@ export async function deleteHoliday(id: string): Promise<{ error?: string }> {
 
 // ── SLA Escalation Rules ──────────────────────────────────────────────────────
 
+// Must match the requests.priority enum — app/api/escalation/run/route.ts matches a
+// rule's tier against a request's priority with a strict string compare, so any tier
+// outside this set can never fire. Also enforced by a DB CHECK constraint (migration
+// 20240101000095) — validated here too so the admin UI surfaces a clear error instead
+// of a raw constraint-violation message.
+const VALID_ESCALATION_TIERS = new Set(['low', 'medium', 'high', 'urgent'])
+
 export async function createEscalationRule(data: {
   name: string
   tier: string
@@ -241,6 +250,9 @@ export async function createEscalationRule(data: {
 }): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!VALID_ESCALATION_TIERS.has(data.tier)) {
+    return { error: `Tier must be one of: ${[...VALID_ESCALATION_TIERS].join(', ')}.` }
+  }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('sla_escalation_rules').insert({
@@ -261,6 +273,9 @@ export async function updateEscalationRule(
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (data.tier !== undefined && !VALID_ESCALATION_TIERS.has(data.tier)) {
+    return { error: `Tier must be one of: ${[...VALID_ESCALATION_TIERS].join(', ')}.` }
+  }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('sla_escalation_rules').update(data).eq('id', id)

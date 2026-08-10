@@ -11,7 +11,11 @@ type EscalationRule = {
   notify_roles: string[]
 }
 
-const TIERS = ['critical', 'high', 'medium', 'low']
+// Must match the requests.priority enum ('low' | 'medium' | 'high' | 'urgent') — the
+// runtime evaluator in app/api/escalation/run/route.ts matches a rule's tier against a
+// request's priority with a strict string compare, so any tier outside this set can
+// never fire.
+const TIERS = ['urgent', 'high', 'medium', 'low']
 
 export function EscalationRulesClient({ initialRules }: { initialRules: EscalationRule[] }) {
   const [rules, setRules] = useState<EscalationRule[]>(initialRules)

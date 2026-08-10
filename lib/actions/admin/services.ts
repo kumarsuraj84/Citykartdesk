@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logAdminAudit } from './audit'
-import type { FormSection } from '@/types'
+import type { FormSection, SLAConfig } from '@/types'
 
 type ActionResult = { error?: string }
 
@@ -126,6 +126,10 @@ export type ServiceInput = {
   backup_owner_id?: string | null
   version?: string
   visibility?: 'all' | 'agents_only' | 'managers_only'
+  // Per-priority response/resolution hour overrides for this service. A priority
+  // tier omitted here (or with a null field) falls back to the org's global_sla_config
+  // default for that field at request-creation time — see createRequest.
+  sla_config?: SLAConfig
 }
 
 function slugify(name: string): string {
@@ -175,6 +179,7 @@ export async function createService(
     backup_owner_id: data.backup_owner_id ?? null,
     version: data.version?.trim() || '1.0',
     visibility: data.visibility ?? 'all',
+    sla_config: data.sla_config ?? {},
   }
 
   const { data: row, error } = await supabase
@@ -223,6 +228,7 @@ export async function updateService(
     ...(data.backup_owner_id !== undefined ? { backup_owner_id: data.backup_owner_id || null } : {}),
     ...(data.version !== undefined ? { version: data.version?.trim() || '1.0' } : {}),
     ...(data.visibility !== undefined ? { visibility: data.visibility } : {}),
+    ...(data.sla_config !== undefined ? { sla_config: data.sla_config } : {}),
   }
 
   const { error } = await supabase

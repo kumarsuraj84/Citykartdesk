@@ -36,11 +36,14 @@ export async function getRequestActivity(requestId: string): Promise<RequestActi
 
 export async function getRequestComments(requestId: string): Promise<RequestCommentWithAuthor[]> {
   const supabase = await createClient()
+  // Latest-first: matches the conversation thread's display order. Also means the
+  // 100-row cap keeps the newest activity on very long threads instead of stranding
+  // it past the limit.
   const { data } = await supabase
     .from('request_comments')
     .select(`*, author:profiles (id, full_name)`)
     .eq('request_id', requestId)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(100)
   return (data ?? []) as RequestCommentWithAuthor[]
 }
@@ -238,9 +241,19 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
       .in('id', ids)
       .order('updated_at', { ascending: false })
   } else if (view === 'mine') {
-    query = query
-      .eq('requester_id', userId)
-      .order('updated_at', { ascending: false })
+    // "My Requests" also includes requests the user collaborates on but didn't
+    // personally request — a collaborated request should surface here, not only
+    // under Team Queue (which explicitly excludes it below).
+    const { data: collabRows } = await supabase
+      .from('request_collaborators')
+      .select('request_id')
+      .eq('user_id', userId)
+    const collabIds = (collabRows ?? []).map((r) => r.request_id)
+
+    query = collabIds.length > 0
+      ? query.or(`requester_id.eq.${userId},id.in.(${collabIds.join(',')})`)
+      : query.eq('requester_id', userId)
+    query = query.order('updated_at', { ascending: false })
   } else if (view === 'assigned_me') {
     query = query
       .eq('assigned_to', userId)
@@ -292,6 +305,17 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
       query = query.or(`requester_id.neq.${userId},id.in.(${intakeByMeIds.join(',')})`)
     } else {
       query = query.neq('requester_id', userId)
+    }
+
+    // Also exclude anything the user collaborates on — a collaborated request
+    // belongs in "My Requests" only, never in Team Queue too.
+    const { data: collabRows } = await supabase
+      .from('request_collaborators')
+      .select('request_id')
+      .eq('user_id', userId)
+    const collabIds = (collabRows ?? []).map((r) => r.request_id)
+    if (collabIds.length > 0) {
+      query = query.not('id', 'in', `(${collabIds.join(',')})`)
     }
     // Sort: user-selected or default SLA urgency
     if (opts.sort && opts.sort !== 'updated_at') {

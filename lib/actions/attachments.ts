@@ -81,7 +81,8 @@ function formatBytes(bytes: number): string {
 
 export async function uploadAttachment(
   requestId: string,
-  formData: FormData
+  formData: FormData,
+  commentId?: string | null
 ): Promise<UploadResult> {
   // ── Auth ──────────────────────────────────────────────────────────────────
   const supabase = await createClient()
@@ -138,6 +139,20 @@ export async function uploadAttachment(
     return { error: 'You do not have permission to attach files to this request.' }
   }
 
+  // ── Comment association check ─────────────────────────────────────────────
+  // Files are attached inline to the reply they were sent with — confirm the given
+  // comment actually belongs to this request so a caller can't graft a file onto
+  // an unrelated request's comment.
+  if (commentId) {
+    const { data: comment } = await supabase
+      .from('request_comments')
+      .select('id')
+      .eq('id', commentId)
+      .eq('request_id', requestId)
+      .maybeSingle()
+    if (!comment) return { error: 'Comment not found on this request.' }
+  }
+
   // ── Storage upload ────────────────────────────────────────────────────────
   // VIRUS_SCAN_HOOK: insert quarantine/scan step here before moving to final bucket
   const admin = createAdminClient()
@@ -161,6 +176,7 @@ export async function uploadAttachment(
     .from('request_attachments')
     .insert({
       request_id: requestId,
+      comment_id: commentId ?? null,
       uploaded_by: profile.id,
       file_name: file.name,
       file_size: file.size,

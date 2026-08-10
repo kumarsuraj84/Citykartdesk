@@ -22,3 +22,18 @@ export function filterActiveOptions(options: FormFieldOption[] | undefined): For
   }
   return out
 }
+
+/**
+ * Flatten a (possibly nested) option tree down to its active leaf values only,
+ * dropping group headers. Used wherever a flat list of selectable values is
+ * needed (e.g. the field-level SLA matrix, one row per leaf option).
+ */
+export function flattenLeafOptions(
+  options: FormFieldOption[] | undefined
+): { value: string; label: string }[] {
+  return filterActiveOptions(options).flatMap((opt) =>
+    opt.children?.length
+      ? flattenLeafOptions(opt.children)
+      : [{ value: opt.value, label: opt.label }]
+  )
+}

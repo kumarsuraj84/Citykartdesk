@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { getGlobalSLAConfig } from '@/lib/queries/admin'
 import { SLAConfigClient } from './SLAConfigClient'
+import { FieldSlaMatrixClient } from './FieldSlaMatrixClient'
+import { getFieldSlaMatrix } from '@/lib/sla/matrix'
 import { AppSettingsClient } from './AppSettingsClient'
 import { BusinessHoursClient } from './BusinessHoursClient'
 import { HolidayCalendarClient } from './HolidayCalendarClient'
@@ -14,10 +16,11 @@ import { STATUS_LABELS } from '@/lib/constants/requests'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
 import type { RequestStatus } from '@/types'
 
-type Tab = 'sla' | 'lifecycle' | 'business-hours' | 'escalation' | 'alerts' | 'general'
+type Tab = 'sla' | 'field-sla' | 'lifecycle' | 'business-hours' | 'escalation' | 'alerts' | 'general'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'sla',            label: 'SLA Targets'    },
+  { id: 'field-sla',      label: 'Field SLA Matrix' },
   { id: 'lifecycle',      label: 'Lifecycle'       },
   { id: 'business-hours', label: 'Business Hours'  },
   { id: 'escalation',     label: 'Escalation'      },
@@ -41,6 +44,7 @@ export default async function RequestConfigPage({
   const supabase = await createClient()
 
   const slaConfig = tab === 'sla' ? await getGlobalSLAConfig() : null
+  const fieldSlaMatrix = tab === 'field-sla' ? await getFieldSlaMatrix() : null
 
   const [{ data: businessHours }, { data: holidays }] = tab === 'business-hours'
     ? await Promise.all([
@@ -65,7 +69,7 @@ export default async function RequestConfigPage({
   const statuses = Object.keys(STATUS_LABELS) as RequestStatus[]
 
   return (
-    <div className="space-y-5 max-w-4xl">
+    <div className={`space-y-5 ${tab === 'field-sla' ? 'max-w-6xl' : 'max-w-4xl'}`}>
       <PageHeader
         title="Request Configuration"
         description="Manage SLA policies, lifecycle statuses, and request governance settings."
@@ -122,6 +126,22 @@ export default async function RequestConfigPage({
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Field SLA Matrix ── */}
+      {tab === 'field-sla' && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Field-Level SLA Matrix</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Set a different resolution-time SLA for individual dropdown/radio/multi-select values across the
+              catalog — e.g. two reasons under the same service can carry different targets. Only resolution
+              hours are set here; response-time SLA still comes from the service or org default. The most
+              specific match wins: field value → service → org default.
+            </p>
+          </div>
+          <FieldSlaMatrixClient rows={fieldSlaMatrix ?? []} />
         </div>
       )}
 

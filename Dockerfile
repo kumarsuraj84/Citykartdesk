@@ -36,6 +36,13 @@ RUN node node_modules/next/dist/bin/next build
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+# All Date/Intl calls that don't pass an explicit timeZone (most of the app —
+# server-rendered timestamps, the SLA business-hours engine, cron day/hour
+# gates in app/api/alerts/run and app/api/escalation/run) resolve against the
+# process's local timezone. Without this the container defaults to UTC, which
+# silently shifts every "today"/"business hours" calculation by +5:30 relative
+# to India, where this app is actually used.
+ENV TZ=Asia/Kolkata
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
