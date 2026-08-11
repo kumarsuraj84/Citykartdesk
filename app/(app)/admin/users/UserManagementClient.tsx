@@ -23,6 +23,18 @@ const ROLE_STYLES: Record<UserRole, string> = {
   user:    'text-slate-600 bg-slate-50 border-slate-200',
 }
 
+// Every role the DB/RLS actually recognizes (user_role enum) — the role select
+// previously hardcoded just ['admin','manager','user'], silently omitting
+// 'agent' and 'platform_owner' even though both are fully wired everywhere
+// else (RLS policies, ROLE_STYLES above, the UserRole type itself).
+const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
+  { value: 'user',           label: 'User' },
+  { value: 'agent',          label: 'Agent' },
+  { value: 'manager',        label: 'Manager' },
+  { value: 'admin',          label: 'Admin' },
+  { value: 'platform_owner', label: 'Platform Owner' },
+]
+
 function RoleBadge({ role }: { role: UserRole }) {
   return (
     <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold capitalize ${ROLE_STYLES[role] ?? 'text-slate-600 bg-slate-50 border-slate-200'}`}>
@@ -272,8 +284,8 @@ function EditDrawer({ user, departments, locations, costCenters, jobFunctions, d
               <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Role</h3>
               <Field label="System Role">
                 <select value={form.role} onChange={e => set('role', e.target.value)} className="input-field">
-                  {(['admin','manager','user'] as UserRole[]).map(r => (
-                    <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
+                  {ROLE_OPTIONS.map(r => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
                   ))}
                 </select>
               </Field>
@@ -465,8 +477,8 @@ function InviteModal({ departments, profiles, teams, onClose }: InviteModalProps
           </Field>
           <Field label="Role">
             <select value={form.role} onChange={e => set('role', e.target.value)} className="input-field">
-              {(['admin','manager','user'] as UserRole[]).map(r => (
-                <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
+              {ROLE_OPTIONS.map(r => (
+                <option key={r.value} value={r.value}>{r.label}</option>
               ))}
             </select>
           </Field>

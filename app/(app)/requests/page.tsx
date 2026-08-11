@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { ExportButton } from '@/components/requests/ExportButton'
 import { exportRequests } from '@/lib/actions/export'
 import { redirect } from 'next/navigation'
-import { getCurrentProfile, getTeamMembersForTeams, getAllProfiles } from '@/lib/queries/profiles'
+import { getCurrentProfile, getTeamMembersForTeams, getAllProfiles, getAgentTierProfiles } from '@/lib/queries/profiles'
 import { getRequests } from '@/lib/queries/requests'
 import { getActiveServicesForReclassify, getServiceCategories, getServiceSubCategoriesForFilter } from '@/lib/queries/services'
 import { RequestsTable } from '@/components/requests/RequestsTable'
@@ -64,7 +64,7 @@ export default async function RequestsPage({ searchParams }: PageProps) {
 
   const params = await searchParams
   const isAgent =
-    profile.team_members.length > 0 ||
+    profile.role === 'agent' ||
     profile.role === 'manager' ||
     profile.role === 'admin' ||
     profile.role === 'platform_owner'
@@ -129,11 +129,23 @@ export default async function RequestsPage({ searchParams }: PageProps) {
   const requests = result.data
 
   // Candidate agents for the Assignee column filter + bulk Assign-To picker —
-  // scoped to the teams actually present on this page's requests (which RLS
-  // already restricted to teams the viewer can see), not every profile in the
-  // org, so nobody can pick an agent who isn't genuinely relevant here.
-  const relevantTeamIds = Array.from(new Set(requests.map((r) => r.team_id)))
-  const assignableUsers = relevantTeamIds.length > 0 ? await getTeamMembersForTeams(relevantTeamIds) : []
+  // teams actually present on this page's requests, UNION the viewer's own
+  // team(s). Falls back to every org profile whenever that comes back empty —
+  // not just when there were no team ids to query in the first place — since
+  // an org with team_members rows not yet populated for the relevant team(s)
+  // would otherwise silently lose the filter entirely even though real
+  // candidate agents exist org-wide. assignRequest itself doesn't restrict
+  // the target to the request's team, so this fallback isn't over-permissive.
+  const relevantTeamIds = Array.from(new Set([
+    ...requests.map((r) => r.team_id),
+    ...profile.team_members.map((m) => m.team_id),
+  ]))
+  const assignableUsers = isAgent
+    ? await (async () => {
+        const scoped = relevantTeamIds.length > 0 ? await getTeamMembersForTeams(relevantTeamIds) : []
+        return scoped.length > 0 ? scoped : await getAgentTierProfiles()
+      })()
+    : []
 
   // Requester column filter — agent-only (a regular user's requests are always
   // their own, so filtering by requester would be meaningless for them).

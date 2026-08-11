@@ -7,12 +7,11 @@ import {
 } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { getCurrentProfile, getTeamMembers } from '@/lib/queries/profiles'
-import { getRequestById, getRequestActivity, getRequestComments, getRequestCollaborators, getRelatedRequests, getSubRequests, getCsatSurveyForRequest } from '@/lib/queries/requests'
+import { getRequestById, getRequestActivity, getRequestComments, getRequestCollaborators, getRelatedRequests, getCsatSurveyForRequest } from '@/lib/queries/requests'
 import { getRequestAttachments } from '@/lib/queries/attachments'
 import { getApprovalsForRequest } from '@/lib/queries/approvals'
 import { ApprovalPanel } from '@/components/requests/ApprovalPanel'
 import { RelatedRequestsPanel } from '@/components/requests/RelatedRequestsPanel'
-import { SubRequestList } from '@/components/requests/SubRequestList'
 import { CsatSurvey } from '@/components/requests/CsatSurvey'
 import { SLABadge } from '@/components/requests/SLABadge'
 import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
@@ -356,7 +355,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
 
   // Phase 1: everything that only needs `id` runs in parallel.
   // teamMembers and csatSurvey are gated on request data so they stay in Phase 2.
-  const [request, activity, comments, attachments, collaborators, approvals, linkedTasks, activeTimer, relatedRequests, subRequests, allProjects] = await Promise.all([
+  const [request, activity, comments, attachments, collaborators, approvals, linkedTasks, activeTimer, relatedRequests, allProjects] = await Promise.all([
     getRequestById(id),
     getRequestActivity(id),
     getRequestComments(id),
@@ -366,7 +365,6 @@ export default async function RequestDetailPage({ params }: PageProps) {
     getTasksForRequest(id),
     getActiveTimer(id),
     getRelatedRequests(id),
-    getSubRequests(id),
     getAllProjectsMini(),
   ])
 
@@ -378,7 +376,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
     profile.role === 'manager' ||
     profile.role === 'admin' ||
     profile.role === 'platform_owner' ||
-    profile.team_members.some((m) => m.team_id === request.team_id)
+    (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
   const isRequester = request.requester_id === profile.id
   const canManage   = isAgent
   const isTerminal  = TERMINAL_STATUSES.includes(request.status)
@@ -805,12 +803,6 @@ export default async function RequestDetailPage({ params }: PageProps) {
         isTerminal={isTerminal}
         teamMembers={teamMembers}
         initialCollaborators={collaborators}
-      />
-      <SubRequestList
-        parentRequestId={request.id}
-        initialSubRequests={subRequests}
-        canManage={canManage}
-        teamMembers={teamMembers}
       />
       <RelatedRequestsPanel
         requestId={request.id}

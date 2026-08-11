@@ -225,24 +225,29 @@ export async function getServiceSubCategoriesForFilter(): Promise<ServiceSubCate
 export type ReclassifyServiceOption = {
   id: string
   name: string
+  category_id: string | null
   category_name: string
+  sub_category_id: string | null
   sub_category_name: string | null
 }
 
 /** Lean active-service list for the "reclassify this request" picker — just
- *  enough to group/label options, not the full catalog card/detail shape. */
+ *  enough to group/label options (and cascade Category → Sub Category →
+ *  Service), not the full catalog card/detail shape. */
 export async function getActiveServicesForReclassify(): Promise<ReclassifyServiceOption[]> {
   const supabase = await createClient()
   const { data } = await supabase
     .from('services')
-    .select('id, name, category:service_categories(name), sub_category:service_sub_categories(name)')
+    .select('id, name, category_id, sub_category_id, category:service_categories(name), sub_category:service_sub_categories(name)')
     .eq('is_active', true)
     .order('sort_order')
-  return ((data ?? []) as unknown as { id: string; name: string; category: { name: string } | null; sub_category: { name: string } | null }[])
+  return ((data ?? []) as unknown as { id: string; name: string; category_id: string | null; sub_category_id: string | null; category: { name: string } | null; sub_category: { name: string } | null }[])
     .map((s) => ({
       id: s.id,
       name: s.name,
+      category_id: s.category_id,
       category_name: s.category?.name ?? '—',
+      sub_category_id: s.sub_category_id,
       sub_category_name: s.sub_category?.name ?? null,
     }))
 }

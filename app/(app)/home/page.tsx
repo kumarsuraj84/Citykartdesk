@@ -895,8 +895,8 @@ export default async function HomePage({
   const hasRequests = enabledMods.includes('requests')
   const hasTasks    = enabledMods.includes('tasks')
   const hasProjects = enabledMods.includes('projects')
-  const isAgent     = profile.team_members.length > 0
   const isManager   = profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'
+  const isAgent     = profile.role === 'agent' || isManager
   const defaultTab  = hasRequests ? 'requests' : hasTasks ? 'tasks' : 'requests'
   const tab         = (sp.tab === 'tasks' && hasTasks) ? 'tasks'
                      : (sp.tab === 'projects' && hasProjects) ? 'projects'

@@ -20,6 +20,10 @@ export interface TeamWithMembers {
 export interface UserOption {
   id: string
   full_name: string
+  /** Other teams this user already belongs to — surfaced in the "Add member"
+   *  picker so an admin never taps someone into a second team without
+   *  realizing they're already tagged elsewhere. */
+  existing_team_names: string[]
 }
 
 export default async function AdminTeamsPage() {
@@ -73,9 +77,21 @@ export default async function AdminTeamsPage() {
     }
   })
 
+  // Every team a given user already belongs to, derived from the same `teams`
+  // list above (no extra query) — used to warn against accidental double-tagging.
+  const teamNamesByUser = new Map<string, string[]>()
+  for (const t of teams) {
+    for (const m of t.members) {
+      const names = teamNamesByUser.get(m.id) ?? []
+      names.push(t.name)
+      teamNamesByUser.set(m.id, names)
+    }
+  }
+
   const allUsers: UserOption[] = ((profilesRaw ?? []) as ProfileQueryRow[]).map((p) => ({
     id: p.id,
     full_name: p.full_name,
+    existing_team_names: teamNamesByUser.get(p.id) ?? [],
   }))
 
   return (

@@ -32,7 +32,11 @@ export default async function AppLayout({
   const navCountsPromise = getNavCounts(profile.id)
   const notificationsPromise = getNotifications(profile.id, { limit: 10 })
 
-  const isAgent = profile.team_members.length > 0 || profile.role === 'agent' || profile.role === 'platform_owner'
+  const isAgent =
+    profile.role === 'agent' ||
+    profile.role === 'manager' ||
+    profile.role === 'admin' ||
+    profile.role === 'platform_owner'
   const isTeamLead = profile.team_members.some((m) => m.is_lead)
   const isManager = profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'
   const isAdmin = profile.role === 'admin' || profile.role === 'platform_owner'

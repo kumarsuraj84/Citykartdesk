@@ -65,8 +65,8 @@ export async function sendAdHocApproval(
     .single()
   if (!req) return { error: 'Request not found.' }
 
-  const onTeam = profile.team_members.some((m) => m.team_id === req.team_id)
-  if (!['manager', 'admin'].includes(profile.role) && !onTeam)
+  const onTeam = profile.role === 'agent' && profile.team_members.some((m) => m.team_id === req.team_id)
+  if (!['manager', 'admin', 'platform_owner'].includes(profile.role) && !onTeam)
     return { error: 'Unauthorized.' }
 
   if (['resolved', 'closed', 'cancelled', 'pending_approval'].includes(req.status))

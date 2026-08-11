@@ -133,7 +133,7 @@ export async function uploadAttachment(
     profile.role === 'manager' ||
     profile.role === 'admin' ||
     profile.role === 'platform_owner' ||
-    profile.team_members.some((m) => m.team_id === request.team_id)
+    (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
 
   if (!isRequester && !isAgent) {
     return { error: 'You do not have permission to attach files to this request.' }
@@ -238,7 +238,7 @@ export async function deleteAttachment(
     profile.role === 'manager' ||
     profile.role === 'admin' ||
     profile.role === 'platform_owner' ||
-    (request ? profile.team_members.some((m) => m.team_id === request.team_id) : false)
+    (request ? profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id) : false)
 
   if (!isUploader && !isAgent) {
     return { error: 'You do not have permission to delete this attachment.' }

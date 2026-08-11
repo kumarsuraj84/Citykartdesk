@@ -20,10 +20,10 @@ export default async function ServiceDetailPage({ params }: PageProps) {
   // else; a plain requester submitting for themselves never sees this option.
   const canBookOnBehalf =
     !!profile &&
-    (profile.role === 'manager' ||
+    (profile.role === 'agent' ||
+      profile.role === 'manager' ||
       profile.role === 'admin' ||
-      profile.role === 'platform_owner' ||
-      profile.team_members.length > 0)
+      profile.role === 'platform_owner')
 
   const slaConfig = service.sla_config as unknown as SLAConfig
   const defaultSla = slaConfig?.[service.default_priority]

@@ -465,16 +465,6 @@ export async function getRelatedRequests(requestId: string) {
   })
 }
 
-export async function getSubRequests(parentRequestId: string) {
-  const supabase = await createClient()
-  const { data } = await supabase
-    .from('requests')
-    .select('id, request_no, title, status, priority, resolution_due_at, assignee:profiles!requests_assigned_to_fkey (id, full_name)')
-    .eq('parent_request_id', parentRequestId)
-    .order('created_at', { ascending: true })
-  return data ?? []
-}
-
 export async function getRequestsForProject(projectId: string) {
   const supabase = await createClient()
   const { data } = await supabase

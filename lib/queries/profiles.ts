@@ -52,6 +52,20 @@ export async function getAllProfiles(): Promise<{ id: string; full_name: string 
   return (data ?? []) as { id: string; full_name: string }[]
 }
 
+/** Org-wide fallback for the Assignee column filter/bulk Assign-To picker when
+ *  no team-scoped candidates exist — unlike getAllProfiles(), restricted to
+ *  agent-tier roles since a plain 'user' can't actually be assigned a request. */
+export async function getAgentTierProfiles(): Promise<{ id: string; full_name: string }[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, full_name')
+    .in('role', ['agent', 'manager', 'admin', 'platform_owner'])
+    .order('full_name')
+    .limit(100)
+  return (data ?? []) as { id: string; full_name: string }[]
+}
+
 export async function searchProfiles(query: string): Promise<{ id: string; full_name: string }[]> {
   const supabase = await createClient()
   const safe = query.replace(/[%_]/g, '\\$&').trim()
@@ -64,18 +78,26 @@ export async function searchProfiles(query: string): Promise<{ id: string; full_
   return (data ?? []) as { id: string; full_name: string }[]
 }
 
+// Only these roles can actually be assigned a request and act on it (see
+// isAgent checks throughout lib/actions/requests.ts) — a plain 'user' who
+// happens to be a team_members row (e.g. legacy data, or added for reporting
+// visibility) can't pick up or work a ticket, so team-member pickers must not
+// offer them as an assignee.
+const AGENT_TIER_ROLES = ['agent', 'manager', 'admin', 'platform_owner']
+
 export async function getTeamMembers(
   teamId: string
 ): Promise<{ id: string; full_name: string }[]> {
   const supabase = await createClient()
   const { data } = await supabase
     .from('team_members')
-    .select('user:profiles!team_members_user_id_fkey (id, full_name)')
+    .select('user:profiles!team_members_user_id_fkey (id, full_name, role)')
     .eq('team_id', teamId)
   if (!data) return []
   return data
-    .map((row) => row.user as { id: string; full_name: string } | null)
-    .filter((u): u is { id: string; full_name: string } => u !== null)
+    .map((row) => row.user as { id: string; full_name: string; role: string } | null)
+    .filter((u): u is { id: string; full_name: string; role: string } => u !== null && AGENT_TIER_ROLES.includes(u.role))
+    .map((u) => ({ id: u.id, full_name: u.full_name }))
 }
 
 /**
@@ -92,13 +114,13 @@ export async function getTeamMembersForTeams(
   const supabase = await createClient()
   const { data } = await supabase
     .from('team_members')
-    .select('user:profiles!team_members_user_id_fkey (id, full_name)')
+    .select('user:profiles!team_members_user_id_fkey (id, full_name, role)')
     .in('team_id', teamIds)
   if (!data) return []
   const byId = new Map<string, { id: string; full_name: string }>()
   for (const row of data) {
-    const u = row.user as { id: string; full_name: string } | null
-    if (u) byId.set(u.id, u)
+    const u = row.user as { id: string; full_name: string; role: string } | null
+    if (u && AGENT_TIER_ROLES.includes(u.role)) byId.set(u.id, { id: u.id, full_name: u.full_name })
   }
   return Array.from(byId.values()).sort((a, b) => a.full_name.localeCompare(b.full_name))
 }

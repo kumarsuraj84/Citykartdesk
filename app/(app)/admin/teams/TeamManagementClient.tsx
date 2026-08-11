@@ -138,12 +138,20 @@ function AddMemberDropdown({
                   key={u.id}
                   onClick={() => handleAdd(u)}
                   disabled={isPending}
+                  title={u.existing_team_names.length > 0 ? `Already in ${u.existing_team_names.join(', ')} — this adds a second team, it does not move them.` : undefined}
                   className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors disabled:opacity-40"
                 >
                   <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
                     {u.full_name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)}
                   </div>
-                  {u.full_name}
+                  <span className="flex-1 min-w-0 text-left">
+                    <span className="block truncate">{u.full_name}</span>
+                    {u.existing_team_names.length > 0 && (
+                      <span className="block truncate text-[10px] font-medium text-amber-600">
+                        Already in {u.existing_team_names.join(', ')}
+                      </span>
+                    )}
+                  </span>
                 </button>
               ))
             )}

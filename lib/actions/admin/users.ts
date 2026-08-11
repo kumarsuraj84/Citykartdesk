@@ -181,8 +181,13 @@ export async function inviteUser(fields: {
   const { error: profileErr } = await admin.from('profiles').update(profileUpdate).eq('id', uid)
   if (profileErr) return { error: profileErr.message }
 
-  if (fields.team_id) {
-    await admin.from('team_members').insert({ team_id: fields.team_id, user_id: uid, is_lead: false })
+  // team_members.org_id is NOT NULL with no DB default — must be set explicitly
+  // (matches addTeamMember's fix for the same constraint) or this insert throws
+  // and silently leaves the new user with no team, invite result unaffected
+  // since the error was previously never even checked.
+  if (fields.team_id && profile.org_id) {
+    const { error: teamErr } = await admin.from('team_members').insert({ team_id: fields.team_id, user_id: uid, org_id: profile.org_id, is_lead: false })
+    if (teamErr) return { error: `User invited, but team assignment failed: ${teamErr.message}` }
   }
 
   revalidatePath('/admin/users')

@@ -66,15 +66,16 @@ export async function resolveFieldSlaTier(
 
 /**
  * Single source of truth for computing a request's response/resolution deadlines —
- * used by createRequest, changePriority, the REOPEN path in updateRequestStatus, and
- * createSubRequest so every place a request gets (or regets) an SLA deadline resolves
+ * used by createRequest, the REOPEN path in updateRequestStatus, changePriority, and
+ * reclassifyRequest so every place a request gets (or regets) an SLA deadline resolves
  * the same two layers (field override > service override) and applies the same
  * business-hours-aware calendar (nights/weekends/holidays excluded), instead of each
  * call site re-deriving its own flat wall-clock estimate.
  *
  * `allFields`/`formData` are optional — omit them for contexts with no dynamic-form
- * submission to check against (e.g. sub-requests), which simply skips the field-level
- * layer and falls straight to the service-level config.
+ * submission to check against (e.g. a priority/service change after the request was
+ * already created), which simply skips the field-level layer and falls straight to
+ * the service-level config.
  */
 export async function resolveSlaDeadlines(
   supabase: AnyClient,

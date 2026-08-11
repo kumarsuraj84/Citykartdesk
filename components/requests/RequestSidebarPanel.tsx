@@ -11,6 +11,7 @@ import {
   addCollaborator,
   removeCollaborator,
   searchOrgMembers,
+  searchAgentTierMembers,
   reclassifyRequest,
 } from '@/lib/actions/requests'
 import { StatusBadge, PriorityBadge } from './RequestBadges'
@@ -176,6 +177,10 @@ function PriorityRow({ requestId, priority, isAgent }: {
 }
 
 // Inline assignee selector
+// Assignee row — team members are listed directly (no typing needed for the
+// common case), plus a search box to forward the ticket to ANY active org
+// member, not just this team — assignRequest itself doesn't restrict the
+// target to the request's team, so the picker shouldn't either.
 function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMembers, isAgent }: {
   requestId: string; assigneeId: string | null; assigneeName: string | null
   viewerId: string; teamMembers: TeamMember[]; isAgent: boolean
@@ -183,82 +188,10 @@ function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMember
   const [open, setOpen] = useState(false)
   const [curId, setCurId] = useState(assigneeId)
   const [curName, setCurName] = useState(assigneeName)
-  const [isPending, startTransition] = useTransition()
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [open])
-
-  function pick(id: string | null, name: string | null) {
-    const prevId = curId, prevName = curName
-    setCurId(id); setCurName(name); setOpen(false)
-    startTransition(async () => {
-      const result = await assignRequest(requestId, id)
-      if (result?.error) { toast.error(result.error); setCurId(prevId); setCurName(prevName) }
-    })
-  }
-
-  return (
-    <PropRow label="Assignee">
-      <div ref={ref} className="relative">
-        <button
-          onClick={() => isAgent && teamMembers.length > 0 && setOpen(v => !v)}
-          className={`flex items-center gap-1.5 ${isAgent && teamMembers.length > 0 ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
-        >
-          {curName ? (
-            <><Avatar name={curName} /><span className="text-xs font-medium text-foreground">{curName}</span></>
-          ) : (
-            <span className="text-xs text-muted-foreground">Unassigned</span>
-          )}
-          {isAgent && teamMembers.length > 0 && !isPending && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
-          {isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-        </button>
-        {open && (
-          <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-xl border border-border bg-card shadow-xl py-1">
-            {curId && (
-              <button onClick={() => pick(null, null)}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted transition-colors">
-                <X className="h-3 w-3" />Unassign
-              </button>
-            )}
-            {viewerId !== curId && (
-              <button onClick={() => { const me = teamMembers.find(m => m.id === viewerId); pick(viewerId, me?.full_name ?? null) }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs font-medium text-primary hover:bg-muted transition-colors">
-                Assign to me
-              </button>
-            )}
-            <div className="my-1 border-t border-border/50" />
-            {teamMembers.map(m => (
-              <button key={m.id} onClick={() => pick(m.id, m.full_name)}
-                className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted transition-colors ${m.id === curId ? 'bg-muted/60' : ''}`}>
-                <Avatar name={m.full_name} />
-                <span className="font-medium">{m.full_name}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </PropRow>
-  )
-}
-
-// Inline service (category / sub category / item) corrector — lets an agent fix a
-// wrongly-submitted classification. The candidate list is filtered client-side
-// (already fetched in full) rather than server-searched, since the active catalog
-// is small enough to ship in one page load.
-function ServiceRow({ requestId, serviceId, serviceName, isAgent, options }: {
-  requestId: string; serviceId: string; serviceName: string; isAgent: boolean
-  options: ReclassifyServiceOption[]
-}) {
-  const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [cur, setCur] = useState({ id: serviceId, name: serviceName })
+  const [results, setResults] = useState<{ id: string; full_name: string }[]>([])
+  const [searching, setSearching] = useState(false)
   const [isPending, startTransition] = useTransition()
-  const [error, setError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -270,16 +203,159 @@ function ServiceRow({ requestId, serviceId, serviceName, isAgent, options }: {
   }, [open])
   useEffect(() => { if (open) inputRef.current?.focus() }, [open])
 
-  const q = query.trim().toLowerCase()
-  const candidates = options.filter((o) => {
-    if (o.id === cur.id) return false
-    if (!q) return true
-    return [o.name, o.category_name, o.sub_category_name ?? ''].join(' ').toLowerCase().includes(q)
-  })
+  useEffect(() => {
+    const q = query.trim()
+    let cancelled = false
+    const t = setTimeout(async () => {
+      if (!q) { setResults([]); setSearching(false); return }
+      setSearching(true)
+      const found = await searchAgentTierMembers(q)
+      if (!cancelled) { setResults(found); setSearching(false) }
+    }, q ? 250 : 0)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [query])
+
+  const teamMemberIds = new Set(teamMembers.map(m => m.id))
+  const searchCandidates = results.filter(m => m.id !== curId && !teamMemberIds.has(m.id))
+
+  function pick(id: string | null, name: string | null) {
+    const prevId = curId, prevName = curName
+    setCurId(id); setCurName(name); setOpen(false); setQuery('')
+    startTransition(async () => {
+      const result = await assignRequest(requestId, id)
+      if (result?.error) { toast.error(result.error); setCurId(prevId); setCurName(prevName) }
+    })
+  }
+
+  return (
+    <PropRow label="Assignee">
+      <div ref={ref} className="relative">
+        <button
+          onClick={() => isAgent && setOpen(v => !v)}
+          className={`flex items-center gap-1.5 ${isAgent ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+        >
+          {curName ? (
+            <><Avatar name={curName} /><span className="text-xs font-medium text-foreground">{curName}</span></>
+          ) : (
+            <span className="text-xs text-muted-foreground">Unassigned</span>
+          )}
+          {isAgent && !isPending && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+          {isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+        </button>
+        {open && (
+          <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-xl border border-border bg-card shadow-xl">
+            <div className="border-b border-border px-2 py-1.5">
+              <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
+                placeholder="Forward to anyone…"
+                className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none" />
+            </div>
+            <div className="max-h-64 overflow-y-auto py-1">
+              {curId && (
+                <button onClick={() => pick(null, null)}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted transition-colors">
+                  <X className="h-3 w-3" />Unassign
+                </button>
+              )}
+              {viewerId !== curId && (
+                <button onClick={() => { const me = teamMembers.find(m => m.id === viewerId); pick(viewerId, me?.full_name ?? null) }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs font-medium text-primary hover:bg-muted transition-colors">
+                  Assign to me
+                </button>
+              )}
+              {!query.trim() ? (
+                <>
+                  <div className="my-1 border-t border-border/50" />
+                  {teamMembers.map(m => (
+                    <button key={m.id} onClick={() => pick(m.id, m.full_name)}
+                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted transition-colors ${m.id === curId ? 'bg-muted/60' : ''}`}>
+                      <Avatar name={m.full_name} />
+                      <span className="font-medium">{m.full_name}</span>
+                    </button>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <div className="my-1 border-t border-border/50" />
+                  {searching ? (
+                    <p className="px-3 py-2 text-xs text-muted-foreground">Searching…</p>
+                  ) : searchCandidates.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-muted-foreground">No matches</p>
+                  ) : searchCandidates.map(m => (
+                    <button key={m.id} onClick={() => pick(m.id, m.full_name)}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted transition-colors">
+                      <Avatar name={m.full_name} />
+                      <span className="font-medium">{m.full_name}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </PropRow>
+  )
+}
+
+// Inline service (category / sub category / service) corrector — lets an agent
+// fully re-route a wrongly-submitted ticket to any active service anywhere in
+// the catalog (any category, any team), via three cascading dropdowns rather
+// than one combined picker — picking a Category narrows Sub Category, picking
+// a Sub Category narrows Service, and choosing a Service commits immediately
+// (reclassifyRequest already supports moving across teams/categories freely).
+function ServiceRow({ requestId, serviceId, serviceName, isAgent, options }: {
+  requestId: string; serviceId: string; serviceName: string; isAgent: boolean
+  options: ReclassifyServiceOption[]
+}) {
+  const [open, setOpen] = useState(false)
+  const [cur, setCur] = useState({ id: serviceId, name: serviceName })
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
+
+  const currentOption = options.find((o) => o.id === cur.id) ?? null
+  const [draftCategoryId, setDraftCategoryId] = useState<string | null>(currentOption?.category_id ?? null)
+  const [draftSubCategoryId, setDraftSubCategoryId] = useState<string | null>(currentOption?.sub_category_id ?? null)
+
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+
+  function openPicker() {
+    // Re-seed the draft selection from whatever is current every time the
+    // picker opens, so a prior aborted attempt doesn't linger.
+    setDraftCategoryId(currentOption?.category_id ?? null)
+    setDraftSubCategoryId(currentOption?.sub_category_id ?? null)
+    setOpen(true)
+  }
+
+  const categories = Array.from(
+    new Map(options.filter((o) => o.category_id).map((o) => [o.category_id!, o.category_name])).entries()
+  ).map(([id, name]) => ({ id, name }))
+
+  const subCategoriesInCategory = draftCategoryId
+    ? Array.from(
+        new Map(
+          options
+            .filter((o) => o.category_id === draftCategoryId && o.sub_category_id)
+            .map((o) => [o.sub_category_id!, o.sub_category_name!])
+        ).entries()
+      ).map(([id, name]) => ({ id, name }))
+    : []
+
+  const servicesInScope = draftCategoryId
+    ? options.filter((o) =>
+        o.category_id === draftCategoryId &&
+        (draftSubCategoryId ? o.sub_category_id === draftSubCategoryId : true)
+      )
+    : []
 
   function pick(o: ReclassifyServiceOption) {
     const prev = cur
-    setCur({ id: o.id, name: o.name }); setOpen(false); setQuery(''); setError(null)
+    setCur({ id: o.id, name: o.name }); setOpen(false); setError(null)
     startTransition(async () => {
       const result = await reclassifyRequest(requestId, o.id)
       if (result?.error) { setError(result.error); setCur(prev) }
@@ -287,50 +363,58 @@ function ServiceRow({ requestId, serviceId, serviceName, isAgent, options }: {
   }
 
   return (
-    <PropRow label="Service">
-      <div ref={ref} className="relative">
-        <button
-          onClick={() => isAgent && setOpen((v) => !v)}
-          className={`flex items-center gap-1 ${isAgent ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
-          title={error ?? undefined}
-        >
-          <span className={`text-xs ${error ? 'text-destructive' : 'text-foreground'}`}>{cur.name}</span>
-          {isAgent && !isPending && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
-          {isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-        </button>
-        {open && (
-          <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-xl border border-border bg-card shadow-xl">
-            <div className="border-b border-border px-2 py-1.5">
-              <input
-                ref={inputRef}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search service, category…"
-                className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
-              />
+      <PropRow label="Service">
+        <div ref={ref} className="relative">
+          <button
+            onClick={() => isAgent && (open ? setOpen(false) : openPicker())}
+            className={`flex items-center gap-1 ${isAgent ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+            title={error ?? undefined}
+          >
+            <span className={`text-xs ${error ? 'text-destructive' : 'text-foreground'}`}>{cur.name}</span>
+            {isAgent && !isPending && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+            {isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+          </button>
+          {open && (
+            <div className="absolute right-0 top-full z-50 mt-1 w-72 space-y-2 rounded-xl border border-border bg-card p-2.5 shadow-xl">
+              <div>
+                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Category</label>
+                <select
+                  value={draftCategoryId ?? ''}
+                  onChange={(e) => { setDraftCategoryId(e.target.value || null); setDraftSubCategoryId(null) }}
+                  className="w-full rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">Select category…</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Sub Category</label>
+                <select
+                  value={draftSubCategoryId ?? ''}
+                  onChange={(e) => setDraftSubCategoryId(e.target.value || null)}
+                  disabled={!draftCategoryId || subCategoriesInCategory.length === 0}
+                  className="w-full rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                >
+                  <option value="">{subCategoriesInCategory.length === 0 ? 'None for this category' : 'All sub categories'}</option>
+                  {subCategoriesInCategory.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Service</label>
+                <select
+                  value={servicesInScope.some((o) => o.id === cur.id) ? cur.id : ''}
+                  onChange={(e) => { const o = options.find((x) => x.id === e.target.value); if (o) pick(o) }}
+                  disabled={!draftCategoryId}
+                  className="w-full rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                >
+                  <option value="">{draftCategoryId ? 'Select service…' : 'Pick a category first'}</option>
+                  {servicesInScope.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+              </div>
             </div>
-            <div className="max-h-56 overflow-y-auto py-1">
-              {candidates.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-muted-foreground">No matches</p>
-              ) : (
-                candidates.map((o) => (
-                  <button
-                    key={o.id}
-                    onClick={() => pick(o)}
-                    className="flex w-full flex-col items-start px-3 py-1.5 text-left text-xs hover:bg-muted transition-colors"
-                  >
-                    <span className="font-medium text-foreground">{o.name}</span>
-                    <span className="text-[10px] text-muted-foreground">
-                      {o.category_name}{o.sub_category_name ? ` · ${o.sub_category_name}` : ''}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </PropRow>
+          )}
+        </div>
+      </PropRow>
   )
 }
 

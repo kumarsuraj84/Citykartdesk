@@ -42,6 +42,14 @@ const BULK_PRIORITIES: { value: RequestPriority; label: string }[] = [
   { value: 'urgent', label: 'Urgent' },
 ]
 
+// createRequest() stores title as "ServiceName: Subject" (or just "ServiceName"
+// when the form had no title-worthy field) — the Title column should read as a
+// subject line, not repeat the Service column right next to it.
+function requestSubject(req: RequestWithRelations): string {
+  const prefix = `${req.service.name}: `
+  return req.title.startsWith(prefix) ? req.title.slice(prefix.length) : req.title
+}
+
 // ── Sortable column header ──────────────────────────────────────────────────────
 
 function SortableTh({ label, col, sortCol, sortDir, pathname, currentSearch }: {
@@ -295,7 +303,7 @@ export function RequestsTable({
                     </button>
                   </td>
                   <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground whitespace-nowrap">{req.request_no}</td>
-                  <td className="max-w-[240px] truncate px-3 py-2 font-medium text-foreground">{req.title}</td>
+                  <td className="max-w-[240px] truncate px-3 py-2 font-medium text-foreground">{requestSubject(req)}</td>
                   <td className="px-3 py-2"><StatusBadge status={req.status} size="sm" /></td>
                   <td className="px-3 py-2"><PriorityBadge priority={req.priority} size="sm" /></td>
                   <td className="px-3 py-2 whitespace-nowrap text-foreground">{req.requester?.full_name ?? '—'}</td>

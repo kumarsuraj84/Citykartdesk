@@ -1,6 +1,6 @@
 'use server'
 
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 
 export type SearchResult = {
@@ -34,8 +34,13 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
   const ql = q.toLowerCase()
   const like = `%${q}%`
 
-  // Admin client bypasses RLS, so every query below scopes to orgId explicitly.
-  const db = createAdminClient()
+  // RLS-scoped client, NOT the admin client — search results must never surface
+  // a request/task/project/approval the viewer isn't otherwise allowed to see.
+  // The explicit .eq('org_id', orgId) filters below are kept as defense-in-depth
+  // (RLS already enforces org scoping) but the real per-row visibility (owner/
+  // requester/assignee/team/collaborator/member) now comes entirely from RLS,
+  // so it can never drift out of sync with the list pages' own visibility rules.
+  const db = await createClient()
 
   // ── 1. Profiles matching the query (for person-based lookups) ──────────────
   const { data: matchingProfiles } = await db

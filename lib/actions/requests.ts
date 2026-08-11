@@ -52,10 +52,10 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
     const actingProfile = await getCurrentProfile()
     const isAgentOrManager =
       !!actingProfile &&
-      (actingProfile.role === 'manager' ||
+      (actingProfile.role === 'agent' ||
+        actingProfile.role === 'manager' ||
         actingProfile.role === 'admin' ||
-        actingProfile.role === 'platform_owner' ||
-        actingProfile.team_members.length > 0)
+        actingProfile.role === 'platform_owner')
     if (!isAgentOrManager) return { error: 'Not authorized to raise a request on behalf of another user.' }
 
     const { data: targetProfile } = await supabase
@@ -176,7 +176,7 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
 
   // Booking on behalf of someone else needs the admin client — requests_insert's
   // RLS (requester_id = auth.uid()) would otherwise reject any requester_id other
-  // than the acting agent's own id (same pattern as createSubRequest/duplicateRequest).
+  // than the acting agent's own id (same pattern as duplicateRequest).
   const insertClient = requesterId === user.id ? supabase : admin
   const { data: request, error: insertError } = await insertClient
     .from('requests')
@@ -290,7 +290,7 @@ export async function updateRequestStatus(
     profile.role === 'manager' ||
     profile.role === 'admin' ||
     profile.role === 'platform_owner' ||
-    profile.team_members.some((m) => m.team_id === request.team_id)
+    (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
   const isRequester = request.requester_id === profile.id
 
   const currentStatus = request.status as RequestStatus
@@ -545,10 +545,10 @@ export async function assignRequest(
   if (!profile) return { error: 'Not authenticated.' }
 
   const isAgentOrManager =
+    profile.role === 'agent' ||
     profile.role === 'manager' ||
     profile.role === 'admin' ||
-    profile.role === 'platform_owner' ||
-    profile.team_members.length > 0
+    profile.role === 'platform_owner'
 
   if (!isAgentOrManager) return { error: 'Not authorized to assign requests.' }
 
@@ -565,7 +565,7 @@ export async function assignRequest(
     profile.role === 'manager' ||
     profile.role === 'admin' ||
     profile.role === 'platform_owner' ||
-    profile.team_members.some((m) => m.team_id === request.team_id)
+    (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
 
   if (!isOnTeam) return { error: 'Not authorized to assign requests for this team.' }
 
@@ -787,6 +787,29 @@ export async function searchOrgMembers(
   return (data ?? []) as { id: string; full_name: string }[]
 }
 
+/** Same as searchOrgMembers but restricted to agent-tier roles — used by the
+ *  Assignee picker's "forward to anyone" search, since only an agent/manager/
+ *  admin/platform_owner can actually be assigned a request and act on it. */
+export async function searchAgentTierMembers(
+  query: string
+): Promise<{ id: string; full_name: string }[]> {
+  const profile = await getCurrentProfile()
+  if (!profile) return []
+  const safe = query.replace(/[%_]/g, '\\$&').trim()
+  if (!safe) return []
+
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, full_name')
+    .eq('is_active', true)
+    .in('role', ['agent', 'manager', 'admin', 'platform_owner'])
+    .ilike('full_name', `%${safe}%`)
+    .order('full_name')
+    .limit(10)
+  return (data ?? []) as { id: string; full_name: string }[]
+}
+
 export async function addCollaborator(
   requestId: string,
   userId: string
@@ -796,10 +819,10 @@ export async function addCollaborator(
   if (!profile) return { error: 'Not authenticated.' }
 
   const isAgentOrManager =
+    profile.role === 'agent' ||
     profile.role === 'manager' ||
     profile.role === 'admin' ||
-    profile.role === 'platform_owner' ||
-    profile.team_members.length > 0
+    profile.role === 'platform_owner'
 
   if (!isAgentOrManager) return { error: 'Not authorized to add collaborators.' }
 
@@ -815,7 +838,7 @@ export async function addCollaborator(
     profile.role === 'manager' ||
     profile.role === 'admin' ||
     profile.role === 'platform_owner' ||
-    profile.team_members.some((m) => m.team_id === request.team_id)
+    (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
 
   if (!isOnTeam) return { error: 'Not authorized to add collaborators for this team.' }
 
@@ -969,7 +992,7 @@ export async function addComment(
     profile.role === 'manager' ||
     profile.role === 'admin' ||
     profile.role === 'platform_owner' ||
-    profile.team_members.some((m) => m.team_id === request.team_id)
+    (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
 
   // Only agents/managers may post internal notes
   const internal = isInternal && isAgent
@@ -1167,10 +1190,10 @@ export async function changePriority(
   if (!profile) return { error: 'Not authenticated.' }
 
   const isAgentOrManager =
+    profile.role === 'agent' ||
     profile.role === 'manager' ||
     profile.role === 'admin' ||
-    profile.role === 'platform_owner' ||
-    profile.team_members.length > 0
+    profile.role === 'platform_owner'
 
   if (!isAgentOrManager) return { error: 'Not authorized to change priority.' }
 
@@ -1186,7 +1209,7 @@ export async function changePriority(
     profile.role === 'manager' ||
     profile.role === 'admin' ||
     profile.role === 'platform_owner' ||
-    profile.team_members.some((m) => m.team_id === request.team_id)
+    (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
 
   if (!isOnTeam) return { error: 'Not authorized to change priority for this team.' }
 
@@ -1287,10 +1310,10 @@ export async function reclassifyRequest(
   if (!profile) return { error: 'Not authenticated.' }
 
   const isAgentOrManager =
+    profile.role === 'agent' ||
     profile.role === 'manager' ||
     profile.role === 'admin' ||
-    profile.role === 'platform_owner' ||
-    profile.team_members.length > 0
+    profile.role === 'platform_owner'
 
   if (!isAgentOrManager) return { error: 'Not authorized to reclassify requests.' }
 
@@ -1306,7 +1329,7 @@ export async function reclassifyRequest(
     profile.role === 'manager' ||
     profile.role === 'admin' ||
     profile.role === 'platform_owner' ||
-    profile.team_members.some((m) => m.team_id === request.team_id)
+    (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
 
   if (!isOnTeam) return { error: 'Not authorized to reclassify requests for this team.' }
 
@@ -1344,7 +1367,7 @@ export async function reclassifyRequest(
   // requests_update's RLS WITH CHECK pins service_id/team_id to their current
   // value (they're normally immutable post-creation) — this is the one
   // deliberate, narrow exception, gated by the isAgentOrManager/isOnTeam checks
-  // above rather than by RLS, same pattern as createSubRequest/duplicateRequest.
+  // above rather than by RLS, same pattern as duplicateRequest.
   const movedTeams = newService.team_id !== request.team_id
 
   const admin = createAdminClient()
@@ -1511,78 +1534,6 @@ export async function duplicateRequest(requestId: string): Promise<{ id?: string
   return { id: newReq.id }
 }
 
-// ── Sub-requests ───────────────────────────────────────────────────────────────
-
-export async function createSubRequest(
-  parentRequestId: string,
-  title: string,
-  opts?: { priority?: RequestPriority; assignedTo?: string }
-): Promise<{ id?: string; error?: string }> {
-  const profile = await getCurrentProfile()
-  if (!profile) return { error: 'Not authenticated.' }
-  if (!title.trim()) return { error: 'Title is required.' }
-
-  const isAgentOrAbove =
-    profile.role === 'agent' ||
-    profile.role === 'manager' ||
-    profile.role === 'admin' ||
-    profile.role === 'platform_owner' ||
-    profile.team_members.length > 0
-  if (!isAgentOrAbove) return { error: 'Only agents and managers can create sub-requests.' }
-
-  const supabase = await createClient()
-
-  const { data: parent } = await supabase
-    .from('requests')
-    .select('org_id, service_id, team_id, requester_id, priority, service:services(sla_config)')
-    .eq('id', parentRequestId)
-    .single()
-  if (!parent) return { error: 'Parent request not found.' }
-
-  const priority = opts?.priority ?? (parent.priority as RequestPriority)
-  const now = new Date()
-  // Sub-requests have no dynamic-form submission of their own to check field-level
-  // overrides against — only the parent service's own SLA config applies.
-  const slaConfig = (parent.service as unknown as { sla_config: SLAConfig } | null)?.sla_config
-  const { responseDueAt, resolutionDueAt } = await resolveSlaDeadlines(supabase, {
-    serviceId: parent.service_id,
-    priority,
-    serviceSlaConfig: slaConfig ?? null,
-    from: now,
-  })
-
-  // Preserves the original requester on the sub-request (same person the parent
-  // was raised for), which requests_insert's RLS (requester_id = auth.uid()) would
-  // reject if the acting agent differs — so this goes through the admin client,
-  // same as duplicateRequest.
-  const admin = createAdminClient()
-  const { data: newReq, error } = await admin
-    .from('requests')
-    .insert({
-      request_no: '',
-      title: title.trim(),
-      parent_request_id: parentRequestId,
-      service_id: parent.service_id,
-      team_id: parent.team_id,
-      org_id: parent.org_id,
-      requester_id: parent.requester_id,
-      assigned_to: opts?.assignedTo ?? null,
-      priority,
-      status: 'open',
-      response_due_at: responseDueAt,
-      resolution_due_at: resolutionDueAt,
-    })
-    .select('id, request_no, title, status, priority, resolution_due_at')
-    .single()
-
-  if (error || !newReq) return { error: error?.message ?? 'Failed to create sub-request.' }
-
-  await logActivity({ requestId: newReq.id, actorId: profile.id, action: 'created', metadata: { parent_request_id: parentRequestId } }).catch(() => {})
-
-  revalidatePath(`/requests/${parentRequestId}`)
-  return { id: newReq.id }
-}
-
 // ── Submit for Approval ───────────────────────────────────────────────────────
 
 export async function submitForApproval(requestId: string): Promise<ActionResult> {
@@ -1600,8 +1551,8 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
 
   if (!req) return { error: 'Request not found.' }
 
-  const onTeam = profile.team_members.some((m) => m.team_id === req.team_id)
-  if (!['manager', 'admin'].includes(profile.role) && !onTeam && profile.id !== req.requester_id)
+  const onTeam = profile.role === 'agent' && profile.team_members.some((m) => m.team_id === req.team_id)
+  if (!['manager', 'admin', 'platform_owner'].includes(profile.role) && !onTeam && profile.id !== req.requester_id)
     return { error: 'Unauthorized.' }
 
   if (['resolved', 'closed', 'cancelled', 'pending_approval'].includes(req.status))
@@ -1748,8 +1699,7 @@ export async function addRelatedRequest(
     profile.role === 'agent' ||
     profile.role === 'manager' ||
     profile.role === 'admin' ||
-    profile.role === 'platform_owner' ||
-    profile.team_members.length > 0
+    profile.role === 'platform_owner'
   if (!isAgentOrAbove) return { error: 'Only agents and managers can link requests.' }
 
   const supabase = await createClient()

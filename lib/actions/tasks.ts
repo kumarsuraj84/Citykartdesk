@@ -563,8 +563,7 @@ export async function addTaskDependency(
     profile.role === 'agent' ||
     profile.role === 'manager' ||
     profile.role === 'admin' ||
-    profile.role === 'platform_owner' ||
-    profile.team_members.length > 0
+    profile.role === 'platform_owner'
   if (!isAgentOrAbove) return { error: 'Only agents and managers can link task dependencies.' }
 
   const supabase = await createClient()
@@ -664,7 +663,7 @@ export async function createCustomField(data: {
 }): Promise<{ data?: { id: string }; error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (!isAgentOrAboveRole(profile.role) && profile.team_members.length === 0) {
+  if (!isAgentOrAboveRole(profile.role)) {
     return { error: 'You do not have permission to manage custom fields.' }
   }
 
@@ -699,7 +698,7 @@ export async function updateCustomField(fieldId: string, data: {
 }): Promise<ActionResult> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (!isAgentOrAboveRole(profile.role) && profile.team_members.length === 0) {
+  if (!isAgentOrAboveRole(profile.role)) {
     return { error: 'You do not have permission to manage custom fields.' }
   }
 
@@ -717,7 +716,7 @@ export async function updateCustomField(fieldId: string, data: {
 export async function deleteCustomField(fieldId: string): Promise<ActionResult> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (!isAgentOrAboveRole(profile.role) && profile.team_members.length === 0) {
+  if (!isAgentOrAboveRole(profile.role)) {
     return { error: 'You do not have permission to manage custom fields.' }
   }
 
