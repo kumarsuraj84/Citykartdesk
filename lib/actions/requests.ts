@@ -11,6 +11,7 @@ import { getEnabledModules } from '@/lib/queries/profiles'
 import { validateFieldValue } from '@/lib/validation/formFields'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
 import { resolveFormSections } from '@/lib/forms/sections'
+import { toCSV } from '@/lib/export/csv'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus } from '@/types'
 import type { Database, Json } from '@/types/database'
 
@@ -40,6 +41,34 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
 
   const serviceId = formData.get('service_id') as string | null
   if (!serviceId) return { error: 'Service is required.' }
+
+  // "Book on behalf of" — an agent/manager can raise a request for someone else.
+  // Ordinary requesters never see this field client-side, but re-check server-side
+  // regardless: honor the override only for agents/managers, and only once the
+  // target profile is confirmed to exist in the same org.
+  let requesterId = user.id
+  const requesterOverride = (formData.get('requester_id') as string | null) || null
+  if (requesterOverride && requesterOverride !== user.id) {
+    const actingProfile = await getCurrentProfile()
+    const isAgentOrManager =
+      !!actingProfile &&
+      (actingProfile.role === 'manager' ||
+        actingProfile.role === 'admin' ||
+        actingProfile.role === 'platform_owner' ||
+        actingProfile.team_members.length > 0)
+    if (!isAgentOrManager) return { error: 'Not authorized to raise a request on behalf of another user.' }
+
+    const { data: targetProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', requesterOverride)
+      .eq('org_id', actingProfile.org_id ?? '')
+      .eq('is_active', true)
+      .single()
+    if (!targetProfile) return { error: 'Selected requester not found in your organisation.' }
+
+    requesterId = requesterOverride
+  }
 
   const projectId = (formData.get('project_id') as string | null) || null
 
@@ -145,13 +174,17 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
     from: now,
   })
 
-  const { data: request, error: insertError } = await supabase
+  // Booking on behalf of someone else needs the admin client — requests_insert's
+  // RLS (requester_id = auth.uid()) would otherwise reject any requester_id other
+  // than the acting agent's own id (same pattern as createSubRequest/duplicateRequest).
+  const insertClient = requesterId === user.id ? supabase : admin
+  const { data: request, error: insertError } = await insertClient
     .from('requests')
     .insert({
       request_no: '',
       service_id: serviceId,
       team_id: service.team_id,
-      requester_id: user.id,
+      requester_id: requesterId,
       org_id: orgId,
       title,
       priority,
@@ -192,6 +225,19 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
     console.error('[createRequest] Activity log failed for request', request.id)
   }
 
+  // Booked on behalf of someone else — let them know a request now exists for them.
+  if (requesterId !== user.id) {
+    notify({
+      recipientId: requesterId,
+      actorId: user.id,
+      type: 'request_created',
+      title: `A request was raised on your behalf: ${title}`,
+      body: 'An agent submitted this request for you.',
+      requestId: request.id,
+      link: `/requests/${request.id}`,
+    }).catch(() => {})
+  }
+
   // Notify team members about the new request
   {
     const { data: teamMembers } = await admin
@@ -199,7 +245,7 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
       .select('user_id')
       .eq('team_id', service.team_id)
     for (const member of teamMembers ?? []) {
-      if (member.user_id !== user.id) {
+      if (member.user_id !== user.id && member.user_id !== requesterId) {
         notify({
           recipientId: member.user_id,
           actorId: user.id,
@@ -301,6 +347,38 @@ export async function updateRequestStatus(
     .eq('id', requestId)
 
   if (updateError) return { error: updateError.message }
+
+  // Auto time-tracking: starts the instant work actually begins (→ in_progress) and
+  // stops the instant it stops (leaving in_progress for any reason — waiting_user,
+  // resolved, cancelled) — no manual Start/Stop Timer action for an agent to remember.
+  if (isAgent && newStatus === 'in_progress' && currentStatus !== 'in_progress') {
+    await supabase
+      .from('request_time_entries')
+      .update({ stopped_at: nowIso })
+      .eq('request_id', requestId)
+      .eq('user_id', profile.id)
+      .is('stopped_at', null)
+    const { error: insertError } = await supabase
+      .from('request_time_entries')
+      .insert({ request_id: requestId, user_id: profile.id, started_at: nowIso })
+    // 23505 = a concurrent call already opened an entry for this user+request
+    // (partial unique index) — that's "already started", not a real failure.
+    if (insertError && insertError.code !== '23505') {
+      console.error('[updateRequestStatus] failed to open time entry', insertError)
+    }
+  } else if (currentStatus === 'in_progress' && newStatus !== 'in_progress') {
+    // Admin client, not the RLS-scoped one: the open entry may belong to a
+    // DIFFERENT agent than the one calling this (e.g. the ticket was
+    // reassigned mid-progress) — request_time_entries' UPDATE policy only
+    // allows `user_id = auth.uid()`, so the RLS-scoped client would silently
+    // no-op on another agent's row, leaving their timer running forever.
+    const admin = createAdminClient()
+    await admin
+      .from('request_time_entries')
+      .update({ stopped_at: nowIso })
+      .eq('request_id', requestId)
+      .is('stopped_at', null)
+  }
 
   // CSAT: create survey record when request is resolved (requester can rate later)
   // Uses the admin client because csat_surveys' INSERT policy only allows
@@ -601,6 +679,88 @@ export async function bulkChangePriority(
   return result
 }
 
+// ── Bulk export (selected rows, RLS-scoped) ────────────────────────────────────
+// Distinct from lib/actions/export.ts's exportRequests(), which is org-wide and
+// gated to admin/manager/platform_owner. This one exports exactly the rows the
+// caller selected in the table — rows they can already see, by definition — so
+// it stays open to any authenticated user, enforced by RLS on the query itself
+// rather than a role check.
+
+export async function bulkExportRequests(requestIds: string[]): Promise<{ csv?: string; error?: string }> {
+  const profile = await getCurrentProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+  if (requestIds.length === 0) return { error: 'No requests selected.' }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('requests')
+    .select(`
+      request_no, title, status, priority, created_at, updated_at, resolution_due_at,
+      service:services (name, category:service_categories(name), sub_category:service_sub_categories(name)),
+      team:teams (name),
+      requester:profiles!requests_requester_id_fkey (full_name),
+      assignee:profiles!requests_assigned_to_fkey (full_name)
+    `)
+    .in('id', requestIds)
+
+  if (error) return { error: error.message }
+
+  type Row = {
+    request_no: string; title: string; status: string; priority: string
+    created_at: string; updated_at: string; resolution_due_at: string | null
+    service: { name: string; category: { name: string } | null; sub_category: { name: string } | null } | null
+    team: { name: string } | null
+    requester: { full_name: string } | null
+    assignee: { full_name: string } | null
+  }
+
+  const rows = ((data ?? []) as unknown as Row[]).map((r) => ({
+    request_no: r.request_no,
+    title: r.title,
+    status: r.status,
+    priority: r.priority,
+    category: r.service?.category?.name ?? '',
+    sub_category: r.service?.sub_category?.name ?? '',
+    service: r.service?.name ?? '',
+    team: r.team?.name ?? '',
+    requester: r.requester?.full_name ?? '',
+    assignee: r.assignee?.full_name ?? 'Unassigned',
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+    resolution_due_at: r.resolution_due_at ?? '',
+  }))
+
+  const csv = toCSV(rows, [
+    { key: 'request_no', label: 'Request No' },
+    { key: 'title', label: 'Title' },
+    { key: 'status', label: 'Status' },
+    { key: 'priority', label: 'Priority' },
+    { key: 'service', label: 'Service' },
+    { key: 'team', label: 'Team' },
+    { key: 'requester', label: 'Requester' },
+    { key: 'assignee', label: 'Assignee' },
+    { key: 'created_at', label: 'Created' },
+    { key: 'updated_at', label: 'Updated' },
+    { key: 'resolution_due_at', label: 'Resolution Due' },
+  ])
+
+  return { csv }
+}
+
+// ── Bulk add collaborator ───────────────────────────────────────────────────────
+
+export async function bulkAddCollaborators(requestIds: string[], userId: string): Promise<BulkResult> {
+  const settled = await Promise.all(
+    requestIds.map(async (id) => ({ id, r: await addCollaborator(id, userId) }))
+  )
+  const result: BulkResult = { succeeded: [], failed: [] }
+  for (const { id, r } of settled) {
+    if (r.error) result.failed.push({ id, error: r.error })
+    else result.succeeded.push(id)
+  }
+  return result
+}
+
 // ── Collaborators ─────────────────────────────────────────────────────────────
 
 /**
@@ -630,7 +790,7 @@ export async function searchOrgMembers(
 export async function addCollaborator(
   requestId: string,
   userId: string
-): Promise<ActionResult> {
+): Promise<ActionResult & { id?: string }> {
   const supabase = await createClient()
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
@@ -673,9 +833,11 @@ export async function addCollaborator(
 
   if (!collaboratorProfile) return { error: 'User not found in your organization.' }
 
-  const { error: insertError } = await supabase
+  const { data: inserted, error: insertError } = await supabase
     .from('request_collaborators')
     .insert({ request_id: requestId, user_id: userId, added_by: profile.id })
+    .select('id')
+    .single()
 
   if (insertError) {
     if (insertError.code === '23505') return { error: 'Already a collaborator.' }
@@ -708,7 +870,7 @@ export async function addCollaborator(
   revalidatePath(`/requests/${requestId}`)
   revalidatePath('/requests')
 
-  return {}
+  return { id: inserted.id }
 }
 
 // ── Remove collaborator ───────────────────────────────────────────────────────
@@ -733,7 +895,8 @@ export async function removeCollaborator(
   const canRemove =
     record.added_by === profile.id ||
     profile.role === 'manager' ||
-    profile.role === 'admin'
+    profile.role === 'admin' ||
+    profile.role === 'platform_owner'
 
   if (!canRemove) return { error: 'Not authorized to remove this collaborator.' }
 
@@ -1113,6 +1276,139 @@ export async function changePriority(
   return {}
 }
 
+// ── Reclassify (correct a wrongly-submitted service/category/sub-category) ────
+
+export async function reclassifyRequest(
+  requestId: string,
+  newServiceId: string
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const profile = await getCurrentProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+
+  const isAgentOrManager =
+    profile.role === 'manager' ||
+    profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
+    profile.team_members.length > 0
+
+  if (!isAgentOrManager) return { error: 'Not authorized to reclassify requests.' }
+
+  const { data: request } = await supabase
+    .from('requests')
+    .select('id, service_id, team_id, priority, status, created_at, waiting_since, assigned_to')
+    .eq('id', requestId)
+    .single()
+
+  if (!request) return { error: 'Request not found.' }
+
+  const isOnTeam =
+    profile.role === 'manager' ||
+    profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
+    profile.team_members.some((m) => m.team_id === request.team_id)
+
+  if (!isOnTeam) return { error: 'Not authorized to reclassify requests for this team.' }
+
+  if (request.service_id === newServiceId) return {}
+
+  const { data: newService } = await supabase
+    .from('services')
+    .select('id, name, team_id, sla_config')
+    .eq('id', newServiceId)
+    .eq('is_active', true)
+    .single()
+
+  if (!newService) return { error: 'Selected service not found.' }
+
+  // The originally submitted form_data belongs to the OLD service's field schema
+  // (field ids are per-service, generated fresh for every service) — it can't be
+  // remapped onto the new service's fields, so this recomputes SLA from the new
+  // service's own config only (no field-level override lookup) and leaves
+  // form_data as-is, a historical record of what was actually submitted. The SLA
+  // clock still runs from the original created_at, same as changePriority.
+  const createdAt = new Date(request.created_at)
+  let { responseDueAt: newResponseDue, resolutionDueAt: newResolutionDue } = await resolveSlaDeadlines(supabase, {
+    serviceId: newServiceId,
+    priority: request.priority as RequestPriority,
+    serviceSlaConfig: newService.sla_config as unknown as SLAConfig | null,
+    from: createdAt,
+  })
+
+  if (request.waiting_since) {
+    const alreadyPausedMs = Date.now() - new Date(request.waiting_since).getTime()
+    if (newResponseDue) newResponseDue = new Date(new Date(newResponseDue).getTime() + alreadyPausedMs).toISOString()
+    if (newResolutionDue) newResolutionDue = new Date(new Date(newResolutionDue).getTime() + alreadyPausedMs).toISOString()
+  }
+
+  // requests_update's RLS WITH CHECK pins service_id/team_id to their current
+  // value (they're normally immutable post-creation) — this is the one
+  // deliberate, narrow exception, gated by the isAgentOrManager/isOnTeam checks
+  // above rather than by RLS, same pattern as createSubRequest/duplicateRequest.
+  const movedTeams = newService.team_id !== request.team_id
+
+  const admin = createAdminClient()
+  const { error: updateError } = await admin
+    .from('requests')
+    .update({
+      service_id: newServiceId,
+      team_id: newService.team_id,
+      response_due_at: newResponseDue,
+      resolution_due_at: newResolutionDue,
+      // A move to a different team invalidates the current assignee — they may
+      // not even be a member of the new team, and requests_select's RLS grants
+      // visibility via team membership, not via assigned_to, so leaving a stale
+      // assignee here would silently orphan the ticket (still shown as
+      // "assigned" to someone who can no longer see or act on it).
+      ...(movedTeams && request.assigned_to ? { assigned_to: null } : {}),
+    })
+    .eq('id', requestId)
+
+  if (updateError) return { error: updateError.message }
+
+  const activityResult = await logActivity({
+    requestId,
+    actorId: profile.id,
+    action: 'reclassified',
+    metadata: { service_to: newService.name },
+  })
+  if (activityResult.error) return { error: activityResult.error }
+
+  // Moved to a different team — let that team know work landed on their queue.
+  if (movedTeams) {
+    const { data: teamMembers } = await admin
+      .from('team_members')
+      .select('user_id')
+      .eq('team_id', newService.team_id)
+    for (const member of teamMembers ?? []) {
+      if (member.user_id !== profile.id) {
+        notify({
+          recipientId: member.user_id,
+          actorId: profile.id,
+          type: 'request_created',
+          title: `Request reclassified to ${newService.name}`,
+          body: `${profile.full_name} moved this request to your team.`,
+          requestId,
+          link: `/requests/${requestId}`,
+        }).catch(() => {})
+      }
+    }
+  }
+
+  // Business Rules: "updated" trigger — a reclassification is an edit, and rules
+  // conditioned on service_id/category_id should get a chance to re-evaluate.
+  try {
+    const { runRulesForTrigger } = await import('@/lib/rules/run')
+    await runRulesForTrigger('updated', requestId)
+  } catch (e) {
+    console.error('[reclassifyRequest] Business rules (updated) failed', e)
+  }
+
+  revalidatePath(`/requests/${requestId}`)
+  revalidatePath('/requests')
+  return {}
+}
+
 // ── Auto-close resolved requests ──────────────────────────────────────────────
 
 export async function autoCloseRequests(): Promise<{ closed: number }> {
@@ -1419,45 +1715,8 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
 }
 
 // ── Time entries ──────────────────────────────────────────────────────────────
-
-export async function startTimer(requestId: string): Promise<{ id?: string; error?: string }> {
-  const profile = await getCurrentProfile()
-  if (!profile) return { error: 'Not authenticated.' }
-
-  const supabase = await createClient()
-
-  // Stop any running timers for this user on this request first
-  await supabase
-    .from('request_time_entries')
-    .update({ stopped_at: new Date().toISOString() })
-    .eq('request_id', requestId)
-    .eq('user_id', profile.id)
-    .is('stopped_at', null)
-
-  const { data, error } = await supabase
-    .from('request_time_entries')
-    .insert({ request_id: requestId, user_id: profile.id, started_at: new Date().toISOString() })
-    .select('id, started_at')
-    .single()
-
-  if (error || !data) return { error: error?.message ?? 'Failed to start timer.' }
-  return { id: data.id }
-}
-
-export async function stopTimer(entryId: string): Promise<ActionResult> {
-  const profile = await getCurrentProfile()
-  if (!profile) return { error: 'Not authenticated.' }
-
-  const supabase = await createClient()
-  const { error } = await supabase
-    .from('request_time_entries')
-    .update({ stopped_at: new Date().toISOString() })
-    .eq('id', entryId)
-    .eq('user_id', profile.id)
-
-  if (error) return { error: error.message }
-  return {}
-}
+// Entries are created/closed automatically by updateRequestStatus (see the
+// in_progress transitions above) — there's no manual start/stop action.
 
 export async function getActiveTimer(requestId: string): Promise<{ id: string; started_at: string } | null> {
   const profile = await getCurrentProfile()

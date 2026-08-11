@@ -1,17 +1,111 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, Send } from 'lucide-react'
+import { Loader2, Send, UserSearch, X } from 'lucide-react'
 import { FieldRenderer, isShortField } from './FieldRenderer'
-import { createRequest } from '@/lib/actions/requests'
+import { createRequest, searchOrgMembers } from '@/lib/actions/requests'
 import { uploadAttachment } from '@/lib/actions/attachments'
 import { validateFields } from '@/lib/validation/formFields'
 import type { FormField, FormSection, ServiceWithRelations } from '@/types'
 
 interface DynamicFormProps {
   service: ServiceWithRelations
+  /** Agents/managers only — lets them raise this request for someone else. */
+  canBookOnBehalf?: boolean
+}
+
+type OrgMember = { id: string; full_name: string }
+
+// ── "Book on behalf of" picker ─────────────────────────────────────────────────
+// Same debounced-search-then-pick pattern as RequestSidebarPanel's Collaborators
+// picker (searchOrgMembers is shared with that feature).
+function RequesterOnBehalfPicker({ value, onChange }: { value: OrgMember | null; onChange: (m: OrgMember | null) => void }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<OrgMember[]>([])
+  const [searching, setSearching] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setQuery('') } }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+  useEffect(() => { if (open) inputRef.current?.focus() }, [open])
+
+  useEffect(() => {
+    const q = query.trim()
+    let cancelled = false
+    const t = setTimeout(async () => {
+      if (!q) { setResults([]); setSearching(false); return }
+      setSearching(true)
+      const found = await searchOrgMembers(q)
+      if (!cancelled) { setResults(found); setSearching(false) }
+    }, q ? 250 : 0)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [query])
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 p-3">
+      <p className="mb-1.5 text-xs font-medium text-foreground">Requesting on behalf of</p>
+      {value ? (
+        <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-1.5">
+          <span className="text-sm text-foreground">{value.full_name}</span>
+          <button type="button" onClick={() => onChange(null)} className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ) : (
+        <div ref={ref} className="relative">
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border bg-background px-3 py-1.5 text-sm text-muted-foreground hover:border-ring/50 hover:text-foreground"
+          >
+            <UserSearch className="h-3.5 w-3.5" />
+            Search a person… (leave empty to request for yourself)
+          </button>
+          {open && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-full rounded-xl border border-border bg-card shadow-lg">
+              <div className="border-b border-border px-2 py-1.5">
+                <input
+                  ref={inputRef}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search people…"
+                  className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                />
+              </div>
+              <div className="max-h-48 overflow-y-auto py-1">
+                {!query.trim() ? (
+                  <p className="px-3 py-2 text-xs text-muted-foreground">Type a name to search</p>
+                ) : searching ? (
+                  <p className="px-3 py-2 text-xs text-muted-foreground">Searching…</p>
+                ) : results.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-muted-foreground">No matches</p>
+                ) : (
+                  results.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => { onChange(m); setOpen(false); setQuery('') }}
+                      className="flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-muted transition-colors"
+                    >
+                      {m.full_name}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 type FieldValue = string | string[] | boolean | File[]
@@ -112,12 +206,13 @@ function SectionBlock({ section, values, errors, onChange }: SectionBlockProps) 
 
 // ── DynamicForm ───────────────────────────────────────────────────────────────
 
-export function DynamicForm({ service }: DynamicFormProps) {
+export function DynamicForm({ service, canBookOnBehalf }: DynamicFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [serverError, setServerError] = useState<string | null>(null)
   const [attachmentWarning, setAttachmentWarning] = useState<string | null>(null)
   const [createdRequestId, setCreatedRequestId] = useState<string | null>(null)
+  const [onBehalfOf, setOnBehalfOf] = useState<OrgMember | null>(null)
 
   const sections =
     Array.isArray(service.form_sections) && service.form_sections.length > 0
@@ -163,6 +258,7 @@ export function DynamicForm({ service }: DynamicFormProps) {
     const formData = new FormData()
     formData.set('service_id', service.id)
     formData.set('form_data', JSON.stringify(submittableValues))
+    if (onBehalfOf) formData.set('requester_id', onBehalfOf.id)
 
     startTransition(async () => {
       const result = await createRequest(formData)
@@ -221,6 +317,10 @@ export function DynamicForm({ service }: DynamicFormProps) {
             Continue to request →
           </Link>
         </div>
+      )}
+
+      {canBookOnBehalf && (
+        <RequesterOnBehalfPicker value={onBehalfOf} onChange={setOnBehalfOf} />
       )}
 
       {isEmpty ? (

@@ -3,7 +3,13 @@ export function toCSV(
   columns: { key: string; label: string }[]
 ): string {
   function quoteCell(value: unknown): string {
-    const str = value == null ? '' : String(value)
+    let str = value == null ? '' : String(value)
+    // Neutralize formula injection — Excel/Sheets treat a leading =, +, -, @,
+    // tab, or CR as the start of a formula for any cell from an untrusted
+    // source (e.g. a user-supplied request title).
+    if (/^[=+\-@\t\r]/.test(str)) {
+      str = "'" + str
+    }
     if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
       return '"' + str.replace(/"/g, '""') + '"'
     }

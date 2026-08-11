@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronRight, Clock, Users, ShieldCheck } from 'lucide-react'
 import { getServiceBySlug } from '@/lib/queries/services'
+import { getCurrentProfile } from '@/lib/queries/profiles'
 import { DynamicForm } from '@/components/forms/DynamicForm'
 import type { SLAConfig } from '@/types'
 
@@ -11,9 +12,18 @@ interface PageProps {
 
 export default async function ServiceDetailPage({ params }: PageProps) {
   const { slug } = await params
-  const service = await getServiceBySlug(slug)
+  const [service, profile] = await Promise.all([getServiceBySlug(slug), getCurrentProfile()])
 
   if (!service) notFound()
+
+  // "Book on behalf of" — only agents/managers can raise a request for someone
+  // else; a plain requester submitting for themselves never sees this option.
+  const canBookOnBehalf =
+    !!profile &&
+    (profile.role === 'manager' ||
+      profile.role === 'admin' ||
+      profile.role === 'platform_owner' ||
+      profile.team_members.length > 0)
 
   const slaConfig = service.sla_config as unknown as SLAConfig
   const defaultSla = slaConfig?.[service.default_priority]
@@ -84,7 +94,7 @@ export default async function ServiceDetailPage({ params }: PageProps) {
 
         {/* Form body */}
         <div className="px-6 py-6">
-          <DynamicForm service={service} />
+          <DynamicForm service={service} canBookOnBehalf={canBookOnBehalf} />
         </div>
       </div>
     </div>

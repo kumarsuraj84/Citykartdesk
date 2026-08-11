@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 
 const ALL_TABS = [
   { id: 'conversations', label: 'Conversations' },
@@ -43,18 +43,6 @@ export function RequestDetailTabs({
   initialTab    = 'conversations',
 }: Props) {
   const [active, setActive] = useState<TabId>(initialTab)
-
-  useEffect(() => {
-    function handleFocusComment() {
-      setActive('conversations')
-      // Let the tab content render before focusing
-      setTimeout(() => {
-        document.querySelector<HTMLTextAreaElement>('textarea')?.focus()
-      }, 0)
-    }
-    window.addEventListener('citykart:focus-comment', handleFocusComment)
-    return () => window.removeEventListener('citykart:focus-comment', handleFocusComment)
-  }, [])
 
   const TABS = ALL_TABS.filter((t) => {
     if (t.id === 'approvals' && !showApprovals) return false

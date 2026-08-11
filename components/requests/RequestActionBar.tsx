@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useTransition, useRef, useEffect } from 'react'
-import { Loader2, UserCheck, ChevronDown, StickyNote, Clock, GitMerge, Square, CheckCircle2, Search, X } from 'lucide-react'
-import { assignRequest, updateRequestStatus, startTimer, stopTimer } from '@/lib/actions/requests'
+import { Loader2, UserCheck, ChevronDown, GitMerge, CheckCircle2, Search, X } from 'lucide-react'
+import { assignRequest, updateRequestStatus } from '@/lib/actions/requests'
 import { sendAdHocApproval, searchManagersForApproval } from '@/lib/actions/approvals'
+import type { RequestStatus } from '@/types'
 
 interface Props {
   requestId:          string
@@ -12,6 +13,7 @@ interface Props {
   isManager:          boolean
   isAssignedToViewer: boolean
   isTerminal:         boolean
+  status:             RequestStatus
   activeTimer?:       { id: string; started_at: string } | null
 }
 
@@ -48,6 +50,7 @@ export function RequestActionBar({
   isManager,
   isAssignedToViewer,
   isTerminal,
+  status,
   activeTimer: initialTimer,
 }: Props) {
   const [isPending, startTransition]           = useTransition()
@@ -59,10 +62,25 @@ export function RequestActionBar({
   const [approvalResults, setApprovalResults]  = useState<{ id: string; full_name: string; role: string }[]>([])
   const [selectedApprovers, setSelectedApprovers] = useState<{ id: string; full_name: string }[]>([])
   const [pickUpError, setPickUpError]          = useState<string | null>(null)
+  const [startWorkError, setStartWorkError]    = useState<string | null>(null)
+  const [localStatus, setLocalStatus]          = useState(status)
   const [actionError, setActionError]          = useState<string | null>(null)
   const [actionSuccess, setActionSuccess]      = useState<string | null>(null)
   const [activeTimer, setActiveTimer]          = useState(initialTimer ?? null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Keep in sync if the server re-renders this component with fresh props
+  // (e.g. another actor changed status, or a status change from elsewhere on the
+  // page auto-started/stopped the timer) without discarding pending local edits.
+  const [prevStatus, setPrevStatus] = useState(status)
+  if (prevStatus !== status) { setPrevStatus(status); setLocalStatus(status) }
+  const [prevActiveTimerId, setPrevActiveTimerId] = useState(initialTimer?.id ?? null)
+  if (prevActiveTimerId !== (initialTimer?.id ?? null)) {
+    setPrevActiveTimerId(initialTimer?.id ?? null)
+    setActiveTimer(initialTimer ?? null)
+  }
+
+  const canStartWorking = localStatus === 'open' || localStatus === 'assigned'
 
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -88,30 +106,16 @@ export function RequestActionBar({
   }
 
   function handleStartWorking() {
+    setStartWorkError(null)
     startWorkTransition(async () => {
-      await updateRequestStatus(requestId, 'in_progress')
-    })
-  }
-
-  function handleAddNote() {
-    setShowActions(false)
-    window.dispatchEvent(new CustomEvent('citykart:focus-comment'))
-  }
-
-  function handleToggleTimer() {
-    setShowActions(false)
-    actTransition(async () => {
-      if (activeTimer) {
-        const result = await stopTimer(activeTimer.id)
-        if (result.error) { flash(result.error, true); return }
-        setActiveTimer(null)
-        flash('Timer stopped')
-      } else {
-        const result = await startTimer(requestId)
-        if (result.error) { flash(result.error, true); return }
-        setActiveTimer({ id: result.id!, started_at: new Date().toISOString() })
-        flash('Timer started')
-      }
+      const result = await updateRequestStatus(requestId, 'in_progress')
+      if (result?.error) { setStartWorkError(result.error); return }
+      setLocalStatus('in_progress')
+      // updateRequestStatus auto-starts a time entry server-side — reflect it
+      // immediately rather than waiting for the next prop sync. The entry's real id
+      // is unused client-side (nothing manually stops it anymore), so a placeholder
+      // is fine here.
+      setActiveTimer({ id: 'pending', started_at: new Date().toISOString() })
     })
   }
 
@@ -166,8 +170,9 @@ export function RequestActionBar({
           </button>
         )}
 
-        {/* Start Working */}
-        {isAgent && isAssignedToViewer && (
+        {/* Start Working — hidden once the request has actually moved past open/assigned,
+            not just while the transition is in flight, so it can't be clicked twice. */}
+        {isAgent && isAssignedToViewer && canStartWorking && (
           <button
             onClick={handleStartWorking}
             disabled={isStartingWork}
@@ -198,38 +203,6 @@ export function RequestActionBar({
 
           {showActions && (
             <div className="absolute right-0 top-full z-20 mt-1.5 w-64 overflow-hidden rounded-xl border border-border bg-card shadow-lg">
-              {/* Actions */}
-              <div className="border-b border-border p-1">
-                <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Actions</p>
-                <button
-                  onClick={handleAddNote}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
-                >
-                  <StickyNote className="h-4 w-4 text-amber-500" />
-                  Add Note
-                </button>
-                {isAgent && (
-                  <button
-                    onClick={handleToggleTimer}
-                    disabled={isActing}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted disabled:opacity-50"
-                  >
-                    {activeTimer ? (
-                      <>
-                        <Square className="h-4 w-4 text-red-500 fill-red-500" />
-                        Stop Timer
-                        {activeTimer && <ElapsedTimer startedAt={activeTimer.started_at} />}
-                      </>
-                    ) : (
-                      <>
-                        <Clock className="h-4 w-4 text-blue-500" />
-                        Start Timer
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-
               {/* Send for approval */}
               {(isAgent || isManager) && (
                 <div className="p-1">
@@ -318,6 +291,7 @@ export function RequestActionBar({
 
       {/* Feedback messages */}
       {pickUpError && <p className="text-xs text-red-600">{pickUpError}</p>}
+      {startWorkError && <p className="text-xs text-red-600">{startWorkError}</p>}
       {actionError && <p className="text-xs text-red-600">{actionError}</p>}
       {actionSuccess && (
         <p className="flex items-center gap-1 text-xs text-emerald-600">

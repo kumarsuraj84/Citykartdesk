@@ -1,21 +1,19 @@
 import Link from 'next/link'
-import { Search, Plus, Inbox, LayoutList, Columns3 } from 'lucide-react'
+import { Search, Plus, LayoutList, Columns3 } from 'lucide-react'
 import { Suspense } from 'react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ExportButton } from '@/components/requests/ExportButton'
 import { exportRequests } from '@/lib/actions/export'
-import { EmptyState } from '@/components/ui/EmptyState'
 import { redirect } from 'next/navigation'
-import { getCurrentProfile, getAllProfiles } from '@/lib/queries/profiles'
+import { getCurrentProfile, getTeamMembersForTeams, getAllProfiles } from '@/lib/queries/profiles'
 import { getRequests } from '@/lib/queries/requests'
-import { SLABadge } from '@/components/requests/SLABadge'
-import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
-import { WorkbenchClient } from '@/components/requests/WorkbenchClient'
+import { getActiveServicesForReclassify, getServiceCategories, getServiceSubCategoriesForFilter } from '@/lib/queries/services'
+import { RequestsTable } from '@/components/requests/RequestsTable'
+import { ColumnFilterSelect } from '@/components/requests/ColumnFilterSelect'
+import { StatusFilterSelect } from '@/components/requests/StatusFilterSelect'
 import { RequestBoardView } from '@/components/requests/RequestBoardView'
 import { Pagination } from '@/components/ui/Pagination'
-import { SourceCell } from '@/components/ui/SourceCell'
-import { formatRelativeTime } from '@/lib/utils'
-import type { RequestStatus, RequestWithRelations } from '@/types'
+import type { RequestStatus, RequestPriority } from '@/types'
 import type { AssignedToFilter } from '@/lib/queries/requests'
 
 interface PageProps {
@@ -25,6 +23,10 @@ interface PageProps {
     status?: string
     q?: string
     assigned?: string
+    priority?: string
+    service?: string
+    category?: string
+    subcategory?: string
     requester_id?: string
     page?: string
     pageSize?: string
@@ -40,81 +42,21 @@ const FILTER_TABS: { label: string; value: string }[] = [
   { label: 'Waiting on User', value: 'waiting_user' },
   { label: 'Resolved',        value: 'resolved' },
   { label: 'Closed',          value: 'closed' },
-  { label: 'All',             value: '' },
+  // Every status option is written to the URL explicitly (never by deleting
+  // the param) — 'all' is its own distinct value, not an empty/absent one, so
+  // selecting it can't be confused with "no status param yet" (which defaults
+  // to 'active' below) the way the old pill row's value:'' briefly was.
+  { label: 'All',             value: 'all' },
 ]
 
-function SortLink({ col, label, current, dir, base }: { col: string; label: string; current: string; dir: string; base: string }) {
-  const isActive = current === col
-  const nextDir = isActive && dir === 'desc' ? 'asc' : 'desc'
-  const url = `${base}&sort=${col}&dir=${nextDir}`
-  return (
-    <Link href={url} className={`flex items-center gap-1 text-xs font-semibold uppercase tracking-wide transition-colors ${isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
-      {label}
-      <span className="text-[10px]">{isActive ? (dir === 'desc' ? '↓' : '↑') : ''}</span>
-    </Link>
-  )
-}
+const PRIORITY_OPTIONS: { value: RequestPriority; label: string }[] = [
+  { value: 'urgent', label: 'Urgent' },
+  { value: 'high',   label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low',    label: 'Low' },
+]
 
-function QueueRow({ request }: { request: RequestWithRelations }) {
-  const source = (request as { source_metadata?: { created_via?: string } | null }).source_metadata?.created_via ?? null
-  return (
-    <Link
-      href={`/requests/${request.id}`}
-      className="group flex items-center gap-3 px-3 py-2.5 hover:bg-muted/40 transition-colors"
-    >
-      {/* Title + meta */}
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <p className="truncate text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-          {request.title}
-        </p>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="font-mono text-xs text-muted-foreground">{request.request_no}</span>
-          <span className="text-muted-foreground/40">·</span>
-          <span className="text-xs text-muted-foreground">{request.service.name}</span>
-          {request.requester && (
-            <>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="text-xs text-muted-foreground">{request.requester.full_name}</span>
-            </>
-          )}
-          {request.assignee && (
-            <>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary">
-                  {request.assignee.full_name.charAt(0).toUpperCase()}
-                </span>
-                {request.assignee.full_name.split(' ')[0]}
-              </span>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Source — editable dropdown */}
-      <div className="hidden w-[84px] shrink-0 sm:flex sm:justify-start">
-        <SourceCell entity="request" id={request.id} value={source} />
-      </div>
-
-      {/* Badges — visible on all screen sizes */}
-      <div className="flex flex-wrap items-center justify-end gap-1.5">
-        <StatusBadge status={request.status} size="sm" />
-        <PriorityBadge priority={request.priority} size="sm" />
-        <SLABadge
-          resolutionDueAt={request.resolution_due_at}
-          responseDueAt={request.response_due_at}
-          status={request.status}
-          showLabel
-        />
-      </div>
-
-      {/* Updated time */}
-      <span className="shrink-0 text-xs text-muted-foreground whitespace-nowrap">
-        {formatRelativeTime(request.updated_at)}
-      </span>
-    </Link>
-  )
-}
+const SORT_COLUMNS = ['updated_at', 'created_at', 'priority', 'status', 'request_no']
 
 export default async function RequestsPage({ searchParams }: PageProps) {
   const profile = await getCurrentProfile()
@@ -132,63 +74,101 @@ export default async function RequestsPage({ searchParams }: PageProps) {
     : params.view === 'collaborated' ? 'collaborated'
     : 'mine'
   const layout: 'table' | 'board' = params.layout === 'board' ? 'board' : 'table'
-  const rawStatus   = params.status as string | undefined
-  const q           = params.q
-  const rawAssigned = params.assigned
-  const requesterId = isAgent ? (params.requester_id ?? undefined) : undefined
-  const page        = Math.max(1, parseInt(params.page ?? '1', 10) || 1)
-  const pageSize    = [25, 50, 100].includes(parseInt(params.pageSize ?? '50', 10))
+  const rawStatus     = params.status as string | undefined
+  const q             = params.q
+  const rawAssigned   = params.assigned
+  const rawPriority   = params.priority
+  const rawService    = params.service
+  const rawCategory   = params.category
+  const rawSubCategory = params.subcategory
+  const requesterId   = isAgent ? (params.requester_id ?? undefined) : undefined
+  const page          = Math.max(1, parseInt(params.page ?? '1', 10) || 1)
+  const pageSize      = [25, 50, 100].includes(parseInt(params.pageSize ?? '50', 10))
     ? parseInt(params.pageSize ?? '50', 10)
     : 50
 
-  const sortCol = ['updated_at', 'created_at', 'priority', 'status'].includes(params.sort ?? '') ? params.sort! : 'updated_at'
-  const sortDir = params.dir === 'asc' ? 'asc' : 'desc'
+  const sortCol = SORT_COLUMNS.includes(params.sort ?? '') ? params.sort! : 'updated_at'
+  const sortDir: 'asc' | 'desc' = params.dir === 'asc' ? 'asc' : 'desc'
 
-  const statusFilter: RequestStatus | 'active' =
-    !rawStatus ? 'active' : (rawStatus as RequestStatus | 'active')
+  // 'all' means "no status filter" (getRequests skips its status clause on
+  // undefined) — a distinct explicit value, not the same as an absent param
+  // (which defaults to 'active' below).
+  const statusFilter: RequestStatus | 'active' | undefined =
+    rawStatus === 'all' ? undefined : !rawStatus ? 'active' : (rawStatus as RequestStatus | 'active')
 
-  const assignedTo: AssignedToFilter | undefined =
-    rawView === 'queue' && (rawAssigned === 'me' || rawAssigned === 'unassigned')
-      ? (rawAssigned as AssignedToFilter)
-      : undefined
+  const assignedTo: AssignedToFilter | undefined = rawAssigned || undefined
+  const priorityFilter = PRIORITY_OPTIONS.some((p) => p.value === rawPriority) ? (rawPriority as RequestPriority) : undefined
+  const serviceFilter = rawService || undefined
+  const categoryFilter = rawCategory || undefined
+  const subCategoryFilter = rawSubCategory || undefined
 
   const showWorkbench = rawView === 'queue' && isAgent
   const isBoard = showWorkbench && layout === 'board'
 
-  const [result, assignableUsers] = await Promise.all([
+  const [result, serviceOptions, categoryOptions, subCategoryOptions] = await Promise.all([
     getRequests({
       view: rawView,
       userId: profile.id,
       status: statusFilter,
       q: q || undefined,
       assignedTo,
+      priority: priorityFilter,
+      serviceId: serviceFilter,
+      categoryId: categoryFilter,
+      subCategoryId: subCategoryFilter,
       requesterId,
       page: isBoard ? 1 : page,
       pageSize: isBoard ? 200 : pageSize,
       sort: sortCol,
       dir: sortDir,
     }),
-    showWorkbench ? getAllProfiles() : Promise.resolve([]),
+    getActiveServicesForReclassify(),
+    getServiceCategories(),
+    getServiceSubCategoriesForFilter(),
   ])
   const requests = result.data
 
-  // ── URL builders ─────────────────────────────────────────────────────────────
+  // Candidate agents for the Assignee column filter + bulk Assign-To picker —
+  // scoped to the teams actually present on this page's requests (which RLS
+  // already restricted to teams the viewer can see), not every profile in the
+  // org, so nobody can pick an agent who isn't genuinely relevant here.
+  const relevantTeamIds = Array.from(new Set(requests.map((r) => r.team_id)))
+  const assignableUsers = relevantTeamIds.length > 0 ? await getTeamMembersForTeams(relevantTeamIds) : []
 
-  function tabHref(status: string) {
+  // Requester column filter — agent-only (a regular user's requests are always
+  // their own, so filtering by requester would be meaningless for them).
+  const requesterOptions = isAgent ? await getAllProfiles() : []
+
+  // ── URL builders ─────────────────────────────────────────────────────────────
+  // currentSearch carries every filter currently in the URL (minus `page`) so
+  // client components (ColumnFilterSelect, RequestsTable's sort headers) can
+  // add/remove exactly one param locally without a server-passed closure and
+  // without silently dropping the others.
+
+  function currentParams(): URLSearchParams {
     const p = new URLSearchParams()
     if (rawView !== 'mine') p.set('view', rawView)
-    if (status) p.set('status', status)
+    if (layout !== 'table') p.set('layout', layout)
+    if (rawStatus && rawStatus !== 'active') p.set('status', rawStatus)
     if (q) p.set('q', q)
     if (assignedTo) p.set('assigned', assignedTo)
-    return `/requests?${p.toString()}`
+    if (priorityFilter) p.set('priority', priorityFilter)
+    if (serviceFilter) p.set('service', serviceFilter)
+    if (categoryFilter) p.set('category', categoryFilter)
+    if (subCategoryFilter) p.set('subcategory', subCategoryFilter)
+    if (requesterId) p.set('requester_id', requesterId)
+    if (params.sort) p.set('sort', params.sort)
+    if (params.dir) p.set('dir', params.dir)
+    return p
   }
+  const currentSearch = currentParams().toString()
 
   function assignedHref(a: AssignedToFilter | '') {
-    const p = new URLSearchParams()
+    const p = currentParams()
     p.set('view', 'queue')
-    if (statusFilter && statusFilter !== 'active') p.set('status', statusFilter)
-    if (q) p.set('q', q)
     if (a) p.set('assigned', a)
+    else p.delete('assigned')
+    p.delete('page')
     return `/requests?${p.toString()}`
   }
 
@@ -223,7 +203,7 @@ export default async function RequestsPage({ searchParams }: PageProps) {
           ...(isAgent ? [{ value: 'queue', label: 'Team Queue' }] : []),
           { value: 'collaborated', label: 'Collaborated' },
         ] as { value: string; label: string }[]).map(({ value: v, label }) => {
-          const href = `/requests?view=${v}${statusFilter && statusFilter !== 'active' ? `&status=${statusFilter}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`
+          const href = `/requests?view=${v}${rawStatus && rawStatus !== 'active' ? `&status=${rawStatus}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`
           return (
             <Link
               key={v}
@@ -247,7 +227,7 @@ export default async function RequestsPage({ searchParams }: PageProps) {
             { value: 'table', label: 'Table', Icon: LayoutList },
             { value: 'board', label: 'Board', Icon: Columns3 },
           ] as const).map(({ value: v, label, Icon }) => {
-            const href = `/requests?view=queue&layout=${v}${statusFilter && statusFilter !== 'active' ? `&status=${statusFilter}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`
+            const href = `/requests?view=queue&layout=${v}${rawStatus && rawStatus !== 'active' ? `&status=${rawStatus}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`
             return (
               <Link
                 key={v}
@@ -292,106 +272,116 @@ export default async function RequestsPage({ searchParams }: PageProps) {
         </div>
       )}
 
-      {/* ── Search + filters row ── */}
+      {/* ── Search + column filters row ── */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* Search */}
+        {/* Global search — matches title, request #, and any comment on the request */}
         <div className="relative w-full max-w-xs">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <form>
             {rawView === 'queue' && <input type="hidden" name="view" value="queue" />}
-            {statusFilter && statusFilter !== 'active' && (
-              <input type="hidden" name="status" value={statusFilter} />
+            {rawStatus && rawStatus !== 'active' && (
+              <input type="hidden" name="status" value={rawStatus} />
             )}
             {assignedTo && <input type="hidden" name="assigned" value={assignedTo} />}
+            {priorityFilter && <input type="hidden" name="priority" value={priorityFilter} />}
+            {serviceFilter && <input type="hidden" name="service" value={serviceFilter} />}
+            {categoryFilter && <input type="hidden" name="category" value={categoryFilter} />}
+            {subCategoryFilter && <input type="hidden" name="subcategory" value={subCategoryFilter} />}
             <input
               type="search"
               name="q"
               defaultValue={q}
-              placeholder="Search requests…"
+              placeholder="Search requests + comments…"
               className="w-full rounded-lg border border-[#E0E0EC] bg-white py-1.5 pl-8 pr-3 text-[12px] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </form>
         </div>
 
-        {/* Status filter pills */}
-        <div className="flex flex-wrap gap-1.5">
-          {FILTER_TABS.map(({ label, value }) => (
-            <Link
-              key={value || 'all'}
-              href={tabHref(value)}
-              className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
-                statusFilter === value || (value === 'active' && statusFilter === 'active')
-                  ? 'border-primary bg-primary text-white'
-                  : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground'
-              }`}
-            >
-              {label}
-            </Link>
-          ))}
-        </div>
+        {/* Status filter — dropdown instead of a pill row to save horizontal space */}
+        <StatusFilterSelect
+          value={rawStatus && rawStatus !== 'active' ? rawStatus : 'active'}
+          options={FILTER_TABS}
+          pathname="/requests"
+          currentSearch={currentSearch}
+        />
+
+        {/* Per-column filters: Priority / Category / Sub Category / Service / Assignee */}
+        <ColumnFilterSelect
+          paramName="priority"
+          value={priorityFilter ?? ''}
+          options={PRIORITY_OPTIONS}
+          placeholder="Any priority…"
+          pathname="/requests"
+          currentSearch={currentSearch}
+        />
+        <ColumnFilterSelect
+          paramName="category"
+          value={categoryFilter ?? ''}
+          options={categoryOptions.map((c) => ({ value: c.id, label: c.name }))}
+          placeholder="Any category…"
+          pathname="/requests"
+          currentSearch={currentSearch}
+        />
+        <ColumnFilterSelect
+          paramName="subcategory"
+          value={subCategoryFilter ?? ''}
+          options={subCategoryOptions.map((s) => ({ value: s.id, label: `${s.name} (${s.category_name})` }))}
+          placeholder="Any sub category…"
+          pathname="/requests"
+          currentSearch={currentSearch}
+        />
+        <ColumnFilterSelect
+          paramName="service"
+          value={serviceFilter ?? ''}
+          options={serviceOptions.map((s) => ({ value: s.id, label: `${s.name} (${s.category_name})` }))}
+          placeholder="Any service…"
+          pathname="/requests"
+          currentSearch={currentSearch}
+        />
+        {assignableUsers.length > 0 && (
+          <ColumnFilterSelect
+            paramName="assigned"
+            value={assignedTo && assignedTo !== 'me' && assignedTo !== 'unassigned' ? assignedTo : ''}
+            options={assignableUsers.map((a) => ({ value: a.id, label: a.full_name }))}
+            placeholder="Any assignee…"
+            pathname="/requests"
+            currentSearch={currentSearch}
+          />
+        )}
+        {requesterOptions.length > 0 && (
+          <ColumnFilterSelect
+            paramName="requester_id"
+            value={requesterId ?? ''}
+            options={requesterOptions.map((r) => ({ value: r.id, label: r.full_name }))}
+            placeholder="Any requester…"
+            pathname="/requests"
+            currentSearch={currentSearch}
+          />
+        )}
       </div>
 
       {/* ── Request list ── */}
-      {showWorkbench && layout === 'board' ? (
+      {isBoard ? (
         requests.length === 0 ? (
-          <div className="rounded-lg border border-[#E8E8F0] bg-white">
-            <EmptyState
-              icon={q ? Search : Inbox}
-              title="No requests found"
-              description={q ? 'Try adjusting your search or filters.' : 'No requests match the selected filters.'}
-            />
+          <div className="rounded-lg border border-[#E8E8F0] bg-white p-8 text-center text-sm text-muted-foreground">
+            No requests found.
           </div>
         ) : (
           <RequestBoardView requests={requests} />
         )
-      ) : showWorkbench ? (
-        <WorkbenchClient
+      ) : (
+        <RequestsTable
           requests={requests}
-          teamMembers={assignableUsers}
-          viewerId={profile.id}
           emptyTitle="No requests found"
           emptyDescription={q ? 'Try adjusting your search or filters.' : 'No requests match the selected filters.'}
-          groupByStatus={statusFilter === 'active'}
+          viewerId={profile.id}
+          teamMembers={assignableUsers}
+          showAssignAction={rawView === 'queue'}
+          sortCol={sortCol}
+          sortDir={sortDir}
+          pathname="/requests"
+          currentSearch={currentSearch}
         />
-      ) : requests.length === 0 ? (
-        <div className="rounded-lg border border-[#E8E8F0] bg-white">
-          <EmptyState
-            icon={q ? Search : Inbox}
-            title="No requests found"
-            description={q ? 'Try adjusting your search or filters.' : 'No requests match the selected filters.'}
-            action={
-              <Link
-                href="/services"
-                className="btn-gradient text-white"
-              >
-                Browse Services
-              </Link>
-            }
-          />
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-lg border border-[#E8E8F0] bg-white">
-          {/* Table header (queue view only, desktop) */}
-          {rawView === 'queue' && (
-            <div className="hidden border-b border-border bg-muted/20 px-3 py-2 sm:flex items-center gap-3">
-              <div className="flex-1">
-                <SortLink col="created_at" label="Request" current={sortCol} dir={sortDir} base={`/requests?view=${rawView}${statusFilter && statusFilter !== 'active' ? `&status=${statusFilter}` : ''}`} />
-              </div>
-              <div className="flex items-center gap-8 pr-2">
-                <SortLink col="status" label="Status" current={sortCol} dir={sortDir} base={`/requests?view=${rawView}${statusFilter && statusFilter !== 'active' ? `&status=${statusFilter}` : ''}`} />
-                <SortLink col="priority" label="Priority" current={sortCol} dir={sortDir} base={`/requests?view=${rawView}${statusFilter && statusFilter !== 'active' ? `&status=${statusFilter}` : ''}`} />
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">SLA</span>
-                <SortLink col="updated_at" label="Updated" current={sortCol} dir={sortDir} base={`/requests?view=${rawView}${statusFilter && statusFilter !== 'active' ? `&status=${statusFilter}` : ''}`} />
-              </div>
-            </div>
-          )}
-
-          <div className="divide-y divide-border">
-            {requests.map((req) => (
-              <QueueRow key={req.id} request={req} />
-            ))}
-          </div>
-        </div>
       )}
 
       {layout !== 'board' && (

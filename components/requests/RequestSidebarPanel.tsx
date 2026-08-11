@@ -11,12 +11,14 @@ import {
   addCollaborator,
   removeCollaborator,
   searchOrgMembers,
+  reclassifyRequest,
 } from '@/lib/actions/requests'
 import { StatusBadge, PriorityBadge } from './RequestBadges'
 import { SLABadge } from './SLABadge'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
 import { formatRelativeTime } from '@/lib/utils'
 import type { RequestStatus, RequestPriority, RequestCollaborator } from '@/types'
+import type { ReclassifyServiceOption } from '@/lib/queries/services'
 
 interface TeamMember { id: string; full_name: string }
 
@@ -28,7 +30,11 @@ interface RequestSidebarPanelProps {
   assigneeId: string | null
   assigneeName: string | null
   teamName: string
+  serviceId: string
   serviceName: string
+  categoryName: string | null
+  subCategoryName: string | null
+  reclassifyOptions: ReclassifyServiceOption[]
   requesterId: string
   requesterName: string
   resolutionDueAt: string | null
@@ -240,6 +246,94 @@ function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMember
   )
 }
 
+// Inline service (category / sub category / item) corrector — lets an agent fix a
+// wrongly-submitted classification. The candidate list is filtered client-side
+// (already fetched in full) rather than server-searched, since the active catalog
+// is small enough to ship in one page load.
+function ServiceRow({ requestId, serviceId, serviceName, isAgent, options }: {
+  requestId: string; serviceId: string; serviceName: string; isAgent: boolean
+  options: ReclassifyServiceOption[]
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [cur, setCur] = useState({ id: serviceId, name: serviceName })
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setQuery('') } }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+  useEffect(() => { if (open) inputRef.current?.focus() }, [open])
+
+  const q = query.trim().toLowerCase()
+  const candidates = options.filter((o) => {
+    if (o.id === cur.id) return false
+    if (!q) return true
+    return [o.name, o.category_name, o.sub_category_name ?? ''].join(' ').toLowerCase().includes(q)
+  })
+
+  function pick(o: ReclassifyServiceOption) {
+    const prev = cur
+    setCur({ id: o.id, name: o.name }); setOpen(false); setQuery(''); setError(null)
+    startTransition(async () => {
+      const result = await reclassifyRequest(requestId, o.id)
+      if (result?.error) { setError(result.error); setCur(prev) }
+    })
+  }
+
+  return (
+    <PropRow label="Service">
+      <div ref={ref} className="relative">
+        <button
+          onClick={() => isAgent && setOpen((v) => !v)}
+          className={`flex items-center gap-1 ${isAgent ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+          title={error ?? undefined}
+        >
+          <span className={`text-xs ${error ? 'text-destructive' : 'text-foreground'}`}>{cur.name}</span>
+          {isAgent && !isPending && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+          {isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+        </button>
+        {open && (
+          <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-xl border border-border bg-card shadow-xl">
+            <div className="border-b border-border px-2 py-1.5">
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search service, category…"
+                className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+              />
+            </div>
+            <div className="max-h-56 overflow-y-auto py-1">
+              {candidates.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-muted-foreground">No matches</p>
+              ) : (
+                candidates.map((o) => (
+                  <button
+                    key={o.id}
+                    onClick={() => pick(o)}
+                    className="flex w-full flex-col items-start px-3 py-1.5 text-left text-xs hover:bg-muted transition-colors"
+                  >
+                    <span className="font-medium text-foreground">{o.name}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {o.category_name}{o.sub_category_name ? ` · ${o.sub_category_name}` : ''}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </PropRow>
+  )
+}
+
 // Collaborators row — agents can add ANY active user in the org (typeahead search),
 // not just team members. Existing add/remove behaviour is unchanged.
 function CollaboratorsRow({ requestId, assigneeId, viewerId, initialCollaborators }: {
@@ -284,9 +378,12 @@ function CollaboratorsRow({ requestId, assigneeId, viewerId, initialCollaborator
   function handleAdd(member: { id: string; full_name: string }) {
     startTransition(async () => {
       const result = await addCollaborator(requestId, member.id)
-      if (!result.error) {
+      // Use the real DB row id from the action's response, not a fabricated one —
+      // removeCollaborator matches on this id, so a fake id silently fails to
+      // remove any collaborator added earlier in the same page session.
+      if (!result.error && result.id) {
         setCollaborators(prev => [...prev, {
-          id: `opt-${member.id}`, user_id: member.id, added_by: viewerId,
+          id: result.id!, user_id: member.id, added_by: viewerId,
           added_at: new Date().toISOString(),
           profile: { id: member.id, full_name: member.full_name },
         }])
@@ -319,7 +416,10 @@ function CollaboratorsRow({ requestId, assigneeId, viewerId, initialCollaborator
           <UserPlus className="h-2.5 w-2.5" />
         </button>
         {open && (
-          <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-xl border border-border bg-card shadow-xl">
+          // Opens upward (bottom-full), not downward — Collaborators is the last row in
+          // RequestSidebarPanel's `overflow-hidden` property list, so a downward dropdown
+          // gets clipped by that ancestor instead of floating over the next card.
+          <div className="absolute right-0 bottom-full z-50 mb-1 w-48 rounded-xl border border-border bg-card shadow-xl">
             <div className="border-b border-border px-2 py-1.5">
               <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
                 placeholder="Search people…"
@@ -348,7 +448,8 @@ function CollaboratorsRow({ requestId, assigneeId, viewerId, initialCollaborator
 
 export function RequestSidebarPanel({
   requestId, requestNo, status, priority,
-  assigneeId, assigneeName, teamName, serviceName,
+  assigneeId, assigneeName, teamName, serviceId, serviceName,
+  categoryName, subCategoryName, reclassifyOptions,
   requesterId, requesterName,
   resolutionDueAt, responseDueAt, createdAt,
   viewerId, isAgent, isRequester, isTerminal,
@@ -399,10 +500,25 @@ export function RequestSidebarPanel({
           <span className="text-xs text-foreground">{teamName}</span>
         </PropRow>
 
-        {/* Read-only: Service */}
-        <PropRow label="Service">
-          <span className="text-xs text-foreground">{serviceName}</span>
+        {/* Editable (agent-only): Service — corrects a wrongly-submitted
+            Category/Sub Category/Item. Non-agents just see it read-only. */}
+        {isAgent ? (
+          <ServiceRow requestId={requestId} serviceId={serviceId} serviceName={serviceName} isAgent={isAgent} options={reclassifyOptions} />
+        ) : (
+          <PropRow label="Service">
+            <span className="text-xs text-foreground">{serviceName}</span>
+          </PropRow>
+        )}
+
+        {/* Read-only: Category / Sub Category — visible to agent and requester alike. */}
+        <PropRow label="Category">
+          <span className="text-xs text-foreground">{categoryName ?? '—'}</span>
         </PropRow>
+        {subCategoryName && (
+          <PropRow label="Sub Category">
+            <span className="text-xs text-foreground">{subCategoryName}</span>
+          </PropRow>
+        )}
 
         {/* Read-only: Created */}
         <PropRow label="Created">

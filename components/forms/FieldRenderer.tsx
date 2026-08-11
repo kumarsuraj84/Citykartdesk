@@ -60,10 +60,16 @@ export function FieldRenderer({ field, value, onChange, error }: FieldRendererPr
         return (
           <input
             type="tel"
+            inputMode="numeric"
             id={field.id}
-            placeholder={field.placeholder ?? '+1 555 123 4567'}
+            placeholder={field.placeholder ?? '9876543210'}
             value={value as string}
-            onChange={(e) => onChange(e.target.value)}
+            // Digits only, no country code, capped at 10 — matches PHONE_REGEX
+            // in lib/validation/formFields.ts. Filtered on keystroke rather
+            // than left to submit-time validation so invalid characters and
+            // over-length input are never enterable in the first place.
+            onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, 10))}
+            maxLength={10}
             className={inputCls}
           />
         )

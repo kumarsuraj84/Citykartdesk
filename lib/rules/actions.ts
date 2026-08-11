@@ -197,6 +197,19 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
   }
 
   await admin.from('requests').update(update).eq('id', request.id)
+
+  // Auto time-tracking: a rule-driven status change away from in_progress must
+  // close any open timer the same way the interactive updateRequestStatus()
+  // does — otherwise an agent's clock keeps running forever on a ticket a rule
+  // just resolved/reassigned out from under them.
+  if (request.status === 'in_progress' && status !== 'in_progress') {
+    await admin
+      .from('request_time_entries')
+      .update({ stopped_at: nowIso })
+      .eq('request_id', request.id)
+      .is('stopped_at', null)
+  }
+
   await logActivity({
     requestId: request.id,
     actorId: request.requester_id,

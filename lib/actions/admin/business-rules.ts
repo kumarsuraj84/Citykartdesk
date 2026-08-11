@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logAdminAudit } from '@/lib/actions/admin/audit'
-import type { RuleCondition } from '@/lib/rules/evaluate'
+import type { RuleCondition, RuleConditionsLogic } from '@/lib/rules/evaluate'
 import type { RuleAction } from '@/lib/rules/actions'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,10 +20,12 @@ export type BusinessRuleInput = {
   name: string
   description?: string
   is_active: boolean
-  trigger: 'created' | 'updated' | 'schedule'
+  /** A rule can fire on more than one trigger (e.g. Created and Edited) instead of needing a duplicate rule per trigger. */
+  trigger: ('created' | 'updated' | 'schedule')[]
   schedule_check?: 'sla_pct_elapsed' | 'unassigned_minutes' | null
   schedule_threshold?: number | null
   conditions: RuleCondition[]
+  conditions_logic: RuleConditionsLogic
   actions: RuleAction[]
   execution_order: number
 }
@@ -33,7 +35,9 @@ export async function createBusinessRule(data: BusinessRuleInput): Promise<{ id?
   if (!profile) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
   if (!data.name.trim()) return { error: 'Name is required.' }
-  if (data.trigger === 'schedule' && (!data.schedule_check || data.schedule_threshold == null)) {
+  if (data.trigger.length === 0) return { error: 'Pick at least one trigger.' }
+  const isScheduled = data.trigger.includes('schedule')
+  if (isScheduled && (!data.schedule_check || data.schedule_threshold == null)) {
     return { error: 'A schedule rule needs a check type and threshold.' }
   }
 
@@ -46,9 +50,10 @@ export async function createBusinessRule(data: BusinessRuleInput): Promise<{ id?
       description: data.description?.trim() || null,
       is_active: data.is_active,
       trigger: data.trigger,
-      schedule_check: data.trigger === 'schedule' ? data.schedule_check : null,
-      schedule_threshold: data.trigger === 'schedule' ? data.schedule_threshold : null,
+      schedule_check: isScheduled ? data.schedule_check : null,
+      schedule_threshold: isScheduled ? data.schedule_threshold : null,
       conditions: data.conditions,
+      conditions_logic: data.conditions_logic,
       actions: data.actions,
       execution_order: data.execution_order,
       created_by: profile.id,
@@ -76,7 +81,9 @@ export async function updateBusinessRule(id: string, data: BusinessRuleInput): P
   const profile = await requireAdminOrManager()
   if (!profile) return { error: 'Unauthorized.' }
   if (!data.name.trim()) return { error: 'Name is required.' }
-  if (data.trigger === 'schedule' && (!data.schedule_check || data.schedule_threshold == null)) {
+  if (data.trigger.length === 0) return { error: 'Pick at least one trigger.' }
+  const isScheduled = data.trigger.includes('schedule')
+  if (isScheduled && (!data.schedule_check || data.schedule_threshold == null)) {
     return { error: 'A schedule rule needs a check type and threshold.' }
   }
 
@@ -88,9 +95,10 @@ export async function updateBusinessRule(id: string, data: BusinessRuleInput): P
       description: data.description?.trim() || null,
       is_active: data.is_active,
       trigger: data.trigger,
-      schedule_check: data.trigger === 'schedule' ? data.schedule_check : null,
-      schedule_threshold: data.trigger === 'schedule' ? data.schedule_threshold : null,
+      schedule_check: isScheduled ? data.schedule_check : null,
+      schedule_threshold: isScheduled ? data.schedule_threshold : null,
       conditions: data.conditions,
+      conditions_logic: data.conditions_logic,
       actions: data.actions,
       execution_order: data.execution_order,
       updated_by: profile.id,
@@ -189,7 +197,7 @@ export async function migrateLegacyRulesToBusinessRules(): Promise<{ migrated?: 
       org_id: profile.org_id,
       name: `${r.name} (migrated from Routing Rules)`,
       is_active: true,
-      trigger: 'created',
+      trigger: ['created'],
       conditions,
       actions,
       execution_order: 0,
@@ -210,7 +218,7 @@ export async function migrateLegacyRulesToBusinessRules(): Promise<{ migrated?: 
       org_id: profile.org_id,
       name: `${r.name} (migrated from SLA Escalation Rules)`,
       is_active: true,
-      trigger: 'schedule',
+      trigger: ['schedule'],
       schedule_check: 'sla_pct_elapsed',
       schedule_threshold: r.trigger_pct,
       conditions,
@@ -245,7 +253,7 @@ export async function migrateLegacyRulesToBusinessRules(): Promise<{ migrated?: 
       org_id: profile.org_id,
       name: `${r.name} (migrated from Alert Rules)`,
       is_active: r.is_active,
-      trigger: 'schedule',
+      trigger: ['schedule'],
       schedule_check: 'unassigned_minutes',
       schedule_threshold: r.threshold_minutes ?? 120,
       conditions: [],

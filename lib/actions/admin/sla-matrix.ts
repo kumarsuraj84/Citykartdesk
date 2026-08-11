@@ -4,10 +4,9 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logAdminAudit } from '@/lib/actions/admin/audit'
-import type { SLAConfig, SLATier } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyClient = { from: (t: string) => any }
+type AnyClient = { from: (t: string) => any; rpc: (fn: string, args: Record<string, unknown>) => any }
 
 export type FieldSlaOverrideInput = {
   serviceId: string
@@ -25,8 +24,12 @@ export type FieldSlaOverrideInput = {
 /**
  * Upsert one row of the Field SLA Matrix — one priority tier's response and resolution
  * hours for one (service, field, option). Storage is still one field_sla_overrides row
- * per (service, field, option) holding all 4 priorities in its sla_config JSONB, so this
- * merges into the other 3 priorities' existing data rather than overwriting them.
+ * per (service, field, option) holding all 4 priorities in its sla_config JSONB. Goes
+ * through the upsert_field_sla_override() SQL function (atomic jsonb_set) rather than a
+ * client-side SELECT-then-merge-then-UPSERT — Response and Resolution hours for the same
+ * row save independently (two separate blur-triggered calls), and the old read-modify-write
+ * let two overlapping saves race, silently reverting whichever one's round trip landed
+ * first. The function also enforces resolution_hours > response_hours.
  */
 export async function upsertFieldSlaOverride(input: FieldSlaOverrideInput): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
@@ -35,35 +38,18 @@ export async function upsertFieldSlaOverride(input: FieldSlaOverrideInput): Prom
 
   const admin = createAdminClient() as unknown as AnyClient
 
-  const { data: existing } = await admin
-    .from('field_sla_overrides')
-    .select('sla_config')
-    .eq('service_id', input.serviceId)
-    .eq('field_id', input.fieldId)
-    .eq('option_value', input.optionValue)
-    .maybeSingle()
-
-  const existingConfig = (existing?.sla_config ?? {}) as SLAConfig
-  const nextTier: SLATier = {
-    response_hours: input.responseHours,
-    resolution_hours: input.resolutionHours,
-  }
-  const nextSlaConfig: SLAConfig = { ...existingConfig, [input.priority]: nextTier }
-
-  const { error } = await admin.from('field_sla_overrides').upsert(
-    {
-      org_id: profile.org_id,
-      service_id: input.serviceId,
-      field_id: input.fieldId,
-      field_label: input.fieldLabel,
-      option_value: input.optionValue,
-      option_label: input.optionLabel,
-      sla_config: nextSlaConfig,
-      updated_by: profile.id,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'service_id,field_id,option_value' }
-  )
+  const { error } = await admin.rpc('upsert_field_sla_override', {
+    p_org_id: profile.org_id,
+    p_service_id: input.serviceId,
+    p_field_id: input.fieldId,
+    p_field_label: input.fieldLabel,
+    p_option_value: input.optionValue,
+    p_option_label: input.optionLabel,
+    p_priority: input.priority,
+    p_response_hours: input.responseHours,
+    p_resolution_hours: input.resolutionHours,
+    p_updated_by: profile.id,
+  })
 
   if (error) return { error: error.message }
 

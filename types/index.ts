@@ -103,7 +103,7 @@ export type ServiceCategoryWithSubCategories = ServiceCategory & {
 export type RequestWithRelations = Request & {
   requester: Profile
   assignee: Profile | null
-  service: Service
+  service: Service & { category?: { id?: string; name: string } | null; sub_category?: { id?: string; name: string } | null }
   team: Team
 }
 

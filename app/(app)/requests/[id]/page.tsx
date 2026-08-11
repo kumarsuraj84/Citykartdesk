@@ -17,6 +17,7 @@ import { CsatSurvey } from '@/components/requests/CsatSurvey'
 import { SLABadge } from '@/components/requests/SLABadge'
 import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
 import { RequestSidebarPanel } from '@/components/requests/RequestSidebarPanel'
+import { getActiveServicesForReclassify } from '@/lib/queries/services'
 import { RequestTasksTab } from '@/components/requests/RequestTasksTab'
 import { getTasksForRequest } from '@/lib/queries/tasks'
 import { getAllProjectsMini } from '@/lib/queries/projects'
@@ -61,6 +62,7 @@ const ACTION_LABELS: Record<ActivityAction, string> = {
   attachment_added:   'attached a file',
   collaborator_added:   'added a collaborator',
   collaborator_removed: 'removed a collaborator',
+  reclassified:         'corrected the service classification',
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -381,10 +383,11 @@ export default async function RequestDetailPage({ params }: PageProps) {
   const canManage   = isAgent
   const isTerminal  = TERMINAL_STATUSES.includes(request.status)
 
-  // Phase 2: only the two queries that depend on request data.
-  const [teamMembers, csatSurvey] = await Promise.all([
+  // Phase 2: only the queries that depend on request data (or are agent-only).
+  const [teamMembers, csatSurvey, reclassifyOptions] = await Promise.all([
     canManage ? getTeamMembers(request.team_id) : Promise.resolve([]),
     isRequester ? getCsatSurveyForRequest(id) : Promise.resolve(null),
+    canManage ? getActiveServicesForReclassify() : Promise.resolve([]),
   ])
 
   // Show Approvals tab if the service has a predefined workflow OR any ad-hoc approval was sent
@@ -784,7 +787,11 @@ export default async function RequestDetailPage({ params }: PageProps) {
         assigneeId={request.assigned_to}
         assigneeName={request.assignee?.full_name ?? null}
         teamName={request.team.name}
+        serviceId={request.service_id}
         serviceName={request.service.name}
+        categoryName={request.service.category?.name ?? null}
+        subCategoryName={request.service.sub_category?.name ?? null}
+        reclassifyOptions={reclassifyOptions}
         requesterId={request.requester_id}
         requesterName={request.requester.full_name}
         resolutionDueAt={request.resolution_due_at}
@@ -860,6 +867,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
             isManager={profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'}
             isAssignedToViewer={request.assigned_to === profile.id}
             isTerminal={isTerminal}
+            status={request.status}
             activeTimer={activeTimer}
           />
         </div>

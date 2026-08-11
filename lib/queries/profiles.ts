@@ -78,6 +78,31 @@ export async function getTeamMembers(
     .filter((u): u is { id: string; full_name: string } => u !== null)
 }
 
+/**
+ * Distinct agents across a set of teams — used for the Team Queue's "who's
+ * working this?" filter and its bulk Assign-To picker, both of which should
+ * only offer agents actually on one of the teams whose requests are visible
+ * in the current queue (RLS already scopes the queue itself to those teams),
+ * not every profile in the org.
+ */
+export async function getTeamMembersForTeams(
+  teamIds: string[]
+): Promise<{ id: string; full_name: string }[]> {
+  if (teamIds.length === 0) return []
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('team_members')
+    .select('user:profiles!team_members_user_id_fkey (id, full_name)')
+    .in('team_id', teamIds)
+  if (!data) return []
+  const byId = new Map<string, { id: string; full_name: string }>()
+  for (const row of data) {
+    const u = row.user as { id: string; full_name: string } | null
+    if (u) byId.set(u.id, u)
+  }
+  return Array.from(byId.values()).sort((a, b) => a.full_name.localeCompare(b.full_name))
+}
+
 export async function searchAgentsForRequest(
   teamId: string,
   query: string

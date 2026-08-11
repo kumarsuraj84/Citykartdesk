@@ -13,9 +13,10 @@ import {
   migrateLegacyRulesToBusinessRules,
   type BusinessRuleInput,
 } from '@/lib/actions/admin/business-rules'
-import type { RuleCondition, RuleConditionField, RuleConditionOperator } from '@/lib/rules/evaluate'
+import type { RuleCondition, RuleConditionField, RuleConditionOperator, RuleConditionsLogic } from '@/lib/rules/evaluate'
 import type { RuleAction } from '@/lib/rules/actions'
-import type { Profile } from '@/types'
+import { flattenLeafOptions } from '@/lib/forms/options'
+import type { Profile, FormFieldType, FormFieldOption } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,15 +24,25 @@ type Ref = { id: string; name: string }
 type SubCatRef = Ref & { category_id: string }
 type ProfileRef = Pick<Profile, 'id' | 'full_name' | 'role'>
 
+export type RuleFormFieldRef = {
+  id: string
+  label: string
+  type: FormFieldType
+  options?: FormFieldOption[]
+  serviceId: string
+  serviceName: string
+}
+
 type BusinessRuleRow = {
   id: string
   name: string
   description: string | null
   is_active: boolean
-  trigger: 'created' | 'updated' | 'schedule'
+  trigger: ('created' | 'updated' | 'schedule')[]
   schedule_check: 'sla_pct_elapsed' | 'unassigned_minutes' | null
   schedule_threshold: number | null
   conditions: RuleCondition[]
+  conditions_logic: RuleConditionsLogic
   actions: RuleAction[]
   execution_order: number
 }
@@ -43,6 +54,11 @@ interface BusinessRulesClientProps {
   subCategories: SubCatRef[]
   teams: Ref[]
   profiles: ProfileRef[]
+  departments: Ref[]
+  locations: Ref[]
+  designations: Ref[]
+  functions: Ref[]
+  formFields: RuleFormFieldRef[]
   legacyRulesAvailable: boolean
 }
 
@@ -55,17 +71,30 @@ const TRIGGER_BADGE: Record<string, string> = {
   schedule: 'bg-violet-50 text-violet-700 border-violet-100',
 }
 
-const FIELD_OPTIONS: { value: RuleConditionField; label: string }[] = [
+const REQUEST_FIELD_OPTIONS: { value: RuleConditionField; label: string }[] = [
   { value: 'priority', label: 'Priority' },
   { value: 'status', label: 'Status' },
   { value: 'service_id', label: 'Service' },
   { value: 'category_id', label: 'Service Group' },
   { value: 'sub_category_id', label: 'Service Sub Group' },
   { value: 'team_id', label: 'Team' },
-  { value: 'requester_id', label: 'Requester' },
   { value: 'title', label: 'Title' },
   { value: 'description', label: 'Description' },
 ]
+
+const REQUESTER_FIELD_OPTIONS: { value: RuleConditionField; label: string }[] = [
+  { value: 'requester_id', label: 'Requester' },
+  { value: 'requester_department_id', label: 'Requester Department' },
+  { value: 'requester_location_id', label: 'Requester Location' },
+  { value: 'requester_designation_id', label: 'Requester Designation' },
+  { value: 'requester_function_id', label: 'Requester Function' },
+]
+
+const FORM_FIELD_PREFIX = 'form:'
+
+function encodeFieldSelection(condition: RuleCondition): string {
+  return condition.field === 'form_field' ? `${FORM_FIELD_PREFIX}${condition.form_field_id ?? ''}` : condition.field
+}
 
 const OPERATOR_OPTIONS: { value: RuleConditionOperator; label: string }[] = [
   { value: 'equals', label: 'is' },
@@ -119,7 +148,34 @@ function conditionValueOptions(field: RuleConditionField, refs: BusinessRulesCli
   if (field === 'sub_category_id') return refs.subCategories.map((c) => ({ value: c.id, label: c.name }))
   if (field === 'team_id') return refs.teams.map((t) => ({ value: t.id, label: t.name }))
   if (field === 'requester_id') return refs.profiles.map((p) => ({ value: p.id, label: p.full_name }))
+  if (field === 'requester_department_id') return refs.departments.map((d) => ({ value: d.id, label: d.name }))
+  if (field === 'requester_location_id') return refs.locations.map((l) => ({ value: l.id, label: l.name }))
+  if (field === 'requester_designation_id') return refs.designations.map((d) => ({ value: d.id, label: d.name }))
+  if (field === 'requester_function_id') return refs.functions.map((f) => ({ value: f.id, label: f.name }))
   return null // title/description — free text
+}
+
+// 'toggle' is intentionally excluded — FieldRenderer.tsx has no case for it
+// (falls through to `default: return null`), so a service form field of that
+// type never actually renders or collects a value; a rule condition built
+// against it would be permanently unsatisfiable.
+const BOOLEAN_FIELD_TYPES: FormFieldType[] = ['checkbox']
+const OPTION_FIELD_TYPES: FormFieldType[] = ['select', 'multiselect', 'radio']
+const YES_NO_OPTIONS = [
+  { value: 'true', label: 'Yes' },
+  { value: 'false', label: 'No' },
+]
+
+function formFieldValueOptions(field: RuleFormFieldRef): { value: string; label: string }[] | null {
+  if (BOOLEAN_FIELD_TYPES.includes(field.type)) return YES_NO_OPTIONS
+  if (OPTION_FIELD_TYPES.includes(field.type)) return flattenLeafOptions(field.options)
+  return null // text/textarea/number/date/email/phone/file — free input
+}
+
+function formFieldInputType(field: RuleFormFieldRef): string {
+  if (field.type === 'number') return 'number'
+  if (field.type === 'date') return 'date'
+  return 'text'
 }
 
 function ConditionRow({
@@ -134,17 +190,49 @@ function ConditionRow({
   refs: BusinessRulesClientProps
 }) {
   const needsValue = condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty'
-  const options = conditionValueOptions(condition.field, refs)
+  const formField = condition.field === 'form_field' ? refs.formFields.find((f) => f.id === condition.form_field_id) : undefined
+  const options = condition.field === 'form_field'
+    ? (formField ? formFieldValueOptions(formField) : null)
+    : conditionValueOptions(condition.field, refs)
+
+  const formFieldsByService = new Map<string, RuleFormFieldRef[]>()
+  for (const f of refs.formFields) {
+    const list = formFieldsByService.get(f.serviceName) ?? []
+    list.push(f)
+    formFieldsByService.set(f.serviceName, list)
+  }
+
+  function handleFieldChange(raw: string) {
+    if (raw.startsWith(FORM_FIELD_PREFIX)) {
+      onChange({ field: 'form_field', form_field_id: raw.slice(FORM_FIELD_PREFIX.length), operator: 'equals', value: null })
+    } else {
+      onChange({ field: raw as RuleConditionField, operator: condition.operator, value: null })
+    }
+  }
 
   return (
     <div className="flex items-center gap-2">
       <select
-        value={condition.field}
-        onChange={(e) => onChange({ field: e.target.value as RuleConditionField, operator: condition.operator, value: null })}
+        value={encodeFieldSelection(condition)}
+        onChange={(e) => handleFieldChange(e.target.value)}
         className={cn(selectCls, 'flex-1')}
       >
-        {FIELD_OPTIONS.map((f) => (
-          <option key={f.value} value={f.value}>{f.label}</option>
+        <optgroup label="Request">
+          {REQUEST_FIELD_OPTIONS.map((f) => (
+            <option key={f.value} value={f.value}>{f.label}</option>
+          ))}
+        </optgroup>
+        <optgroup label="Requester">
+          {REQUESTER_FIELD_OPTIONS.map((f) => (
+            <option key={f.value} value={f.value}>{f.label}</option>
+          ))}
+        </optgroup>
+        {[...formFieldsByService.entries()].map(([serviceName, fields]) => (
+          <optgroup key={serviceName} label={serviceName}>
+            {fields.map((f) => (
+              <option key={f.id} value={`${FORM_FIELD_PREFIX}${f.id}`}>{f.label}</option>
+            ))}
+          </optgroup>
         ))}
       </select>
       <select
@@ -170,7 +258,7 @@ function ConditionRow({
           </select>
         ) : (
           <input
-            type="text"
+            type={condition.field === 'form_field' && formField ? formFieldInputType(formField) : 'text'}
             value={typeof condition.value === 'string' ? condition.value : ''}
             onChange={(e) => onChange({ ...condition, value: e.target.value })}
             placeholder="Text…"
@@ -337,10 +425,11 @@ function formStateFromRule(rule: BusinessRuleRow | null): BusinessRuleInput {
       name: rule.name,
       description: rule.description ?? '',
       is_active: rule.is_active,
-      trigger: rule.trigger,
+      trigger: rule.trigger.length > 0 ? rule.trigger : ['created'],
       schedule_check: rule.schedule_check,
       schedule_threshold: rule.schedule_threshold,
       conditions: rule.conditions ?? [],
+      conditions_logic: rule.conditions_logic ?? 'AND',
       actions: rule.actions ?? [],
       execution_order: rule.execution_order,
     }
@@ -349,10 +438,11 @@ function formStateFromRule(rule: BusinessRuleRow | null): BusinessRuleInput {
     name: '',
     description: '',
     is_active: true,
-    trigger: 'created',
+    trigger: ['created'],
     schedule_check: null,
     schedule_threshold: null,
     conditions: [],
+    conditions_logic: 'AND',
     actions: [],
     execution_order: 0,
   }
@@ -394,9 +484,25 @@ function RuleEditor({
     set('actions', [...form.actions, { type: 'assign', params: { strategy: 'direct', assigneeIds: [] } }])
   }
 
+  function toggleTrigger(t: 'created' | 'updated' | 'schedule') {
+    setForm((prev) => {
+      const has = prev.trigger.includes(t)
+      if (has && prev.trigger.length === 1) return prev // at least one trigger required
+      const nextTrigger = has ? prev.trigger.filter((x) => x !== t) : [...prev.trigger, t]
+      const stillScheduled = nextTrigger.includes('schedule')
+      return {
+        ...prev,
+        trigger: nextTrigger,
+        schedule_check: stillScheduled ? prev.schedule_check : null,
+        schedule_threshold: stillScheduled ? prev.schedule_threshold : null,
+      }
+    })
+  }
+
   function submit() {
     if (!form.name.trim()) { setError('Rule name is required.'); return }
-    if (form.trigger === 'schedule' && (!form.schedule_check || form.schedule_threshold == null)) {
+    if (form.trigger.length === 0) { setError('Pick at least one trigger.'); return }
+    if (form.trigger.includes('schedule') && (!form.schedule_check || form.schedule_threshold == null)) {
       setError('Schedule rules need a check type and threshold.')
       return
     }
@@ -442,27 +548,29 @@ function RuleEditor({
           {/* Trigger */}
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Execute when a request is</label>
+            <p className="mb-1.5 text-xs text-muted-foreground">Pick one or more — no need to duplicate a rule per trigger.</p>
             <div className="flex gap-2">
               {(['created', 'updated', 'schedule'] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
-                  onClick={() => set('trigger', t)}
+                  aria-pressed={form.trigger.includes(t)}
+                  onClick={() => toggleTrigger(t)}
                   className={cn(
                     'flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
-                    form.trigger === t ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                    form.trigger.includes(t) ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'
                   )}
                 >
                   {TRIGGER_LABELS[t]}
                 </button>
               ))}
             </div>
-            {form.trigger === 'updated' && (
-              <p className="mt-1.5 text-xs text-muted-foreground">Fires after a status change or priority change.</p>
+            {form.trigger.includes('updated') && (
+              <p className="mt-1.5 text-xs text-muted-foreground">&quot;Edited&quot; fires after a status change or priority change.</p>
             )}
           </div>
 
-          {form.trigger === 'schedule' && (
+          {form.trigger.includes('schedule') && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Check</label>
@@ -495,8 +603,32 @@ function RuleEditor({
               <label className="block text-sm font-medium text-foreground">Conditions</label>
               <button type="button" onClick={addCondition} className="text-xs text-primary hover:underline">+ Add condition</button>
             </div>
+            {form.conditions.length > 1 && (
+              <div className="mb-2 flex gap-2">
+                {(['AND', 'OR'] as const).map((logic) => (
+                  <button
+                    key={logic}
+                    type="button"
+                    aria-pressed={form.conditions_logic === logic}
+                    onClick={() => set('conditions_logic', logic)}
+                    className={cn(
+                      'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                      form.conditions_logic === logic ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                    )}
+                  >
+                    {logic === 'AND' ? 'Match ALL (AND)' : 'Match ANY (OR)'}
+                  </button>
+                ))}
+              </div>
+            )}
             <p className="mb-2 text-xs text-muted-foreground">
-              {form.conditions.length === 0 ? 'No conditions — matches every request.' : 'All conditions must match.'}
+              {form.conditions.length === 0
+                ? 'No conditions — matches every request.'
+                : form.conditions.length === 1
+                ? 'This condition must match.'
+                : form.conditions_logic === 'OR'
+                ? 'Any one condition must match.'
+                : 'All conditions must match.'}
             </p>
             <div className="space-y-2">
               {form.conditions.map((c, i) => (
@@ -579,14 +711,18 @@ function RuleCard({ rule, onEdit, onDelete }: { rule: BusinessRuleRow; onEdit: (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-sm sm:flex-row sm:items-center">
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={cn('rounded-full border px-2.5 py-0.5 text-xs font-semibold', TRIGGER_BADGE[rule.trigger])}>
-            {TRIGGER_LABELS[rule.trigger]}
-            {rule.trigger === 'schedule' && rule.schedule_check ? ` · ${rule.schedule_check === 'sla_pct_elapsed' ? `${rule.schedule_threshold}% SLA` : `${rule.schedule_threshold}m unassigned`}` : ''}
-          </span>
+          {rule.trigger.map((t) => (
+            <span key={t} className={cn('rounded-full border px-2.5 py-0.5 text-xs font-semibold', TRIGGER_BADGE[t])}>
+              {TRIGGER_LABELS[t]}
+              {t === 'schedule' && rule.schedule_check ? ` · ${rule.schedule_check === 'sla_pct_elapsed' ? `${rule.schedule_threshold}% SLA` : `${rule.schedule_threshold}m unassigned`}` : ''}
+            </span>
+          ))}
           <span className="text-sm font-semibold text-foreground truncate">{rule.name}</span>
         </div>
         <p className="text-xs text-muted-foreground">
-          {rule.conditions.length === 0 ? 'Matches every request' : `${rule.conditions.length} condition${rule.conditions.length === 1 ? '' : 's'}`}
+          {rule.conditions.length === 0
+            ? 'Matches every request'
+            : `${rule.conditions.length} condition${rule.conditions.length === 1 ? '' : 's'}${rule.conditions.length > 1 ? ` (${rule.conditions_logic === 'OR' ? 'any' : 'all'})` : ''}`}
           {' · '}
           {rule.actions.length} action{rule.actions.length === 1 ? '' : 's'}
           {' · order '}{rule.execution_order}

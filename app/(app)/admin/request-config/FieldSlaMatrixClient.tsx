@@ -72,11 +72,21 @@ function HoursInput({ item, priority, field }: HoursInputProps) {
     const prevRaw = initial != null ? String(initial) : ''
     if (nextRaw === prevRaw) return
     if (nextParsed != null && (Number.isNaN(nextParsed) || nextParsed < 0)) {
-      setError('Invalid')
+      setError('Invalid number.')
       return
     }
+
+    const tier = item.tiers[priority]
+    const responseHours = field === 'response_hours' ? nextParsed : tier.response_hours
+    const resolutionHours = field === 'resolution_hours' ? nextParsed : tier.resolution_hours
+    // Catch it client-side before the round trip — the server (upsert_field_sla_override)
+    // enforces the same rule as the source of truth, this is just faster feedback.
+    if (responseHours != null && resolutionHours != null && resolutionHours <= responseHours) {
+      setError('Resolution SLA must be greater than Response SLA.')
+      return
+    }
+
     startTransition(async () => {
-      const tier = item.tiers[priority]
       const result = await upsertFieldSlaOverride({
         serviceId: item.service_id,
         fieldId: item.field_id,
@@ -84,8 +94,8 @@ function HoursInput({ item, priority, field }: HoursInputProps) {
         optionValue: item.option_value,
         optionLabel: item.option_label,
         priority,
-        responseHours: field === 'response_hours' ? nextParsed : tier.response_hours,
-        resolutionHours: field === 'resolution_hours' ? nextParsed : tier.resolution_hours,
+        responseHours,
+        resolutionHours,
       })
       if (result.error) {
         setError(result.error)
@@ -108,13 +118,17 @@ function HoursInput({ item, priority, field }: HoursInputProps) {
         onBlur={handleBlur}
         placeholder="—"
         disabled={isPending}
-        title={error ?? undefined}
         className={`w-full rounded-md border bg-background px-2 py-1 text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 ${
           error ? 'border-red-400' : 'border-border'
         }`}
       />
       {saved && <Check className="pointer-events-none absolute -right-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-emerald-500" />}
-      {error && <AlertTriangle className="pointer-events-none absolute -right-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-red-500" />}
+      {error && (
+        <div className="absolute left-0 top-full z-10 mt-1 w-max max-w-[220px] rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 shadow-sm">
+          <AlertTriangle className="mr-1 inline h-3 w-3" />
+          {error}
+        </div>
+      )}
     </div>
   )
 }

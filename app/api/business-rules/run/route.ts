@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyCronSecret } from '@/lib/cron-auth'
 import { computeElapsedBusinessMinutes } from '@/lib/sla/business-hours'
-import { matchesConditions, type RuleCondition, type RuleEvaluationRequest } from '@/lib/rules/evaluate'
+import { matchesConditions, type RuleCondition, type RuleConditionsLogic, type RuleEvaluationRequest } from '@/lib/rules/evaluate'
 import { executeActions, type RuleAction, type ActionRequest } from '@/lib/rules/actions'
 import type { SLAConfig, FormSection, FormField } from '@/types'
 
@@ -16,6 +16,7 @@ type BusinessRuleRow = {
   schedule_check: 'sla_pct_elapsed' | 'unassigned_minutes'
   schedule_threshold: number
   conditions: RuleCondition[]
+  conditions_logic: RuleConditionsLogic
   actions: RuleAction[]
 }
 
@@ -41,8 +42,8 @@ export async function GET(req: NextRequest) {
 
   const { data: rules } = await admin
     .from('business_rules')
-    .select('id, name, org_id, schedule_check, schedule_threshold, conditions, actions')
-    .eq('trigger', 'schedule')
+    .select('id, name, org_id, schedule_check, schedule_threshold, conditions, conditions_logic, actions')
+    .contains('trigger', ['schedule'])
     .eq('is_active', true)
 
   for (const rule of (rules ?? []) as BusinessRuleRow[]) {
@@ -81,10 +82,15 @@ async function fireRule(admin: AnyClient, rule: BusinessRuleRow, request: RawReq
     sub_category_id: request.service?.sub_category_id ?? null,
     team_id: request.team_id,
     requester_id: request.requester_id,
+    requester_department_id: request.requester?.department_id ?? null,
+    requester_location_id: request.requester?.location_id ?? null,
+    requester_designation_id: request.requester?.designation_id ?? null,
+    requester_function_id: request.requester?.function_id ?? null,
     title: request.title,
     description: request.description,
+    form_data: request.form_data,
   }
-  if (!matchesConditions(evalRequest, rule.conditions ?? [])) return false
+  if (!matchesConditions(evalRequest, rule.conditions ?? [], rule.conditions_logic)) return false
 
   const actionRequest: ActionRequest = {
     id: request.id,
@@ -134,10 +140,16 @@ type RawRequest = {
     form_sections: FormSection[] | null
     form_fields: FormField[] | null
   } | null
+  requester: {
+    department_id: string | null
+    location_id: string | null
+    designation_id: string | null
+    function_id: string | null
+  } | null
 }
 
 const REQUEST_SELECT =
-  'id, title, description, priority, status, service_id, team_id, requester_id, assigned_to, org_id, created_at, form_data, waiting_since, response_due_at, resolution_due_at, service:services(category_id, sub_category_id, sla_config, form_sections, form_fields)'
+  'id, title, description, priority, status, service_id, team_id, requester_id, assigned_to, org_id, created_at, form_data, waiting_since, response_due_at, resolution_due_at, service:services(category_id, sub_category_id, sla_config, form_sections, form_fields), requester:profiles!requester_id(department_id, location_id, designation_id, function_id)'
 
 async function runSlaPctElapsed(admin: AnyClient, rule: BusinessRuleRow, now: Date): Promise<number> {
   const { data: requests } = await admin

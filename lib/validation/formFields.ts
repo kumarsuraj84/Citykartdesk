@@ -4,10 +4,10 @@ import type { FormField } from '@/types'
 // ("john", "a@b") without being pedantic about the RFC 5322 edge cases.
 export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
-// Accepts an optional leading "+" plus 7–15 digits, with spaces/dashes/dots/
-// parens allowed as separators (covers international formats without forcing
-// a specific country pattern).
-export const PHONE_REGEX = /^\+?[0-9](?:[0-9\s\-().]*[0-9])?$/
+// Domestic mobile numbers only: exactly 10 digits, no country code, no
+// separators. Deliberately strict (not the old 7–15-digit/"+"-prefixed
+// international pattern) per explicit product requirement.
+export const PHONE_REGEX = /^[0-9]{10}$/
 
 function isEmpty(val: unknown): boolean {
   return (
@@ -39,10 +39,8 @@ export function validateFieldValue(field: FormField, value: unknown): string | n
   }
 
   if (field.type === 'phone') {
-    const str = String(value).trim()
-    const digitCount = str.replace(/\D/g, '').length
-    if (!PHONE_REGEX.test(str) || digitCount < 7 || digitCount > 15) {
-      return `Enter a valid phone number for "${field.label}".`
+    if (!PHONE_REGEX.test(String(value).trim())) {
+      return `Enter a valid 10-digit phone number for "${field.label}" (no country code).`
     }
   }
 

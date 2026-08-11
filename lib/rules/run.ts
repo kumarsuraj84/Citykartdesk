@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { matchesConditions, type RuleCondition, type RuleEvaluationRequest } from './evaluate'
+import { matchesConditions, type RuleCondition, type RuleConditionsLogic, type RuleEvaluationRequest } from './evaluate'
 import { executeActions, type RuleAction, type ActionRequest } from './actions'
 import type { SLAConfig, FormSection, FormField } from '@/types'
 
@@ -10,6 +10,7 @@ type BusinessRuleRow = {
   id: string
   name: string
   conditions: RuleCondition[]
+  conditions_logic: RuleConditionsLogic
   actions: RuleAction[]
   execution_order: number
 }
@@ -37,10 +38,16 @@ type RawRequest = {
     form_sections: FormSection[] | null
     form_fields: FormField[] | null
   } | null
+  requester: {
+    department_id: string | null
+    location_id: string | null
+    designation_id: string | null
+    function_id: string | null
+  } | null
 }
 
 const SELECT =
-  'id, title, description, priority, status, service_id, team_id, requester_id, assigned_to, org_id, created_at, form_data, waiting_since, response_due_at, resolution_due_at, service:services(category_id, sub_category_id, sla_config, form_sections, form_fields)'
+  'id, title, description, priority, status, service_id, team_id, requester_id, assigned_to, org_id, created_at, form_data, waiting_since, response_due_at, resolution_due_at, service:services(category_id, sub_category_id, sla_config, form_sections, form_fields), requester:profiles!requester_id(department_id, location_id, designation_id, function_id)'
 
 async function fetchRequest(admin: AnyClient, requestId: string): Promise<RawRequest | null> {
   const { data } = await admin.from('requests').select(SELECT).eq('id', requestId).single()
@@ -56,8 +63,13 @@ function toEvalRequest(request: RawRequest): RuleEvaluationRequest {
     sub_category_id: request.service?.sub_category_id ?? null,
     team_id: request.team_id,
     requester_id: request.requester_id,
+    requester_department_id: request.requester?.department_id ?? null,
+    requester_location_id: request.requester?.location_id ?? null,
+    requester_designation_id: request.requester?.designation_id ?? null,
+    requester_function_id: request.requester?.function_id ?? null,
     title: request.title,
     description: request.description,
+    form_data: request.form_data,
   }
 }
 
@@ -92,6 +104,9 @@ function toActionRequest(request: RawRequest): ActionRequest {
  * the single call site both createRequest and the status/priority-change
  * actions use — see lib/actions/requests.ts.
  *
+ * A rule's `trigger` is an array (a rule can fire on Created AND Edited, not
+ * just one), so this queries with a containment check rather than equality.
+ *
  * Re-fetches the request after every rule that actually matched and ran its
  * actions, so a later rule's condition check sees that rule's writes instead
  * of the stale snapshot taken at the start of this function — otherwise a
@@ -107,16 +122,16 @@ export async function runRulesForTrigger(trigger: 'created' | 'updated', request
 
   const { data: rules } = await admin
     .from('business_rules')
-    .select('id, name, conditions, actions, execution_order')
+    .select('id, name, conditions, conditions_logic, actions, execution_order')
     .eq('org_id', request.org_id)
-    .eq('trigger', trigger)
+    .contains('trigger', [trigger])
     .eq('is_active', true)
     .order('execution_order', { ascending: true })
 
   if (!rules || rules.length === 0) return
 
   for (const rule of rules as BusinessRuleRow[]) {
-    if (!matchesConditions(toEvalRequest(request), rule.conditions ?? [])) continue
+    if (!matchesConditions(toEvalRequest(request), rule.conditions ?? [], rule.conditions_logic)) continue
 
     await executeActions(admin, toActionRequest(request), rule.actions ?? [], { ruleId: rule.id, ruleName: rule.name })
 

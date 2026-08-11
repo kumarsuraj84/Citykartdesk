@@ -5,6 +5,7 @@ import type {
   RequestCommentWithAuthor,
   RequestCollaborator,
   RequestStatus,
+  RequestPriority,
 } from '@/types'
 
 export async function getRequestById(id: string): Promise<RequestWithRelations | null> {
@@ -15,7 +16,7 @@ export async function getRequestById(id: string): Promise<RequestWithRelations |
       *,
       requester:profiles!requests_requester_id_fkey (*),
       assignee:profiles!requests_assigned_to_fkey (*),
-      service:services (*),
+      service:services (*, category:service_categories(name), sub_category:service_sub_categories(name)),
       team:teams (*)
     `)
     .eq('id', id)
@@ -60,7 +61,10 @@ export async function getRequestCollaborators(requestId: string): Promise<Reques
 
 // ── getRequests ───────────────────────────────────────────────────────────────
 
-export type AssignedToFilter = 'me' | 'unassigned'
+// 'me'/'unassigned' are the two named states; any other value is a raw agent
+// user id (the Team Queue "who's working this?" filter) — the `& {}` keeps
+// the two literals autocompleting while still accepting an arbitrary string.
+export type AssignedToFilter = 'me' | 'unassigned' | (string & {})
 
 /** Standard user/agent views */
 export type RequestView = 'mine' | 'queue' | 'collaborated'
@@ -79,12 +83,23 @@ export interface GetRequestsOptions {
   /** userId of the current viewer — avoids a redundant getUser() call */
   userId: string
   status?: RequestStatus | 'active'
+  /** Matches title/request_no AND the body of any comment on the request (internal
+   *  notes included — RLS on request_comments already hides those the viewer
+   *  can't see, same as it would if they opened the thread directly). */
   q?: string
   limit?: number
   page?: number
   pageSize?: number
-  /** Queue-only: filter by assignment state */
+  /** Column filter: assignment state ('me'/'unassigned') or a specific agent id. */
   assignedTo?: AssignedToFilter
+  /** Column filter: exact priority match. */
+  priority?: RequestPriority
+  /** Column filter: exact service match. */
+  serviceId?: string
+  /** Column filter: exact service-category match. */
+  categoryId?: string
+  /** Column filter: exact service-sub-category match. */
+  subCategoryId?: string
   /** Agent-only: filter to show only requests from a specific requester */
   requesterId?: string
   sort?: string
@@ -201,7 +216,7 @@ function sanitizeQuery(q: string): string {
 
 export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRequests> {
   const supabase = await createClient()
-  const { userId, view, status, q, assignedTo, requesterId } = opts
+  const { userId, view, status, q, assignedTo, priority, serviceId, categoryId, subCategoryId, requesterId } = opts
   const pg = opts.page ?? 1
   const size = opts.pageSize ?? (opts.limit ?? 50)
   const from = (pg - 1) * size
@@ -217,7 +232,7 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
       waiting_since, resolved_at, closed_at, created_at, updated_at, source_metadata,
       requester:profiles!requests_requester_id_fkey (id, full_name, avatar_url),
       assignee:profiles!requests_assigned_to_fkey (id, full_name, avatar_url),
-      service:services (id, name, icon, slug),
+      service:services!inner (id, name, icon, slug, category_id, sub_category_id, category:service_categories(id, name), sub_category:service_sub_categories(id, name)),
       team:teams (id, name)
     `
 
@@ -229,6 +244,12 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
 
   const now = new Date().toISOString()
 
+  // Sort headers in RequestsTable render on every view (mine/collaborated/queue
+  // alike), so a user-selected sort must be honored here too — not just in the
+  // queue branch's SLA-urgency default further down.
+  const hasExplicitSort = Boolean(opts.sort) && opts.sort !== 'updated_at'
+  const sortAsc = (opts.dir ?? 'desc') === 'asc'
+
   if (view === 'collaborated') {
     // Fetch request IDs where this user is an explicit collaborator
     const { data: collabRows } = await supabase
@@ -237,9 +258,10 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
       .eq('user_id', userId)
     const ids = (collabRows ?? []).map((r) => r.request_id)
     if (ids.length === 0) return { data: [], total: 0, page: pg, pageSize: size, totalPages: 0 }
-    query = query
-      .in('id', ids)
-      .order('updated_at', { ascending: false })
+    query = query.in('id', ids)
+    query = hasExplicitSort
+      ? query.order(opts.sort!, { ascending: sortAsc, nullsFirst: false })
+      : query.order('updated_at', { ascending: sortAsc })
   } else if (view === 'mine') {
     // "My Requests" also includes requests the user collaborates on but didn't
     // personally request — a collaborated request should surface here, not only
@@ -253,7 +275,9 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
     query = collabIds.length > 0
       ? query.or(`requester_id.eq.${userId},id.in.(${collabIds.join(',')})`)
       : query.eq('requester_id', userId)
-    query = query.order('updated_at', { ascending: false })
+    query = hasExplicitSort
+      ? query.order(opts.sort!, { ascending: sortAsc, nullsFirst: false })
+      : query.order('updated_at', { ascending: sortAsc })
   } else if (view === 'assigned_me') {
     query = query
       .eq('assigned_to', userId)
@@ -339,13 +363,23 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
     query = query.eq('status', status)
   }
 
-  // ── Assignment filter (queue only) ────────────────────────────────────────
+  // ── Assignee column filter — works on any view, not just queue, now that
+  // both My Requests and Team Queue render through the same table/Assignee column.
 
-  if (view === 'queue' && assignedTo === 'unassigned') {
+  if (assignedTo === 'unassigned') {
     query = query.is('assigned_to', null)
-  } else if (view === 'queue' && assignedTo === 'me') {
+  } else if (assignedTo === 'me') {
     query = query.eq('assigned_to', userId)
+  } else if (assignedTo) {
+    query = query.eq('assigned_to', assignedTo)
   }
+
+  // ── Priority / Service column filters ─────────────────────────────────────
+
+  if (priority) query = query.eq('priority', priority)
+  if (serviceId) query = query.eq('service_id', serviceId)
+  if (categoryId) query = query.eq('service.category_id', categoryId)
+  if (subCategoryId) query = query.eq('service.sub_category_id', subCategoryId)
 
   // ── Requester filter (agent viewing specific user's history) ─────────────
 
@@ -353,12 +387,23 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
     query = query.eq('requester_id', requesterId)
   }
 
-  // ── Search ────────────────────────────────────────────────────────────────
+  // ── Search — title/request_no, plus (global) any comment on the request,
+  // internal notes included (RLS on request_comments already scopes what a
+  // given viewer can see, same as opening the thread itself would). ─────────
 
   if (q) {
     const safe = sanitizeQuery(q)
     if (safe.length > 0) {
-      query = query.or(`title.ilike.%${safe}%,request_no.ilike.%${safe}%`)
+      const { data: commentMatches } = await supabase
+        .from('request_comments')
+        .select('request_id')
+        .ilike('body', `%${safe}%`)
+        .order('created_at', { ascending: false })
+        .limit(500)
+      const commentRequestIds = Array.from(new Set((commentMatches ?? []).map((r) => r.request_id)))
+      const orParts = [`title.ilike.%${safe}%`, `request_no.ilike.%${safe}%`]
+      if (commentRequestIds.length > 0) orParts.push(`id.in.(${commentRequestIds.join(',')})`)
+      query = query.or(orParts.join(','))
     }
   }
 

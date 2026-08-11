@@ -463,6 +463,7 @@ export type Database = {
         Row: {
           actions: Json
           conditions: Json
+          conditions_logic: string
           created_at: string
           created_by: string | null
           description: string | null
@@ -474,13 +475,14 @@ export type Database = {
           org_id: string
           schedule_check: string | null
           schedule_threshold: number | null
-          trigger: string
+          trigger: string[]
           updated_at: string
           updated_by: string | null
         }
         Insert: {
           actions?: Json
           conditions?: Json
+          conditions_logic?: string
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -492,13 +494,14 @@ export type Database = {
           org_id: string
           schedule_check?: string | null
           schedule_threshold?: number | null
-          trigger: string
+          trigger: string[]
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
           actions?: Json
           conditions?: Json
+          conditions_logic?: string
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -510,7 +513,7 @@ export type Database = {
           org_id?: string
           schedule_check?: string | null
           schedule_threshold?: number | null
-          trigger?: string
+          trigger?: string[]
           updated_at?: string
           updated_by?: string | null
         }
@@ -4795,6 +4798,7 @@ export type Database = {
         | "attachment_added"
         | "collaborator_added"
         | "collaborator_removed"
+        | "reclassified"
       approval_decision_type: "approved" | "rejected"
       approval_status: "pending" | "approved" | "rejected" | "cancelled"
       approver_type: "specific_user" | "any_manager"
@@ -5058,6 +5062,7 @@ export const Constants = {
         "attachment_added",
         "collaborator_added",
         "collaborator_removed",
+        "reclassified",
       ],
       approval_decision_type: ["approved", "rejected"],
       approval_status: ["pending", "approved", "rejected", "cancelled"],
