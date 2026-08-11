@@ -140,48 +140,51 @@ git push -u origin master
 4. Wait for the cert to provision (Railway shows "Active").
 5. Update `NEXT_PUBLIC_APP_URL` to the custom domain and redeploy.
 
-### 2.5 Scheduled jobs (escalations, SLA alerts, DeskTime sync, intake classification)
+### 2.5 Scheduled jobs (Business Rules, SLA alerts, DeskTime sync, intake classification)
 
-Five GET endpoints do the scheduled work, all gated by the `x-cron-secret`
+Four GET endpoints do the scheduled work, all gated by the `x-cron-secret`
 header matching `CRON_SECRET` (`/api/intake/cron/classify` additionally
 accepts Vercel's `Authorization: Bearer <CRON_SECRET>` convention, kept for
-back-compat — `cron-tick.mjs` uses `x-cron-secret` for all five):
+back-compat — `cron-tick.mjs` uses `x-cron-secret` for all four):
 
-- `/api/escalation/run` — escalates requests past their SLA deadline.
-- `/api/alerts/run` — fires configured alert rules.
 - `/api/business-rules/run` — evaluates schedule-trigger Business Rules
-  (Request Configuration → Business Rules) — e.g. "unassigned for N minutes"
-  or "N% of SLA elapsed" conditions. Created/edited-trigger rules run inline,
-  not from this cron.
+  (Admin → Business Rules) — e.g. "unassigned for N minutes" or "N% of SLA
+  elapsed" conditions, including SLA escalation notifications (superseded the
+  old `/api/escalation/run`, now removed — migrate any remaining legacy
+  escalation rules via the "Migrate legacy rules" button on that screen).
+  Created/edited-trigger rules run inline, not from this cron.
+- `/api/alerts/run` — fires configured alert rules (Task/Milestone/digest
+  alerts; the request-scoped "unassigned" alert type was also superseded by
+  Business Rules).
 - `/api/desktime/sync` — pulls the last 3 days of DeskTime data for every org
   with a connected API key. Run once daily.
 - `/api/intake/cron/classify` — reclassifies any intake messages missing a
   final classification. Run every few minutes.
 
 `scripts/cron-tick.mjs` pings whichever of these are listed in `CRON_JOBS` by
-name (`escalation`, `alerts`, `business-rules`, `desktime-sync`,
-`intake-classify` — see the `JOB_PATHS` map at the top of the script). Set it
-up as a **separate Railway service** in the same project:
+name (`alerts`, `business-rules`, `desktime-sync`, `intake-classify` — see the
+`JOB_PATHS` map at the top of the script). Set it up as a **separate Railway
+service** in the same project:
 
 1. Railway → **New Service → Empty Service** (or deploy the same repo again).
 2. **Settings → Deploy → Cron Schedule**: pick a schedule matching the jobs
-   this service runs (e.g. `*/15 * * * *` for escalation+alerts, `0 2 * * *`
+   this service runs (e.g. `*/15 * * * *` for alerts+business-rules, `0 2 * * *`
    for a once-daily desktime-sync service, `*/5 * * * *` for intake-classify).
 3. **Settings → Deploy → Start Command**: `node scripts/cron-tick.mjs`
 4. Set its env vars:
    ```
    CRON_SECRET=        # identical to the web service value
    CRON_TARGET_URL=    # the web service URL (Railway internal or public)
-   # optional: CRON_JOBS=escalation,alerts   (this is the default)
+   # optional: CRON_JOBS=alerts,business-rules   (this is the default)
    ```
 5. A Railway cron service runs the start command on schedule, then exits.
    A non-zero exit (any job returned non-2xx) shows up as a failed run in the
    Railway dashboard.
 
 Each job's natural cadence is different, so in practice this means **up to
-five separate Railway cron services**, each with its own schedule and
-`CRON_JOBS` value — e.g. `CRON_JOBS=escalation,alerts,business-rules` on a
-15-minute service, `CRON_JOBS=desktime-sync` on a once-daily service, and
+four separate Railway cron services**, each with its own schedule and
+`CRON_JOBS` value — e.g. `CRON_JOBS=alerts,business-rules` on a 15-minute
+service, `CRON_JOBS=desktime-sync` on a once-daily service, and
 `CRON_JOBS=intake-classify` on a 5-minute service (only needed if the intake
 module is in use).
 
@@ -191,7 +194,7 @@ From any machine that can reach the app:
 
 ```
 curl -i -H "x-cron-secret: $CRON_SECRET" \
-  https://YOUR-APP.up.railway.app/api/escalation/run
+  https://YOUR-APP.up.railway.app/api/business-rules/run
 ```
 
 - `200` with a JSON summary → working.
@@ -206,5 +209,5 @@ curl -i -H "x-cron-secret: $CRON_SECRET" \
 - [ ] You can log in with the admin account you created via Supabase Auth (not
       the seed.sql placeholder password)
 - [ ] `NEXT_PUBLIC_APP_URL` matches the real deployed URL
-- [ ] At least one cron service is running if you rely on SLA escalation/alerts
+- [ ] At least one cron service is running if you rely on Business Rules/alerts
 - [ ] Custom domain cert shows "Active" in Railway, if used

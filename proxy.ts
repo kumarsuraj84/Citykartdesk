@@ -23,7 +23,6 @@ export async function proxy(request: NextRequest) {
   const PUBLIC_API_ROUTES = new Set([
     '/api/health',
     '/api/alerts/run',
-    '/api/escalation/run',
     '/api/business-rules/run',
     '/api/desktime/sync',
     '/api/intake/cron/classify',

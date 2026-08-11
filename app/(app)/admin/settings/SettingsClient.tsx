@@ -371,10 +371,10 @@ function IntegrationsTab({ status, deskTimeStatus }: {
         : 'RESEND_API_KEY not set — email delivery is disabled.',
     },
     {
-      name: 'Escalation Cron',
-      description: 'Wire to /api/escalation/run — see .claude/cron.md',
+      name: 'Business Rules Cron',
+      description: 'Wire to /api/business-rules/run — see .claude/cron.md',
       enabled: false,
-      detail: 'Schedule a cron job to POST /api/escalation/run on your desired cadence.',
+      detail: 'Schedule a cron job to POST /api/business-rules/run on your desired cadence.',
     },
     {
       name: 'Alert Cron',

@@ -23,7 +23,7 @@ type BusinessRuleRow = {
  * Evaluates every active `schedule`-trigger business rule against the requests
  * it applies to — the schedule-trigger counterpart to the `created`/`updated`
  * triggers run inline from lib/actions/requests.ts. Same verifyCronSecret +
- * admin-client pattern as app/api/escalation/run and app/api/alerts/run;
+ * admin-client pattern as app/api/alerts/run;
  * registered as the `business-rules` job in scripts/cron-tick.mjs.
  */
 export async function GET(req: NextRequest) {

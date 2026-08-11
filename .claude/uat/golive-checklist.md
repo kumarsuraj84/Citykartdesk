@@ -74,7 +74,7 @@ Complete every item before production deployment. Items marked ✅ are verified.
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
 | 5.1 | All 5 UAT personas cannot access unauthorised data | ⬜ | |
-| 5.2 | `/api/escalation/run` returns 401 without correct secret | ⬜ | |
+| 5.2 | `/api/business-rules/run` returns 401 without correct secret | ⬜ | |
 | 5.3 | `/api/alerts/run` returns 401 without correct secret | ⬜ | |
 | 5.4 | `/admin/*` redirects to `/home` for non-admin/manager | ⬜ | |
 | 5.5 | Attachment magic-byte validation active | ⬜ | |
@@ -88,7 +88,7 @@ Complete every item before production deployment. Items marked ✅ are verified.
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 6.1 | Escalation cron configured (`/api/escalation/run`) | ⬜ | Every 30 min recommended |
+| 6.1 | Business Rules cron configured (`/api/business-rules/run`) | ⬜ | Every 15-30 min recommended |
 | 6.2 | Alert cron configured (`/api/alerts/run`) | ⬜ | Every 60 min recommended |
 | 6.3 | Cron jobs tested end-to-end on staging | ⬜ | |
 | 6.4 | Cron failure alerting configured | ⬜ | |

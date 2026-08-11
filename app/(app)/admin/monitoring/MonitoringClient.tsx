@@ -228,11 +228,11 @@ export function MonitoringClient({ stats, recentActivity }: MonitoringClientProp
               href="/admin/reports"
             />
             <MetricCard
-              label="Escalation Rules"
-              value={stats.escalation_rules_count}
+              label="Active Business Rules"
+              value={stats.business_rules_count}
               icon={Settings}
               color="slate"
-              href="/admin/request-config"
+              href="/admin/business-rules"
             />
           </div>
         </div>

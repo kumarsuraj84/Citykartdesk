@@ -5,11 +5,11 @@
 # original Vercel-era config below doesn't cover). The curl examples and
 # `x-cron-secret` header below are still accurate for local testing.
 
-# Escalation Cron Setup
+# Business Rules Cron Setup
 
-## Vercel: add to vercel.json: crons entry with path /api/escalation/run and schedule */15 * * * *
+## Vercel: add to vercel.json: crons entry with path /api/business-rules/run and schedule */15 * * * *
 
-## Local: curl -H "X-Cron-Secret: dev" http://localhost:3210/api/escalation/run
+## Local: curl -H "X-Cron-Secret: dev" http://localhost:3210/api/business-rules/run
 
 ## Supabase: use pg_cron + pg_net extension to call the HTTP endpoint on a schedule.
 

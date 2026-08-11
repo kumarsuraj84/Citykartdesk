@@ -13,18 +13,17 @@
  *
  * Optional env:
  *   CRON_JOBS              comma-separated list of jobs to run.
- *                          Defaults to "escalation,alerts".
- *                          Known names (see JOB_PATHS below): escalation, alerts,
+ *                          Defaults to "alerts,business-rules".
+ *                          Known names (see JOB_PATHS below): alerts,
  *                          business-rules, desktime-sync, intake-classify. An
  *                          unrecognized name falls back to the legacy
  *                          `/api/<name>/run` shape.
  */
 
-// Known job name -> route path. `escalation`/`alerts`/`business-rules` fit the
-// legacy `/api/<name>/run` convention; `desktime-sync`/`intake-classify` don't
+// Known job name -> route path. `alerts`/`business-rules` fit the legacy
+// `/api/<name>/run` convention; `desktime-sync`/`intake-classify` don't
 // (different route shapes), so they need an explicit mapping.
 const JOB_PATHS = {
-  escalation: '/api/escalation/run',
   alerts: '/api/alerts/run',
   'business-rules': '/api/business-rules/run',
   'desktime-sync': '/api/desktime/sync',
@@ -33,7 +32,7 @@ const JOB_PATHS = {
 
 const secret = process.env.CRON_SECRET
 const baseUrl = (process.env.CRON_TARGET_URL ?? '').replace(/\/$/, '')
-const jobs = (process.env.CRON_JOBS ?? 'escalation,alerts')
+const jobs = (process.env.CRON_JOBS ?? 'alerts,business-rules')
   .split(',')
   .map((j) => j.trim())
   .filter(Boolean)

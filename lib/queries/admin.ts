@@ -84,7 +84,7 @@ export type MonitoringStats = {
   requests_today: number
   resolved_today: number
   scheduled_reports_count: number
-  escalation_rules_count: number
+  business_rules_count: number
 }
 
 export type RecentActivityRow = {
@@ -119,7 +119,7 @@ export async function getMonitoringStats(): Promise<MonitoringStats> {
     requestsTodayRes,
     resolvedTodayRes,
     scheduledReportsRes,
-    escalationRulesRes,
+    businessRulesRes,
   ] = await Promise.all([
     supabase.from('requests').select('id', { count: 'exact', head: true }).not('status', 'in', `(${closedStatuses.join(',')})`),
     supabase.from('tasks').select('id', { count: 'exact', head: true }).not('status', 'in', `(${doneCancelled.join(',')})`),
@@ -130,7 +130,7 @@ export async function getMonitoringStats(): Promise<MonitoringStats> {
     supabase.from('requests').select('id', { count: 'exact', head: true }).gte('created_at', todayIso),
     supabase.from('requests').select('id', { count: 'exact', head: true }).eq('status', 'resolved').gte('updated_at', todayIso),
     supabase.from('scheduled_reports').select('id', { count: 'exact', head: true }).eq('is_active', true),
-    supabase.from('sla_escalation_rules').select('id', { count: 'exact', head: true }),
+    supabase.from('business_rules').select('id', { count: 'exact', head: true }).eq('is_active', true),
   ])
 
   return {
@@ -143,7 +143,7 @@ export async function getMonitoringStats(): Promise<MonitoringStats> {
     requests_today: requestsTodayRes.count ?? 0,
     resolved_today: resolvedTodayRes.count ?? 0,
     scheduled_reports_count: scheduledReportsRes.count ?? 0,
-    escalation_rules_count: escalationRulesRes.count ?? 0,
+    business_rules_count: businessRulesRes.count ?? 0,
   }
 }
 

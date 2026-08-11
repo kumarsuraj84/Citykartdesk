@@ -431,33 +431,41 @@ const content: Record<string, React.ReactNode> = {
 
   'routing-rules': (
     <article className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
-      <h2>Configure Routing Rules (Auto-Assignment)</h2>
+      <h2>Configure Auto-Assignment (Business Rules)</h2>
       <p>
-        Routing rules let you override the default team assignment based on request attributes.
+        Auto-assignment now lives under <strong>Business Rules</strong> — it replaced the old
+        standalone Routing Rules screen so assignment, priority/status changes, and notifications
+        are all configured in one place.
       </p>
       <ol>
-        <li>Go to <strong>Admin → Routing Rules</strong>.</li>
+        <li>Go to <strong>Admin → Business Rules</strong>.</li>
         <li>Click <strong>New Rule</strong>.</li>
+        <li>Set <strong>Execute when a request is</strong> to <code>Created</code>.</li>
         <li>
-          Set <strong>Conditions</strong> — one or more attribute matches:
+          Add <strong>Conditions</strong> — one or more field/operator/value matches, all ANDed:
           <ul>
-            <li>Service is…</li>
-            <li>Priority is…</li>
-            <li>Requester department is…</li>
-            <li>Custom field value is…</li>
+            <li>Service, Service Group, or Service Sub Group is…</li>
+            <li>Priority or Status is…</li>
+            <li>Team or Requester is…</li>
+            <li>Title/Description contains…</li>
           </ul>
         </li>
         <li>
-          Set the <strong>Action</strong>: assign to Team X, or assign to Agent Y.
+          Add an <strong>Assign</strong> action: choose Direct (a specific agent), Round-robin, or
+          Load-balanced (fewest open requests), and pick the candidate agent(s).
         </li>
-        <li>Set a <strong>Priority</strong> number — lower number = evaluated first.</li>
+        <li>
+          Set <strong>Execution order</strong> — lower runs first; a later matching rule&apos;s
+          action can override an earlier one.
+        </li>
         <li>Save.</li>
       </ol>
       <div className="not-prose rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
         <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Rule evaluation order</p>
         <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">
-          Rules are evaluated top-to-bottom. The first matching rule wins. If no rule matches, the
-          service&apos;s owning team is used as the fallback.
+          Every active rule whose conditions match runs, in ascending execution order — not just
+          the first match. If no rule assigns the request, it&apos;s left unassigned for the
+          owning team to pick up.
         </p>
       </div>
     </article>
@@ -507,30 +515,35 @@ const content: Record<string, React.ReactNode> = {
 
   'escalation-rules': (
     <article className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
-      <h2>Configure Escalation Rules</h2>
+      <h2>Configure SLA Escalation (Business Rules)</h2>
+      <p>
+        SLA escalation now lives under <strong>Business Rules</strong> — it replaced the old
+        standalone Escalation Rules screen.
+      </p>
       <ol>
-        <li>Go to <strong>Admin → Request Config → Escalation Rules</strong>.</li>
+        <li>Go to <strong>Admin → Business Rules</strong>.</li>
         <li>Click <strong>New Rule</strong>.</li>
+        <li>Set <strong>Execute when a request is</strong> to <code>On a schedule</code>.</li>
         <li>
-          Set the <strong>Trigger</strong>:{' '}
-          <code>SLA First Response breached</code>, <code>SLA Resolution breached</code>, or{' '}
-          <code>No activity for N hours</code>.
-        </li>
-        <li>
-          Set the <strong>Action</strong>:
+          Set the schedule check:
           <ul>
-            <li>Notify a user or team via email/in-app.</li>
-            <li>Reassign the request to an escalation team.</li>
-            <li>Increase the request priority.</li>
+            <li><code>% of SLA elapsed</code> — fires once a request crosses the threshold you set (e.g. 80%).</li>
+            <li><code>Unassigned for N minutes</code> — fires once an unassigned request has waited that long.</li>
           </ul>
+        </li>
+        <li>Optionally add a <strong>Priority is…</strong> condition to scope the rule to one tier.</li>
+        <li>
+          Add a <strong>Notify</strong> action: choose roles and/or the assignee/requester, and
+          in-app and/or email delivery.
         </li>
         <li>Save.</li>
       </ol>
       <div className="not-prose rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/40">
         <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Note</p>
         <p className="mt-1 text-sm text-blue-700 dark:text-blue-400">
-          Escalation rules fire via the background cron job. Ensure your cron job is running (see
-          Platform Settings → Cron Jobs).
+          Schedule-trigger rules fire via the <code>/api/business-rules/run</code> cron job.
+          Confirm it&apos;s registered in your deployment&apos;s <code>CRON_JOBS</code> (see
+          docs/RAILWAY-DEPLOYMENT.md).
         </p>
       </div>
     </article>

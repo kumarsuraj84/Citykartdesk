@@ -101,7 +101,7 @@ export async function computeSLADeadline(
 /**
  * Inverse of computeSLADeadline: sums the business minutes that fall between two
  * timestamps, honoring the same business-hours/holiday calendar. Used by the
- * escalation cron (app/api/escalation/run) to compute "% of SLA time elapsed" against
+ * business-rules cron (app/api/business-rules/run) to compute "% of SLA time elapsed" against
  * actual working time instead of raw wall-clock time — a deadline that spans a weekend
  * or holiday shouldn't read as more "elapsed" than the working hours actually consumed.
  *

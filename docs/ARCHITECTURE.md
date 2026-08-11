@@ -204,7 +204,8 @@ supabase/migrations/**       87 migrations (see DATABASE.md §evolution)
 
 ## 7. Background jobs & ops
 
-- **`GET /api/escalation/run`** (header `x-cron-secret`) — SLA warnings/breaches.
+- **`GET /api/business-rules/run`** (header `x-cron-secret`) — schedule-trigger
+  Business Rules: SLA warnings/breaches, unassigned-for-N-minutes, etc.
 - **`GET /api/alerts/run`** (header `x-cron-secret`) — task due/overdue, unassigned
   requests, daily digest.
 - **`GET /api/health`** — DB connectivity + latency (for uptime checks).
