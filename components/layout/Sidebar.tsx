@@ -8,7 +8,7 @@ import {
   BarChart3, Activity, Settings, Monitor, BookOpenText,
   Users, Tag, GitBranch, Building2, Database, Workflow,
   LogOut, BookOpen, KeyRound, ChevronDown, Sparkles, Filter,
-  PanelLeftClose, PanelLeftOpen, Timer, Table2, Zap,
+  PanelLeftClose, PanelLeftOpen, Timer, Table2, Zap, Headset,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/actions/auth'
@@ -79,6 +79,8 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
       show: has('requests') || has('tasks') || has('approvals') || has('projects'),
       items: [
         ...(has('requests') ? [{ label: 'Requests',      href: '/requests',      icon: Inbox,       countKey: 'requests'      as keyof NavCounts }] : []),
+        ...(has('requests') && (isAgent || isManager || isAdmin)
+          ? [{ label: 'Agent Requests', href: '/requests/queue', icon: Headset } as NavItem] : []),
         ...(has('tasks')    ? [{ label: 'Tasks',          href: '/tasks',         icon: ListTodo,    countKey: 'tasks'         as keyof NavCounts }] : []),
         ...(has('approvals') && (isAgent || isManager || isAdmin)
           ? [{ label: 'Approvals', href: '/approvals', icon: ShieldCheck, countKey: 'approvals' as keyof NavCounts }] : []),
@@ -203,7 +205,14 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
 
   function isActive(item: NavItem) {
     if (item.exactMatch) return pathname === item.href
-    return pathname === item.href || pathname.startsWith(item.href + '/')
+    // Two items can share a URL prefix (e.g. /requests and /requests/queue) —
+    // startsWith() alone would light up both, so pick whichever visible item's
+    // href most specifically matches the current path.
+    const matches = flatItems.filter((i) =>
+      i.exactMatch ? pathname === i.href : (pathname === i.href || pathname.startsWith(i.href + '/'))
+    )
+    const best = matches.sort((a, b) => b.href.length - a.href.length)[0]
+    return best === item
   }
 
   function renderItem(item: NavItem) {

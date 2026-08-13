@@ -263,18 +263,13 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
       ? query.order(opts.sort!, { ascending: sortAsc, nullsFirst: false })
       : query.order('updated_at', { ascending: sortAsc })
   } else if (view === 'mine') {
-    // "My Requests" also includes requests the user collaborates on but didn't
-    // personally request — a collaborated request should surface here, not only
-    // under Team Queue (which explicitly excludes it below).
-    const { data: collabRows } = await supabase
-      .from('request_collaborators')
-      .select('request_id')
-      .eq('user_id', userId)
-    const collabIds = (collabRows ?? []).map((r) => r.request_id)
-
-    query = collabIds.length > 0
-      ? query.or(`requester_id.eq.${userId},id.in.(${collabIds.join(',')})`)
-      : query.eq('requester_id', userId)
+    // "My Requests" means exactly one thing: requests I raised as requester —
+    // not requests I merely collaborate on (those live only in the dedicated
+    // "Collaborated" tab) and not requests assigned to me as an agent (those
+    // live in Team Queue, filterable to "Assigned to Me"). Mixing collaborated
+    // tickets in here used to duplicate them across two tabs and blurred "I
+    // raised this" with "I'm cc'd on this."
+    query = query.eq('requester_id', userId)
     query = hasExplicitSort
       ? query.order(opts.sort!, { ascending: sortAsc, nullsFirst: false })
       : query.order('updated_at', { ascending: sortAsc })
@@ -331,8 +326,10 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
       query = query.neq('requester_id', userId)
     }
 
-    // Also exclude anything the user collaborates on — a collaborated request
-    // belongs in "My Requests" only, never in Team Queue too.
+    // Also exclude anything the user collaborates on — collaborated requests
+    // belong in the dedicated "Collaborated" tab only, kept as a distinct facet
+    // from "raised by me" (My Requests) and "my team's work" (Team Queue) so no
+    // ticket is duplicated across tabs.
     const { data: collabRows } = await supabase
       .from('request_collaborators')
       .select('request_id')

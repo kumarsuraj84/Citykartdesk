@@ -1432,6 +1432,100 @@ export async function reclassifyRequest(
   return {}
 }
 
+// ── Edit submitted form data ────────────────────────────────────────────────
+// The intake form fields (e.g. "Reason for request", "Mobile Number") are
+// captured once at submission time and were otherwise permanently read-only —
+// reclassify only ever touches service/category/sub_category. This lets an
+// agent correct a mistyped or outdated field value after the fact, validated
+// against the same form_schema_snapshot/form_sections_snapshot the request was
+// actually submitted with (not the service's current, possibly-since-edited
+// form) so validation can't reject a value that was legitimately valid then.
+
+export async function updateRequestFormData(
+  requestId: string,
+  formDataJson: string
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const profile = await getCurrentProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+
+  const { data: request } = await supabase
+    .from('requests')
+    .select('id, team_id, form_data, form_schema_snapshot, form_sections_snapshot')
+    .eq('id', requestId)
+    .single()
+
+  if (!request) return { error: 'Request not found.' }
+
+  const isOnTeam =
+    profile.role === 'manager' ||
+    profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
+    (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
+
+  if (!isOnTeam) return { error: 'Not authorized to edit this request.' }
+
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(formDataJson) as Record<string, unknown>
+  } catch {
+    return { error: 'Invalid form data.' }
+  }
+
+  const sections = Array.isArray(request.form_sections_snapshot)
+    ? (request.form_sections_snapshot as unknown as FormSection[])
+    : null
+  const legacyFields = Array.isArray(request.form_schema_snapshot)
+    ? (request.form_schema_snapshot as unknown as FormField[])
+    : []
+  const allFields: FormField[] = sections
+    ? [...sections].sort((a, b) => a.order - b.order).flatMap((s) => [...s.fields].sort((a, b) => a.order - b.order))
+    : legacyFields
+
+  if (allFields.length === 0) return { error: 'This request has no editable submitted information.' }
+
+  // File-type fields live in request_attachments, never in form_data — not
+  // part of this edit surface, same exclusion createRequest itself applies.
+  const editableFields = allFields.filter((f) => f.type !== 'file')
+
+  for (const field of editableFields) {
+    const err = validateFieldValue(field, parsed[field.id])
+    if (err) return { error: err }
+  }
+
+  // Merge onto the existing payload rather than replacing it outright — keeps
+  // any keys outside this schema (e.g. from a prior, since-changed service)
+  // untouched instead of silently dropping them.
+  const existingFormData = (request.form_data ?? {}) as Record<string, unknown>
+  const mergedFormData: Record<string, unknown> = { ...existingFormData }
+  for (const field of editableFields) mergedFormData[field.id] = parsed[field.id]
+
+  const admin = createAdminClient()
+  const { error: updateError } = await admin
+    .from('requests')
+    .update({ form_data: mergedFormData as Json })
+    .eq('id', requestId)
+
+  if (updateError) return { error: updateError.message }
+
+  const activityResult = await logActivity({
+    requestId,
+    actorId: profile.id,
+    action: 'form_data_updated',
+  })
+  if (activityResult.error) return { error: activityResult.error }
+
+  try {
+    const { runRulesForTrigger } = await import('@/lib/rules/run')
+    await runRulesForTrigger('updated', requestId)
+  } catch (e) {
+    console.error('[updateRequestFormData] Business rules (updated) failed', e)
+  }
+
+  revalidatePath(`/requests/${requestId}`)
+  return {}
+}
+
 // ── Auto-close resolved requests ──────────────────────────────────────────────
 
 export async function autoCloseRequests(): Promise<{ closed: number }> {

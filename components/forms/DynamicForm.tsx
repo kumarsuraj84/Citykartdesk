@@ -108,9 +108,9 @@ function RequesterOnBehalfPicker({ value, onChange }: { value: OrgMember | null;
   )
 }
 
-type FieldValue = string | string[] | boolean | File[]
+export type FieldValue = string | string[] | boolean | File[]
 
-function getDefaultValue(field: FormField): FieldValue {
+export function getDefaultValue(field: FormField): FieldValue {
   switch (field.type) {
     case 'multiselect':
     case 'file':        return []
@@ -136,7 +136,7 @@ interface FieldGridProps {
   onChange: (fieldId: string, val: FieldValue) => void
 }
 
-function FieldGrid({ fields, values, errors, onChange }: FieldGridProps) {
+export function FieldGrid({ fields, values, errors, onChange }: FieldGridProps) {
   // Build rows by pairing consecutive short fields
   const rows: FormField[][] = []
   let i = 0
@@ -182,7 +182,7 @@ interface SectionBlockProps {
   onChange: (fieldId: string, val: FieldValue) => void
 }
 
-function SectionBlock({ section, values, errors, onChange }: SectionBlockProps) {
+export function SectionBlock({ section, values, errors, onChange }: SectionBlockProps) {
   const fields = [...section.fields].sort((a, b) => a.order - b.order)
   if (fields.length === 0) return null
 

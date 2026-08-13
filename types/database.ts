@@ -4730,6 +4730,7 @@ export type Database = {
         Args: { p_request_id: string }
         Returns: boolean
       }
+      can_view_project: { Args: { p_project_id: string }; Returns: boolean }
       current_org_id: { Args: never; Returns: string }
       current_user_role: {
         Args: never
@@ -4779,6 +4780,21 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      upsert_field_sla_override: {
+        Args: {
+          p_field_id: string
+          p_field_label: string
+          p_option_label: string
+          p_option_value: string
+          p_org_id: string
+          p_priority: string
+          p_resolution_hours: number
+          p_response_hours: number
+          p_service_id: string
+          p_updated_by: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       activity_action:
@@ -4799,6 +4815,7 @@ export type Database = {
         | "collaborator_added"
         | "collaborator_removed"
         | "reclassified"
+        | "form_data_updated"
       approval_decision_type: "approved" | "rejected"
       approval_status: "pending" | "approved" | "rejected" | "cancelled"
       approver_type: "specific_user" | "any_manager"
@@ -5063,6 +5080,7 @@ export const Constants = {
         "collaborator_added",
         "collaborator_removed",
         "reclassified",
+        "form_data_updated",
       ],
       approval_decision_type: ["approved", "rejected"],
       approval_status: ["pending", "approved", "rejected", "cancelled"],

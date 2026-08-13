@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, LayoutGrid, Inbox, ListTodo, CheckCircle, Bell, Sparkles, FolderKanban, Menu } from 'lucide-react'
+import { Home, LayoutGrid, Inbox, ListTodo, CheckCircle, Bell, Sparkles, FolderKanban, Menu, Headset } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Sidebar } from './Sidebar'
@@ -34,6 +34,7 @@ export function MobileNav({ profile, navVisibility, navCounts }: MobileNavProps)
     { label: 'Projects',      href: '/projects',      icon: FolderKanban, show: has('projects') },
     { label: 'New Request',   href: '/services',      icon: LayoutGrid,  show: has('services') },
     { label: 'Requests',      href: '/requests',      icon: Inbox,       show: has('requests') },
+    { label: 'Agent Requests', href: '/requests/queue', icon: Headset,   show: has('requests') && (isAgent || isManager || isAdmin) },
     { label: 'Tasks',         href: '/tasks',         icon: ListTodo,    show: has('tasks') },
     { label: 'Intake',        href: '/intake',        icon: Sparkles,    show: has('intake') && (isAgent || isManager || isAdmin) },
     { label: 'Approvals',     href: '/approvals',     icon: CheckCircle, show: has('approvals') && (isAgent || isManager || isAdmin) },
@@ -43,6 +44,13 @@ export function MobileNav({ profile, navVisibility, navCounts }: MobileNavProps)
   const visible = items.filter((i) => i.show)
   const showMore = isManager || isAdmin
 
+  // When two items share a URL prefix (e.g. /requests and /requests/queue),
+  // startsWith() alone would light up both — pick whichever visible item's
+  // href most specifically matches the current path.
+  const activeItem = visible
+    .filter((i) => i.href === '/home' ? pathname === '/home' : pathname === i.href || pathname.startsWith(i.href + '/'))
+    .sort((a, b) => b.href.length - a.href.length)[0]
+
   return (
     <div className="flex shrink-0 border-t border-border bg-card lg:hidden">
       {/* Primary shortcuts — scrolls horizontally on its own if it doesn't fit,
@@ -50,10 +58,7 @@ export function MobileNav({ profile, navVisibility, navCounts }: MobileNavProps)
       <nav className="flex flex-1 overflow-x-auto min-w-0">
         {visible.map((item) => {
           const Icon = item.icon
-          const isActive =
-            item.href === '/home'
-              ? pathname === '/home'
-              : pathname.startsWith(item.href)
+          const isActive = item === activeItem
 
           return (
             <Link

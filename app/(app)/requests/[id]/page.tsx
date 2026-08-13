@@ -16,6 +16,7 @@ import { CsatSurvey } from '@/components/requests/CsatSurvey'
 import { SLABadge } from '@/components/requests/SLABadge'
 import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
 import { RequestSidebarPanel } from '@/components/requests/RequestSidebarPanel'
+import { SubmittedDataPanel } from '@/components/requests/SubmittedDataPanel'
 import { getActiveServicesForReclassify } from '@/lib/queries/services'
 import { RequestTasksTab } from '@/components/requests/RequestTasksTab'
 import { getTasksForRequest } from '@/lib/queries/tasks'
@@ -62,6 +63,7 @@ const ACTION_LABELS: Record<ActivityAction, string> = {
   collaborator_added:   'added a collaborator',
   collaborator_removed: 'removed a collaborator',
   reclassified:         'corrected the service classification',
+  form_data_updated:    'updated the submitted information',
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -252,99 +254,6 @@ function HistoryRow({ item }: { item: RequestActivityWithActor }) {
   )
 }
 
-// ── Field value display helper ─────────────────────────────────────────────────
-
-function displayFieldValue(field: FormField, raw: unknown): string {
-  if (raw === undefined || raw === null || raw === '') return '—'
-  if (field.type === 'checkbox') return raw ? 'Yes' : 'No'
-  if (field.type === 'multiselect' && Array.isArray(raw)) {
-    const labels = (raw as string[]).map((v) => {
-      const opt = field.options?.find((o) => o.value === v)
-      return opt?.label ?? v
-    })
-    return labels.length > 0 ? labels.join(', ') : '—'
-  }
-  if (field.type === 'select' || field.type === 'radio') {
-    const opt = field.options?.find((o) => o.value === String(raw))
-    return opt?.label ?? String(raw)
-  }
-  return String(raw)
-}
-
-function FieldRow({ field, data }: { field: FormField; data: Record<string, unknown> }) {
-  return (
-    <div className="flex items-start justify-between gap-4 px-4 py-2.5">
-      <dt className="shrink-0 text-xs text-muted-foreground">{field.label}</dt>
-      <dd className="text-right text-xs font-medium text-foreground whitespace-pre-wrap break-words">
-        {displayFieldValue(field, data[field.id])}
-      </dd>
-    </div>
-  )
-}
-
-// ── SubmittedData: section-aware, backward-compatible ─────────────────────────
-
-function SubmittedData({
-  sections,
-  legacySchema,
-  data,
-}: {
-  sections: FormSection[]
-  legacySchema: FormField[]
-  data: Record<string, unknown>
-}) {
-  const hasSections = sections.length > 0
-
-  if (!hasSections && legacySchema.length === 0) return null
-
-  return (
-    <div className="space-y-4">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Submitted Information
-      </h3>
-
-      {hasSections ? (
-        // ── Section-grouped display ───────────────────────────────────────────
-        <div className="space-y-3">
-          {[...sections]
-            .sort((a, b) => a.order - b.order)
-            .filter((s) => s.fields.length > 0)
-            .map((section) => (
-              <div key={section.id} className="rounded-lg border border-border">
-                {/* Section header */}
-                <div className="border-b border-border bg-muted/30 px-4 py-2">
-                  <p className="text-xs font-semibold text-foreground">{section.title}</p>
-                  {section.description && (
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      {section.description}
-                    </p>
-                  )}
-                </div>
-                {/* Fields */}
-                <dl className="divide-y divide-border">
-                  {[...section.fields]
-                    .sort((a, b) => a.order - b.order)
-                    .map((field) => (
-                      <FieldRow key={field.id} field={field} data={data} />
-                    ))}
-                </dl>
-              </div>
-            ))}
-        </div>
-      ) : (
-        // ── Legacy flat display ───────────────────────────────────────────────
-        <dl className="rounded-lg border border-border divide-y divide-border">
-          {[...legacySchema]
-            .sort((a, b) => a.order - b.order)
-            .map((field) => (
-              <FieldRow key={field.id} field={field} data={data} />
-            ))}
-        </dl>
-      )}
-    </div>
-  )
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function RequestDetailPage({ params }: PageProps) {
@@ -499,7 +408,13 @@ export default async function RequestDetailPage({ params }: PageProps) {
   const detailsTab = (
     <div className="space-y-5">
       {(formSections.length > 0 || formSchema.length > 0) && (
-        <SubmittedData sections={formSections} legacySchema={formSchema} data={formData} />
+        <SubmittedDataPanel
+          requestId={request.id}
+          sections={formSections}
+          legacySchema={formSchema}
+          data={formData}
+          canEdit={canManage}
+        />
       )}
 
       {request.description && (
