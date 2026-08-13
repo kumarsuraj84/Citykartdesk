@@ -60,7 +60,7 @@ export async function sendAdHocApproval(
 
   const { data: req } = await supabase
     .from('requests')
-    .select('id, title, status, team_id, requester_id')
+    .select('id, title, status, team_id, requester_id, org_id')
     .eq('id', requestId)
     .single()
   if (!req) return { error: 'Request not found.' }
@@ -90,10 +90,14 @@ export async function sendAdHocApproval(
     .maybeSingle()
   if (existing) return { error: 'An approval is already pending for this request.' }
 
-  // Create ad-hoc workflow
+  // Create ad-hoc workflow. org_id must be set — approval_workflow_steps' RLS
+  // (approval_workflow_steps_select) checks the workflow's own org_id, not the
+  // request's; leaving it null makes the steps invisible to the RLS-scoped
+  // client that resolveApprovalContext() uses, so approve/reject would fail
+  // with "Approval workflow has no steps" for every approver, permanently.
   const { data: workflow, error: wfErr } = await admin
     .from('approval_workflows')
-    .insert({ name: `Ad-hoc: ${req.title}` })
+    .insert({ name: `Ad-hoc: ${req.title}`, org_id: req.org_id })
     .select('id')
     .single()
   if (wfErr || !workflow) return { error: wfErr?.message ?? 'Failed to create approval workflow.' }
