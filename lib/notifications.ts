@@ -82,11 +82,19 @@ export async function notify(inputs: NotifyInput | NotifyInput[]): Promise<void>
     const { createAdminClient } = await import('@/lib/supabase/admin')
     const { sendNotificationEmail } = await import('@/lib/email/notify-email')
     const adminClient = createAdminClient()
-    for (const n of notificationRows) {
-      const { data: u } = await adminClient.auth.admin.getUserById(n.user_id)
-      if (!u?.user?.email) continue
-      await sendNotificationEmail({ type: n.type, recipientEmail: u.user.email, recipientName: '', data: { ...(n.metadata as Record<string, string> ?? {}), title: n.title, body: n.body ?? '', link: n.link ?? '' } })
-    }
+    // Independent per-recipient — was one at a time (an N-recipient notify(),
+    // e.g. a Business Rule notifying every manager, took N sequential round
+    // trips). Each attempt is caught individually so one bad address can't
+    // stop the rest from sending, which the old sequential loop's single
+    // outer catch would have done (an earlier failure aborted every
+    // recipient still queued behind it).
+    await Promise.all(notificationRows.map(async (n) => {
+      try {
+        const { data: u } = await adminClient.auth.admin.getUserById(n.user_id)
+        if (!u?.user?.email) return
+        await sendNotificationEmail({ type: n.type, recipientEmail: u.user.email, recipientName: '', data: { ...(n.metadata as Record<string, string> ?? {}), title: n.title, body: n.body ?? '', link: n.link ?? '' } })
+      } catch { /* isolated per recipient */ }
+    }))
   } catch {} })()
 }
 

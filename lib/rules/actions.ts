@@ -258,12 +258,15 @@ async function runNotify(
   }
 
   if (params.channels.includes('email')) {
-    for (const recipientId of recipients) {
+    // Independent per-recipient — was one at a time, so a rule notifying
+    // every manager+admin on an SLA breach took N sequential round trips
+    // before executeActions could move to the rule's next action.
+    await Promise.all([...recipients].map(async (recipientId) => {
       const email = await getUserEmail(admin, recipientId)
       if (email) {
         await sendEmail({ to: email, subject: title, html: `<p>${body}</p><p><a href="/requests/${request.id}">View request</a></p>` })
       }
-    }
+    }))
   }
 }
 
