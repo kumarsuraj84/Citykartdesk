@@ -16,9 +16,10 @@ import {
 } from '@/lib/actions/requests'
 import { StatusBadge, PriorityBadge } from './RequestBadges'
 import { SLABadge } from './SLABadge'
+import { SubmittedFieldRow } from './SubmittedFieldRow'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
 import { formatRelativeTime } from '@/lib/utils'
-import type { RequestStatus, RequestPriority, RequestCollaborator } from '@/types'
+import type { RequestStatus, RequestPriority, RequestCollaborator, FormField, FormSection } from '@/types'
 import type { ReclassifyServiceOption } from '@/lib/queries/services'
 
 interface TeamMember { id: string; full_name: string }
@@ -49,6 +50,9 @@ interface RequestSidebarPanelProps {
   isTerminal: boolean
   teamMembers: TeamMember[]
   initialCollaborators: RequestCollaborator[]
+  formSections: FormSection[]
+  formSchema: FormField[]
+  formData: Record<string, unknown>
 }
 
 function Avatar({ name, size = 'sm' }: { name: string; size?: 'sm' | 'md' }) {
@@ -538,8 +542,20 @@ export function RequestSidebarPanel({
   resolutionDueAt, responseDueAt, createdAt,
   viewerId, isAgent, isRequester, isTerminal,
   teamMembers, initialCollaborators,
+  formSections, formSchema, formData,
 }: RequestSidebarPanelProps) {
   const isOverdue = resolutionDueAt ? new Date(resolutionDueAt) < new Date() : false
+
+  // Every submitted intake-form field (Reason for request, Mobile Number, …),
+  // not just Category/Sub Category — shown right here so agents don't have to
+  // switch to the Details tab to see what was actually submitted. File-type
+  // fields are skipped (those are attachments, not form_data values); editing
+  // still happens from the Details tab's "Submitted Information" panel.
+  const submittedFields: FormField[] = (
+    formSections.length > 0
+      ? [...formSections].sort((a, b) => a.order - b.order).flatMap((s) => [...s.fields].sort((a, b) => a.order - b.order))
+      : [...formSchema].sort((a, b) => a.order - b.order)
+  ).filter((f) => f.type !== 'file')
 
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
@@ -603,6 +619,18 @@ export function RequestSidebarPanel({
             <span className="text-xs text-foreground">{subCategoryName}</span>
           </PropRow>
         )}
+
+        {/* Every submitted intake-form field, editable in place for agents —
+            same click-to-edit popover pattern as the Service row above. */}
+        {submittedFields.map((field) => (
+          <SubmittedFieldRow
+            key={field.id}
+            requestId={requestId}
+            field={field}
+            value={formData[field.id]}
+            canEdit={isAgent}
+          />
+        ))}
 
         {/* Read-only: Created */}
         <PropRow label="Created">

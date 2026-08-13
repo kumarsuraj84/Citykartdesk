@@ -11,7 +11,7 @@ import type { FormField, FormSection } from '@/types'
 
 // ── Read-only field display (unchanged from the original inline version) ──────
 
-function displayFieldValue(field: FormField, raw: unknown): string {
+export function displayFieldValue(field: FormField, raw: unknown): string {
   if (raw === undefined || raw === null || raw === '') return '—'
   if (field.type === 'checkbox') return raw ? 'Yes' : 'No'
   if (field.type === 'multiselect' && Array.isArray(raw)) {

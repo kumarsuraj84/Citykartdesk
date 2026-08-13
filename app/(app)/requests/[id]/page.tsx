@@ -718,6 +718,9 @@ export default async function RequestDetailPage({ params }: PageProps) {
         isTerminal={isTerminal}
         teamMembers={teamMembers}
         initialCollaborators={collaborators}
+        formSections={formSections}
+        formSchema={formSchema}
+        formData={formData}
       />
       <RelatedRequestsPanel
         requestId={request.id}

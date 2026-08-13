@@ -1440,6 +1440,11 @@ export async function reclassifyRequest(
 // against the same form_schema_snapshot/form_sections_snapshot the request was
 // actually submitted with (not the service's current, possibly-since-edited
 // form) so validation can't reject a value that was legitimately valid then.
+//
+// Accepts either the full editable field set (the Details tab's multi-field
+// form) or a single field (the sidebar's inline per-row editor) — only the
+// keys actually present in formDataJson are validated/merged, so a one-field
+// save never trips "required" on sibling fields it didn't touch.
 
 export async function updateRequestFormData(
   requestId: string,
@@ -1488,7 +1493,13 @@ export async function updateRequestFormData(
   // part of this edit surface, same exclusion createRequest itself applies.
   const editableFields = allFields.filter((f) => f.type !== 'file')
 
-  for (const field of editableFields) {
+  // Only the fields actually present in this payload are touched — lets a
+  // caller save one field at a time without re-submitting (and re-validating)
+  // every other field on the form.
+  const fieldsToUpdate = editableFields.filter((f) => Object.prototype.hasOwnProperty.call(parsed, f.id))
+  if (fieldsToUpdate.length === 0) return { error: 'No editable fields to update.' }
+
+  for (const field of fieldsToUpdate) {
     const err = validateFieldValue(field, parsed[field.id])
     if (err) return { error: err }
   }
@@ -1498,7 +1509,7 @@ export async function updateRequestFormData(
   // untouched instead of silently dropping them.
   const existingFormData = (request.form_data ?? {}) as Record<string, unknown>
   const mergedFormData: Record<string, unknown> = { ...existingFormData }
-  for (const field of editableFields) mergedFormData[field.id] = parsed[field.id]
+  for (const field of fieldsToUpdate) mergedFormData[field.id] = parsed[field.id]
 
   const admin = createAdminClient()
   const { error: updateError } = await admin
