@@ -4768,6 +4768,10 @@ export type Database = {
         Returns: boolean
       }
       is_team_member: { Args: { p_team_id: string }; Returns: boolean }
+      merge_request_form_data: {
+        Args: { p_patch: Json; p_request_id: string }
+        Returns: undefined
+      }
       org_read_desktime_key: { Args: { p_ref: string }; Returns: string }
       org_store_desktime_key: {
         Args: { p_org_id: string; p_secret: string }

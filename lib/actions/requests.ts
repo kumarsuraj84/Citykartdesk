@@ -1456,7 +1456,7 @@ export async function updateRequestFormData(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, team_id, form_data, form_schema_snapshot, form_sections_snapshot')
+    .select('id, team_id, form_schema_snapshot, form_sections_snapshot')
     .eq('id', requestId)
     .single()
 
@@ -1504,18 +1504,20 @@ export async function updateRequestFormData(
     if (err) return { error: err }
   }
 
-  // Merge onto the existing payload rather than replacing it outright — keeps
-  // any keys outside this schema (e.g. from a prior, since-changed service)
-  // untouched instead of silently dropping them.
-  const existingFormData = (request.form_data ?? {}) as Record<string, unknown>
-  const mergedFormData: Record<string, unknown> = { ...existingFormData }
-  for (const field of fieldsToUpdate) mergedFormData[field.id] = parsed[field.id]
+  // Merged atomically in Postgres (form_data || patch, in a single UPDATE) —
+  // NOT read-modify-write in JS. The sidebar makes single-field saves a
+  // one-click action, so two agents correcting different fields on the same
+  // request close together is a real scenario; a JS-side merge of a
+  // previously-fetched snapshot would let whichever save lands second
+  // silently clobber the other's edit. See migration 107.
+  const patch: Record<string, unknown> = {}
+  for (const field of fieldsToUpdate) patch[field.id] = parsed[field.id]
 
   const admin = createAdminClient()
-  const { error: updateError } = await admin
-    .from('requests')
-    .update({ form_data: mergedFormData as Json })
-    .eq('id', requestId)
+  const { error: updateError } = await admin.rpc('merge_request_form_data', {
+    p_request_id: requestId,
+    p_patch: patch as Json,
+  })
 
   if (updateError) return { error: updateError.message }
 

@@ -36,10 +36,15 @@ export function SubmittedFieldRow({ requestId, field, value, canEdit }: Submitte
     // appended to <body>, outside this popover's own DOM subtree — a click on
     // an option is technically "outside" `ref.current`, so without this
     // exclusion every option click would close the popover before the
-    // selection could register.
+    // selection could register. Scoped to the combobox's own listbox
+    // (role="listbox"/"option") rather than the generic `[data-base-ui-portal]`
+    // marker every Base UI portal shares (tooltips, menus, sheets…) — a wider
+    // exclusion would wrongly keep this popover open when the user is
+    // actually interacting with some unrelated portaled element elsewhere on
+    // the page.
     const h = (e: MouseEvent) => {
       const target = e.target as HTMLElement
-      if (target.closest('[data-base-ui-portal]')) return
+      if (target.closest('[role="listbox"], [role="option"]')) return
       if (ref.current && !ref.current.contains(target)) setOpen(false)
     }
     document.addEventListener('mousedown', h)
