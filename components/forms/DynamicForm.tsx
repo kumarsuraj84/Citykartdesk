@@ -8,6 +8,7 @@ import { FieldRenderer, isShortField } from './FieldRenderer'
 import { createRequest, searchOrgMembers } from '@/lib/actions/requests'
 import { uploadAttachment } from '@/lib/actions/attachments'
 import { validateFields } from '@/lib/validation/formFields'
+import { resolveServiceFormSections } from '@/lib/forms/sections'
 import type { FormField, FormSection, ServiceWithRelations } from '@/types'
 
 interface DynamicFormProps {
@@ -214,16 +215,15 @@ export function DynamicForm({ service, canBookOnBehalf }: DynamicFormProps) {
   const [createdRequestId, setCreatedRequestId] = useState<string | null>(null)
   const [onBehalfOf, setOnBehalfOf] = useState<OrgMember | null>(null)
 
-  const sections =
-    Array.isArray(service.form_sections) && service.form_sections.length > 0
-      ? (service.form_sections as unknown as FormSection[])
-      : null
+  // A tagged template is always section-based (it never has a legacy flat
+  // shape) — an untagged/legacy service keeps rendering flat, header-less
+  // fields exactly as before if it never migrated to sections either.
+  const hasSections = service.template
+    ? true
+    : Array.isArray(service.form_sections) && service.form_sections.length > 0
 
-  const legacyFields = Array.isArray(service.form_fields)
-    ? (service.form_fields as unknown as FormField[])
-    : []
-
-  const allFields: FormField[] = sections ? flattenSections(sections) : legacyFields
+  const sections = resolveServiceFormSections(service)
+  const allFields: FormField[] = flattenSections(sections)
 
   const [values, setValues] = useState<Record<string, FieldValue>>(() =>
     Object.fromEntries(allFields.map((f) => [f.id, getDefaultValue(f)]))
@@ -327,7 +327,7 @@ export function DynamicForm({ service, canBookOnBehalf }: DynamicFormProps) {
         <p className="py-4 text-center text-sm text-muted-foreground">
           No additional information required for this service.
         </p>
-      ) : sections ? (
+      ) : hasSections ? (
         <div className="space-y-8">
           {[...sections]
             .sort((a, b) => a.order - b.order)
@@ -343,7 +343,7 @@ export function DynamicForm({ service, canBookOnBehalf }: DynamicFormProps) {
         </div>
       ) : (
         <FieldGrid
-          fields={[...legacyFields].sort((a, b) => a.order - b.order)}
+          fields={[...allFields].sort((a, b) => a.order - b.order)}
           values={values}
           errors={errors}
           onChange={handleChange}

@@ -2,10 +2,13 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft, Layers } from 'lucide-react'
 import { getCurrentProfile } from '@/lib/queries/profiles'
-import { getServiceById } from '@/lib/queries/services'
+import { getServiceById, getActiveFormTemplatesForPicker } from '@/lib/queries/services'
 import { getFieldIdsWithSlaOverrides } from '@/lib/sla/matrix'
+import { resolveFormSections } from '@/lib/forms/sections'
 import { SectionBuilder } from '@/components/admin/SectionBuilder'
-import type { FormField, FormSection } from '@/types'
+import { ServiceTemplateTag } from '@/components/admin/ServiceTemplateTag'
+import { saveFormSections } from '@/lib/actions/admin/services'
+import type { FormSection } from '@/types'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -18,37 +21,24 @@ export default async function AdminServiceEditorPage({ params }: PageProps) {
   if (!profile) redirect('/login')
   if (profile.role !== 'admin' && profile.role !== 'platform_owner') redirect('/home')
 
-  const [service, fieldIdsWithSla] = await Promise.all([
+  const [service, fieldIdsWithSla, templates] = await Promise.all([
     getServiceById(id),
     getFieldIdsWithSlaOverrides(id),
+    getActiveFormTemplatesForPicker(),
   ])
   if (!service) notFound()
 
-  // ── Resolve initial sections ─────────────────────────────────────────────
+  const isTagged = Boolean(service.template_id && service.template)
+
+  // ── Resolve initial sections (untagged/legacy path only — a tagged
+  // service's fields live on the template, edited from its own page) ────────
   const existingSections =
     Array.isArray(service.form_sections) && service.form_sections.length > 0
       ? (service.form_sections as unknown as FormSection[])
       : null
 
-  const legacyFields = Array.isArray(service.form_fields)
-    ? (service.form_fields as unknown as FormField[])
-    : []
-
-  const initialSections: FormSection[] = existingSections ?? (
-    legacyFields.length > 0
-      ? [
-          {
-            id: 'section_migrated_0',
-            title: 'Request Details',
-            description: undefined,
-            order: 0,
-            fields: legacyFields.map((f, i) => ({ ...f, order: i })),
-          },
-        ]
-      : []
-  )
-
-  const isMigrated = !existingSections && legacyFields.length > 0
+  const initialSections: FormSection[] = resolveFormSections(service)
+  const isMigrated = !existingSections && initialSections.length > 0
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5">
@@ -85,25 +75,43 @@ export default async function AdminServiceEditorPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Migration notice */}
-      {isMigrated && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <p className="text-sm font-semibold text-amber-900">Legacy fields pre-loaded</p>
-          <p className="mt-0.5 text-xs text-amber-700">
-            Fields have been pre-loaded into a &ldquo;Request Details&rdquo; section. Saving will
-            activate the section-based format — the original flat fields remain stored but are no
-            longer used.
+      {/* Template tag — always shown; drives whether the builder below is editable */}
+      <ServiceTemplateTag
+        serviceId={service.id}
+        currentTemplate={isTagged ? { id: service.template!.id, name: service.template!.name } : null}
+        templates={templates}
+        hasOwnForm={initialSections.length > 0}
+      />
+
+      {isTagged ? (
+        <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            This service&rsquo;s form is managed by its tagged template — open the template above to edit fields.
           </p>
         </div>
-      )}
+      ) : (
+        <>
+          {/* Migration notice */}
+          {isMigrated && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm font-semibold text-amber-900">Legacy fields pre-loaded</p>
+              <p className="mt-0.5 text-xs text-amber-700">
+                Fields have been pre-loaded into a &ldquo;Request Details&rdquo; section. Saving will
+                activate the section-based format — the original flat fields remain stored but are no
+                longer used.
+              </p>
+            </div>
+          )}
 
-      {/* Builder */}
-      <SectionBuilder
-        serviceId={service.id}
-        serviceName={service.name}
-        initialSections={initialSections}
-        fieldIdsWithSla={fieldIdsWithSla}
-      />
+          {/* Builder — untagged/legacy services still build their own form */}
+          <SectionBuilder
+            entityName={service.name}
+            initialSections={initialSections}
+            onSave={saveFormSections.bind(null, service.id)}
+            fieldIdsWithSla={fieldIdsWithSla}
+          />
+        </>
+      )}
     </div>
   )
 }

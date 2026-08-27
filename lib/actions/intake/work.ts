@@ -73,8 +73,16 @@ function buildSourceMetadata(review: {
 // selects/radios/checkboxes are left for the reviewer (can't infer reliably).
 type SvcField = { id: string; type: string; label?: string; order?: number }
 
-function collectFields(svc: { form_fields?: unknown; form_sections?: unknown }): SvcField[] {
-  const sections = Array.isArray(svc.form_sections) ? (svc.form_sections as { order?: number; fields?: SvcField[] }[]) : null
+function collectFields(svc: {
+  form_fields?: unknown
+  form_sections?: unknown
+  // A tagged Form Template is the live source of truth — see
+  // resolveServiceFormSections() in lib/forms/sections.ts. Checked first here
+  // too so intake auto-fill matches whatever the requester actually sees.
+  template?: { form_sections?: unknown } | null
+}): SvcField[] {
+  const source = svc.template ?? svc
+  const sections = Array.isArray(source.form_sections) ? (source.form_sections as { order?: number; fields?: SvcField[] }[]) : null
   if (sections?.length) {
     return [...sections]
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -197,7 +205,7 @@ export async function approveAndCreate(
     // Verify service and team exist in this org. Pull the form schema so we can
     // snapshot it and pre-fill form_data (F3).
     const [{ data: svc }, { data: team }, { data: cls }] = await Promise.all([
-      admin.from('services').select('id, name, team_id, form_fields, form_sections').eq('id', payload.service_id).maybeSingle(),
+      admin.from('services').select('id, name, team_id, form_fields, form_sections, template:form_templates(form_sections)').eq('id', payload.service_id).maybeSingle(),
       admin.from('teams').select('id').eq('id', payload.team_id).maybeSingle(),
       admin.from('intake_classifications').select('entities').eq('message_id', review.message_id).eq('is_final', true).maybeSingle(),
     ])
@@ -209,7 +217,8 @@ export async function approveAndCreate(
 
     // Autofill the service's fields from extracted entities + the email text.
     const entities = (cls?.entities ?? {}) as Parameters<typeof buildFormData>[1]
-    const formData = buildFormData(collectFields(svc), entities, payload.title, payload.description || '')
+    const resolvedFields = collectFields(svc)
+    const formData = buildFormData(resolvedFields, entities, payload.title, payload.description || '')
 
     const { data: req, error: reqErr } = await admin
       .from('requests')
@@ -225,7 +234,10 @@ export async function approveAndCreate(
         status,
         form_data:              formData,
         form_schema_snapshot:   svc.form_fields ?? [],
-        form_sections_snapshot: svc.form_sections ?? [],
+        // Template's sections if tagged (the live source the requester
+        // actually saw), else the service's own — same precedence as
+        // createRequest()'s resolveServiceFormSections().
+        form_sections_snapshot: svc.template?.form_sections ?? svc.form_sections ?? [],
         intake_message_id:      review.message_id,
         source_metadata:        sourceMetadata,
       })

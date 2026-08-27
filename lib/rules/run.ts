@@ -37,6 +37,7 @@ type RawRequest = {
     sla_config: SLAConfig | null
     form_sections: FormSection[] | null
     form_fields: FormField[] | null
+    template: { form_sections: FormSection[] | null } | null
   } | null
   requester: {
     department_id: string | null
@@ -47,7 +48,7 @@ type RawRequest = {
 }
 
 const SELECT =
-  'id, title, description, priority, status, service_id, team_id, requester_id, assigned_to, org_id, created_at, form_data, waiting_since, response_due_at, resolution_due_at, service:services(category_id, sub_category_id, sla_config, form_sections, form_fields), requester:profiles!requester_id(department_id, location_id, designation_id, function_id)'
+  'id, title, description, priority, status, service_id, team_id, requester_id, assigned_to, org_id, created_at, form_data, waiting_since, response_due_at, resolution_due_at, service:services(category_id, sub_category_id, sla_config, form_sections, form_fields, template:form_templates(form_sections)), requester:profiles!requester_id(department_id, location_id, designation_id, function_id)'
 
 async function fetchRequest(admin: AnyClient, requestId: string): Promise<RawRequest | null> {
   const { data } = await admin.from('requests').select(SELECT).eq('id', requestId).single()
@@ -92,6 +93,7 @@ function toActionRequest(request: RawRequest): ActionRequest {
       sla_config: request.service?.sla_config ?? null,
       form_sections: request.service?.form_sections ?? null,
       form_fields: request.service?.form_fields ?? null,
+      template: request.service?.template ?? null,
     },
   }
 }

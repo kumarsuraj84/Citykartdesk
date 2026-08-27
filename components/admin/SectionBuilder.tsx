@@ -2,16 +2,19 @@
 
 import { useState, useTransition, useCallback, useEffect, useMemo } from 'react'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
-import { saveFormSections } from '@/lib/actions/admin/services'
 import { filterActiveOptions } from '@/lib/forms/options'
 import type { FormField, FormFieldType, FormFieldOption, FormSection } from '@/types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface SectionBuilderProps {
-  serviceId: string
-  serviceName: string
+  /** Display name of the service/template this form belongs to (shown in the empty state). */
+  entityName: string
   initialSections: FormSection[]
+  /** Persists the edited sections — e.g. `(s) => saveFormSections(serviceId, s)` or
+   *  `(s) => saveTemplateSections(templateId, s)`. This component doesn't know or
+   *  care which entity it's editing a form for. */
+  onSave: (sections: FormSection[]) => Promise<{ error?: string }>
   /** Field ids that have Field SLA Matrix entries configured — deleting one of these
    *  orphans that SLA data (never destroyed, just unreachable), so deletion needs a
    *  warning first instead of disappearing silently. */
@@ -475,9 +478,9 @@ function PreviewField({ field }: { field: FormField }) {
 // ── SectionBuilder ────────────────────────────────────────────────────────────
 
 export function SectionBuilder({
-  serviceId,
-  serviceName,
+  entityName,
   initialSections,
+  onSave,
   fieldIdsWithSla = [],
 }: SectionBuilderProps) {
   const slaFieldIds = useMemo(() => new Set(fieldIdsWithSla), [fieldIdsWithSla])
@@ -614,7 +617,7 @@ export function SectionBuilder({
     }
     setSaveState({ type: 'idle' })
     startTransition(async () => {
-      const result = await saveFormSections(serviceId, sections)
+      const result = await onSave(sections)
       if (result.error) {
         setSaveState({ type: 'error', message: result.error })
       } else {
@@ -699,7 +702,7 @@ export function SectionBuilder({
             <div className="rounded-2xl border-2 border-dashed border-border py-16 text-center">
               <p className="text-sm font-medium text-foreground">No sections yet</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Add a section to start building the form for {serviceName}.
+                Add a section to start building the form for {entityName}.
               </p>
             </div>
           )}

@@ -90,6 +90,10 @@ export type ServiceWithRelations = Service & {
   owner: Pick<Profile, 'id' | 'full_name' | 'avatar_url'> | null
   backup_owner: Pick<Profile, 'id' | 'full_name' | 'avatar_url'> | null
   escalation_policy: EscalationPolicy | null
+  // Live source of truth for the form when set — see resolveServiceFormSections()
+  // in lib/forms/sections.ts. Null means this service still owns its own
+  // form_sections/form_fields (untagged/legacy).
+  template: { id: string; name: string; form_sections: unknown } | null
 }
 
 export type ServiceSubCategoryWithServices = ServiceSubCategory & {

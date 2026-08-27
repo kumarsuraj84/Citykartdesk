@@ -1149,6 +1149,57 @@ export type Database = {
           },
         ]
       }
+      form_templates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          form_sections: Json
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          form_sections?: Json
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          form_sections?: Json
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "form_templates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       global_sla_config: {
         Row: {
           escalation_pct: number
@@ -3781,6 +3832,7 @@ export type Database = {
           status: string
           sub_category_id: string | null
           team_id: string
+          template_id: string | null
           updated_at: string
           version: string
           visibility: string
@@ -3809,6 +3861,7 @@ export type Database = {
           status?: string
           sub_category_id?: string | null
           team_id: string
+          template_id?: string | null
           updated_at?: string
           version?: string
           visibility?: string
@@ -3837,6 +3890,7 @@ export type Database = {
           status?: string
           sub_category_id?: string | null
           team_id?: string
+          template_id?: string | null
           updated_at?: string
           version?: string
           visibility?: string
@@ -3897,6 +3951,13 @@ export type Database = {
             columns: ["team_id"]
             isOneToOne: false
             referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "services_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "form_templates"
             referencedColumns: ["id"]
           },
         ]

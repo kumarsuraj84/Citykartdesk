@@ -131,6 +131,11 @@ export type ServiceInput = {
   // override if one exists, or otherwise gets no SLA deadline — see
   // lib/sla/resolve.ts resolveSlaDeadlines.
   sla_config?: SLAConfig
+  // Form Template this service is tagged to — null/undefined means untagged,
+  // in which case the service keeps rendering its own form_sections/form_fields
+  // (see lib/forms/sections.ts's resolveServiceFormSections()). Once tagged, the
+  // service's own form is never read: the template is the live source of truth.
+  template_id?: string | null
 }
 
 function slugify(name: string): string {
@@ -181,6 +186,7 @@ export async function createService(
     version: data.version?.trim() || '1.0',
     visibility: data.visibility ?? 'all',
     sla_config: data.sla_config ?? {},
+    template_id: data.template_id || null,
   }
 
   const { data: row, error } = await supabase
@@ -230,6 +236,7 @@ export async function updateService(
     ...(data.version !== undefined ? { version: data.version?.trim() || '1.0' } : {}),
     ...(data.visibility !== undefined ? { visibility: data.visibility } : {}),
     ...(data.sla_config !== undefined ? { sla_config: data.sla_config } : {}),
+    ...(data.template_id !== undefined ? { template_id: data.template_id || null } : {}),
   }
 
   const { error } = await supabase

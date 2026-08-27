@@ -10,7 +10,7 @@ import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/reques
 import { getEnabledModules } from '@/lib/queries/profiles'
 import { validateFieldValue } from '@/lib/validation/formFields'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
-import { resolveFormSections } from '@/lib/forms/sections'
+import { resolveServiceFormSections } from '@/lib/forms/sections'
 import { toCSV } from '@/lib/export/csv'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus } from '@/types'
 import type { Database, Json } from '@/types/database'
@@ -84,31 +84,22 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
 
   const { data: service, error: serviceError } = await supabase
     .from('services')
-    .select('*, team:teams (*)')
+    .select('*, team:teams (*), template:form_templates (form_sections)')
     .eq('id', serviceId)
     .eq('is_active', true)
     .single()
 
   if (serviceError || !service) return { error: 'Service not found.' }
 
-  // ── Resolve mode: sections vs legacy flat ──────────────────────────────────
-  const hasSections =
-    Array.isArray(service.form_sections) && service.form_sections.length > 0
-
-  const sections = hasSections
-    ? (service.form_sections as unknown as FormSection[])
-    : null
-
-  const legacyFields = Array.isArray(service.form_fields)
-    ? (service.form_fields as unknown as FormField[])
-    : []
+  // ── Resolve the form: template (if tagged) is the live source of truth,
+  // otherwise the service's own sections/legacy flat fields — see
+  // resolveServiceFormSections() in lib/forms/sections.ts.
+  const sections = resolveServiceFormSections(service)
 
   // All fields in submission order (for validation and title extraction)
-  const allFields: FormField[] = sections
-    ? [...sections]
-        .sort((a, b) => a.order - b.order)
-        .flatMap((s) => [...s.fields].sort((a, b) => a.order - b.order))
-    : legacyFields
+  const allFields: FormField[] = [...sections]
+    .sort((a, b) => a.order - b.order)
+    .flatMap((s) => [...s.fields].sort((a, b) => a.order - b.order))
 
   // ── Server-side validation ─────────────────────────────────────────────────
   // Source of truth — the client's DynamicForm runs the same check for instant
@@ -189,10 +180,15 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
       title,
       priority,
       form_data: parsedFormData as Json,
-      // Legacy flat snapshot (always present for backward compat)
+      // Legacy flat snapshot (always present for backward compat) — always
+      // read off the service's own column, never the template: templates
+      // never have a legacy flat form_fields shape, only sections.
       form_schema_snapshot: service.form_fields as Json,
-      // Section snapshot (empty array for legacy services)
-      form_sections_snapshot: (service.form_sections ?? []) as Json,
+      // Section snapshot — the resolved form actually shown to the requester
+      // (template's sections if tagged, else the service's own). Freezing
+      // this here is what keeps an already-submitted request immune to a
+      // later template edit; only requests submitted after the edit see it.
+      form_sections_snapshot: sections as Json,
       response_due_at: responseDueAt,
       resolution_due_at: resolutionDueAt,
       project_id: projectId,
@@ -414,7 +410,7 @@ export async function updateRequestStatus(
       const priority = request.priority as RequestPriority
       const { data: full } = await supabase
         .from('requests')
-        .select('service_id, form_data, service:services(sla_config, form_sections, form_fields)')
+        .select('service_id, form_data, service:services(sla_config, form_sections, form_fields, template:form_templates(form_sections))')
         .eq('id', requestId)
         .single()
 
@@ -424,8 +420,9 @@ export async function updateRequestStatus(
           sla_config?: SLAConfig
           form_sections?: FormSection[]
           form_fields?: FormField[]
+          template?: { form_sections?: FormSection[] } | null
         }
-        const allFields = resolveFormSections(svc).flatMap((s) => s.fields)
+        const allFields = resolveServiceFormSections(svc).flatMap((s) => s.fields)
         const resolved = await resolveSlaDeadlines(supabase, {
           serviceId: full.service_id,
           priority,
@@ -1199,7 +1196,7 @@ export async function changePriority(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, priority, team_id, status, created_at, waiting_since, assigned_to, service_id, form_data, service:services(sla_config, form_sections, form_fields)')
+    .select('id, priority, team_id, status, created_at, waiting_since, assigned_to, service_id, form_data, service:services(sla_config, form_sections, form_fields, template:form_templates(form_sections))')
     .eq('id', requestId)
     .single()
 
@@ -1223,8 +1220,9 @@ export async function changePriority(
     sla_config?: SLAConfig
     form_sections?: FormSection[]
     form_fields?: FormField[]
+    template?: { form_sections?: FormSection[] } | null
   }
-  const allFields = resolveFormSections(svc).flatMap((s) => s.fields)
+  const allFields = resolveServiceFormSections(svc).flatMap((s) => s.fields)
   const createdAt = new Date(request.created_at)
 
   let { responseDueAt: newResponseDue, resolutionDueAt: newResolutionDue } = await resolveSlaDeadlines(supabase, {

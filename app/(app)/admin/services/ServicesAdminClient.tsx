@@ -11,7 +11,8 @@ import {
   saveFormSections,
   type ServiceInput,
 } from '@/lib/actions/admin/services'
-import type { ServiceCategoryWithSubCategories, ServiceWithRelations, Team, Profile, FormField, FormSection, SLAConfig } from '@/types'
+import { resolveServiceFormSections } from '@/lib/forms/sections'
+import type { ServiceCategoryWithSubCategories, ServiceWithRelations, Team, Profile, SLAConfig } from '@/types'
 import type { ServiceSubCategory } from '@/types'
 
 const SLA_PRIORITIES = ['urgent', 'high', 'medium', 'low'] as const
@@ -42,28 +43,6 @@ function draftToSlaConfig(draft: SlaDraft): SLAConfig {
   return config
 }
 
-// Mirrors the legacy → section migration in app/(app)/admin/services/[id]/page.tsx —
-// a service's intake form lives in `form_sections` (current) or, for older services,
-// a flat `form_fields` array. Duplicating must carry over whichever one is populated.
-function resolveFormSections(service: ServiceWithRelations): FormSection[] {
-  const sections = Array.isArray(service.form_sections) && service.form_sections.length > 0
-    ? (service.form_sections as unknown as FormSection[])
-    : null
-  if (sections) return sections
-
-  const legacyFields = Array.isArray(service.form_fields)
-    ? (service.form_fields as unknown as FormField[])
-    : []
-  if (legacyFields.length === 0) return []
-
-  return [{
-    id: 'section_migrated_0',
-    title: 'Request Details',
-    order: 0,
-    fields: legacyFields.map((f, i) => ({ ...f, order: i })),
-  }]
-}
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type ProfileMini = Pick<Profile, 'id' | 'full_name'>
@@ -72,6 +51,7 @@ type Props = {
   categories: ServiceCategoryWithSubCategories[]
   teams: Team[]
   profiles: ProfileMini[]
+  templates: { id: string; name: string }[]
 }
 
 type ModalMode =
@@ -112,12 +92,14 @@ function ServiceModal({
   categories,
   teams,
   profiles,
+  templates,
   onClose,
 }: {
   mode: Exclude<ModalMode, null>
   categories: ServiceCategoryWithSubCategories[]
   teams: Team[]
   profiles: ProfileMini[]
+  templates: { id: string; name: string }[]
   onClose: () => void
 }) {
   const isEdit = mode.type === 'edit'
@@ -131,6 +113,7 @@ function ServiceModal({
   const [categoryId, setCategoryId] = useState(existing?.category_id ?? '')
   const [subCategoryId, setSubCategoryId] = useState(existing?.sub_category_id ?? '')
   const [teamId, setTeamId] = useState(existing?.team_id ?? '')
+  const [templateId, setTemplateId] = useState(existing?.template_id ?? '')
   const [priority, setPriority] = useState<ServiceInput['default_priority']>(
     existing?.default_priority ?? 'medium'
   )
@@ -171,6 +154,7 @@ function ServiceModal({
       version: version.trim() || '1.0',
       visibility,
       sla_config: draftToSlaConfig(slaDraft),
+      template_id: templateId || null,
     }
 
     startTransition(async () => {
@@ -183,10 +167,13 @@ function ServiceModal({
         return
       }
 
-      // Duplicate: also clone the source service's intake form onto the new one
-      // (handles both current section-based and legacy flat-field services).
-      if (mode.type === 'duplicate' && result.id) {
-        const sourceSections = resolveFormSections(mode.source)
+      // Duplicate: a template-tagged source already carries its template_id
+      // forward via `data` above (same live template, nothing to copy). Only
+      // an untagged legacy source — which still owns its own inline form —
+      // needs its sections cloned onto the new service the old way, so a
+      // duplicate of it isn't left with an empty form.
+      if (mode.type === 'duplicate' && result.id && !mode.source.template_id) {
+        const sourceSections = resolveServiceFormSections(mode.source)
         if (sourceSections.length > 0) {
           const formResult = await saveFormSections(result.id, sourceSections)
           if (formResult.error) {
@@ -209,7 +196,10 @@ function ServiceModal({
           </h2>
           {isDuplicate && (
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Pre-filled from the source service{resolveFormSections(mode.source).length > 0 ? ', including its intake form' : ''}.
+              Pre-filled from the source service
+              {mode.source.template_id
+                ? ', tagged to the same template'
+                : resolveServiceFormSections(mode.source).length > 0 ? ', including its intake form' : ''}.
             </p>
           )}
         </div>
@@ -287,6 +277,27 @@ function ServiceModal({
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Form Template — the live source of truth for this service's intake
+              form once tagged; forms are no longer built per-service. */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Form Template</label>
+            <select
+              value={templateId}
+              onChange={(e) => setTemplateId(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <option value="">No template — untagged</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {templateId
+                ? "This service's intake form always reflects whatever the tagged template currently says."
+                : 'Manage reusable forms under Service Desk → Form Templates.'}
+            </p>
           </div>
 
           {/* Team + Priority */}
@@ -582,7 +593,7 @@ function ServiceRow({
 
 // ── Main client component ─────────────────────────────────────────────────────
 
-export default function ServicesAdminClient({ categories, teams, profiles }: Props) {
+export default function ServicesAdminClient({ categories, teams, profiles, templates }: Props) {
   const [modal, setModal] = useState<ModalMode>(null)
   const [archiveTarget, setArchiveTarget] = useState<ServiceWithRelations | null>(null)
   const [archivePending, startArchive] = useTransition()
@@ -717,6 +728,7 @@ export default function ServicesAdminClient({ categories, teams, profiles }: Pro
           categories={categories}
           teams={teams}
           profiles={profiles}
+          templates={templates}
           onClose={() => setModal(null)}
         />
       )}

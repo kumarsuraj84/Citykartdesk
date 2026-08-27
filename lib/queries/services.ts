@@ -34,7 +34,8 @@ const SERVICE_SELECT = `
   approval_workflow:approval_workflows (*),
   owner:profiles!services_owner_id_fkey (id, full_name, avatar_url),
   backup_owner:profiles!services_backup_owner_id_fkey (id, full_name, avatar_url),
-  escalation_policy:escalation_policies (*)
+  escalation_policy:escalation_policies (*),
+  template:form_templates (id, name, form_sections)
 `
 
 /**
@@ -322,4 +323,64 @@ export async function getAllSubCategoriesForAdmin(): Promise<
     .select('*, category:service_categories (*)')
     .order('sort_order')
   return (data ?? []) as (ServiceSubCategory & { category: ServiceCategory })[]
+}
+
+// ── Form Templates ─────────────────────────────────────────────────────────────
+
+export type FormTemplateSummary = {
+  id: string
+  name: string
+  description: string | null
+  is_active: boolean
+  updated_at: string
+  service_count: number
+}
+
+/** All active templates for the library page, with how many services are tagged to each. */
+export async function getFormTemplates(): Promise<FormTemplateSummary[]> {
+  const supabase = await createClient()
+  const [{ data: templates }, { data: services }] = await Promise.all([
+    supabase
+      .from('form_templates')
+      .select('id, name, description, is_active, updated_at')
+      .eq('is_active', true)
+      .order('name'),
+    supabase.from('services').select('template_id').not('template_id', 'is', null),
+  ])
+
+  const counts = new Map<string, number>()
+  for (const s of services ?? []) {
+    const id = (s as { template_id: string | null }).template_id
+    if (id) counts.set(id, (counts.get(id) ?? 0) + 1)
+  }
+
+  return (templates ?? []).map((t) => ({ ...t, service_count: counts.get(t.id) ?? 0 }))
+}
+
+export type FormTemplateWithSections = {
+  id: string
+  name: string
+  description: string | null
+  form_sections: unknown
+}
+
+export async function getFormTemplateById(id: string): Promise<FormTemplateWithSections | null> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('form_templates')
+    .select('id, name, description, form_sections')
+    .eq('id', id)
+    .single()
+  return data
+}
+
+/** Lean {id, name} list for the Service Catalog's "Tag a template" picker. */
+export async function getActiveFormTemplatesForPicker(): Promise<{ id: string; name: string }[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('form_templates')
+    .select('id, name')
+    .eq('is_active', true)
+    .order('name')
+  return data ?? []
 }

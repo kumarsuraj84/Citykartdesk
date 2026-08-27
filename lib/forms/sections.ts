@@ -35,3 +35,25 @@ export function resolveFormSections(service: {
       : [])
   )
 }
+
+/**
+ * Resolve a service's intake form the *current* way: if the service is
+ * tagged to a Form Template (`template_id` set), the template's fields are
+ * the live, single source of truth — the service's own `form_sections`/
+ * `form_fields` are never consulted once a template is tagged, and editing
+ * the template immediately changes what every tagged service renders next.
+ * Untagged (legacy) services fall through to `resolveFormSections()`
+ * unchanged, so nothing built before Form Templates existed has to migrate.
+ *
+ * Callers must select `template:form_templates(form_sections, form_fields)`
+ * alongside the service row (see lib/queries/services.ts) — this function
+ * does no I/O of its own.
+ */
+export function resolveServiceFormSections(service: {
+  form_sections?: unknown
+  form_fields?: unknown
+  template?: { form_sections?: unknown; form_fields?: unknown } | null
+}): FormSection[] {
+  if (service.template) return resolveFormSections(service.template)
+  return resolveFormSections(service)
+}

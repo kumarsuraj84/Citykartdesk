@@ -3,7 +3,7 @@ import { sendEmail } from '@/lib/email/send'
 import { logActivity } from '@/lib/activity'
 import { STATUS_LABELS } from '@/lib/constants/requests'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
-import { resolveFormSections } from '@/lib/forms/sections'
+import { resolveServiceFormSections } from '@/lib/forms/sections'
 import type { SLAConfig, FormSection, FormField } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -50,6 +50,7 @@ export type ActionRequest = {
     sla_config: SLAConfig | null
     form_sections: FormSection[] | null
     form_fields: FormField[] | null
+    template: { form_sections: FormSection[] | null } | null
   }
 }
 
@@ -129,7 +130,7 @@ async function runSetPriority(admin: AnyClient, request: ActionRequest, priority
   // does — from created_at, field override > service override, business-hours
   // aware — instead of leaving the old priority's due dates in place under a
   // new priority.
-  const allFields = resolveFormSections(request.service).flatMap((s) => s.fields)
+  const allFields = resolveServiceFormSections(request.service).flatMap((s) => s.fields)
   const { responseDueAt, resolutionDueAt } = await resolveSlaDeadlines(admin, {
     serviceId: request.service_id,
     priority: priority as 'low' | 'medium' | 'high' | 'urgent',
@@ -183,7 +184,7 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
   // same as the REOPEN branch in updateRequestStatus — otherwise a rule-driven
   // reopen keeps whatever deadline (or null) the request had before it closed.
   if (status === 'open' && (request.status === 'resolved' || request.status === 'closed')) {
-    const allFields = resolveFormSections(request.service).flatMap((s) => s.fields)
+    const allFields = resolveServiceFormSections(request.service).flatMap((s) => s.fields)
     const resolved = await resolveSlaDeadlines(admin, {
       serviceId: request.service_id,
       priority: request.priority as 'low' | 'medium' | 'high' | 'urgent',

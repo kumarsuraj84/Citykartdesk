@@ -8,7 +8,7 @@ import {
   BarChart3, Activity, Settings, Monitor, BookOpenText,
   Users, Tag, GitBranch, Building2, Database, Workflow,
   LogOut, BookOpen, KeyRound, ChevronDown, Sparkles, Filter,
-  PanelLeftClose, PanelLeftOpen, Timer, Table2, Zap, Headset,
+  PanelLeftClose, PanelLeftOpen, Timer, Table2, Zap, Headset, FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/actions/auth'
@@ -120,6 +120,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
           label: 'Service Desk',
           items: [
             { label: 'Service Catalog', href: '/admin/services',       icon: LayoutGrid },
+            { label: 'Form Templates',  href: '/admin/form-templates',  icon: FileText   },
             { label: 'Categories',      href: '/admin/categories',      icon: Tag        },
             { label: 'Business Rules',  href: '/admin/business-rules',  icon: Zap        },
             ...(has('approvals') ? [{ label: 'Approval Flows', href: '/admin/approvals',      icon: ShieldCheck }] : []),
