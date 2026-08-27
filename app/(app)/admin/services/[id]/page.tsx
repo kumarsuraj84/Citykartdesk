@@ -3,11 +3,8 @@ import Link from 'next/link'
 import { ChevronLeft, Layers } from 'lucide-react'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { getServiceById, getActiveFormTemplatesForPicker } from '@/lib/queries/services'
-import { getFieldIdsWithSlaOverrides } from '@/lib/sla/matrix'
 import { resolveFormSections } from '@/lib/forms/sections'
-import { SectionBuilder } from '@/components/admin/SectionBuilder'
 import { ServiceTemplateTag } from '@/components/admin/ServiceTemplateTag'
-import { saveFormSections } from '@/lib/actions/admin/services'
 import type { FormSection } from '@/types'
 
 interface PageProps {
@@ -21,27 +18,22 @@ export default async function AdminServiceEditorPage({ params }: PageProps) {
   if (!profile) redirect('/login')
   if (profile.role !== 'admin' && profile.role !== 'platform_owner') redirect('/home')
 
-  const [service, fieldIdsWithSla, templates] = await Promise.all([
+  const [service, templates] = await Promise.all([
     getServiceById(id),
-    getFieldIdsWithSlaOverrides(id),
     getActiveFormTemplatesForPicker(),
   ])
   if (!service) notFound()
 
   const isTagged = Boolean(service.template_id && service.template)
 
-  // ── Resolve initial sections (untagged/legacy path only — a tagged
-  // service's fields live on the template, edited from its own page) ────────
-  const existingSections =
-    Array.isArray(service.form_sections) && service.form_sections.length > 0
-      ? (service.form_sections as unknown as FormSection[])
-      : null
-
+  // Read-only only — Service Catalog no longer builds forms. Untagged/legacy
+  // services keep rendering whatever they already have (fully working for
+  // requesters), but the only way to change it is "Convert to template"
+  // below, which moves it onto the editable Form Templates system.
   const initialSections: FormSection[] = resolveFormSections(service)
-  const isMigrated = !existingSections && initialSections.length > 0
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-5">
+    <div className="mx-auto max-w-[900px] space-y-5">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm">
         <Link
@@ -49,7 +41,7 @@ export default async function AdminServiceEditorPage({ params }: PageProps) {
           className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" />
-          Form Builder
+          Service Catalog
         </Link>
         <span className="text-muted-foreground/40">/</span>
         <span className="font-medium text-foreground">{service.name}</span>
@@ -65,17 +57,18 @@ export default async function AdminServiceEditorPage({ params }: PageProps) {
             {service.name}
           </h1>
           <p className="text-xs text-muted-foreground">
-            {service.category.name} · {service.team.name}
+            {service.category.name}
+            {service.sub_category ? ` → ${service.sub_category.name}` : ''} · {service.team.name}
             {!service.is_active && ' · Inactive'}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
           <Layers className="h-3 w-3" />
-          Form Builder
+          Form
         </div>
       </div>
 
-      {/* Template tag — always shown; drives whether the builder below is editable */}
+      {/* Template tag — the only place a service's form is configured now */}
       <ServiceTemplateTag
         serviceId={service.id}
         currentTemplate={isTagged ? { id: service.template!.id, name: service.template!.name } : null}
@@ -89,28 +82,38 @@ export default async function AdminServiceEditorPage({ params }: PageProps) {
             This service&rsquo;s form is managed by its tagged template — open the template above to edit fields.
           </p>
         </div>
-      ) : (
-        <>
-          {/* Migration notice */}
-          {isMigrated && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-              <p className="text-sm font-semibold text-amber-900">Legacy fields pre-loaded</p>
-              <p className="mt-0.5 text-xs text-amber-700">
-                Fields have been pre-loaded into a &ldquo;Request Details&rdquo; section. Saving will
-                activate the section-based format — the original flat fields remain stored but are no
-                longer used.
-              </p>
+      ) : initialSections.length > 0 ? (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Current fields (read-only)
+          </p>
+          {initialSections.map((section) => (
+            <div key={section.id} className="rounded-xl border border-border bg-card">
+              <div className="border-b border-border bg-muted/30 px-4 py-2">
+                <p className="text-xs font-semibold text-foreground">{section.title}</p>
+              </div>
+              <ul className="divide-y divide-border">
+                {[...section.fields]
+                  .sort((a, b) => a.order - b.order)
+                  .map((field) => (
+                    <li key={field.id} className="flex items-center justify-between px-4 py-2 text-xs">
+                      <span className="text-foreground">{field.label}</span>
+                      <span className="text-muted-foreground">{field.type}{field.required ? ' · Required' : ''}</span>
+                    </li>
+                  ))}
+              </ul>
             </div>
-          )}
-
-          {/* Builder — untagged/legacy services still build their own form */}
-          <SectionBuilder
-            entityName={service.name}
-            initialSections={initialSections}
-            onSave={saveFormSections.bind(null, service.id)}
-            fieldIdsWithSla={fieldIdsWithSla}
-          />
-        </>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            Service Catalog no longer edits forms directly — use &ldquo;Convert to template&rdquo; above to make these fields editable.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            This service has no submitted-form fields. Tag a template above to give it one.
+          </p>
+        </div>
       )}
     </div>
   )

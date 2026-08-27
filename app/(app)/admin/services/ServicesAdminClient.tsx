@@ -13,7 +13,6 @@ import {
 } from '@/lib/actions/admin/services'
 import { resolveServiceFormSections } from '@/lib/forms/sections'
 import type { ServiceCategoryWithSubCategories, ServiceWithRelations, Team, Profile, SLAConfig } from '@/types'
-import type { ServiceSubCategory } from '@/types'
 
 const SLA_PRIORITIES = ['urgent', 'high', 'medium', 'low'] as const
 type SlaDraft = Record<(typeof SLA_PRIORITIES)[number], { response: string; resolution: string }>
@@ -55,7 +54,11 @@ type Props = {
 }
 
 type ModalMode =
-  | { type: 'create' }
+  // A service is always created from inside the sub-category it belongs to —
+  // category/sub-category come from where you clicked "Add Service", not a
+  // dropdown, so the create mode carries that fixed context instead of
+  // letting the modal pick it.
+  | { type: 'create'; categoryId: string; categoryName: string; subCategoryId: string; subCategoryName: string }
   | { type: 'edit'; service: ServiceWithRelations }
   | { type: 'duplicate'; source: ServiceWithRelations }
   | null
@@ -89,14 +92,12 @@ const STATUS_BADGE: Record<ServiceStatus, { label: string; className: string }> 
 
 function ServiceModal({
   mode,
-  categories,
   teams,
   profiles,
   templates,
   onClose,
 }: {
   mode: Exclude<ModalMode, null>
-  categories: ServiceCategoryWithSubCategories[]
   teams: Team[]
   profiles: ProfileMini[]
   templates: { id: string; name: string }[]
@@ -104,14 +105,21 @@ function ServiceModal({
 }) {
   const isEdit = mode.type === 'edit'
   const isDuplicate = mode.type === 'duplicate'
+  const isCreate = mode.type === 'create'
   const existing = isEdit ? mode.service : isDuplicate ? mode.source : null
   const existingAny = existing as (ServiceWithRelations & { status?: string; owner_id?: string | null; backup_owner_id?: string | null; version?: string; visibility?: string }) | null
 
   const [name, setName] = useState(isDuplicate ? `${existing?.name ?? ''} (Copy)` : existing?.name ?? '')
   const [description, setDescription] = useState(existing?.description ?? '')
   const [icon, setIcon] = useState(existing?.icon ?? '')
-  const [categoryId, setCategoryId] = useState(existing?.category_id ?? '')
-  const [subCategoryId, setSubCategoryId] = useState(existing?.sub_category_id ?? '')
+  // Category/sub-category are never picked in this modal — they come from
+  // where the service was created (the "Add Service" button on a
+  // sub-category's own row) or, for edit/duplicate, from the existing
+  // service. Fixed for the lifetime of this modal, shown read-only below.
+  const categoryId = isCreate ? mode.categoryId : existing?.category_id ?? ''
+  const subCategoryId = isCreate ? mode.subCategoryId : existing?.sub_category_id ?? ''
+  const categoryName = isCreate ? mode.categoryName : existing?.category?.name ?? '—'
+  const subCategoryName = isCreate ? mode.subCategoryName : existing?.sub_category?.name ?? null
   const [teamId, setTeamId] = useState(existing?.team_id ?? '')
   const [templateId, setTemplateId] = useState(existing?.template_id ?? '')
   const [priority, setPriority] = useState<ServiceInput['default_priority']>(
@@ -128,12 +136,6 @@ function ServiceModal({
   )
   const [error, setError] = useState('')
   const [pending, startTransition] = useTransition()
-
-  // Derive sub-categories for selected category
-  const selectedCat = categories.find((c) => c.id === categoryId)
-  const subCategories: ServiceSubCategory[] = selectedCat
-    ? (selectedCat.sub_categories as ServiceSubCategory[])
-    : []
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -192,16 +194,21 @@ function ServiceModal({
       <div className="w-full max-w-lg rounded-2xl border border-border bg-card shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="border-b border-border px-5 py-4 sticky top-0 bg-card z-10">
           <h2 className="text-base font-semibold text-foreground">
-            {isEdit ? 'Edit Service' : isDuplicate ? `Duplicate "${mode.source.name}"` : 'Create Service'}
+            {isEdit ? 'Edit Service' : isDuplicate ? `Duplicate "${mode.source.name}"` : 'Add Service'}
           </h2>
-          {isDuplicate && (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Pre-filled from the source service
-              {mode.source.template_id
-                ? ', tagged to the same template'
-                : resolveServiceFormSections(mode.source).length > 0 ? ', including its intake form' : ''}.
-            </p>
-          )}
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {isDuplicate ? (
+              <>
+                Pre-filled from the source service
+                {mode.source.template_id
+                  ? ', tagged to the same template'
+                  : resolveServiceFormSections(mode.source).length > 0 ? ', including its intake form' : ''}
+                {' '}· {categoryName}{subCategoryName ? ` → ${subCategoryName}` : ''}
+              </>
+            ) : (
+              <>Under {categoryName}{subCategoryName ? ` → ${subCategoryName}` : ''}</>
+            )}
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 px-5 py-4">
@@ -245,37 +252,14 @@ function ServiceModal({
             />
           </div>
 
-          {/* Category + Sub-category */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                Category <span className="text-destructive">*</span>
-              </label>
-              <select
-                value={categoryId}
-                onChange={(e) => { setCategoryId(e.target.value); setSubCategoryId('') }}
-                required
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-              >
-                <option value="">Select…</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Sub-category</label>
-              <select
-                value={subCategoryId}
-                onChange={(e) => setSubCategoryId(e.target.value)}
-                disabled={!categoryId}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
-              >
-                <option value="">None</option>
-                {subCategories.map((sc) => (
-                  <option key={sc.id} value={sc.id}>{sc.name}</option>
-                ))}
-              </select>
+          {/* Category / Sub-category — fixed by where this service was
+              created (or, for edit/duplicate, by the existing service);
+              never a picker here. To move a service, delete and re-add it
+              from the target sub-category. */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Category</label>
+            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-foreground">
+              {categoryName}{subCategoryName ? ` → ${subCategoryName}` : ''}
             </div>
           </div>
 
@@ -561,7 +545,7 @@ function ServiceRow({
           className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-foreground hover:bg-muted"
         >
           <Settings2 className="h-3 w-3" />
-          Edit Form
+          Form
         </Link>
         <button
           onClick={() => onDuplicate(service)}
@@ -630,19 +614,9 @@ export default function ServicesAdminClient({ categories, teams, profiles, templ
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div />
-        <button
-          onClick={() => setModal({ type: 'create' })}
-          className="btn-gradient"
-        >
-          <Plus className="h-4 w-4" />
-          Create Service
-        </button>
-      </div>
-
-      {/* Category tree */}
+      {/* Category tree — a service is created from inside the sub-category it
+          belongs to ("+ Add Service" below), not picked via a dropdown, so
+          there's no context-free "Create Service" button up here anymore. */}
       {categories.length === 0 ? (
         <div className="rounded-xl border border-border bg-card p-8 text-center">
           <p className="text-sm text-muted-foreground">No categories found. Create categories first.</p>
@@ -707,6 +681,19 @@ export default function ServicesAdminClient({ categories, teams, profiles, templ
                       ) : (
                         <p className="ml-10 text-xs italic text-muted-foreground/60">No services</p>
                       )}
+                      <button
+                        onClick={() => setModal({
+                          type: 'create',
+                          categoryId: cat.id,
+                          categoryName: cat.name,
+                          subCategoryId: sc.id,
+                          subCategoryName: sc.name,
+                        })}
+                        className="ml-6 mt-1.5 flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/5"
+                      >
+                        <Plus className="h-3 w-3" />
+                        Add Service
+                      </button>
                     </div>
                   ))}
                   {cat.sub_categories.length === 0 && (
@@ -725,7 +712,6 @@ export default function ServicesAdminClient({ categories, teams, profiles, templ
       {modal && (
         <ServiceModal
           mode={modal}
-          categories={categories}
           teams={teams}
           profiles={profiles}
           templates={templates}
