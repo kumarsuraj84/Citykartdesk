@@ -619,7 +619,16 @@ export default function ServicesAdminClient({ categories, teams, profiles, templ
           there's no context-free "Create Service" button up here anymore. */}
       {categories.length === 0 ? (
         <div className="rounded-xl border border-border bg-card p-8 text-center">
-          <p className="text-sm text-muted-foreground">No categories found. Create categories first.</p>
+          <p className="text-sm text-muted-foreground">
+            No categories yet — a service is always added from inside a category &amp; sub-category, so create those first.
+          </p>
+          <Link
+            href="/admin/categories"
+            className="btn-gradient mt-4 inline-flex items-center gap-1.5"
+          >
+            <Plus className="h-4 w-4" />
+            Manage Categories
+          </Link>
         </div>
       ) : (
         <div className="space-y-4">
@@ -698,7 +707,12 @@ export default function ServicesAdminClient({ categories, teams, profiles, templ
                   ))}
                   {cat.sub_categories.length === 0 && (
                     <div className="px-4 py-3">
-                      <p className="ml-6 text-xs italic text-muted-foreground/60">No sub-categories</p>
+                      <p className="ml-6 text-xs italic text-muted-foreground/60">
+                        No sub-categories yet — a service needs one to be added under.{' '}
+                        <Link href={`/admin/categories/${cat.slug}`} className="not-italic text-primary hover:underline">
+                          Add one →
+                        </Link>
+                      </p>
                     </div>
                   )}
                 </div>
