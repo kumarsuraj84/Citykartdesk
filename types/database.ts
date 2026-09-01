@@ -3483,6 +3483,7 @@ export type Database = {
       requests: {
         Row: {
           assigned_to: string | null
+          cancellation_reason: string | null
           category_id: string | null
           closed_at: string | null
           created_at: string
@@ -3496,6 +3497,8 @@ export type Database = {
           parent_request_id: string | null
           priority: Database["public"]["Enums"]["request_priority"]
           project_id: string | null
+          reopen_count: number
+          reopen_deadline_at: string | null
           request_no: string
           requester_id: string
           resolution_due_at: string | null
@@ -3513,6 +3516,7 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          cancellation_reason?: string | null
           category_id?: string | null
           closed_at?: string | null
           created_at?: string
@@ -3526,6 +3530,8 @@ export type Database = {
           parent_request_id?: string | null
           priority?: Database["public"]["Enums"]["request_priority"]
           project_id?: string | null
+          reopen_count?: number
+          reopen_deadline_at?: string | null
           request_no: string
           requester_id: string
           resolution_due_at?: string | null
@@ -3543,6 +3549,7 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          cancellation_reason?: string | null
           category_id?: string | null
           closed_at?: string | null
           created_at?: string
@@ -3556,6 +3563,8 @@ export type Database = {
           parent_request_id?: string | null
           priority?: Database["public"]["Enums"]["request_priority"]
           project_id?: string | null
+          reopen_count?: number
+          reopen_deadline_at?: string | null
           request_no?: string
           requester_id?: string
           resolution_due_at?: string | null
@@ -4924,6 +4933,7 @@ export type Database = {
       intake_validation_stats: { Args: never; Returns: Json }
       is_agent: { Args: never; Returns: boolean }
       is_owner_org: { Args: never; Returns: boolean }
+      is_request_approver: { Args: { p_request_id: string }; Returns: boolean }
       is_request_collaborator: {
         Args: { p_request_id: string }
         Returns: boolean

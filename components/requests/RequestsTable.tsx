@@ -22,7 +22,7 @@ import {
   searchOrgMembers,
 } from '@/lib/actions/requests'
 import { downloadCSV } from '@/lib/export/csv'
-import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
+import { StatusBadge, PriorityBadge, ReopenedBadge } from '@/components/requests/RequestBadges'
 import { SLABadge } from '@/components/requests/SLABadge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatRelativeTime } from '@/lib/utils'
@@ -304,7 +304,12 @@ export function RequestsTable({
                   </td>
                   <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground whitespace-nowrap">{req.request_no}</td>
                   <td className="max-w-[240px] truncate px-3 py-2 font-medium text-foreground">{requestSubject(req)}</td>
-                  <td className="px-3 py-2"><StatusBadge status={req.status} size="sm" /></td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <StatusBadge status={req.status} size="sm" />
+                      <ReopenedBadge count={req.reopen_count ?? 0} size="sm" />
+                    </div>
+                  </td>
                   <td className="px-3 py-2"><PriorityBadge priority={req.priority} size="sm" /></td>
                   <td className="px-3 py-2 whitespace-nowrap text-foreground">{req.requester?.full_name ?? '—'}</td>
                   <td className="px-3 py-2 whitespace-nowrap">

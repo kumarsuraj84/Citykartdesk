@@ -591,9 +591,19 @@ export async function rejectApproval(approvalId: string, comment?: string): Prom
     .single()
 
   const resumeNow = new Date()
-  const cancelPayload: { status: 'cancelled'; waiting_since: null; response_due_at?: string; resolution_due_at?: string } = {
+  // Tagged as 'approval_rejected' (distinct from a technician directly
+  // cancelling a ticket) so the requester — and only the requester — gets a
+  // 48-hour window to reopen it: a rejected approval can be an honest
+  // mistake, unlike a deliberate cancellation.
+  const REOPEN_WINDOW_HOURS = 48
+  const cancelPayload: {
+    status: 'cancelled'; waiting_since: null; cancellation_reason: 'approval_rejected'; reopen_deadline_at: string
+    response_due_at?: string; resolution_due_at?: string
+  } = {
     status: 'cancelled',
     waiting_since: null,
+    cancellation_reason: 'approval_rejected',
+    reopen_deadline_at: new Date(resumeNow.getTime() + REOPEN_WINDOW_HOURS * 3_600_000).toISOString(),
   }
   if (reqForResume?.waiting_since) {
     const pausedMs = resumeNow.getTime() - new Date(reqForResume.waiting_since).getTime()

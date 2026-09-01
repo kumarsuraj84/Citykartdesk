@@ -131,6 +131,11 @@ export const REPORT_ENTITIES: Record<EntityKey, ReportEntityDef> = {
       { key: 'approval_status', label: 'Approval Status', type: 'enum', options: REQUEST_APPROVAL_STATUS },
       { key: 'approved_by_name', label: 'Approved/Rejected By', type: 'string' },
       { key: 'approval_decided_at', label: 'Approval Decided On', type: 'date' },
+      // Whether this ticket was ever reopened — either the requester
+      // reopening a resolution they weren't satisfied with, or reopening a
+      // ticket that was cancelled by an approval rejection.
+      { key: 'is_reopened', label: 'Reopened', type: 'boolean', options: BOOL_OPTIONS },
+      { key: 'reopen_count', label: 'Reopen Count', type: 'number', groupable: false },
       { key: 'created_at', label: 'Created', type: 'date' },
       { key: 'updated_at', label: 'Updated', type: 'date' },
       { key: 'responded_at', label: 'First Responded', type: 'date' },

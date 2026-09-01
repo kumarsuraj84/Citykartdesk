@@ -146,6 +146,7 @@ async function fetchRequestRows(
     .select(`
       id, request_no, title, description, status, priority, created_at, updated_at,
       responded_at, resolved_at, closed_at, resolution_due_at, response_due_at, source_metadata, form_data,
+      reopen_count,
       service:services(name, template:form_templates(name)),
       category:service_categories(name), sub_category:service_sub_categories(name),
       team:teams(name), project:projects(name),
@@ -165,6 +166,7 @@ async function fetchRequestRows(
     created_at: string; updated_at: string; responded_at: string | null; resolved_at: string | null; closed_at: string | null
     resolution_due_at: string | null; response_due_at: string | null; source_metadata: unknown
     form_data: Record<string, unknown> | null
+    reopen_count: number
     service: { name: string; template: { name: string } | null } | null
     category: { name: string } | null; sub_category: { name: string } | null
     team: { name: string } | null; project: { name: string } | null
@@ -208,6 +210,8 @@ async function fetchRequestRows(
       approval_status: approvalSummaries.get(r.id)?.status ?? 'not_sent',
       approved_by_name: approvalSummaries.get(r.id)?.decidedByName ?? '',
       approval_decided_at: approvalSummaries.get(r.id)?.decidedAt ?? null,
+      is_reopened: r.reopen_count > 0,
+      reopen_count: r.reopen_count,
       created_at: r.created_at,
       updated_at: r.updated_at,
       responded_at: r.responded_at,

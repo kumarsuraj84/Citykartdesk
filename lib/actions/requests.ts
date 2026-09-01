@@ -312,7 +312,7 @@ export async function updateRequestStatus(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, status, priority, requester_id, team_id, assigned_to, responded_at, waiting_since, response_due_at, resolution_due_at, form_data, form_sections_snapshot, form_schema_snapshot')
+    .select('id, status, priority, requester_id, team_id, assigned_to, responded_at, waiting_since, response_due_at, resolution_due_at, resolved_at, form_data, form_sections_snapshot, form_schema_snapshot, cancellation_reason, reopen_deadline_at, reopen_count')
     .eq('id', requestId)
     .single()
 
@@ -330,12 +330,63 @@ export async function updateRequestStatus(
   const allowedForRequester = REQUESTER_TRANSITIONS[currentStatus] ?? []
 
   const agentInitiated = isAgent && allowedForAgent.includes(newStatus)
+
+  // Reopening a ticket that was cancelled because an approval was rejected
+  // isn't in the static transition matrix at all (cancelled has no outgoing
+  // transitions there) — it's a narrow, time-boxed exception: only the
+  // requester, only when THIS cancellation was caused by an approval
+  // rejection (not a technician's own cancellation), and only within the
+  // window set when it was rejected. Reopening lands it back on the same
+  // technician as 'assigned' so they Start Working again before resending
+  // it for approval.
+  const isApprovalRejectionReopen =
+    isRequester &&
+    currentStatus === 'cancelled' &&
+    newStatus === 'assigned' &&
+    request.cancellation_reason === 'approval_rejected' &&
+    !!request.reopen_deadline_at &&
+    new Date(request.reopen_deadline_at) > new Date()
+
+  const isResolvedReopenByRequester =
+    isRequester && !agentInitiated && currentStatus === 'resolved' && newStatus === 'open'
+
   const canTransition =
     agentInitiated ||
-    (isRequester && allowedForRequester.includes(newStatus))
+    (isRequester && allowedForRequester.includes(newStatus)) ||
+    isApprovalRejectionReopen
 
   if (!canTransition) {
+    if (isRequester && currentStatus === 'cancelled' && newStatus === 'assigned') {
+      return {
+        error: request.cancellation_reason === 'approval_rejected'
+          ? 'The reopen window for this request has expired.'
+          : 'This request cannot be reopened.',
+      }
+    }
     return { error: `Transition to "${newStatus}" is not permitted.` }
+  }
+
+  // Resolved → Open by the requester ("I'm not satisfied") is time-boxed and
+  // requires a remark explaining why — unlike an agent reopening their own
+  // resolved work, which stays unrestricted.
+  if (isResolvedReopenByRequester) {
+    const RESOLVED_REOPEN_WINDOW_HOURS = 72
+    const deadline = request.resolved_at
+      ? new Date(new Date(request.resolved_at).getTime() + RESOLVED_REOPEN_WINDOW_HOURS * 3_600_000)
+      : null
+    if (!deadline || deadline < new Date()) {
+      return { error: 'The reopen window for this request has expired.' }
+    }
+    if (!comment?.trim()) {
+      return { error: 'Please explain why you are reopening this request.' }
+    }
+  }
+
+  // A technician directly cancelling a ticket must say why — the requester
+  // can never reopen it (only an approval-rejected cancellation is
+  // reopenable), so this remark is their only visibility into the reason.
+  if (agentInitiated && newStatus === 'cancelled' && !comment?.trim()) {
+    return { error: 'Please explain why you are cancelling this request.' }
   }
 
   // Technician-mandatory fields (required, but hidden or read-only for the
@@ -371,6 +422,33 @@ export async function updateRequestStatus(
     status: newStatus,
     resolved_at: newStatus === 'resolved' ? nowIso : newStatus === 'open' ? null : undefined,
     closed_at:   newStatus === 'closed'   ? nowIso : newStatus === 'open' ? null : undefined,
+  }
+
+  // A technician directly cancelling a ticket is permanent (never
+  // reopenable) — tagged 'manual' so it's never mistaken for the
+  // approval-rejected case, which is. Same tag for a requester cancelling
+  // their own ticket (there's nothing to reopen there either way).
+  if (newStatus === 'cancelled') {
+    updatePayload.cancellation_reason = 'manual'
+    updatePayload.reopen_deadline_at = null
+  }
+
+  // Resolving a ticket opens a 72-hour "not satisfied? reopen it" window for
+  // the requester — reuses the same reopen_deadline_at column the
+  // approval-rejection path uses, so autoCloseRequests() only needs one
+  // sweep for both cases.
+  if (newStatus === 'resolved') {
+    const RESOLVED_REOPEN_WINDOW_HOURS = 72
+    updatePayload.reopen_deadline_at = new Date(now.getTime() + RESOLVED_REOPEN_WINDOW_HOURS * 3_600_000).toISOString()
+  }
+
+  // Successfully reopening (either path) clears the reopen state and counts
+  // toward reopen_count — surfaced as a distinct badge in the UI and as a
+  // reportable field ("which tickets were reopened").
+  if (isApprovalRejectionReopen || isResolvedReopenByRequester) {
+    updatePayload.cancellation_reason = null
+    updatePayload.reopen_deadline_at = null
+    updatePayload.reopen_count = (request.reopen_count ?? 0) + 1
   }
 
   // SLA pause: entering waiting_user
@@ -467,7 +545,10 @@ export async function updateRequestStatus(
   // Uses the same field-override > policy resolution as request creation — a
   // reopened ticket should still get the SLA its selected field values/service imply, not
   // just whatever the (removed) org-wide default used to say.
-  if (newStatus === 'open' && (currentStatus === 'resolved' || currentStatus === 'closed')) {
+  if (
+    (newStatus === 'open' && (currentStatus === 'resolved' || currentStatus === 'closed')) ||
+    isApprovalRejectionReopen
+  ) {
     try {
       const priority = request.priority as RequestPriority
       const { data: full } = await supabase
@@ -529,6 +610,23 @@ export async function updateRequestStatus(
     return { error: activityResult.error }
   }
 
+  // A reopen gets its own activity entry (in addition to the generic
+  // status-change one above) — carries the remark and which of the two
+  // reopenable cases this was, so the conversation/history timeline makes
+  // clear *why* a technician is looking at a ticket that was already
+  // resolved or rejected once.
+  if (isApprovalRejectionReopen || isResolvedReopenByRequester) {
+    await logActivity({
+      requestId,
+      actorId: profile.id,
+      action: 'reopened',
+      metadata: {
+        reason: isApprovalRejectionReopen ? 'approval_rejected' : 'unsatisfied_with_resolution',
+        remark: comment?.trim() || null,
+      },
+    })
+  }
+
   // Notify requester on meaningful status changes (not self-transitions)
   if (request.requester_id !== profile.id) {
     const notifyStatuses: Record<string, { type: import('@/lib/notifications').NotifyInput['type']; title: string; body: string }> = {
@@ -551,14 +649,17 @@ export async function updateRequestStatus(
     }
   }
 
-  // Notify assignee when request is reopened (open status)
-  if (newStatus === 'open' && request.assigned_to && request.assigned_to !== profile.id) {
+  // Notify assignee when request is reopened (open, or back-to-assigned via
+  // the approval-rejection reopen path)
+  if ((newStatus === 'open' || isApprovalRejectionReopen) && request.assigned_to && request.assigned_to !== profile.id) {
     notify({
       recipientId: request.assigned_to,
       actorId: profile.id,
       type: 'request_reopened',
       title: 'Request reopened',
-      body: `A request has been reopened: ${requestId}`,
+      body: isApprovalRejectionReopen
+        ? `${profile.full_name} reopened a rejected request — it's back with you.`
+        : `A request has been reopened: ${requestId}`,
       requestId,
       link: `/requests/${requestId}`,
     }).catch(() => {})
@@ -1727,35 +1828,32 @@ export async function autoCloseRequests(): Promise<{ closed: number }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { closed: 0 }
 
-  const supabase = await createClient()
   const admin = createAdminClient()
 
-  const { data: setting } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'auto_close_days')
-    .single()
-
-  const autoCloseDays = parseInt(setting?.value ?? '7', 10)
-  const cutoff = new Date()
-  cutoff.setDate(cutoff.getDate() - autoCloseDays)
-
+  // Finalizes both reopenable-terminal-state cases once their window lapses:
+  // resolved (72h to reopen if unsatisfied) and cancelled-via-approval-
+  // rejection (48h to reopen). reopen_deadline_at is the single column both
+  // paths set (see updateRequestStatus/rejectApproval), so one sweep covers
+  // both — this supersedes the old app_settings.auto_close_days-driven sweep,
+  // which only ever covered resolved tickets on a much longer, admin-set
+  // day-based timer.
+  const nowIso = new Date().toISOString()
   const { data: toClose } = await admin
     .from('requests')
-    .select('id, requester_id, title')
-    .eq('status', 'resolved')
-    .lt('resolved_at', cutoff.toISOString())
+    .select('id, requester_id, title, status')
+    .in('status', ['resolved', 'cancelled'])
+    .not('reopen_deadline_at', 'is', null)
+    .lt('reopen_deadline_at', nowIso)
     .limit(50)
 
   if (!toClose || toClose.length === 0) return { closed: 0 }
 
-  const now = new Date().toISOString()
   let closed = 0
 
   for (const req of toClose) {
     const { error } = await admin
       .from('requests')
-      .update({ status: 'closed', closed_at: now })
+      .update({ status: 'closed', closed_at: nowIso, reopen_deadline_at: null })
       .eq('id', req.id)
 
     if (!error) {
@@ -1765,7 +1863,9 @@ export async function autoCloseRequests(): Promise<{ closed: number }> {
         actorId: req.requester_id, // system action — use requester as placeholder
         type: 'request_auto_closed',
         title: 'Your request was automatically closed',
-        body: `Resolved requests are closed after ${autoCloseDays} days.`,
+        body: req.status === 'resolved'
+          ? 'The reopen window has passed since this request was resolved.'
+          : 'The reopen window has passed since this request was rejected.',
         requestId: req.id,
         link: `/requests/${req.id}`,
       }).catch(() => {})

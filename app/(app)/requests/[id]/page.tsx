@@ -14,7 +14,7 @@ import { ApprovalPanel } from '@/components/requests/ApprovalPanel'
 import { RelatedRequestsPanel } from '@/components/requests/RelatedRequestsPanel'
 import { CsatSurvey } from '@/components/requests/CsatSurvey'
 import { SLABadge } from '@/components/requests/SLABadge'
-import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
+import { StatusBadge, PriorityBadge, ReopenedBadge } from '@/components/requests/RequestBadges'
 import { RequestSidebarPanel } from '@/components/requests/RequestSidebarPanel'
 import { SubmittedDataPanel } from '@/components/requests/SubmittedDataPanel'
 import { getActiveServicesForReclassify, getAllowedSubCategoriesForService } from '@/lib/queries/services'
@@ -26,6 +26,7 @@ import { CommentForm } from '@/components/requests/CommentForm'
 import { AttachmentChips } from '@/components/requests/AttachmentChips'
 import { RequestDetailTabs } from '@/components/requests/RequestDetailTabs'
 import { RequestActionBar } from '@/components/requests/RequestActionBar'
+import { ApprovalRejectedReopenBanner } from '@/components/requests/ApprovalRejectedReopenBanner'
 import { getActiveTimer } from '@/lib/actions/requests'
 import { filterFieldsForRequester, filterFlatFieldsForRequester } from '@/lib/forms/sections'
 import { formatRelativeTime } from '@/lib/utils'
@@ -835,6 +836,10 @@ export default async function RequestDetailPage({ params }: PageProps) {
         <span className="font-medium text-foreground">{request.request_no}</span>
       </nav>
 
+      {isRequester && request.status === 'cancelled' && request.cancellation_reason === 'approval_rejected' && request.reopen_deadline_at && (
+        <ApprovalRejectedReopenBanner requestId={request.id} reopenDeadlineAt={request.reopen_deadline_at} />
+      )}
+
       {/* Header card */}
       <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
         {/* Action bar row */}
@@ -842,6 +847,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
           {/* Left: title meta */}
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={request.status} />
+            <ReopenedBadge count={request.reopen_count ?? 0} />
             <PriorityBadge priority={request.priority} />
             <SLABadge
               resolutionDueAt={request.resolution_due_at}

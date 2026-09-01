@@ -335,7 +335,7 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
       id, request_no, title, description, requester_id, assigned_to, service_id, team_id,
       org_id, priority, status, response_due_at, resolution_due_at, responded_at,
       waiting_since, resolved_at, closed_at, created_at, updated_at, source_metadata,
-      category_id, sub_category_id,
+      category_id, sub_category_id, reopen_count,
       requester:profiles!requests_requester_id_fkey (id, full_name, avatar_url),
       assignee:profiles!requests_assigned_to_fkey (id, full_name, avatar_url),
       service:services (id, name, icon, slug),

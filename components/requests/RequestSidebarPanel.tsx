@@ -87,7 +87,21 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
   const [open, setOpen] = useState(false)
   const [cur, setCur] = useState(status)
   const [isPending, startTransition] = useTransition()
+  const [reopenRemark, setReopenRemark] = useState<string | null>(null)
+  const [reopenError, setReopenError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+
+  // Re-sync if the server-provided status changes underneath us — e.g. the
+  // approval-rejection reopen banner (a sibling component entirely outside
+  // this one) calls router.refresh() after reopening, which re-renders this
+  // component with a fresh `status` prop but would otherwise leave `cur`
+  // frozen at its very first value forever (useState's initializer only
+  // runs once). Same pattern as CategoryRow below.
+  const [prevStatus, setPrevStatus] = useState(status)
+  if (status !== prevStatus) {
+    setPrevStatus(status)
+    setCur(status)
+  }
 
   useEffect(() => {
     if (!open) return
@@ -96,13 +110,29 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
     return () => document.removeEventListener('mousedown', h)
   }, [open])
 
-  function pick(next: RequestStatus) {
+  function apply(next: RequestStatus, comment?: string) {
     const prev = cur
-    setCur(next); setOpen(false)
+    setCur(next); setOpen(false); setReopenRemark(null); setReopenError(null)
     startTransition(async () => {
-      const result = await updateRequestStatus(requestId, next)
+      const result = await updateRequestStatus(requestId, next, comment)
       if (result?.error) { toast.error(result.error); setCur(prev) }
     })
+  }
+
+  function pick(next: RequestStatus) {
+    // A pure requester reopening a resolved ticket ("I'm not satisfied")
+    // must explain why — the remark is required server-side too, but
+    // collecting it here avoids a round-trip just to find that out.
+    if (!isAgent && isRequester && cur === 'resolved' && next === 'open') {
+      setReopenRemark('')
+      return
+    }
+    apply(next)
+  }
+
+  function confirmReopen() {
+    if (!reopenRemark?.trim()) { setReopenError('Please explain why you are reopening this request.'); return }
+    apply('open', reopenRemark)
   }
 
   return (
@@ -124,6 +154,28 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
                 <StatusBadge status={s} size="sm" />
               </button>
             ))}
+          </div>
+        )}
+        {reopenRemark !== null && (
+          <div className="absolute right-0 top-full z-50 mt-1 w-64 space-y-2 rounded-xl border border-border bg-card p-3 shadow-xl">
+            <p className="text-[11px] font-medium text-foreground">Why are you reopening this?</p>
+            <textarea
+              autoFocus
+              value={reopenRemark}
+              onChange={(e) => { setReopenRemark(e.target.value); setReopenError(null) }}
+              placeholder="Explain what's still wrong…"
+              rows={3}
+              className="w-full resize-none rounded-lg border border-input bg-background px-2 py-1.5 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            {reopenError && <p className="text-[11px] text-destructive">{reopenError}</p>}
+            <div className="flex gap-2">
+              <button onClick={confirmReopen} disabled={isPending} className="btn-gradient flex-1 !py-1 !text-xs">
+                {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Reopen'}
+              </button>
+              <button onClick={() => { setReopenRemark(null); setReopenError(null) }} className="btn-soft !py-1 !text-xs">
+                Cancel
+              </button>
+            </div>
           </div>
         )}
       </div>
