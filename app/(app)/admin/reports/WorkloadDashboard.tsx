@@ -10,7 +10,7 @@ export function WorkloadDashboard({ rows, threshold }: { rows: WorkloadRow[]; th
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiCard label="Agents with Open Work" value={rows.length} accent="#6366F1" />
+        <KpiCard label="Technicians with Open Work" value={rows.length} accent="#6366F1" />
         <KpiCard label="Total Open Items" value={totalOpen} sub="Requests + tasks" accent="#06B6D4" />
         <KpiCard label="Overdue Items" value={totalOverdue} accent="var(--warning)" />
         <KpiCard label="Over Threshold" value={overloadedCount} sub={`> ${threshold} open`} danger={overloadedCount > 0} />
@@ -19,7 +19,7 @@ export function WorkloadDashboard({ rows, threshold }: { rows: WorkloadRow[]; th
       <div className="rounded-xl border border-border bg-card p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold text-foreground">Agent Workload</h2>
+          <h2 className="text-sm font-semibold text-foreground">Technician Workload</h2>
         </div>
 
         {rows.length === 0 ? (
@@ -29,7 +29,7 @@ export function WorkloadDashboard({ rows, threshold }: { rows: WorkloadRow[]; th
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-border text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  <th className="py-2 pr-3">Agent</th>
+                  <th className="py-2 pr-3">Technician</th>
                   <th className="py-2 pr-3 text-right">Open Requests</th>
                   <th className="py-2 pr-3 text-right">Overdue Requests</th>
                   <th className="py-2 pr-3 text-right">Open Tasks</th>

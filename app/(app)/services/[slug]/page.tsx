@@ -1,10 +1,10 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronRight, Clock, Users, ShieldCheck } from 'lucide-react'
-import { getServiceBySlug } from '@/lib/queries/services'
+import { getServiceBySlug, getAllowedSubCategoriesForService } from '@/lib/queries/services'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { DynamicForm } from '@/components/forms/DynamicForm'
-import type { SLAConfig } from '@/types'
+import { CategoryIcon } from '@/components/admin/CategoryIcon'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -16,6 +16,8 @@ export default async function ServiceDetailPage({ params }: PageProps) {
 
   if (!service) notFound()
 
+  const allowedSubCategories = await getAllowedSubCategoriesForService(service.id)
+
   // "Book on behalf of" — only agents/managers can raise a request for someone
   // else; a plain requester submitting for themselves never sees this option.
   const canBookOnBehalf =
@@ -25,8 +27,7 @@ export default async function ServiceDetailPage({ params }: PageProps) {
       profile.role === 'admin' ||
       profile.role === 'platform_owner')
 
-  const slaConfig = service.sla_config as unknown as SLAConfig
-  const defaultSla = slaConfig?.[service.default_priority]
+  const defaultSla = service.sla_policy?.config?.[service.default_priority]
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -34,27 +35,17 @@ export default async function ServiceDetailPage({ params }: PageProps) {
       <nav className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
         <Link href="/services" className="hover:text-foreground transition-colors">Services</Link>
         <ChevronRight className="h-3 w-3 shrink-0" />
-        <Link href={`/services/categories/${service.category.slug}`} className="hover:text-foreground transition-colors">
-          {service.category.name}
-        </Link>
-        {service.sub_category && (
-          <>
-            <ChevronRight className="h-3 w-3 shrink-0" />
-            <Link href={`/services/categories/${service.category.slug}/${service.sub_category.slug}`} className="hover:text-foreground transition-colors">
-              {service.sub_category.name}
-            </Link>
-          </>
-        )}
-        <ChevronRight className="h-3 w-3 shrink-0" />
         <span className="text-foreground font-medium">{service.name}</span>
       </nav>
 
       {/* Service header card */}
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xl">
-            {service.icon ?? '📋'}
-          </div>
+          <CategoryIcon
+            icon={service.icon}
+            iconImageUrl={service.icon_image_url}
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xl"
+          />
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-semibold tracking-tight text-foreground">{service.name}</h1>
             {service.description && (
@@ -94,7 +85,7 @@ export default async function ServiceDetailPage({ params }: PageProps) {
 
         {/* Form body */}
         <div className="px-6 py-6">
-          <DynamicForm service={service} canBookOnBehalf={canBookOnBehalf} />
+          <DynamicForm service={service} canBookOnBehalf={canBookOnBehalf} allowedSubCategories={allowedSubCategories} />
         </div>
       </div>
     </div>

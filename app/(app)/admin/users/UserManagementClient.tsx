@@ -14,31 +14,24 @@ import {
 } from '@/lib/actions/admin/users'
 import type { UserWithTeams, Department, Location, CostCenter, JobFunction, Designation, ProfileMini, TeamOption } from './page'
 import type { UserRole } from '@/types'
-
-const ROLE_STYLES: Record<UserRole, string> = {
-  platform_owner: 'text-purple-700 bg-purple-50 border-purple-300 font-bold',
-  admin:   'text-red-700 bg-red-50 border-red-200',
-  manager: 'text-orange-700 bg-orange-50 border-orange-200',
-  agent:   'text-blue-700 bg-blue-50 border-blue-200',
-  user:    'text-slate-600 bg-slate-50 border-slate-200',
-}
+import { ROLE_LABELS, ROLE_BADGE_STYLES } from '@/lib/constants/roles'
 
 // Every role the DB/RLS actually recognizes (user_role enum) — the role select
 // previously hardcoded just ['admin','manager','user'], silently omitting
 // 'agent' and 'platform_owner' even though both are fully wired everywhere
-// else (RLS policies, ROLE_STYLES above, the UserRole type itself).
+// else (RLS policies, ROLE_BADGE_STYLES, the UserRole type itself).
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
-  { value: 'user',           label: 'User' },
-  { value: 'agent',          label: 'Agent' },
-  { value: 'manager',        label: 'Manager' },
-  { value: 'admin',          label: 'Admin' },
-  { value: 'platform_owner', label: 'Platform Owner' },
+  { value: 'user',           label: ROLE_LABELS.user },
+  { value: 'agent',          label: ROLE_LABELS.agent },
+  { value: 'manager',        label: ROLE_LABELS.manager },
+  { value: 'admin',          label: ROLE_LABELS.admin },
+  { value: 'platform_owner', label: ROLE_LABELS.platform_owner },
 ]
 
 function RoleBadge({ role }: { role: UserRole }) {
   return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold capitalize ${ROLE_STYLES[role] ?? 'text-slate-600 bg-slate-50 border-slate-200'}`}>
-      {role}
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${ROLE_BADGE_STYLES[role] ?? 'text-slate-600 bg-slate-50 border-slate-200'}`}>
+      {ROLE_LABELS[role] ?? role}
     </span>
   )
 }

@@ -4,14 +4,22 @@ export type RuleConditionField =
   | 'service_id'
   | 'category_id'
   | 'sub_category_id'
+  | 'template_id'
   | 'team_id'
+  | 'project_id'
+  | 'assigned_to'
   | 'requester_id'
+  | 'requester_role'
   | 'requester_department_id'
   | 'requester_location_id'
   | 'requester_designation_id'
   | 'requester_function_id'
   | 'title'
   | 'description'
+  | 'source_channel'
+  | 'is_sla_breached'
+  | 'has_attachment'
+  | 'age_days'
   | 'form_field'
 
 export type RuleConditionOperator =
@@ -22,6 +30,10 @@ export type RuleConditionOperator =
   | 'is_empty'
   | 'is_not_empty'
   | 'in'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte'
 
 export type RuleCondition = {
   field: RuleConditionField
@@ -30,18 +42,25 @@ export type RuleCondition = {
   operator: RuleConditionOperator
   /** Unused for is_empty/is_not_empty. Array only for `in`. */
   value?: string | string[] | null
+  /** How this condition combines with the ONE BEFORE it (ignored on the first
+   *  condition, which has nothing to combine with). Undefined on a condition
+   *  saved before per-row logic existed — matchesConditions() falls back to
+   *  the rule's legacy `conditions_logic` for those. See matchesConditions(). */
+  logic?: RuleConditionsLogic
 }
 
 export type RuleConditionsLogic = 'AND' | 'OR'
 
 /**
  * The shape a caller must assemble before evaluating conditions — category_id/
- * sub_category_id and the requester's department/location/designation/function
- * live on `services`/`profiles`, not `requests`, so callers join
- * `service:services(category_id, sub_category_id)` and
- * `requester:profiles!requester_id(department_id, location_id, designation_id, function_id)`
- * and flatten before calling. form_data is the request's submitted intake-form
- * values, keyed by form field id — used by `form_field` conditions.
+ * sub_category_id/template_id and the requester's role/department/location/
+ * designation/function live on `services`/`profiles`, not `requests`, so
+ * callers join `service:services(category_id, sub_category_id, template_id)`
+ * and `requester:profiles!requester_id(role, department_id, location_id,
+ * designation_id, function_id)` and flatten before calling. form_data is the
+ * request's submitted intake-form values, keyed by form field id — used by
+ * `form_field` conditions. `is_sla_breached`/`has_attachment`/`age_days` are
+ * computed by the caller, not raw columns — see lib/rules/run.ts.
  */
 export type RuleEvaluationRequest = {
   priority: string
@@ -49,14 +68,22 @@ export type RuleEvaluationRequest = {
   service_id: string
   category_id: string | null
   sub_category_id: string | null
+  template_id: string | null
   team_id: string
+  project_id: string | null
+  assigned_to: string | null
   requester_id: string
+  requester_role: string
   requester_department_id: string | null
   requester_location_id: string | null
   requester_designation_id: string | null
   requester_function_id: string | null
   title: string
   description: string | null
+  source_channel: string
+  is_sla_breached: boolean
+  has_attachment: boolean
+  age_days: number
   form_data?: Record<string, unknown> | null
 }
 
@@ -87,6 +114,17 @@ function matchesOne(request: RuleEvaluationRequest, condition: RuleCondition): b
   if (operator === 'is_empty') return raw == null || raw === '' || (Array.isArray(raw) && raw.length === 0)
   if (operator === 'is_not_empty') return !(raw == null || raw === '' || (Array.isArray(raw) && raw.length === 0))
 
+  if (operator === 'gt' || operator === 'gte' || operator === 'lt' || operator === 'lte') {
+    if (raw == null || raw === '') return false
+    const n = Number(raw)
+    const target = Number(Array.isArray(value) ? value[0] : value)
+    if (Number.isNaN(n) || Number.isNaN(target)) return false
+    if (operator === 'gt') return n > target
+    if (operator === 'gte') return n >= target
+    if (operator === 'lt') return n < target
+    return n <= target
+  }
+
   const fieldValue = toComparable(raw)
 
   if (operator === 'in') {
@@ -116,19 +154,37 @@ function matchesOne(request: RuleEvaluationRequest, condition: RuleCondition): b
 }
 
 /**
- * Evaluates a rule's conditions against a request. `logic` picks whether every
- * condition must match (AND, the original and default behaviour) or any one
- * match is enough (OR). An empty conditions array always matches, regardless
- * of logic — "no conditions" means "matches every request", not "matches
- * nothing" (which an empty OR would otherwise mean).
+ * Evaluates a rule's conditions against a request. Each condition (after the
+ * first) carries its own `logic` — AND or OR — describing how it combines with
+ * the condition immediately before it, evaluated left-to-right with the usual
+ * AND-binds-tighter-than-OR precedence: consecutive AND-connected conditions
+ * form a group, and an OR starts a new group, so
+ *   [X, Y(AND), A(OR), B(AND)]
+ * reads as "(X AND Y) OR (A AND B)" — sum-of-products, not a single global
+ * switch. `fallbackLogic` (the rule's legacy `conditions_logic` column) is
+ * used only for a condition with no `logic` of its own — i.e. a rule saved
+ * before per-condition logic existed, so it keeps evaluating exactly as
+ * before rather than silently changing behaviour.
+ *
+ * An empty conditions array always matches — "no conditions" means "matches
+ * every request", not "matches nothing" (which an empty OR would otherwise mean).
  */
 export function matchesConditions(
   request: RuleEvaluationRequest,
   conditions: RuleCondition[],
-  logic: RuleConditionsLogic = 'AND'
+  fallbackLogic: RuleConditionsLogic = 'AND'
 ): boolean {
   if (conditions.length === 0) return true
-  return logic === 'OR'
-    ? conditions.some((condition) => matchesOne(request, condition))
-    : conditions.every((condition) => matchesOne(request, condition))
+
+  const groups: RuleCondition[][] = [[conditions[0]]]
+  for (let i = 1; i < conditions.length; i++) {
+    const connector = conditions[i].logic ?? fallbackLogic
+    if (connector === 'OR') {
+      groups.push([conditions[i]])
+    } else {
+      groups[groups.length - 1].push(conditions[i])
+    }
+  }
+
+  return groups.some((group) => group.every((condition) => matchesOne(request, condition)))
 }

@@ -62,6 +62,10 @@ function validateSections(sections: FormSection[]): string | null {
       ) {
         return `Section "${section.title}", field "${field.label}": select/multiselect fields require at least one option.`
       }
+
+      if (field.requester_can_set === true && field.requester_can_view === false) {
+        return `Section "${section.title}", field "${field.label}": cannot be settable by requesters while hidden from them.`
+      }
     }
   }
 

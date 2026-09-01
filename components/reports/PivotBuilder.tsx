@@ -14,7 +14,7 @@ import {
 } from '@dnd-kit/core'
 import {
   GripVertical, X, Loader2, Table2, LayoutGrid, Download,
-  ChevronUp, ChevronDown, RotateCcw, AlertTriangle,
+  ChevronUp, ChevronDown, RotateCcw, AlertTriangle, Search, CalendarRange,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -45,6 +45,17 @@ function moveInArray<T>(arr: T[], index: number, dir: -1 | 1): T[] {
   return next
 }
 
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+const DATE_PRESETS: { label: string; from: () => string; to: () => string }[] = [
+  { label: 'Today', from: () => isoDate(new Date()), to: () => isoDate(new Date()) },
+  { label: 'Last 7 days', from: () => isoDate(new Date(Date.now() - 6 * 86_400_000)), to: () => isoDate(new Date()) },
+  { label: 'Last 30 days', from: () => isoDate(new Date(Date.now() - 29 * 86_400_000)), to: () => isoDate(new Date()) },
+  { label: 'This month', from: () => { const d = new Date(); return isoDate(new Date(d.getFullYear(), d.getMonth(), 1)) }, to: () => isoDate(new Date()) },
+]
+
 function defaultFilterFor(field: ReportField): FieldFilter {
   switch (field.type) {
     case 'enum': return { field: field.key, op: 'eq', value: field.options?.[0]?.value ?? '' }
@@ -71,6 +82,10 @@ export function PivotBuilder() {
   const [colFields, setColFields] = useState<string[]>([])
   const [valueFields, setValueFields] = useState<ValueFieldConfig[]>([{ field: '__count__', agg: 'count' }])
   const [filters, setFilters] = useState<FieldFilter[]>([])
+  const [dateRangeField, setDateRangeField] = useState<string>('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [fieldSearch, setFieldSearch] = useState('')
 
   // getReportFields already prepends the synthetic Record Count field server-side.
   const allFields = fields
@@ -98,6 +113,11 @@ export function PivotBuilder() {
         setColFields([])
         setValueFields([{ field: '__count__', agg: 'count' }])
         setFilters([])
+        const dateFieldKeys = loadedFields.filter((f) => f.type === 'date').map((f) => f.key)
+        setDateRangeField(dateFieldKeys.includes('created_at') ? 'created_at' : (dateFieldKeys[0] ?? ''))
+        setDateFrom('')
+        setDateTo('')
+        setFieldSearch('')
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to load report data.'
         setLoadError(msg)
@@ -138,17 +158,38 @@ export function PivotBuilder() {
     setColFields([])
     setValueFields([{ field: '__count__', agg: 'count' }])
     setFilters([])
+    const dateFieldKeys = fields.filter((f) => f.type === 'date').map((f) => f.key)
+    setDateRangeField(dateFieldKeys.includes('created_at') ? 'created_at' : (dateFieldKeys[0] ?? ''))
+    setDateFrom('')
+    setDateTo('')
   }
 
+  const dateFieldOptions = useMemo(() => allFields.filter((f) => f.type === 'date'), [allFields])
+
+  const dateRangeFilters = useMemo<FieldFilter[]>(() => {
+    const out: FieldFilter[] = []
+    if (dateRangeField && dateFrom) out.push({ field: dateRangeField, op: 'gte', value: dateFrom })
+    if (dateRangeField && dateTo) out.push({ field: dateRangeField, op: 'lte', value: `${dateTo}T23:59:59.999` })
+    return out
+  }, [dateRangeField, dateFrom, dateTo])
+
+  const effectiveFilters = useMemo(() => [...filters, ...dateRangeFilters], [filters, dateRangeFilters])
+
   const pivotConfig: PivotConfig = useMemo(
-    () => ({ rowFields, colFields, valueFields: valueFields.length ? valueFields : [{ field: '__count__', agg: 'count' }], filters }),
-    [rowFields, colFields, valueFields, filters]
+    () => ({ rowFields, colFields, valueFields: valueFields.length ? valueFields : [{ field: '__count__', agg: 'count' }], filters: effectiveFilters }),
+    [rowFields, colFields, valueFields, effectiveFilters]
   )
 
   const pivotResult = useMemo(() => (mode === 'pivot' ? computePivot(rows, pivotConfig, allFields) : null), [mode, rows, pivotConfig, allFields])
 
   const flatColumns = useMemo(() => columns.map((k) => fieldByKey.get(k)).filter((f): f is ReportField => !!f), [columns, fieldByKey])
-  const flatRows = useMemo(() => (mode === 'table' ? toFlatTable(rows, filters, columns) : []), [mode, rows, filters, columns])
+  const flatRows = useMemo(() => (mode === 'table' ? toFlatTable(rows, effectiveFilters, columns) : []), [mode, rows, effectiveFilters, columns])
+
+  const visibleFields = useMemo(() => {
+    if (!fieldSearch.trim()) return allFields
+    const q = fieldSearch.trim().toLowerCase()
+    return allFields.filter((f) => f.label.toLowerCase().includes(q))
+  }, [allFields, fieldSearch])
 
   function handleExport() {
     startExporting(async () => {
@@ -235,8 +276,21 @@ export function PivotBuilder() {
             {/* Available fields */}
             <div className="space-y-2 rounded-xl border border-border bg-card p-3">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-1">Fields</div>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={fieldSearch}
+                  onChange={(e) => setFieldSearch(e.target.value)}
+                  placeholder="Search fields…"
+                  className="w-full rounded-md border border-border bg-background py-1.5 pl-7 pr-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              </div>
               <div className="flex flex-col gap-1 max-h-[60vh] overflow-y-auto">
-                {allFields.map((f) => (
+                {visibleFields.length === 0 && (
+                  <span className="px-1 py-2 text-[11px] text-muted-foreground/70">No fields match &quot;{fieldSearch}&quot;.</span>
+                )}
+                {visibleFields.map((f) => (
                   <FieldChip key={f.key} field={f} mode={mode} onAdd={addToWell} />
                 ))}
               </div>
@@ -308,6 +362,53 @@ export function PivotBuilder() {
                       )
                     })}
                   </Well_>
+                </div>
+              )}
+
+              {dateFieldOptions.length > 0 && (
+                <div className="rounded-xl border-2 border-dashed border-border/60 bg-muted/10 p-3 space-y-2">
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <CalendarRange className="h-3 w-3" /> Date Range
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {dateFieldOptions.length > 1 ? (
+                      <select
+                        value={dateRangeField}
+                        onChange={(e) => setDateRangeField(e.target.value)}
+                        className={inputCls}
+                      >
+                        {dateFieldOptions.map((f) => (
+                          <option key={f.key} value={f.key}>{f.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-xs font-medium text-foreground">{dateFieldOptions[0]?.label}</span>
+                    )}
+                    <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={inputCls} />
+                    <span className="text-xs text-muted-foreground">to</span>
+                    <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={inputCls} />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DATE_PRESETS.map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => { setDateFrom(p.from()); setDateTo(p.to()) }}
+                        className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                    {(dateFrom || dateTo) && (
+                      <button
+                        type="button"
+                        onClick={() => { setDateFrom(''); setDateTo('') }}
+                        className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 

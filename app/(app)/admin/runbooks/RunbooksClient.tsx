@@ -143,21 +143,21 @@ const content: Record<string, React.ReactNode> = {
     <article className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
       <h2>Role Guide</h2>
       <p>Citykart Desk has four built-in roles. Each controls what a user can see and do.</p>
-      <h3>Employee</h3>
+      <h3>Requester</h3>
       <p>
-        The default role. Employees can browse the service catalogue, submit requests, track their
+        The default role. Requesters can browse the service catalogue, submit requests, track their
         own requests, and leave comments. They cannot see other users&apos; requests or admin pages.
       </p>
-      <h3>Agent</h3>
+      <h3>Technician</h3>
       <p>
-        Agents are support staff. They see the full request queue for their assigned teams, can
+        Technicians are support staff. They see the full request queue for their assigned teams, can
         update statuses, add internal notes, manage tasks, and run SLA actions. They cannot change
         platform configuration.
       </p>
       <h3>Manager</h3>
       <p>
-        Managers have all agent capabilities plus read access to admin reports, team management,
-        and approval flow configuration. They can assign agents but cannot change global platform
+        Managers have all technician capabilities plus read access to admin reports, team management,
+        and approval flow configuration. They can assign technicians but cannot change global platform
         settings.
       </p>
       <h3>Admin</h3>
@@ -615,14 +615,14 @@ const content: Record<string, React.ReactNode> = {
         <li>Click on the user to open their profile.</li>
         <li>
           In the <strong>Role</strong> field, select the new role:{' '}
-          <code>employee</code>, <code>agent</code>, <code>manager</code>, or <code>admin</code>.
+          <code>user</code> (Requester), <code>agent</code> (Technician), <code>manager</code>, or <code>admin</code>.
         </li>
         <li>Click <strong>Save Changes</strong>.</li>
       </ol>
       <div className="not-prose rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
         <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Important</p>
         <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">
-          Only Admins can assign the Admin role. Managers can promote Employees to Agent but cannot
+          Only Admins can assign the Admin role. Managers can promote Requesters to Technician but cannot
           grant Manager or Admin.
         </p>
       </div>
@@ -714,7 +714,7 @@ const content: Record<string, React.ReactNode> = {
       <h2>How to Export to CSV</h2>
       <ol>
         <li>Go to <strong>Admin → Reports</strong>.</li>
-        <li>Select the report type: <em>Requests</em>, <em>SLA Performance</em>, or <em>Agent Activity</em>.</li>
+        <li>Select the report type: <em>Requests</em>, <em>SLA Performance</em>, or <em>Technician Activity</em>.</li>
         <li>Apply date range and any filters (service, team, status, priority).</li>
         <li>
           Click <strong>Export CSV</strong>. The file downloads immediately in your browser.

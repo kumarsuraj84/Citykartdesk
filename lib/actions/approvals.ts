@@ -4,8 +4,11 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { getRequestPreviewSummary, getRequestComments } from '@/lib/queries/requests'
+import { getApprovalForRequest, type ApprovalWithDetails } from '@/lib/queries/approvals'
 import { logActivity } from '@/lib/activity'
 import { notify } from '@/lib/notifications'
+import type { RequestPriority, RequestStatus } from '@/types'
 
 type ActionResult = { error?: string }
 
@@ -23,16 +26,23 @@ export async function searchUsersForDelegation(
   return (data ?? []) as { id: string; full_name: string }[]
 }
 
-// Search all active users (for ad-hoc approval picker)
+// Search all active users (for ad-hoc approval picker) — matches by name OR
+// email. Email isn't a `profiles` column (it lives in Supabase Auth), so a
+// name hit is checked DB-side first and an email hit falls back to scanning
+// auth.users — cheap at this app's single-org scale, avoided entirely when
+// the name search already found matches.
 export async function searchManagersForApproval(
   query: string
 ): Promise<{ id: string; full_name: string; role: string }[]> {
   const profile = await getCurrentProfile()
   if (!profile || !profile.org_id) return []
 
+  const q = query.trim()
+  if (!q) return []
+
   const admin = createAdminClient()
-  const safe = query.replace(/[%_]/g, '\\$&').trim()
-  const { data } = await admin
+  const safe = q.replace(/[%_]/g, '\\$&')
+  const { data: byName } = await admin
     .from('profiles')
     .select('id, full_name, role')
     .eq('org_id', profile.org_id)
@@ -40,7 +50,50 @@ export async function searchManagersForApproval(
     .ilike('full_name', `%${safe}%`)
     .order('full_name')
     .limit(8)
-  return (data ?? []) as { id: string; full_name: string; role: string }[]
+
+  if (byName && byName.length >= 8) return byName as { id: string; full_name: string; role: string }[]
+
+  // Looks like (or might be) an email — cross-reference auth.users.
+  const { data: authData } = await admin.auth.admin.listUsers({ perPage: 1000 })
+  const qLower = q.toLowerCase()
+  const matchingIds = new Set(
+    (authData?.users ?? [])
+      .filter((u) => u.email?.toLowerCase().includes(qLower))
+      .map((u) => u.id)
+  )
+  if (matchingIds.size === 0) return byName as { id: string; full_name: string; role: string }[] ?? []
+
+  const { data: byEmail } = await admin
+    .from('profiles')
+    .select('id, full_name, role')
+    .eq('org_id', profile.org_id)
+    .eq('is_active', true)
+    .in('id', [...matchingIds])
+    .order('full_name')
+    .limit(8)
+
+  const merged = new Map<string, { id: string; full_name: string; role: string }>()
+  for (const u of byName ?? []) merged.set(u.id, u)
+  for (const u of byEmail ?? []) merged.set(u.id, u)
+  return [...merged.values()].slice(0, 8)
+}
+
+// Clears the "approval required" notification once it's no longer actionable
+// — for the deciding approver right after they act, and for everyone still
+// pending once the whole approval is settled (approved-to-completion or
+// rejected). Notifications, once archived, drop out of the bell/notifications
+// list on the next route refresh (same is-null filter every other query uses).
+async function archiveApprovalNotifications(requestId: string, opts: { onlyUserId?: string } = {}) {
+  const admin = createAdminClient()
+  const now = new Date().toISOString()
+  let q = admin
+    .from('notifications')
+    .update({ archived_at: now, read_at: now })
+    .eq('request_id', requestId)
+    .eq('type', 'approval_requested')
+    .is('archived_at', null)
+  if (opts.onlyUserId) q = q.eq('user_id', opts.onlyUserId)
+  await q
 }
 
 // Send a request to multiple users for parallel ad-hoc approval.
@@ -60,7 +113,7 @@ export async function sendAdHocApproval(
 
   const { data: req } = await supabase
     .from('requests')
-    .select('id, title, status, team_id, requester_id, org_id')
+    .select('id, title, status, team_id, requester_id, org_id, waiting_since')
     .eq('id', requestId)
     .single()
   if (!req) return { error: 'Request not found.' }
@@ -72,12 +125,24 @@ export async function sendAdHocApproval(
   if (['resolved', 'closed', 'cancelled', 'pending_approval'].includes(req.status))
     return { error: 'Request is already in approval or a terminal state.' }
 
-  // Verify all approvers exist and are active
+  if (['open', 'assigned'].includes(req.status))
+    return { error: 'Start working on this request before sending it for approval.' }
+
+  if (!req.org_id) return { error: 'Request has no organization.' }
+
+  // Verify all approvers exist, are active, and are in the same org as the
+  // request — without this, an approver id from another tenant (never
+  // reachable via searchManagersForApproval's own org_id filter, but not
+  // blocked here either) would get an approval_workflow_steps row, and RLS's
+  // is_request_approver() grants read access purely off that row, with no
+  // separate org check of its own — this is the only gate standing between
+  // a cross-org approver_user_id and a cross-tenant data leak.
   const { data: approvers } = await admin
     .from('profiles')
     .select('id, full_name')
     .in('id', approverIds)
     .eq('is_active', true)
+    .eq('org_id', req.org_id)
   if (!approvers || approvers.length !== approverIds.length)
     return { error: 'One or more selected users were not found.' }
 
@@ -120,10 +185,16 @@ export async function sendAdHocApproval(
     .single()
   if (approvalErr || !approval) return { error: approvalErr?.message ?? 'Failed to create approval.' }
 
-  // Put request on hold
+  // Put request on hold — SLA pauses the same way "Waiting on User" does.
+  // If it was already paused (e.g. sent while waiting on the user), keep the
+  // original pause start rather than resetting the clock.
   const { error: stErr } = await admin
     .from('requests')
-    .update({ status: 'pending_approval', updated_at: new Date().toISOString() })
+    .update({
+      status: 'pending_approval',
+      updated_at: new Date().toISOString(),
+      waiting_since: req.waiting_since ?? new Date().toISOString(),
+    })
     .eq('id', requestId)
   if (stErr) return { error: stErr.message }
 
@@ -132,6 +203,13 @@ export async function sendAdHocApproval(
     actorId: profile.id,
     action: 'status_changed',
     metadata: { from: req.status, to: 'pending_approval' },
+  }).catch(() => {})
+
+  await logActivity({
+    requestId,
+    actorId: profile.id,
+    action: 'approval_requested',
+    metadata: { approver_names: approvers.map((a) => a.full_name) },
   }).catch(() => {})
 
   // Notify all approvers at once
@@ -158,7 +236,7 @@ async function resolveApprovalContext(approvalId: string) {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' } as const
 
-  const isManager = profile.role === 'manager' || profile.role === 'admin'
+  const isManager = profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'
 
   const { data: approval } = await supabase
     .from('approvals')
@@ -217,7 +295,7 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
   const ctx = await resolveApprovalContext(approvalId)
   if ('error' in ctx) return { error: ctx.error }
 
-  const { approval, steps, currentStep, profile, supabase, isParallel, decidedSteps } = ctx
+  const { approval, steps, currentStep, profile, isParallel, decidedSteps } = ctx
   const admin = createAdminClient()
 
   // Record the decision
@@ -230,6 +308,9 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
   })
   if (decisionError) return { error: decisionError.message }
 
+  // This is now decided for the acting approver — their notification is done.
+  await archiveApprovalNotifications(approval.request_id, { onlyUserId: profile.id })
+
   // For parallel: done when all steps now have an approved decision
   const nowApprovedSteps = new Set([...decidedSteps, currentStep.step_order])
   const allApproved = isParallel
@@ -239,16 +320,61 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
   const isLastStep = allApproved
 
   if (isLastStep) {
-    // All steps approved — move approval to approved + unblock the request
-    const { error: approvalUpdateError } = await admin
+    // All steps approved — move approval to approved + unblock the request.
+    // Guarded with .eq('status', 'pending') + checking a row actually came
+    // back: two approvers finishing the last two parallel steps at the same
+    // instant would otherwise both compute isLastStep = true (each reads
+    // decidedSteps before the other's decision lands) and both run the
+    // resolution below — double-extending due dates, double-notifying the
+    // requester. Only the call that actually flips pending -> approved
+    // proceeds; the other's decision is still recorded, it just doesn't
+    // redo work someone else already did.
+    const { data: approvalUpdated, error: approvalUpdateError } = await admin
       .from('approvals')
       .update({ status: 'approved' })
       .eq('id', approvalId)
+      .eq('status', 'pending')
+      .select('id')
+      .maybeSingle()
     if (approvalUpdateError) return { error: approvalUpdateError.message }
+    if (!approvalUpdated) {
+      revalidatePath(`/requests/${approval.request_id}`)
+      revalidatePath('/approvals')
+      revalidatePath('/home')
+      revalidatePath('/notifications')
+      return {}
+    }
 
-    const { error: requestUpdateError } = await supabase
+    // Fully resolved — clear it for anyone else it was still pending with too.
+    await archiveApprovalNotifications(approval.request_id)
+
+    // Resume the SLA clock — mirrors updateRequestStatus()'s "Waiting on
+    // User" resume: extend the due dates by however long the approval was
+    // pending, so time spent on hold isn't counted against SLA.
+    const { data: req } = await admin
       .from('requests')
-      .update({ status: 'open' })
+      .select('requester_id, waiting_since, response_due_at, resolution_due_at')
+      .eq('id', approval.request_id)
+      .single()
+
+    const resumeNow = new Date()
+    const updatePayload: { status: 'open'; waiting_since: null; response_due_at?: string; resolution_due_at?: string } = {
+      status: 'open',
+      waiting_since: null,
+    }
+    if (req?.waiting_since) {
+      const pausedMs = resumeNow.getTime() - new Date(req.waiting_since).getTime()
+      if (req.response_due_at) {
+        updatePayload.response_due_at = new Date(new Date(req.response_due_at).getTime() + pausedMs).toISOString()
+      }
+      if (req.resolution_due_at) {
+        updatePayload.resolution_due_at = new Date(new Date(req.resolution_due_at).getTime() + pausedMs).toISOString()
+      }
+    }
+
+    const { error: requestUpdateError } = await admin
+      .from('requests')
+      .update(updatePayload)
       .eq('id', approval.request_id)
     if (requestUpdateError) return { error: requestUpdateError.message }
 
@@ -267,11 +393,6 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
     })
 
     // Notify requester: approval fully approved
-    const { data: req } = await admin
-      .from('requests')
-      .select('requester_id')
-      .eq('id', approval.request_id)
-      .single()
     if (req && req.requester_id !== profile.id) {
       notify({
         recipientId: req.requester_id,
@@ -317,6 +438,7 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
   revalidatePath(`/requests/${approval.request_id}`)
   revalidatePath('/approvals')
   revalidatePath('/home')
+  revalidatePath('/notifications')
 
   return {}
 }
@@ -331,7 +453,7 @@ export async function delegateApproval(
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
 
-  const isManager = profile.role === 'manager' || profile.role === 'admin'
+  const isManager = profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'
 
   const { data: approval } = await supabase
     .from('approvals')
@@ -342,12 +464,38 @@ export async function delegateApproval(
   if (!approval) return { error: 'Approval not found.' }
   if (approval.status !== 'pending') return { error: 'This approval is no longer pending.' }
 
-  const { data: currentStep } = await supabase
-    .from('approval_workflow_steps')
-    .select('id, step_order, approver_type, approver_user_id')
-    .eq('workflow_id', approval.workflow_id)
-    .eq('step_order', approval.current_step ?? 1)
-    .single()
+  const isParallel = approval.current_step === 0
+  const admin = createAdminClient()
+
+  let currentStep: { id: string; step_order: number; approver_type: string; approver_user_id: string | null } | null = null
+
+  if (isParallel) {
+    // Parallel (ad-hoc) mode: current_step is always 0, so it can never match
+    // a real step_order — looking it up the sequential way (below) always
+    // returned "Current approval step not found", making Delegate silently
+    // fail for every ad-hoc approval. Find the caller's own undecided step
+    // instead, same lookup resolveApprovalContext() uses for approve/reject.
+    const { data: steps } = await supabase
+      .from('approval_workflow_steps')
+      .select('id, step_order, approver_type, approver_user_id')
+      .eq('workflow_id', approval.workflow_id)
+    const { data: decisions } = await admin
+      .from('approval_decisions')
+      .select('step_order')
+      .eq('approval_id', approvalId)
+    const decidedSteps = new Set((decisions ?? []).map((d) => d.step_order))
+    currentStep = (steps ?? []).find(
+      (s) => s.approver_type === 'specific_user' && s.approver_user_id === profile.id && !decidedSteps.has(s.step_order)
+    ) ?? null
+  } else {
+    const { data } = await supabase
+      .from('approval_workflow_steps')
+      .select('id, step_order, approver_type, approver_user_id')
+      .eq('workflow_id', approval.workflow_id)
+      .eq('step_order', approval.current_step ?? 1)
+      .single()
+    currentStep = data
+  }
 
   if (!currentStep) return { error: 'Current approval step not found.' }
 
@@ -357,13 +505,18 @@ export async function delegateApproval(
 
   if (!canDelegate) return { error: 'You are not the designated approver for this step.' }
 
-  const admin = createAdminClient()
   const { error: updateError } = await admin
     .from('approval_workflow_steps')
     .update({ approver_user_id: newApproverId, approver_type: 'specific_user' })
     .eq('id', currentStep.id)
 
   if (updateError) return { error: updateError.message }
+
+  // The outgoing approver is no longer the one who needs to act — clear
+  // their now-stale "approval required" notification (mirrors approve/
+  // reject's own archiving) so it doesn't keep pointing them at a step
+  // they can no longer decide.
+  await archiveApprovalNotifications(approval.request_id, { onlyUserId: profile.id })
 
   await logActivity({
     requestId: approval.request_id,
@@ -394,7 +547,7 @@ export async function rejectApproval(approvalId: string, comment?: string): Prom
   const ctx = await resolveApprovalContext(approvalId)
   if ('error' in ctx) return { error: ctx.error }
 
-  const { approval, currentStep, profile, supabase } = ctx
+  const { approval, currentStep, profile } = ctx
   const admin = createAdminClient()
 
   const { error: decisionError } = await admin.from('approval_decisions').insert({
@@ -406,15 +559,55 @@ export async function rejectApproval(approvalId: string, comment?: string): Prom
   })
   if (decisionError) return { error: decisionError.message }
 
-  const { error: approvalUpdateError } = await admin
+  // Guarded the same way approveApproval's final step is: two approvers
+  // (or an approve/reject race) hitting this at the same instant should only
+  // let ONE of them actually resolve the approval and resume the SLA clock.
+  const { data: approvalRejected, error: approvalUpdateError } = await admin
     .from('approvals')
     .update({ status: 'rejected' })
     .eq('id', approvalId)
+    .eq('status', 'pending')
+    .select('id')
+    .maybeSingle()
   if (approvalUpdateError) return { error: approvalUpdateError.message }
+  if (!approvalRejected) {
+    revalidatePath(`/requests/${approval.request_id}`)
+    revalidatePath('/approvals')
+    revalidatePath('/home')
+    revalidatePath('/notifications')
+    return {}
+  }
 
-  const { error: requestUpdateError } = await supabase
+  // A single reject ends it for every approver — clear it for all of them.
+  await archiveApprovalNotifications(approval.request_id)
+
+  // Resume the SLA clock the same way an approval does — even though
+  // 'cancelled' is terminal, clearing waiting_since keeps the record
+  // consistent if the request is ever reopened.
+  const { data: reqForResume } = await admin
     .from('requests')
-    .update({ status: 'cancelled' })
+    .select('waiting_since, response_due_at, resolution_due_at')
+    .eq('id', approval.request_id)
+    .single()
+
+  const resumeNow = new Date()
+  const cancelPayload: { status: 'cancelled'; waiting_since: null; response_due_at?: string; resolution_due_at?: string } = {
+    status: 'cancelled',
+    waiting_since: null,
+  }
+  if (reqForResume?.waiting_since) {
+    const pausedMs = resumeNow.getTime() - new Date(reqForResume.waiting_since).getTime()
+    if (reqForResume.response_due_at) {
+      cancelPayload.response_due_at = new Date(new Date(reqForResume.response_due_at).getTime() + pausedMs).toISOString()
+    }
+    if (reqForResume.resolution_due_at) {
+      cancelPayload.resolution_due_at = new Date(new Date(reqForResume.resolution_due_at).getTime() + pausedMs).toISOString()
+    }
+  }
+
+  const { error: requestUpdateError } = await admin
+    .from('requests')
+    .update(cancelPayload)
     .eq('id', approval.request_id)
   if (requestUpdateError) return { error: requestUpdateError.message }
 
@@ -453,6 +646,87 @@ export async function rejectApproval(approvalId: string, comment?: string): Prom
   revalidatePath(`/requests/${approval.request_id}`)
   revalidatePath('/approvals')
   revalidatePath('/home')
+  revalidatePath('/notifications')
 
   return {}
+}
+
+// ── Preview (for the Approvals list and the notification bell) ────────────────
+// Lets an approver see the ticket details + conversation and act on it without
+// leaving the current page — reuses the same RLS-scoped queries the full
+// request page uses, so visibility rules stay identical.
+
+export type ApprovalPreviewData = {
+  request: {
+    id: string
+    request_no: string
+    title: string
+    description: string | null
+    status: RequestStatus
+    priority: RequestPriority
+    requester_name: string
+    service_name: string
+    category_name: string | null
+    sub_category_name: string | null
+    created_at: string
+  }
+  comments: {
+    id: string
+    body: string
+    created_at: string
+    author_name: string
+  }[]
+}
+
+export async function getApprovalPreview(
+  approvalId: string
+): Promise<{ data?: ApprovalPreviewData; error?: string }> {
+  const supabase = await createClient()
+  const { data: approval } = await supabase
+    .from('approvals')
+    .select('request_id')
+    .eq('id', approvalId)
+    .single()
+  if (!approval) return { error: 'Approval not found.' }
+
+  const [request, comments] = await Promise.all([
+    getRequestPreviewSummary(approval.request_id),
+    getRequestComments(approval.request_id),
+  ])
+  if (!request) return { error: 'Request not found.' }
+
+  return {
+    data: {
+      request: {
+        id: request.id,
+        request_no: request.request_no,
+        title: request.title,
+        description: request.description,
+        status: request.status,
+        priority: request.priority,
+        requester_name: request.requester?.full_name ?? 'Unknown',
+        service_name: request.service?.name ?? '—',
+        category_name: request.category?.name ?? null,
+        sub_category_name: request.sub_category?.name ?? null,
+        created_at: request.created_at,
+      },
+      // Internal notes are an agent-only concern — an ad-hoc approver may not
+      // be an agent at all, so they're left out of the preview entirely.
+      comments: comments
+        .filter((c) => !c.is_internal)
+        .map((c) => ({
+          id: c.id,
+          body: c.body,
+          created_at: c.created_at,
+          author_name: c.author?.full_name ?? 'Unknown',
+        })),
+    },
+  }
+}
+
+// Resolves the current/most recent approval for a request — used by the
+// notification bell, which only stores request_id on the notification, to
+// get the full ApprovalWithDetails the preview dialog's action panel needs.
+export async function getApprovalForRequestAction(requestId: string): Promise<ApprovalWithDetails | null> {
+  return getApprovalForRequest(requestId)
 }

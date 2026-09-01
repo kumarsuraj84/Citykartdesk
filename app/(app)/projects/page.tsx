@@ -26,6 +26,8 @@ interface PageProps {
 export default async function ProjectsPage({ searchParams }: PageProps) {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
+  // Projects isn't fully built out yet — Admin/Owner only until that work ships.
+  if (profile.role !== 'admin' && profile.role !== 'platform_owner') redirect('/home')
 
   const sp = await searchParams
   const layout: 'cards' | 'table' = sp.layout === 'cards' ? 'cards' : 'table'

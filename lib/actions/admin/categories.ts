@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logAdminAudit } from './audit'
+import type { RequestPriority } from '@/types'
 
 type ActionResult = { error?: string }
 
@@ -20,6 +21,9 @@ export type CategoryInput = {
   name: string
   description?: string
   icon?: string
+  // Uploaded icon image — takes priority over `icon` (the emoji) whenever
+  // set. See lib/actions/admin/icons.ts's uploadIconImage().
+  icon_image_url?: string | null
   color?: string
 }
 
@@ -58,6 +62,7 @@ export async function createCategory(
       slug,
       description: data.description?.trim() || null,
       icon: data.icon?.trim() || null,
+      icon_image_url: data.icon_image_url || null,
     })
     .select('id')
     .single()
@@ -91,6 +96,7 @@ export async function updateCategory(
     ...(data.name !== undefined ? { name: data.name.trim() } : {}),
     ...(data.description !== undefined ? { description: data.description?.trim() || null } : {}),
     ...(data.icon !== undefined ? { icon: data.icon?.trim() || null } : {}),
+    ...(data.icon_image_url !== undefined ? { icon_image_url: data.icon_image_url || null } : {}),
   }
 
   const { error } = await supabase
@@ -137,9 +143,10 @@ export async function toggleCategoryActive(
 }
 
 // ── deleteCategory ────────────────────────────────────────────────────────────
-// Hard delete. `services.category_id` is a NOT-NULL, RESTRICT-on-delete foreign
-// key — a category that still has services attached cannot be removed at the DB
-// level, so we check for that up front. Sub-categories cascade automatically.
+// Hard delete. Sub-categories cascade automatically (service_sub_categories.category_id
+// ON DELETE CASCADE), which would in turn cascade-delete any service_sub_category_tags
+// pointing at them — silently un-tagging services. Blocked up front instead, same
+// intent as the old "services still use it" check, adapted to the tag relationship.
 
 export async function deleteCategory(id: string): Promise<ActionResult> {
   const guard = await requireAdmin()
@@ -155,14 +162,22 @@ export async function deleteCategory(id: string): Promise<ActionResult> {
 
   if (fetchError || !category) return { error: 'Category not found.' }
 
-  const { count: serviceCount } = await supabase
-    .from('services')
-    .select('id', { count: 'exact', head: true })
+  const { data: subCats } = await supabase
+    .from('service_sub_categories')
+    .select('id')
     .eq('category_id', id)
+  const subCatIds = (subCats ?? []).map((s) => s.id)
 
-  if (serviceCount && serviceCount > 0) {
+  const { count: tagCount } = subCatIds.length > 0
+    ? await supabase
+        .from('service_sub_category_tags')
+        .select('service_id', { count: 'exact', head: true })
+        .in('sub_category_id', subCatIds)
+    : { count: 0 }
+
+  if (tagCount && tagCount > 0) {
     return {
-      error: `Cannot delete "${category.name}" — ${serviceCount} service${serviceCount === 1 ? '' : 's'} still use it. Move or delete them first.`,
+      error: `Cannot delete "${category.name}" — ${tagCount} service${tagCount === 1 ? ' is' : 's are'} still tagged to one of its sub-categories. Retag or delete them first.`,
     }
   }
 
@@ -187,37 +202,43 @@ export async function upsertSubCategory(
     id?: string          // omit for create
     categoryId: string
     name: string
-    slug: string
     description?: string
     icon?: string
+    // Uploaded icon image — takes priority over `icon` (the emoji) whenever
+    // set. See lib/actions/admin/icons.ts's uploadIconImage().
+    iconImageUrl?: string | null
     sortOrder: number
     isActive?: boolean
+    // Priority label auto-applied to a ticket's `priority` when this
+    // sub-category is picked (optional — "not mandatory" per the SOP). The
+    // actual response/resolution hours for that priority come from whichever
+    // service's SLA Policy applies — a sub-category can be tagged by more than
+    // one service, so it can't store literal hours itself. See
+    // lib/sla/resolve.ts's resolveSlaDeadlines and lib/actions/requests.ts.
+    slaPriority?: RequestPriority | null
   }
 ): Promise<ActionResult & { id?: string }> {
   const guard = await requireAdmin()
   if ('error' in guard) return guard
 
   if (!input.name.trim()) return { error: 'Name is required.' }
-  if (!input.slug.trim()) return { error: 'Slug is required.' }
-  // Basic slug validation
-  if (!/^[a-z0-9-]+$/.test(input.slug)) {
-    return { error: 'Slug may only contain lowercase letters, numbers, and hyphens.' }
-  }
 
   const supabase = await createClient()
 
   const payload = {
     category_id: input.categoryId,
     name: input.name.trim(),
-    slug: input.slug.trim(),
     description: input.description?.trim() || null,
     icon: input.icon?.trim() || null,
+    icon_image_url: input.iconImageUrl || null,
     sort_order: input.sortOrder,
     is_active: input.isActive ?? true,
+    sla_priority: input.slaPriority ?? null,
   }
 
   if (input.id) {
-    // Update
+    // Update — slug is an internal identifier once set (never shown to the
+    // admin, never regenerated from an edited name).
     const { error } = await supabase
       .from('service_sub_categories')
       .update(payload)
@@ -234,10 +255,23 @@ export async function upsertSubCategory(
     revalidatePath('/services')
     return { id: input.id }
   } else {
-    // Insert
+    // Insert — auto-generate a slug from the name (never shown to the admin),
+    // unique within this category (the actual DB constraint is per-category,
+    // not global — service_sub_categories_category_id_slug_key).
+    const baseSlug = slugify(input.name.trim()) || 'sub-category'
+    const { data: existingSlugs } = await supabase
+      .from('service_sub_categories')
+      .select('slug')
+      .eq('category_id', input.categoryId)
+      .like('slug', `${baseSlug}%`)
+    const usedSlugs = new Set((existingSlugs ?? []).map((r: { slug: string }) => r.slug))
+    let slug = baseSlug
+    let i = 2
+    while (usedSlugs.has(slug)) { slug = `${baseSlug}-${i++}` }
+
     const { data, error } = await supabase
       .from('service_sub_categories')
-      .insert(payload)
+      .insert({ ...payload, slug })
       .select('id')
       .single()
     if (error) return { error: error.message }
@@ -316,8 +350,11 @@ export async function toggleSubCategoryActive(
 }
 
 // ── deleteSubCategory ─────────────────────────────────────────────────────────
-// Hard delete. `services.sub_category_id` is ON DELETE SET NULL, so this is
-// always safe — any services tagged with this sub-category simply lose the tag.
+// Hard delete. service_sub_category_tags.sub_category_id is ON DELETE CASCADE —
+// deleting a sub-category still in use would silently untag every service
+// pointing at it, so that's blocked up front (same intent as deleteCategory).
+// requests.sub_category_id is ON DELETE SET NULL, so already-submitted tickets
+// are unaffected either way — only the ongoing tag relationship is guarded here.
 
 export async function deleteSubCategory(id: string, categoryId: string): Promise<ActionResult> {
   const guard = await requireAdmin()
@@ -332,6 +369,17 @@ export async function deleteSubCategory(id: string, categoryId: string): Promise
     .single()
 
   if (fetchError || !subCategory) return { error: 'Sub-category not found.' }
+
+  const { count: tagCount } = await supabase
+    .from('service_sub_category_tags')
+    .select('service_id', { count: 'exact', head: true })
+    .eq('sub_category_id', id)
+
+  if (tagCount && tagCount > 0) {
+    return {
+      error: `Cannot delete "${subCategory.name}" — ${tagCount} service${tagCount === 1 ? ' is' : 's are'} still tagged to it. Retag or delete them first.`,
+    }
+  }
 
   const { error } = await supabase.from('service_sub_categories').delete().eq('id', id)
   if (error) return { error: error.message }

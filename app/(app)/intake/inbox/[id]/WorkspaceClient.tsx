@@ -28,7 +28,7 @@ const CONVERT_META: Record<ConvertType, { label: string; icon: React.ReactNode; 
 }
 
 export function WorkspaceClient({
-  message, attachments, thread, services, teams,
+  message, attachments, thread, services, teams, isAdmin,
 }: {
   message: InboxMessageDetail
   attachments: { id: string; file_name: string; file_size: number; mime_type: string | null; signedUrl: string | null }[]
@@ -36,6 +36,7 @@ export function WorkspaceClient({
   services: { id: string; name: string; team_id: string | null }[]
   teams: { id: string; name: string }[]
   profileId: string
+  isAdmin: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -244,9 +245,13 @@ export function WorkspaceClient({
                     </a>
                   )}
                   {review.created_task_id && (
-                    <a href={`/tasks/${review.created_task_id}`} className="ml-1 inline-flex items-center gap-0.5 underline">
-                      open <ExternalLink className="h-2.5 w-2.5" />
-                    </a>
+                    isAdmin ? (
+                      <a href={`/tasks/${review.created_task_id}`} className="ml-1 inline-flex items-center gap-0.5 underline">
+                        open <ExternalLink className="h-2.5 w-2.5" />
+                      </a>
+                    ) : null
+                    // Tasks is Admin/Owner-only for now — /tasks would
+                    // redirect this viewer to /home, so no link for them.
                   )}
                 </span>
               )}

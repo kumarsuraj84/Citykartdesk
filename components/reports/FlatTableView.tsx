@@ -1,13 +1,14 @@
 'use client'
 
 import type { ReportRow } from '@/lib/queries/reporting'
-import type { ReportField } from '@/lib/reporting/field-registry'
+import { labelForFieldValue, type ReportField } from '@/lib/reporting/field-registry'
 
-function formatCell(v: string | number | boolean | null, type: ReportField['type']): string {
+function formatCell(v: string | number | boolean | null, field: ReportField): string {
   if (v === null || v === undefined || v === '') return '—'
-  if (type === 'boolean') return v === true || v === 'true' ? 'Yes' : 'No'
-  if (type === 'date') return String(v).slice(0, 10)
-  if (type === 'number' && typeof v === 'number') return Number.isInteger(v) ? v.toLocaleString() : v.toFixed(2)
+  if (field.type === 'boolean') return v === true || v === 'true' ? 'Yes' : 'No'
+  if (field.type === 'date') return String(v).slice(0, 10)
+  if (field.type === 'enum') return labelForFieldValue(field, v)
+  if (field.type === 'number' && typeof v === 'number') return Number.isInteger(v) ? v.toLocaleString() : v.toFixed(2)
   return String(v)
 }
 
@@ -44,7 +45,7 @@ export function FlatTableView({
               <td className="px-2 py-1.5 text-xs text-muted-foreground">{i + 1}</td>
               {columns.map((c) => (
                 <td key={c.key} className="px-3 py-1.5 text-xs text-foreground whitespace-nowrap">
-                  {formatCell(row[c.key], c.type)}
+                  {formatCell(row[c.key], c)}
                 </td>
               ))}
             </tr>

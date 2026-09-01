@@ -7,6 +7,8 @@
 // (they're per-org/per-team and fetched at runtime) — see
 // lib/queries/reporting.ts's `withCustomFields()`, which merges them in.
 
+import { STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants/requests'
+
 export type FieldDataType = 'string' | 'number' | 'date' | 'boolean' | 'enum'
 
 export interface FieldOption {
@@ -38,21 +40,14 @@ export interface ReportEntityDef {
 // ── Shared enum option sets (mirrors types/database.ts Enums, kept in sync by hand
 // since these change rarely — see docs/DATABASE.md §1 for the source of truth) ──
 
-const REQUEST_STATUS: FieldOption[] = [
-  { value: 'pending_approval', label: 'Pending Approval' },
-  { value: 'open', label: 'Open' },
-  { value: 'assigned', label: 'Assigned' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'waiting_user', label: 'Waiting on User' },
-  { value: 'resolved', label: 'Resolved' },
-  { value: 'closed', label: 'Closed' },
-  { value: 'cancelled', label: 'Cancelled' },
-]
-const REQUEST_PRIORITY: FieldOption[] = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'urgent', label: 'Urgent' },
+// Derived from the single canonical label maps in lib/constants/requests.ts —
+// do not hand-copy status/priority labels here again; edit them there and both
+// Reports and Business Rules pick up the change automatically.
+const REQUEST_STATUS: FieldOption[] = Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))
+const REQUEST_PRIORITY: FieldOption[] = Object.entries(PRIORITY_LABELS).map(([value, label]) => ({ value, label }))
+const SOURCE_CHANNEL: FieldOption[] = [
+  { value: 'portal', label: 'Portal' },
+  { value: 'intake', label: 'Intake' },
 ]
 const TASK_STATUS: FieldOption[] = [
   { value: 'open', label: 'Open' },
@@ -87,6 +82,15 @@ const APPROVAL_STATUS: FieldOption[] = [
   { value: 'rejected', label: 'Rejected' },
   { value: 'cancelled', label: 'Cancelled' },
 ]
+// Same as APPROVAL_STATUS plus "never sent" — a request with no approvals row
+// at all needs its own value here, distinct from every real approval status,
+// so "which tickets were never pushed for approval" is answerable from the
+// Requests entity itself, not just the separate Approvals entity (which only
+// ever has a row for tickets that WERE sent).
+const REQUEST_APPROVAL_STATUS: FieldOption[] = [
+  { value: 'not_sent', label: 'Not Sent for Approval' },
+  ...APPROVAL_STATUS,
+]
 
 const BOOL_OPTIONS: FieldOption[] = [
   { value: 'true', label: 'Yes' },
@@ -106,22 +110,43 @@ export const REPORT_ENTITIES: Record<EntityKey, ReportEntityDef> = {
     fields: [
       { key: 'request_no', label: 'Request #', type: 'string' },
       { key: 'title', label: 'Title', type: 'string', groupable: false },
+      { key: 'description', label: 'Description', type: 'string', groupable: false },
       { key: 'status', label: 'Status', type: 'enum', options: REQUEST_STATUS },
       { key: 'priority', label: 'Priority', type: 'enum', options: REQUEST_PRIORITY },
       { key: 'service_name', label: 'Service', type: 'string' },
+      { key: 'category_name', label: 'Category', type: 'string' },
+      { key: 'sub_category_name', label: 'Sub Category', type: 'string' },
+      { key: 'template_name', label: 'Template', type: 'string' },
       { key: 'team_name', label: 'Team', type: 'string' },
       { key: 'requester_name', label: 'Requester', type: 'string' },
-      { key: 'assignee_name', label: 'Assignee', type: 'string' },
+      { key: 'assignee_name', label: 'Technician', type: 'string' },
       { key: 'project_name', label: 'Project', type: 'string' },
+      { key: 'source_channel', label: 'Source', type: 'enum', options: SOURCE_CHANNEL },
+      // Whether/how this ticket went through approval — "not_sent" covers
+      // every ticket that never had an approval at all, so this answers
+      // "which were pushed for approval and which weren't" directly, unlike
+      // the separate Approvals entity (which has no row for a ticket that
+      // was never sent). For multiple approval cycles on one ticket, this
+      // reflects the most recent cycle.
+      { key: 'approval_status', label: 'Approval Status', type: 'enum', options: REQUEST_APPROVAL_STATUS },
+      { key: 'approved_by_name', label: 'Approved/Rejected By', type: 'string' },
+      { key: 'approval_decided_at', label: 'Approval Decided On', type: 'date' },
       { key: 'created_at', label: 'Created', type: 'date' },
       { key: 'updated_at', label: 'Updated', type: 'date' },
+      { key: 'responded_at', label: 'First Responded', type: 'date' },
       { key: 'resolved_at', label: 'Resolved', type: 'date' },
       { key: 'closed_at', label: 'Closed', type: 'date' },
       { key: 'resolution_due_at', label: 'Resolution Due', type: 'date' },
       { key: 'response_due_at', label: 'Response Due', type: 'date' },
       { key: 'age_days', label: 'Age (days)', type: 'number', groupable: false },
       { key: 'resolution_days', label: 'Resolution Time (days)', type: 'number', groupable: false },
-      { key: 'is_sla_breached', label: 'SLA Breached', type: 'boolean', options: BOOL_OPTIONS },
+      { key: 'is_sla_breached', label: 'Resolution SLA Breached', type: 'boolean', options: BOOL_OPTIONS },
+      { key: 'is_response_sla_breached', label: 'Response SLA Breached', type: 'boolean', options: BOOL_OPTIONS },
+      { key: 'csat_rating', label: 'CSAT Rating', type: 'number', groupable: false },
+      { key: 'collaborator_count', label: 'Collaborators', type: 'number', groupable: false },
+      { key: 'attachment_count', label: 'Attachments', type: 'number', groupable: false },
+      { key: 'comment_count', label: 'Comments', type: 'number', groupable: false },
+      { key: 'time_tracked_minutes', label: 'Time Tracked (min)', type: 'number', groupable: false },
     ],
   },
   tasks: {
@@ -189,6 +214,13 @@ export const REPORT_ENTITIES: Record<EntityKey, ReportEntityDef> = {
       { key: 'workflow_name', label: 'Workflow', type: 'string' },
       { key: 'status', label: 'Status', type: 'enum', options: APPROVAL_STATUS },
       { key: 'current_step', label: 'Current Step', type: 'number', groupable: false },
+      // Who actually made the call, and when — the most recent decision
+      // recorded against this approval (covers the common single-approver
+      // case exactly; for multi-approver workflows this is whoever acted
+      // last, since a single scalar field can't represent every approver).
+      { key: 'decided_by_name', label: 'Decided By', type: 'string' },
+      { key: 'decided_at', label: 'Decided On', type: 'date' },
+      { key: 'decision_comment', label: 'Decision Comment', type: 'string', groupable: false },
       { key: 'created_at', label: 'Created', type: 'date' },
       { key: 'updated_at', label: 'Updated', type: 'date' },
       { key: 'age_days', label: 'Age (days)', type: 'number', groupable: false },
@@ -232,4 +264,15 @@ export function aggregationsForType(type: FieldDataType): { value: string; label
 
 export function getEntityFields(entity: EntityKey, extra: ReportField[] = []): ReportField[] {
   return [...REPORT_ENTITIES[entity].fields, ...extra]
+}
+
+/** Turns a raw enum value into its display label — the single place every
+ * rendering path (pivot groups, flat table cells, xlsx export) resolves an
+ * enum field's value to human text, so they can never drift from each other. */
+export function labelForFieldValue(field: ReportField, raw: unknown): string {
+  if (field.type === 'enum' && field.options) {
+    const match = field.options.find((o) => o.value === String(raw))
+    if (match) return match.label
+  }
+  return String(raw)
 }

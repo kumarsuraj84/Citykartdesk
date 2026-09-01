@@ -19,6 +19,8 @@ export default async function TaskDetailPage({ params }: PageProps) {
 
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
+  // Tasks isn't fully built out yet — Admin/Owner only until that work ships.
+  if (profile.role !== 'admin' && profile.role !== 'platform_owner') redirect('/home')
 
   const task = await getTaskById(id)
   if (!task) notFound()

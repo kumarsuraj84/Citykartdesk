@@ -280,7 +280,7 @@ export function RequestsTable({
               <SortableTh label="Status" col="status" sortCol={sortCol} sortDir={sortDir} pathname={pathname} currentSearch={currentSearch} />
               <SortableTh label="Priority" col="priority" sortCol={sortCol} sortDir={sortDir} pathname={pathname} currentSearch={currentSearch} />
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Requester</th>
-              <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Assignee</th>
+              <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Technician</th>
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Category</th>
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Sub Category</th>
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Service</th>
@@ -310,8 +310,8 @@ export function RequestsTable({
                   <td className="px-3 py-2 whitespace-nowrap">
                     {req.assignee ? <span className="text-foreground">{req.assignee.full_name}</span> : <span className="text-amber-600 font-medium">Unassigned</span>}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{req.service.category?.name ?? '—'}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{req.service.sub_category?.name ?? '—'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{req.category?.name ?? '—'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{req.sub_category?.name ?? '—'}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{req.service.name}</td>
                   <td className="px-3 py-2">
                     <SLABadge resolutionDueAt={req.resolution_due_at} responseDueAt={req.response_due_at} status={req.status} showLabel />

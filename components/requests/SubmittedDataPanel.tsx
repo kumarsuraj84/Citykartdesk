@@ -6,6 +6,7 @@ import { Pencil, Loader2 } from 'lucide-react'
 import { FieldGrid, SectionBlock, getDefaultValue } from '@/components/forms/DynamicForm'
 import type { FieldValue } from '@/components/forms/DynamicForm'
 import { validateFields } from '@/lib/validation/formFields'
+import { isTechnicianMandatory } from '@/lib/forms/sections'
 import { updateRequestFormData } from '@/lib/actions/requests'
 import type { FormField, FormSection } from '@/types'
 
@@ -31,7 +32,10 @@ export function displayFieldValue(field: FormField, raw: unknown): string {
 function FieldRow({ field, data }: { field: FormField; data: Record<string, unknown> }) {
   return (
     <div className="flex items-start justify-between gap-4 px-4 py-2.5">
-      <dt className="shrink-0 text-xs text-muted-foreground">{field.label}</dt>
+      <dt className="shrink-0 text-xs text-muted-foreground">
+        {isTechnicianMandatory(field) && <span className="mr-0.5 text-destructive">*</span>}
+        {field.label}
+      </dt>
       <dd className="text-right text-xs font-medium text-foreground whitespace-pre-wrap break-words">
         {displayFieldValue(field, data[field.id])}
       </dd>
@@ -87,7 +91,7 @@ export function SubmittedDataPanel({ requestId, sections, legacySchema, data, ca
   }
 
   function handleSave() {
-    const newErrors = validateFields(editableFields, values)
+    const newErrors = validateFields(editableFields, values, 'technician')
     setErrors(newErrors)
     if (Object.keys(newErrors).length > 0) return
 

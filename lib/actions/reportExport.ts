@@ -1,10 +1,10 @@
 'use server'
 
 import ExcelJS from 'exceljs'
-import { getCurrentProfile } from '@/lib/queries/profiles'
 import { fetchReportData, getReportFieldsForEntity } from '@/lib/queries/reporting'
+import { authorizeReportAccess } from '@/lib/reporting/access'
 import { computePivot, toFlatTable, type PivotConfig, type PivotRow } from '@/lib/reporting/pivot-engine'
-import { REPORT_ENTITIES, RECORD_COUNT_FIELD, type EntityKey, type ReportField } from '@/lib/reporting/field-registry'
+import { REPORT_ENTITIES, RECORD_COUNT_FIELD, labelForFieldValue, type EntityKey, type ReportField } from '@/lib/reporting/field-registry'
 
 const HEADER_FILL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } }
 const SUBTOTAL_FILL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } }
@@ -24,17 +24,12 @@ function fieldLabel(key: string, fields: ReportField[]): string {
   return fields.find((f) => f.key === key)?.label ?? key
 }
 
-function formatValue(v: string | number | boolean | null, type?: ReportField['type']): string | number {
+function formatValue(v: string | number | boolean | null, field?: ReportField): string | number {
   if (v === null || v === undefined || v === '') return ''
   if (typeof v === 'number') return v
-  if (type === 'boolean') return v === true || v === 'true' ? 'Yes' : 'No'
+  if (field?.type === 'boolean') return v === true || v === 'true' ? 'Yes' : 'No'
+  if (field?.type === 'enum') return labelForFieldValue(field, v)
   return String(v)
-}
-
-async function requireAdminOrManager() {
-  const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return null
-  return profile
 }
 
 export interface ReportExportConfig {
@@ -47,13 +42,13 @@ export async function exportReportXlsx(
   entity: EntityKey,
   config: ReportExportConfig
 ): Promise<{ data?: string; filename?: string; error?: string }> {
-  const profile = await requireAdminOrManager()
-  if (!profile) return { error: 'Unauthorized.' }
-  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
+  const auth = await authorizeReportAccess(entity)
+  if ('error' in auth) return { error: auth.error }
+  const { profile, scope } = auth
 
   const [allRows, fields] = await Promise.all([
-    fetchReportData(entity, profile.org_id),
-    getReportFieldsForEntity(entity, profile.org_id),
+    fetchReportData(entity, profile.org_id!, scope),
+    getReportFieldsForEntity(entity, profile.org_id!),
   ])
   const fieldsWithCount = [...fields, RECORD_COUNT_FIELD]
 
@@ -71,7 +66,7 @@ export async function exportReportXlsx(
     const sheet = workbook.addWorksheet('Data', { views: [{ state: 'frozen', ySplit: 1 }] })
     sheet.columns = colFields.map((f) => ({ header: f.label, key: f.key, width: Math.max(14, f.label.length + 4) }))
     for (const row of flatRows) {
-      sheet.addRow(Object.fromEntries(colFields.map((f) => [f.key, formatValue(row[f.key], f.type)])))
+      sheet.addRow(Object.fromEntries(colFields.map((f) => [f.key, formatValue(row[f.key], f)])))
     }
     sheet.getRow(1).eachCell((cell) => {
       cell.fill = HEADER_FILL
@@ -85,7 +80,7 @@ export async function exportReportXlsx(
         headerRow: true,
         style: { theme: 'TableStyleMedium2', showRowStripes: true },
         columns: colFields.map((f) => ({ name: f.label, filterButton: true })),
-        rows: flatRows.map((row) => colFields.map((f) => formatValue(row[f.key], f.type))),
+        rows: flatRows.map((row) => colFields.map((f) => formatValue(row[f.key], f))),
       })
     }
   } else {
@@ -173,7 +168,7 @@ export async function exportReportXlsx(
         headerRow: true,
         style: { theme: 'TableStyleMedium2', showRowStripes: true },
         columns: rawFields.map((f) => ({ name: f.label, filterButton: true })),
-        rows: filteredRaw.map((row) => rawFields.map((f) => formatValue(row[f.key], f.type))),
+        rows: filteredRaw.map((row) => rawFields.map((f) => formatValue(row[f.key], f))),
       })
     }
   }

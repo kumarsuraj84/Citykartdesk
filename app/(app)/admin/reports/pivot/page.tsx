@@ -5,7 +5,6 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 export default async function ReportBuilderPage() {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
-  if (!['admin', 'manager', 'platform_owner'].includes(profile.role)) redirect('/home')
   if (!profile.org_id) redirect('/home')
 
   return (

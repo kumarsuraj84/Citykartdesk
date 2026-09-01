@@ -1,21 +1,18 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
-import { ShieldOff, ArrowRight, CheckCircle2, XCircle, Clock } from 'lucide-react'
+import { ShieldOff, ArrowRight, CheckCircle2 } from 'lucide-react'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { getApprovals } from '@/lib/queries/approvals'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Pagination } from '@/components/ui/Pagination'
-import { formatRelativeTime } from '@/lib/utils'
 import type { ApprovalStatus } from '@/types'
-import type { ApprovalWithDetails } from '@/lib/queries/approvals'
 import { createClient } from '@/lib/supabase/server'
 import { ExportButton } from '@/components/requests/ExportButton'
 import { exportApprovals } from '@/lib/actions/export'
 import type { ExportFilters } from '@/lib/export/reports'
-import { InlineApprovalActions } from '@/components/requests/InlineApprovalActions'
+import { ApprovalRow } from '@/components/requests/ApprovalRow'
 
 interface PageProps {
   searchParams: Promise<{ tab?: string; page?: string; pageSize?: string }>
@@ -27,20 +24,6 @@ const TABS: { value: ApprovalStatus | 'all'; label: string }[] = [
   { value: 'rejected', label: 'Rejected' },
   { value: 'all',      label: 'All' },
 ]
-
-const STATUS_ICONS: Record<ApprovalStatus, React.ElementType> = {
-  pending:   Clock,
-  approved:  CheckCircle2,
-  rejected:  XCircle,
-  cancelled: XCircle,
-}
-
-const STATUS_COLORS: Record<ApprovalStatus, string> = {
-  pending:   'text-amber-600 bg-amber-50 border-amber-200',
-  approved:  'text-emerald-700 bg-emerald-50 border-emerald-200',
-  rejected:  'text-red-600 bg-red-50 border-red-200',
-  cancelled: 'text-muted-foreground bg-muted border-border',
-}
 
 function ApprovalsExportButton({ activeTab }: { activeTab: ApprovalStatus | 'all' }) {
   const filters: ExportFilters | undefined =
@@ -57,90 +40,6 @@ function ApprovalsExportButton({ activeTab }: { activeTab: ApprovalStatus | 'all
       filename={`approvals-${activeTab}`}
       label="Export CSV"
     />
-  )
-}
-
-function ApprovalCard({
-  approval,
-  viewerId,
-  viewerIsManager,
-}: {
-  approval: ApprovalWithDetails
-  viewerId: string
-  viewerIsManager: boolean
-}) {
-  const req = approval.request
-  if (!req) return null
-
-  const Icon = STATUS_ICONS[approval.status]
-  const colorCls = STATUS_COLORS[approval.status]
-
-  const currentStepInfo = approval.steps.find(
-    (s) => s.step_order === (approval.current_step ?? 1)
-  )
-
-  const approverLabel =
-    currentStepInfo?.approver_type === 'specific_user' && currentStepInfo.approver
-      ? currentStepInfo.approver.full_name
-      : 'Any Manager'
-
-  const canAct =
-    approval.status === 'pending' &&
-    currentStepInfo &&
-    (
-      (currentStepInfo.approver_type === 'any_manager' && viewerIsManager) ||
-      (currentStepInfo.approver_type === 'specific_user' && currentStepInfo.approver_user_id === viewerId)
-    )
-
-  return (
-    <div className="group">
-      <Link
-        href={`/requests/${req.id}?tab=approvals`}
-        className="flex items-center gap-4 px-4 py-3.5 hover:bg-muted/40 transition-colors"
-      >
-        {/* Status icon */}
-        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${colorCls}`}>
-          <Icon className="h-4 w-4" />
-        </div>
-
-        {/* Main content */}
-        <div className="min-w-0 flex-1 space-y-1">
-          <p className="truncate text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-            {req.title}
-          </p>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-mono text-xs text-muted-foreground">{req.request_no}</span>
-            <span className="text-muted-foreground/40">·</span>
-            {req.service && <span className="text-xs text-muted-foreground">{req.service.name}</span>}
-            <span className="text-muted-foreground/40">·</span>
-            {req.requester && (
-              <span className="text-xs text-muted-foreground">{req.requester.full_name}</span>
-            )}
-            {approval.status === 'pending' && currentStepInfo && (
-              <>
-                <span className="text-muted-foreground/40">·</span>
-                <span className="text-xs text-amber-600">Awaiting: {approverLabel}</span>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Badges */}
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-          <StatusBadge status={req.status} size="sm" />
-          <PriorityBadge priority={req.priority} size="sm" />
-        </div>
-
-        {/* Time */}
-        <span className="shrink-0 text-xs text-muted-foreground whitespace-nowrap">
-          {formatRelativeTime(approval.updated_at)}
-        </span>
-      </Link>
-
-      {canAct && (
-        <InlineApprovalActions approvalId={approval.id} />
-      )}
-    </div>
   )
 }
 
@@ -263,7 +162,7 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <div className="divide-y divide-border">
             {approvals.map((approval) => (
-              <ApprovalCard key={approval.id} approval={approval} viewerId={profile.id} viewerIsManager={isManager} />
+              <ApprovalRow key={approval.id} approval={approval} viewerId={profile.id} viewerRole={profile.role} />
             ))}
           </div>
         </div>

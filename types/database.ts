@@ -3483,6 +3483,7 @@ export type Database = {
       requests: {
         Row: {
           assigned_to: string | null
+          category_id: string | null
           closed_at: string | null
           created_at: string
           description: string | null
@@ -3504,6 +3505,7 @@ export type Database = {
           service_id: string
           source_metadata: Json | null
           status: Database["public"]["Enums"]["request_status"]
+          sub_category_id: string | null
           team_id: string
           title: string
           updated_at: string
@@ -3511,6 +3513,7 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          category_id?: string | null
           closed_at?: string | null
           created_at?: string
           description?: string | null
@@ -3532,6 +3535,7 @@ export type Database = {
           service_id: string
           source_metadata?: Json | null
           status?: Database["public"]["Enums"]["request_status"]
+          sub_category_id?: string | null
           team_id: string
           title: string
           updated_at?: string
@@ -3539,6 +3543,7 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          category_id?: string | null
           closed_at?: string | null
           created_at?: string
           description?: string | null
@@ -3560,6 +3565,7 @@ export type Database = {
           service_id?: string
           source_metadata?: Json | null
           status?: Database["public"]["Enums"]["request_status"]
+          sub_category_id?: string | null
           team_id?: string
           title?: string
           updated_at?: string
@@ -3571,6 +3577,13 @@ export type Database = {
             columns: ["assigned_to"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requests_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "service_categories"
             referencedColumns: ["id"]
           },
           {
@@ -3613,6 +3626,13 @@ export type Database = {
             columns: ["service_id"]
             isOneToOne: false
             referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requests_sub_category_id_fkey"
+            columns: ["sub_category_id"]
+            isOneToOne: false
+            referencedRelation: "service_sub_categories"
             referencedColumns: ["id"]
           },
           {
@@ -3719,6 +3739,7 @@ export type Database = {
           created_at: string
           description: string | null
           icon: string | null
+          icon_image_url: string | null
           id: string
           is_active: boolean
           name: string
@@ -3731,6 +3752,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           icon?: string | null
+          icon_image_url?: string | null
           id?: string
           is_active?: boolean
           name: string
@@ -3743,6 +3765,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           icon?: string | null
+          icon_image_url?: string | null
           id?: string
           is_active?: boolean
           name?: string
@@ -3767,9 +3790,11 @@ export type Database = {
           created_at: string
           description: string | null
           icon: string | null
+          icon_image_url: string | null
           id: string
           is_active: boolean
           name: string
+          sla_priority: Database["public"]["Enums"]["request_priority"] | null
           slug: string
           sort_order: number
           updated_at: string
@@ -3779,9 +3804,11 @@ export type Database = {
           created_at?: string
           description?: string | null
           icon?: string | null
+          icon_image_url?: string | null
           id?: string
           is_active?: boolean
           name: string
+          sla_priority?: Database["public"]["Enums"]["request_priority"] | null
           slug: string
           sort_order?: number
           updated_at?: string
@@ -3791,9 +3818,11 @@ export type Database = {
           created_at?: string
           description?: string | null
           icon?: string | null
+          icon_image_url?: string | null
           id?: string
           is_active?: boolean
           name?: string
+          sla_priority?: Database["public"]["Enums"]["request_priority"] | null
           slug?: string
           sort_order?: number
           updated_at?: string
@@ -3808,11 +3837,40 @@ export type Database = {
           },
         ]
       }
+      service_sub_category_tags: {
+        Row: {
+          service_id: string
+          sub_category_id: string
+        }
+        Insert: {
+          service_id: string
+          sub_category_id: string
+        }
+        Update: {
+          service_id?: string
+          sub_category_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_sub_category_tags_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_sub_category_tags_sub_category_id_fkey"
+            columns: ["sub_category_id"]
+            isOneToOne: false
+            referencedRelation: "service_sub_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       services: {
         Row: {
           approval_workflow_id: string | null
           backup_owner_id: string | null
-          category_id: string
           created_at: string
           default_priority: Database["public"]["Enums"]["request_priority"]
           description: string | null
@@ -3820,17 +3878,17 @@ export type Database = {
           form_fields: Json
           form_sections: Json
           icon: string | null
+          icon_image_url: string | null
           id: string
           is_active: boolean
           keywords: string[]
           name: string
           org_id: string | null
           owner_id: string | null
-          sla_config: Json
+          sla_policy_id: string | null
           slug: string
           sort_order: number
           status: string
-          sub_category_id: string | null
           team_id: string
           template_id: string | null
           updated_at: string
@@ -3841,7 +3899,6 @@ export type Database = {
         Insert: {
           approval_workflow_id?: string | null
           backup_owner_id?: string | null
-          category_id: string
           created_at?: string
           default_priority?: Database["public"]["Enums"]["request_priority"]
           description?: string | null
@@ -3849,17 +3906,17 @@ export type Database = {
           form_fields?: Json
           form_sections?: Json
           icon?: string | null
+          icon_image_url?: string | null
           id?: string
           is_active?: boolean
           keywords?: string[]
           name: string
           org_id?: string | null
           owner_id?: string | null
-          sla_config?: Json
+          sla_policy_id?: string | null
           slug: string
           sort_order?: number
           status?: string
-          sub_category_id?: string | null
           team_id: string
           template_id?: string | null
           updated_at?: string
@@ -3870,7 +3927,6 @@ export type Database = {
         Update: {
           approval_workflow_id?: string | null
           backup_owner_id?: string | null
-          category_id?: string
           created_at?: string
           default_priority?: Database["public"]["Enums"]["request_priority"]
           description?: string | null
@@ -3878,17 +3934,17 @@ export type Database = {
           form_fields?: Json
           form_sections?: Json
           icon?: string | null
+          icon_image_url?: string | null
           id?: string
           is_active?: boolean
           keywords?: string[]
           name?: string
           org_id?: string | null
           owner_id?: string | null
-          sla_config?: Json
+          sla_policy_id?: string | null
           slug?: string
           sort_order?: number
           status?: string
-          sub_category_id?: string | null
           team_id?: string
           template_id?: string | null
           updated_at?: string
@@ -3909,13 +3965,6 @@ export type Database = {
             columns: ["backup_owner_id"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "services_category_id_fkey"
-            columns: ["category_id"]
-            isOneToOne: false
-            referencedRelation: "service_categories"
             referencedColumns: ["id"]
           },
           {
@@ -3940,10 +3989,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "services_sub_category_id_fkey"
-            columns: ["sub_category_id"]
+            foreignKeyName: "services_sla_policy_id_fkey"
+            columns: ["sla_policy_id"]
             isOneToOne: false
-            referencedRelation: "service_sub_categories"
+            referencedRelation: "sla_policies"
             referencedColumns: ["id"]
           },
           {
@@ -4024,6 +4073,57 @@ export type Database = {
           trigger_pct?: number
         }
         Relationships: []
+      }
+      sla_policies: {
+        Row: {
+          config: Json
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sla_policies_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sla_policies_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tags: {
         Row: {
@@ -4798,7 +4898,7 @@ export type Database = {
         Returns: Database["public"]["Enums"]["user_role"]
       }
       current_user_team_ids: { Args: never; Returns: string[] }
-      generate_request_no: { Args: { p_prefix: string }; Returns: string }
+      generate_request_no: { Args: never; Returns: string }
       get_enabled_modules: {
         Args: never
         Returns: Database["public"]["Enums"]["module_slug"][]

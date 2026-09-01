@@ -27,6 +27,11 @@ export default async function IntakeReviewPage({ params }: PageProps) {
 
   if (!review) notFound()
 
+  // Tasks is Admin/Owner-only for now (see components/layout/Sidebar.tsx) —
+  // INTAKE_ROLES includes plain agents/managers, but /tasks/[id] would
+  // redirect them to /home, so ReviewClient needs to know not to link there.
+  const isAdmin = profile.role === 'admin' || profile.role === 'platform_owner'
+
   // Generate short-lived signed URLs for attachments (private bucket; admin client).
   const signedAttachments = await Promise.all(
     attachments.map(async (a) => {
@@ -49,6 +54,7 @@ export default async function IntakeReviewPage({ params }: PageProps) {
         services={(services ?? []) as { id: string; name: string; team_id: string | null }[]}
         teams={(teams ?? []) as { id: string; name: string }[]}
         profileId={profile.id}
+        isAdmin={isAdmin}
       />
     </div>
   )

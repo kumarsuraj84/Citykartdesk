@@ -14,6 +14,12 @@ export default async function InboxPage({ searchParams }: PageProps) {
   if (!profile) redirect('/login')
   if (!INTAKE_ROLES.includes(profile.role)) redirect('/home')
 
+  // Tasks is Admin/Owner-only for now (see components/layout/Sidebar.tsx) —
+  // INTAKE_ROLES includes plain agents/managers, but /tasks/[id] would
+  // redirect them to /home, so ReviewClient (via InboxWorkspace) needs to
+  // know not to link there.
+  const isAdmin = profile.role === 'admin' || profile.role === 'platform_owner'
+
   const sp = await searchParams
 
   // Fetch the full set (archived included) so the folder rail + search/sort run
@@ -24,6 +30,6 @@ export default async function InboxPage({ searchParams }: PageProps) {
   ])
 
   return (
-    <InboxWorkspace messages={data} channels={channels} initialFolder={sp.folder} initialChannel={sp.channel} profileId={profile.id} />
+    <InboxWorkspace messages={data} channels={channels} initialFolder={sp.folder} initialChannel={sp.channel} profileId={profile.id} isAdmin={isAdmin} />
   )
 }

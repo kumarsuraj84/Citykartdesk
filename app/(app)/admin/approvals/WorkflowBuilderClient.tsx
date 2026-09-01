@@ -16,6 +16,7 @@ import {
   fetchWorkflowSteps,
 } from '@/lib/actions/admin/workflows'
 import type { ApprovalWorkflowSummary, ApprovalWorkflowStep } from '@/lib/queries/admin'
+import { ROLE_LABELS } from '@/lib/constants/roles'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -122,7 +123,7 @@ function StepRow({
             >
               <option value="">— select approver —</option>
               {approvers.map((a) => (
-                <option key={a.id} value={a.id}>{a.full_name} ({a.role})</option>
+                <option key={a.id} value={a.id}>{a.full_name} ({(ROLE_LABELS as Record<string, string>)[a.role] ?? a.role})</option>
               ))}
             </select>
           )}
@@ -451,7 +452,7 @@ function WorkflowCard({
                     >
                       <option value="">— select approver —</option>
                       {approvers.map((a) => (
-                        <option key={a.id} value={a.id}>{a.full_name} ({a.role})</option>
+                        <option key={a.id} value={a.id}>{a.full_name} ({(ROLE_LABELS as Record<string, string>)[a.role] ?? a.role})</option>
                       ))}
                     </select>
                   )}

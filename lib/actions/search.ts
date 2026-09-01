@@ -188,26 +188,21 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
   }))
 
   // ── 4. Services ────────────────────────────────────────────────────────────
+  // A service is a flat catalog entry now (no fixed category to show as a
+  // subtitle — category is a per-submission field, not a service property).
   const { data: svcData } = await db
     .from('services')
-    .select('id,name,slug,category_id')
+    .select('id,name,slug,description')
     .eq('org_id', orgId)
     .or(`name.ilike.${like},description.ilike.${like}`)
     .eq('is_active', true)
     .limit(5)
 
-  // Fetch category names
-  const catIds = [...new Set((svcData ?? []).map((s) => s.category_id).filter(Boolean))]
-  const { data: catData } = catIds.length > 0
-    ? await db.from('service_categories').select('id,name').eq('org_id', orgId).in('id', catIds)
-    : { data: [] }
-  const catMap = new Map((catData ?? []).map((c) => [c.id, c.name]))
-
   const services: SearchResult[] = (svcData ?? []).map((s) => ({
     id: s.id,
     type: 'service' as const,
     title: s.name,
-    subtitle: catMap.get(s.category_id),
+    subtitle: s.description ?? undefined,
     href: `/services/${s.slug}`,
   }))
 

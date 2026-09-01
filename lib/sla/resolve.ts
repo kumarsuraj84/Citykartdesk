@@ -13,7 +13,9 @@ type FieldSlaOverrideRow = {
 /**
  * Resolve the tightest field-level SLA override that applies to a submitted request.
  * field_sla_overrides (migration 20240101000092) is the most specific SLA layer — more
- * specific than services.sla_config. There is no org-wide default layer beneath it (the
+ * specific than the service's mapped SLA Policy (services.sla_policy_id →
+ * sla_policies.config), which is the only other layer. There is no org-wide default layer
+ * beneath it (the
  * old global_sla_config-backed "SLA Targets" screen was removed — a service/field with no
  * explicit override simply gets no SLA deadline). See resolveSlaDeadlines below for how
  * every request-facing action (create, priority change, reopen) computes deadlines.
@@ -66,34 +68,42 @@ export async function resolveFieldSlaTier(
 
 /**
  * Single source of truth for computing a request's response/resolution deadlines —
- * used by createRequest, the REOPEN path in updateRequestStatus, changePriority, and
- * reclassifyRequest so every place a request gets (or regets) an SLA deadline resolves
- * the same two layers (field override > service override) and applies the same
- * business-hours-aware calendar (nights/weekends/holidays excluded), instead of each
- * call site re-deriving its own flat wall-clock estimate.
+ * used by createRequest, the REOPEN path in updateRequestStatus, changePriority,
+ * reclassifyRequest, and updateRequestCategory so every place a request gets (or
+ * regets) an SLA deadline resolves the same two layers (field override > the
+ * service's mapped SLA Policy) and applies the same business-hours-aware calendar
+ * (nights/weekends/holidays excluded), instead of each call site re-deriving its
+ * own flat wall-clock estimate.
+ *
+ * A Sub-Category no longer carries its own hours — it only carries a priority
+ * label (service_sub_categories.sla_priority), which feeds `priority` itself at
+ * the call site (see createRequest/updateRequestCategory) rather than being a
+ * separate config layer here.
  *
  * `allFields`/`formData` are optional — omit them for contexts with no dynamic-form
  * submission to check against (e.g. a priority/service change after the request was
  * already created), which simply skips the field-level layer and falls straight to
- * the service-level config.
+ * the policy config.
  */
 export async function resolveSlaDeadlines(
   supabase: AnyClient,
   params: {
     serviceId: string
     priority: 'low' | 'medium' | 'high' | 'urgent'
-    serviceSlaConfig: SLAConfig | null | undefined
+    // The config of the service's mapped SLA Policy (services.sla_policy_id →
+    // sla_policies.config). Null/undefined when the service has no policy mapped.
+    servicePolicyConfig: SLAConfig | null | undefined
     allFields?: FormField[]
     formData?: Record<string, unknown>
     from: Date
   }
 ): Promise<{ responseDueAt: string | null; resolutionDueAt: string | null }> {
-  const { serviceId, priority, serviceSlaConfig, allFields = [], formData = {}, from } = params
+  const { serviceId, priority, servicePolicyConfig, allFields = [], formData = {}, from } = params
 
   const fieldTier = await resolveFieldSlaTier(supabase, serviceId, priority, allFields, formData)
-  const serviceTier = serviceSlaConfig?.[priority]
-  const responseHours = fieldTier?.response_hours ?? serviceTier?.response_hours ?? null
-  const resolutionHours = fieldTier?.resolution_hours ?? serviceTier?.resolution_hours ?? null
+  const policyTier = servicePolicyConfig?.[priority]
+  const responseHours = fieldTier?.response_hours ?? policyTier?.response_hours ?? null
+  const resolutionHours = fieldTier?.resolution_hours ?? policyTier?.resolution_hours ?? null
 
   const responseDueAt =
     responseHours != null

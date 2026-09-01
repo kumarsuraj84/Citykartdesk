@@ -239,7 +239,7 @@ export default async function RequestsPage({ searchParams }: PageProps) {
         <ColumnFilterSelect
           paramName="service"
           value={serviceFilter ?? ''}
-          options={serviceOptions.map((s) => ({ value: s.id, label: `${s.name} (${s.category_name})` }))}
+          options={serviceOptions.map((s) => ({ value: s.id, label: s.name }))}
           placeholder="Any service…"
           pathname="/requests"
           currentSearch={currentSearch}

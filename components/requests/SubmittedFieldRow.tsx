@@ -6,6 +6,7 @@ import { FieldRenderer } from '@/components/forms/FieldRenderer'
 import { getDefaultValue } from '@/components/forms/DynamicForm'
 import type { FieldValue } from '@/components/forms/DynamicForm'
 import { validateFieldValue } from '@/lib/validation/formFields'
+import { isTechnicianMandatory } from '@/lib/forms/sections'
 import { updateRequestFormData } from '@/lib/actions/requests'
 import { displayFieldValue } from './SubmittedDataPanel'
 import type { FormField } from '@/types'
@@ -58,7 +59,7 @@ export function SubmittedFieldRow({ requestId, field, value, canEdit }: Submitte
   }
 
   function handleSave() {
-    const err = validateFieldValue(field, draft)
+    const err = validateFieldValue(field, draft, 'technician')
     if (err) { setError(err); return }
     setError(null)
     startTransition(async () => {
@@ -71,7 +72,10 @@ export function SubmittedFieldRow({ requestId, field, value, canEdit }: Submitte
 
   return (
     <div className="flex items-center justify-between gap-3 py-2 border-b border-border/50 last:border-0">
-      <span className="shrink-0 text-[11px] text-muted-foreground w-20">{field.label}</span>
+      <span className="shrink-0 text-[11px] text-muted-foreground w-20">
+        {isTechnicianMandatory(field) && <span className="mr-0.5 text-destructive">*</span>}
+        {field.label}
+      </span>
       <div ref={ref} className="relative min-w-0">
         <button
           type="button"

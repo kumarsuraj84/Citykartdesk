@@ -37,6 +37,7 @@ interface SearchableSelectProps {
   placeholder?: string
   className?: string
   id?: string
+  disabled?: boolean
 }
 
 interface SingleProps extends SearchableSelectProps {
@@ -60,7 +61,7 @@ interface MultiProps extends SearchableSelectProps {
  *  that object, and only the boundary props (`value`/`onChange`) deal in plain
  *  strings, converting via `byValue`. */
 export function SearchableSelect(props: SingleProps | MultiProps) {
-  const { options, placeholder, className, id } = props
+  const { options, placeholder, className, id, disabled } = props
   const flat = React.useMemo(() => flattenOptions(options), [options])
   const byValue = React.useMemo(() => new Map(flat.map((o) => [o.value, o])), [flat])
 
@@ -80,6 +81,7 @@ export function SearchableSelect(props: SingleProps | MultiProps) {
     "w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground",
     "placeholder:text-muted-foreground/50 transition-colors border-border hover:border-ring/50",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20 focus-visible:border-ring",
+    disabled && "opacity-50 cursor-not-allowed hover:border-border",
     className
   )
 
@@ -93,6 +95,7 @@ export function SearchableSelect(props: SingleProps | MultiProps) {
         onValueChange={(next) => props.onChange((next as FlatOption[]).map((o) => o.value))}
         itemToStringLabel={itemToStringLabel}
         filter={filterByLabel}
+        disabled={disabled}
       >
         <Combobox.InputGroup className={cn(inputCls, "flex flex-wrap items-center gap-1.5 py-1.5")}>
           <Combobox.Chips className="flex flex-wrap items-center gap-1 empty:hidden">
@@ -157,6 +160,7 @@ export function SearchableSelect(props: SingleProps | MultiProps) {
       onValueChange={(next) => props.onChange((next as FlatOption | null)?.value ?? '')}
       itemToStringLabel={itemToStringLabel}
       filter={filterByLabel}
+      disabled={disabled}
     >
       <Combobox.InputGroup className={cn(inputCls, "flex items-center gap-1.5")}>
         <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />

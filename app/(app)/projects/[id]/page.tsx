@@ -38,11 +38,14 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   const { id } = await params
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
+  // Projects isn't fully built out yet — Admin/Owner only until that work ships.
+  if (profile.role !== 'admin' && profile.role !== 'platform_owner') redirect('/home')
 
   const project = await getProjectById(id)
   if (!project) notFound()
 
-  const isManager = profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'
+  // Page is already Admin/Owner-only (redirect above) — both are manager-tier.
+  const isManager = true
 
   const [progress, tasks, requests, activity, profiles, allProjects, milestones, members, updates] = await Promise.all([
     getProjectProgress(id),

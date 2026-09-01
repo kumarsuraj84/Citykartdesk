@@ -39,6 +39,12 @@ export default async function ReportsPage({
   if (!['admin', 'manager', 'platform_owner'].includes(profile.role)) redirect('/home')
   if (!profile.org_id) redirect('/home')
 
+  // Projects is Admin/Owner-only for now (see components/layout/Sidebar.tsx) —
+  // a plain manager can still see this Projects tab (module-gated, not
+  // role-gated), but /projects and /projects/[id] redirect anyone else to
+  // /home, so ProjectsDashboard needs to know not to link there for them.
+  const isAdmin = profile.role === 'admin' || profile.role === 'platform_owner'
+
   const sp           = await searchParams
   const period       = (['7d','30d','90d'].includes(sp.period) ? sp.period : '30d') as Period
   const hasCustomRange = isValidISODate(sp.from) && isValidISODate(sp.to) && sp.from <= sp.to
@@ -220,7 +226,7 @@ export default async function ReportsPage({
       )}
 
       {tab === 'projects' && hasProjects && projectData && (
-        <ProjectsDashboard data={projectData} />
+        <ProjectsDashboard data={projectData} isAdmin={isAdmin} />
       )}
 
       {tab === 'export' && <ReportsClient />}

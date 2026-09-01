@@ -80,8 +80,10 @@ export type VisibilityScope = {
 }
 
 export type ServiceWithRelations = Service & {
-  category: ServiceCategory
-  sub_category: ServiceSubCategory | null
+  // A broad service no longer owns a single category/sub-category — it's
+  // tagged to a SET of allowed sub-categories instead (service_sub_category_tags),
+  // and the requester picks one per submission. See allowedSubCategories below
+  // and resolveServiceFormSections() in lib/forms/sections.ts for the template.
   team: Team
   approval_workflow: ApprovalWorkflow | null
   // Owner/backup_owner are always fetched as a lean projection (id, full_name, avatar_url) —
@@ -94,20 +96,31 @@ export type ServiceWithRelations = Service & {
   // in lib/forms/sections.ts. Null means this service still owns its own
   // form_sections/form_fields (untagged/legacy).
   template: { id: string; name: string; form_sections: unknown } | null
+  // The SLA Policy this service is mapped to (services.sla_policy_id) — the
+  // source of truth resolveSlaDeadlines() looks up hours from. Null means no
+  // SLA is configured for this service.
+  sla_policy: { id: string; name: string; config: SLAConfig } | null
 }
 
-export type ServiceSubCategoryWithServices = ServiceSubCategory & {
-  services: ServiceWithRelations[]
+/** A sub-category this service is tagged to — the requester picks one of
+ *  these (grouped by category) as a built-in field on the submission form. */
+export type AllowedSubCategory = {
+  id: string
+  name: string
+  category_id: string
+  category_name: string
 }
 
 export type ServiceCategoryWithSubCategories = ServiceCategory & {
-  sub_categories: ServiceSubCategoryWithServices[]
+  sub_categories: ServiceSubCategory[]
 }
 
 export type RequestWithRelations = Request & {
   requester: Profile
   assignee: Profile | null
-  service: Service & { category?: { id?: string; name: string } | null; sub_category?: { id?: string; name: string } | null }
+  service: Service
+  category: { id: string; name: string } | null
+  sub_category: { id: string; name: string } | null
   team: Team
 }
 
@@ -189,10 +202,30 @@ export type FormField = {
     min_length?: number
     max_length?: number
   }
+  /** Whether a requester can see this field at all — on their own create-request
+   *  form and later when re-viewing this request. Absent/undefined means `true`,
+   *  which is what makes this a zero-migration addition: every field saved
+   *  before this existed (including every frozen form_sections_snapshot on an
+   *  existing request) has no such key and silently keeps behaving as "fully
+   *  requester-visible" forever. See lib/forms/sections.ts's requesterCanView(). */
+  requester_can_view?: boolean
+  /** Whether a requester can set/edit this field's value themselves. Absent/
+   *  undefined means `true`, matching every existing field's actual behavior
+   *  today. Requires requester_can_view to also be true — can't let someone
+   *  set a value in a field they can't see.
+   *
+   *  `required` stays a single flag, but its audience is derived from these
+   *  two: required && requesterCanView && requesterCanSet is mandatory for the
+   *  requester at submission time; required && !(both) is mandatory for the
+   *  technician instead, enforced when they try to change the ticket's status
+   *  (see updateRequestStatus() in lib/actions/requests.ts). See
+   *  lib/forms/sections.ts's requesterCanSet()/isRequesterMandatory()/
+   *  isTechnicianMandatory(). */
+  requester_can_set?: boolean
 }
 
 // ============================================================
-// SLA config (stored in services.sla_config)
+// SLA config (stored in sla_policies.config; also field_sla_overrides.sla_config)
 // ============================================================
 // Form section definition (stored in services.form_sections)
 // Phase 2: section-based form architecture.
@@ -221,6 +254,19 @@ export type SLAConfig = {
   medium?: SLATier
   high?: SLATier
   urgent?: SLATier
+}
+
+/** A reusable, named SLA table (e.g. "IT SLA") — created once in Service Desk
+ *  → SLA Policies, then mapped onto one or more Services (services.sla_policy_id). */
+export type SlaPolicy = {
+  id: string
+  org_id: string
+  name: string
+  description: string | null
+  config: SLAConfig
+  is_active: boolean
+  created_at: string
+  updated_at: string
 }
 
 // ============================================================

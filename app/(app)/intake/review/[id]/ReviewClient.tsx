@@ -76,7 +76,7 @@ function avatarColor(seed: string): string {
 }
 
 export function ReviewClient({
-  review, attachments, thread, services, teams,
+  review, attachments, thread, services, teams, isAdmin,
 }: {
   review: IntakeReviewDetail
   attachments: Attachment[]
@@ -84,6 +84,7 @@ export function ReviewClient({
   services: { id: string; name: string; team_id: string | null }[]
   teams: { id: string; name: string }[]
   profileId: string
+  isAdmin: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -464,9 +465,15 @@ export function ReviewClient({
               </a>
             )}
             {review.created_task_id && (
-              <a href={`/tasks/${review.created_task_id}`} className="mt-1 inline-flex items-center gap-1 text-xs text-emerald-700 underline">
-                Open Task <ExternalLink className="h-3 w-3" />
-              </a>
+              isAdmin ? (
+                <a href={`/tasks/${review.created_task_id}`} className="mt-1 inline-flex items-center gap-1 text-xs text-emerald-700 underline">
+                  Open Task <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : (
+                // Tasks is Admin/Owner-only for now — /tasks would redirect
+                // this viewer to /home, so don't offer a dead-end link.
+                <p className="mt-1 text-xs text-emerald-700">Task created</p>
+              )
             )}
           </div>
         )}

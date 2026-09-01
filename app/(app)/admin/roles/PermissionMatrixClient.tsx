@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Check, Minus, Plus, X, ChevronDown, Trash2 } from 'lucide-react'
 import { savePermissionOverrides, createCustomRole, deleteCustomRole } from '@/lib/actions/admin/permissions'
+import { ROLE_LABELS } from '@/lib/constants/roles'
 
 type Perm = boolean | 'partial'
 
@@ -35,11 +36,11 @@ const SYSTEM_ROLES = ['user', 'agent', 'manager', 'admin', 'platform_owner'] as 
 type SystemRole = typeof SYSTEM_ROLES[number]
 
 const ROLE_META: Record<string, { label: string; badge: string }> = {
-  user:           { label: 'End User',       badge: 'bg-slate-50 text-slate-600 border border-slate-200'    },
-  agent:          { label: 'Agent',          badge: 'bg-blue-50 text-blue-600 border border-blue-200'       },
-  manager:        { label: 'Manager',        badge: 'bg-violet-50 text-violet-600 border border-violet-200' },
-  admin:          { label: 'Administrator',  badge: 'bg-amber-50 text-amber-600 border border-amber-200'    },
-  platform_owner: { label: 'Platform Owner', badge: 'bg-red-50 text-red-600 border border-red-200'          },
+  user:           { label: ROLE_LABELS.user,           badge: 'bg-slate-50 text-slate-600 border border-slate-200'    },
+  agent:          { label: ROLE_LABELS.agent,          badge: 'bg-blue-50 text-blue-600 border border-blue-200'       },
+  manager:        { label: ROLE_LABELS.manager,        badge: 'bg-violet-50 text-violet-600 border border-violet-200' },
+  admin:          { label: ROLE_LABELS.admin,          badge: 'bg-amber-50 text-amber-600 border border-amber-200'    },
+  platform_owner: { label: ROLE_LABELS.platform_owner, badge: 'bg-red-50 text-red-600 border border-red-200'          },
 }
 
 const ROW_ROLE_KEY: Record<SystemRole, keyof PermRow> = {
@@ -51,11 +52,11 @@ const ROW_ROLE_KEY: Record<SystemRole, keyof PermRow> = {
 }
 
 const BASE_ROLE_OPTIONS = [
-  { value: 'user',           label: 'End User'       },
-  { value: 'agent',          label: 'Agent'          },
-  { value: 'manager',        label: 'Manager'        },
-  { value: 'admin',          label: 'Administrator'  },
-  { value: 'platform_owner', label: 'Platform Owner' },
+  { value: 'user',           label: ROLE_LABELS.user },
+  { value: 'agent',          label: ROLE_LABELS.agent },
+  { value: 'manager',        label: ROLE_LABELS.manager },
+  { value: 'admin',          label: ROLE_LABELS.admin },
+  { value: 'platform_owner', label: ROLE_LABELS.platform_owner },
 ]
 
 function actionKey(row: PermRow, roleKey: string) {

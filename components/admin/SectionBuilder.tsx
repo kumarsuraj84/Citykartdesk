@@ -3,7 +3,10 @@
 import { useState, useTransition, useCallback, useEffect, useMemo } from 'react'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { filterActiveOptions } from '@/lib/forms/options'
+import { requesterCanView, requesterCanSet } from '@/lib/forms/sections'
 import type { FormField, FormFieldType, FormFieldOption, FormSection } from '@/types'
+
+type PreviewAudience = 'requester' | 'technician'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -71,6 +74,10 @@ function newField(type: FormFieldType): FormField {
     label: labels[type] ?? 'Untitled field',
     required: false,
     order: 0,
+    // Fully requester-facing by default — matches the only behavior that
+    // existed before requester/technician visibility was introduced.
+    requester_can_view: true,
+    requester_can_set: true,
     options: needsOptions
       ? [
           { value: uid(), label: 'Option 1' },
@@ -212,6 +219,11 @@ function getValidationErrors(sections: FormSection[]): string[] {
         const activeLeaves = countActiveLeaves(f.options ?? [])
         if (activeLeaves < 2)
           errors.push(`"${f.label || 'Field'}" needs at least 2 active (non-archived) selectable options`)
+      }
+      // Defense-in-depth — the inspector's toggle cascade prevents this combo
+      // by construction, but guard here too in case of a future import path.
+      if (f.requester_can_set === true && f.requester_can_view === false) {
+        errors.push(`"${f.label || 'Field'}" can't be settable by requesters while hidden from them`)
       }
     })
   })
@@ -401,14 +413,29 @@ function MultiSelectTree({ tree, depth = 0 }: { tree: OptTree; depth?: number })
   )
 }
 
-function PreviewField({ field }: { field: FormField }) {
+function PreviewField({ field, audience }: { field: FormField; audience: PreviewAudience }) {
+  const requesterFacing = requesterCanView(field) && requesterCanSet(field)
+  const effectiveRequired = field.required && (audience === 'requester' ? requesterFacing : !requesterFacing)
+  const readOnlyForRequester = audience === 'requester' && requesterCanView(field) && !requesterCanSet(field)
+  const hiddenFromRequester = audience === 'technician' && !requesterCanView(field)
   const base =
-    'w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:border-primary focus:bg-background'
+    'w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:border-primary focus:bg-background' +
+    (readOnlyForRequester ? ' opacity-50 cursor-not-allowed' : '')
   return (
-    <label className="block">
-      <span className="mb-1 flex items-center gap-1 text-xs font-medium">
+    <label className={`block ${readOnlyForRequester ? 'pointer-events-none' : ''}`}>
+      <span className="mb-1 flex items-center gap-1.5 text-xs font-medium">
         {field.label || 'Untitled'}
-        {field.required && <span className="text-destructive">*</span>}
+        {effectiveRequired && <span className="text-destructive">*</span>}
+        {hiddenFromRequester && (
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Hidden from requester
+          </span>
+        )}
+        {readOnlyForRequester && (
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Read-only
+          </span>
+        )}
       </span>
       {field.type === 'textarea' && (
         <textarea rows={3} placeholder={field.placeholder} className={base} />
@@ -418,7 +445,10 @@ function PreviewField({ field }: { field: FormField }) {
         <input type="email" placeholder={field.placeholder ?? 'name@company.com'} className={base} />
       )}
       {field.type === 'phone' && (
-        <input type="tel" placeholder={field.placeholder ?? '+1 555 123 4567'} className={base} />
+        // Matches the real requester/technician form exactly (FieldRenderer.tsx) —
+        // 10-digit mobile number only, no country code, so the preview doesn't
+        // mislead an admin into thinking one is expected.
+        <input type="tel" inputMode="numeric" maxLength={10} placeholder={field.placeholder ?? '9876543210'} className={base} />
       )}
       {field.type === 'number' && (
         <input type="number" placeholder={field.placeholder} className={base} />
@@ -486,6 +516,7 @@ export function SectionBuilder({
   const slaFieldIds = useMemo(() => new Set(fieldIdsWithSla), [fieldIdsWithSla])
   const [sections, setSections] = useState<FormSection[]>(initialSections)
   const [selected, setSelected] = useState<Selected>(null)
+  const [previewAudience, setPreviewAudience] = useState<PreviewAudience>('requester')
   const [isPending, startTransition] = useTransition()
   const [saveState, setSaveState] = useState<
     { type: 'idle' } | { type: 'success' } | { type: 'error'; message: string }
@@ -771,6 +802,11 @@ export function SectionBuilder({
                             {f.options
                               ? ` · ${leafCount} choice${leafCount === 1 ? '' : 's'}`
                               : ''}
+                            {!requesterCanView(f)
+                              ? ' · Technician only'
+                              : !requesterCanSet(f)
+                              ? ' · Read-only to requester'
+                              : ''}
                           </span>
                         </span>
                         <span className="flex items-center gap-0.5 text-muted-foreground">
@@ -917,6 +953,89 @@ export function SectionBuilder({
                 </div>
               </label>
 
+              <label className="mt-3 flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2">
+                <span className="text-sm font-medium text-foreground">Requester can View</span>
+                <div
+                  role="checkbox"
+                  aria-checked={requesterCanView(selectedField)}
+                  tabIndex={0}
+                  onClick={() => {
+                    const nextView = !requesterCanView(selectedField)
+                    updateField(selectedSection.id, selectedField.id, {
+                      requester_can_view: nextView,
+                      // Cascade off: can't be settable in a field they can no longer see.
+                      ...(nextView ? {} : { requester_can_set: false }),
+                    })
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === ' ') {
+                      const nextView = !requesterCanView(selectedField)
+                      updateField(selectedSection.id, selectedField.id, {
+                        requester_can_view: nextView,
+                        ...(nextView ? {} : { requester_can_set: false }),
+                      })
+                    }
+                  }}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    requesterCanView(selectedField) ? 'bg-primary' : 'bg-muted-foreground/30'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                      requesterCanView(selectedField) ? 'translate-x-4' : 'translate-x-0.5'
+                    }`}
+                  />
+                </div>
+              </label>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Off hides this field from the requester entirely — it becomes a technician-only
+                field, filled in after the ticket is received.
+              </p>
+
+              <label className="mt-3 flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2">
+                <span className="text-sm font-medium text-foreground">Requester can Set</span>
+                <div
+                  role="checkbox"
+                  aria-checked={requesterCanSet(selectedField)}
+                  tabIndex={0}
+                  onClick={() => {
+                    const nextSet = !requesterCanSet(selectedField)
+                    updateField(selectedSection.id, selectedField.id, {
+                      requester_can_set: nextSet,
+                      // Cascade on: turning Set on implies View must be on too.
+                      ...(nextSet ? { requester_can_view: true } : {}),
+                    })
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === ' ') {
+                      const nextSet = !requesterCanSet(selectedField)
+                      updateField(selectedSection.id, selectedField.id, {
+                        requester_can_set: nextSet,
+                        ...(nextSet ? { requester_can_view: true } : {}),
+                      })
+                    }
+                  }}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    requesterCanSet(selectedField) ? 'bg-primary' : 'bg-muted-foreground/30'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                      requesterCanSet(selectedField) ? 'translate-x-4' : 'translate-x-0.5'
+                    }`}
+                  />
+                </div>
+              </label>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Off shows the field to the requester read-only — visible, but they can&apos;t edit it.
+              </p>
+              {selectedField.required && !(requesterCanView(selectedField) && requesterCanSet(selectedField)) && (
+                <p className="mt-2 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                  Required, but hidden or read-only for the requester — this makes it mandatory
+                  for the technician instead, enforced before they can change the ticket&apos;s status.
+                </p>
+              )}
+
               {(selectedField.type === 'select' || selectedField.type === 'multiselect') && (
                 <OptionTreeEditor
                   options={selectedField.options ?? []}
@@ -936,36 +1055,56 @@ export function SectionBuilder({
           <div className="rounded-2xl border border-border bg-card shadow-sm">
             <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
               <h3 className="text-sm font-semibold text-foreground">Live preview</h3>
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                What requesters see
-              </span>
+              <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setPreviewAudience('requester')}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    previewAudience === 'requester' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Requester View
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewAudience('technician')}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    previewAudience === 'technician' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Technician View
+                </button>
+              </div>
             </div>
             <div className="space-y-5 p-4">
-              {sections.map((s) => (
-                <div key={s.id}>
-                  <h4 className="text-sm font-semibold text-foreground">
-                    {s.title || 'Untitled section'}
-                  </h4>
-                  {s.description && (
-                    <p className="mt-0.5 text-xs text-muted-foreground">{s.description}</p>
-                  )}
-                  <div className="mt-3 space-y-3">
-                    {s.fields.map((f) => (
-                      <PreviewField key={f.id} field={f} />
-                    ))}
-                    {s.fields.length === 0 && (
-                      <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-                        No fields yet.
-                      </p>
+              {sections.map((s) => {
+                const visibleFields = previewAudience === 'technician' ? s.fields : s.fields.filter(requesterCanView)
+                return (
+                  <div key={s.id}>
+                    <h4 className="text-sm font-semibold text-foreground">
+                      {s.title || 'Untitled section'}
+                    </h4>
+                    {s.description && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">{s.description}</p>
                     )}
+                    <div className="mt-3 space-y-3">
+                      {visibleFields.map((f) => (
+                        <PreviewField key={f.id} field={f} audience={previewAudience} />
+                      ))}
+                      {visibleFields.length === 0 && (
+                        <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                          No fields yet.
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
               <button
                 type="button"
                 className="btn-gradient w-full"
               >
-                Submit request
+                {previewAudience === 'requester' ? 'Submit request' : 'Save'}
               </button>
             </div>
           </div>

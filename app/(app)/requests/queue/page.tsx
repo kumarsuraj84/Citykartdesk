@@ -95,8 +95,8 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
   const sortCol = SORT_COLUMNS.includes(params.sort ?? '') ? params.sort! : 'updated_at'
   const sortDir: 'asc' | 'desc' = params.dir === 'asc' ? 'asc' : 'desc'
 
-  const statusFilter: RequestStatus | 'active' | undefined =
-    rawStatus === 'all' ? undefined : !rawStatus ? 'active' : (rawStatus as RequestStatus | 'active')
+  const statusFilter: RequestStatus | 'active' | 'unresolved' | undefined =
+    rawStatus === 'all' ? undefined : !rawStatus ? 'active' : (rawStatus as RequestStatus | 'unresolved')
 
   const assignedTo: AssignedToFilter | undefined = rawAssigned || undefined
   const priorityFilter = PRIORITY_OPTIONS.some((p) => p.value === rawPriority) ? (rawPriority as RequestPriority) : undefined
@@ -236,7 +236,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
       {/* ── Within Team Queue: narrow by assignment state ── */}
       {rawTab === 'team' && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground">Assigned:</span>
+          <span className="text-xs font-medium text-muted-foreground">Technician:</span>
           {(
             [
               { label: 'All',        value: '' as const },
@@ -316,7 +316,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
         <ColumnFilterSelect
           paramName="service"
           value={serviceFilter ?? ''}
-          options={serviceOptions.map((s) => ({ value: s.id, label: `${s.name} (${s.category_name})` }))}
+          options={serviceOptions.map((s) => ({ value: s.id, label: s.name }))}
           placeholder="Any service…"
           pathname="/requests/queue"
           currentSearch={currentSearch}
@@ -326,7 +326,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
             paramName="assigned"
             value={assignedTo && assignedTo !== 'me' && assignedTo !== 'unassigned' ? assignedTo : ''}
             options={assignableUsers.map((a) => ({ value: a.id, label: a.full_name }))}
-            placeholder="Any assignee…"
+            placeholder="Any technician…"
             pathname="/requests/queue"
             currentSearch={currentSearch}
           />

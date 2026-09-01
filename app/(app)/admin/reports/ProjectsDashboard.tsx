@@ -30,6 +30,18 @@ function Section({ title, icon: Icon, children, className = '' }: {
 
 function Divider() { return <div className="h-px bg-border my-1" /> }
 
+// This dashboard is reachable by plain managers (admin/reports is
+// manager-or-admin), but /projects and /projects/[id] now redirect anyone
+// who isn't admin/platform_owner to /home (Projects is admin-only for now —
+// see components/layout/Sidebar.tsx). Render project deep-links as plain,
+// non-navigating content for a non-admin viewer instead of a dead-end link.
+function ProjectLink({ href, isAdmin, className, children }: {
+  href: string; isAdmin: boolean; className?: string; children: React.ReactNode
+}) {
+  if (!isAdmin) return <div className={className}>{children}</div>
+  return <Link href={href} className={className}>{children}</Link>
+}
+
 // ── Milestones Timeline (portfolio Gantt) ───────────────────────────────────────
 
 const MS_DAY = 24 * 60 * 60 * 1000
@@ -42,8 +54,8 @@ function fmtShort(d: Date): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function MilestonesTimeline({ milestones, nowIso }: {
-  milestones: ProjectAnalyticsData['milestonesTimeline']; nowIso: string
+function MilestonesTimeline({ milestones, nowIso, isAdmin }: {
+  milestones: ProjectAnalyticsData['milestonesTimeline']; nowIso: string; isAdmin: boolean
 }) {
   const now = new Date(nowIso).getTime()
 
@@ -84,9 +96,10 @@ function MilestonesTimeline({ milestones, nowIso }: {
           const left = ((startMs - min) / totalMs) * 100
           const width = Math.max(((Math.max(endMs, startMs) - startMs) / totalMs) * 100, 1)
           return (
-            <Link
+            <ProjectLink
               key={m.id}
               href={`/projects/${m.projectId}`}
+              isAdmin={isAdmin}
               className="relative flex items-center gap-3 px-3 py-2.5 hover:bg-muted/40 transition-colors"
             >
               <span className="w-48 shrink-0 truncate text-xs">
@@ -100,7 +113,7 @@ function MilestonesTimeline({ milestones, nowIso }: {
                   title={`${fmtShort(new Date(startMs))} → ${fmtShort(new Date(endMs))}`}
                 />
               </span>
-            </Link>
+            </ProjectLink>
           )
         })}
       </div>
@@ -142,8 +155,8 @@ function peakChipClass(n: number): string {
   return 'text-emerald-700 bg-emerald-50 border-emerald-200'
 }
 
-function LoadGroup({ label, items, min, totalMs, now }: {
-  label: string; items: LoadItem[]; min: number; totalMs: number; now: number
+function LoadGroup({ label, items, min, totalMs, now, isAdmin }: {
+  label: string; items: LoadItem[]; min: number; totalMs: number; now: number; isAdmin: boolean
 }) {
   const [open, setOpen] = useState(true)
   const todayPct = ((now - min) / totalMs) * 100
@@ -182,9 +195,10 @@ function LoadGroup({ label, items, min, totalMs, now }: {
           const left = ((startMs - min) / totalMs) * 100
           const width = Math.max(((Math.max(endMs, startMs) - startMs) / totalMs) * 100, 1)
           return (
-            <Link
+            <ProjectLink
               key={`${it.kind}-${it.id}`}
               href={`/projects/${it.projectId}`}
+              isAdmin={isAdmin}
               className="relative flex items-center gap-3 px-3 py-2 hover:bg-muted/40 transition-colors"
             >
               <span className="w-52 shrink-0 truncate text-xs">
@@ -199,7 +213,7 @@ function LoadGroup({ label, items, min, totalMs, now }: {
                   title={`${fmtShort(new Date(startMs))} → ${fmtShort(new Date(endMs))}`}
                 />
               </span>
-            </Link>
+            </ProjectLink>
           )
         })}
       </div>
@@ -208,7 +222,7 @@ function LoadGroup({ label, items, min, totalMs, now }: {
   )
 }
 
-function LoadGantt({ items, nowIso }: { items: LoadItem[]; nowIso: string }) {
+function LoadGantt({ items, nowIso, isAdmin }: { items: LoadItem[]; nowIso: string; isAdmin: boolean }) {
   const [groupBy, setGroupBy] = useState<'project' | 'owner'>('project')
   const [ownerFilter, setOwnerFilter] = useState('')
   const now = new Date(nowIso).getTime()
@@ -278,7 +292,7 @@ function LoadGantt({ items, nowIso }: { items: LoadItem[]; nowIso: string }) {
       ) : (
         <div className="space-y-4">
           {groupList.map(([key, g]) => (
-            <LoadGroup key={key} label={g.label} items={g.items} min={min} totalMs={totalMs} now={now} />
+            <LoadGroup key={key} label={g.label} items={g.items} min={min} totalMs={totalMs} now={now} isAdmin={isAdmin} />
           ))}
         </div>
       )}
@@ -414,7 +428,7 @@ function ManagerRollupPanel({ rollup }: { rollup: ManagerRollup }) {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-export function ProjectsDashboard({ data }: { data: ProjectAnalyticsData }) {
+export function ProjectsDashboard({ data, isAdmin }: { data: ProjectAnalyticsData; isAdmin: boolean }) {
   return (
     <div className="space-y-4">
 
@@ -471,9 +485,11 @@ export function ProjectsDashboard({ data }: { data: ProjectAnalyticsData }) {
           </>
         )}
 
-        <Link href="/projects" className="mt-1 flex items-center gap-1 text-xs font-medium text-primary hover:underline">
-          View all projects <ArrowRight className="h-3 w-3" />
-        </Link>
+        {isAdmin && (
+          <Link href="/projects" className="mt-1 flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+            View all projects <ArrowRight className="h-3 w-3" />
+          </Link>
+        )}
       </Section>
 
       {/* ── Status Mix + Projects by Owner ── */}
@@ -553,14 +569,14 @@ export function ProjectsDashboard({ data }: { data: ProjectAnalyticsData }) {
       {/* ── Milestones Timeline ── */}
       {data.milestonesTimeline.length > 0 && (
         <Section title="Milestones Timeline" icon={GanttChartSquare}>
-          <MilestonesTimeline milestones={data.milestonesTimeline} nowIso={data.nowIso} />
+          <MilestonesTimeline milestones={data.milestonesTimeline} nowIso={data.nowIso} isAdmin={isAdmin} />
         </Section>
       )}
 
       {/* ── Load-detection Gantt ── */}
       {data.loadItems.length > 0 && (
         <Section title="Capacity & Load" icon={Layers}>
-          <LoadGantt items={data.loadItems} nowIso={data.nowIso} />
+          <LoadGantt items={data.loadItems} nowIso={data.nowIso} isAdmin={isAdmin} />
         </Section>
       )}
 

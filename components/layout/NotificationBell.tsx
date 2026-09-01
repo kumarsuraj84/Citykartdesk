@@ -3,10 +3,13 @@
 import { useState, useRef, useEffect, useTransition } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { Bell, Check, CheckCheck, Archive, X } from 'lucide-react'
+import { Bell, Check, CheckCheck, Archive, X, Eye, Loader2 } from 'lucide-react'
 import { markNotificationRead, markAllNotificationsRead, archiveNotification } from '@/lib/actions/notifications'
+import { getApprovalForRequestAction } from '@/lib/actions/approvals'
+import { ApprovalPreviewDialog } from '@/components/requests/ApprovalPreviewDialog'
 import { formatRelativeTime } from '@/lib/utils'
-import type { NotificationWithActor } from '@/types'
+import type { NotificationWithActor, UserRole } from '@/types'
+import type { ApprovalWithDetails } from '@/lib/queries/approvals'
 
 // ── Notification icon map ─────────────────────────────────────────────────────
 
@@ -39,13 +42,17 @@ function NotificationRow({
   onRead,
   onArchive,
   onClose,
+  onPreviewApproval,
 }: {
   notification: NotificationWithActor
   onRead: (id: string) => void
   onArchive: (id: string) => void
   onClose: () => void
+  onPreviewApproval: (n: NotificationWithActor) => void
 }) {
   const isUnread = !notification.read_at
+  // Actionable — preview + act right here instead of navigating away.
+  const isApproval = notification.type === 'approval_requested' && !!notification.request_id
   const initials = notification.actor?.full_name
     ? notification.actor.full_name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
     : '?'
@@ -87,6 +94,11 @@ function NotificationRow({
 
       {/* Actions — show on hover */}
       <div className="flex shrink-0 flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {isApproval && (
+          <span title="Preview & approve" className="rounded p-0.5 text-primary">
+            <Eye className="h-3 w-3" />
+          </span>
+        )}
         {isUnread && (
           <button
             type="button"
@@ -109,6 +121,25 @@ function NotificationRow({
     </div>
   )
 
+  // Actionable approval notifications preview (and act) in place instead of
+  // navigating away — a plain div (not a nested <button>) since the row
+  // itself already contains the mark-read/archive buttons above.
+  if (isApproval) {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => { onRead(notification.id); onClose(); onPreviewApproval(notification) }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRead(notification.id); onClose(); onPreviewApproval(notification) }
+        }}
+        className="block cursor-pointer border-b border-border last:border-0"
+      >
+        {inner}
+      </div>
+    )
+  }
+
   // If there's a link, wrap in Link and mark read on click
   if (notification.link) {
     return (
@@ -130,12 +161,16 @@ function NotificationRow({
 interface NotificationBellProps {
   initialNotifications: NotificationWithActor[]
   initialUnreadCount: number
+  viewerId: string
+  viewerRole: UserRole
   dark?: boolean
 }
 
 export function NotificationBell({
   initialNotifications,
   initialUnreadCount,
+  viewerId,
+  viewerRole,
   dark = false,
 }: NotificationBellProps) {
   const [open, setOpen] = useState(false)
@@ -143,6 +178,18 @@ export function NotificationBell({
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount)
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
+
+  const [previewApproval, setPreviewApproval] = useState<ApprovalWithDetails | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+
+  async function handlePreviewApproval(n: NotificationWithActor) {
+    if (!n.request_id) return
+    setPreviewLoading(true)
+    const approval = await getApprovalForRequestAction(n.request_id)
+    setPreviewLoading(false)
+    if (!approval) { toast.error('This approval is no longer available.'); return }
+    setPreviewApproval(approval)
+  }
 
   // Close on outside click
   useEffect(() => {
@@ -253,6 +300,7 @@ export function NotificationBell({
                   onRead={handleRead}
                   onArchive={handleArchive}
                   onClose={() => setOpen(false)}
+                  onPreviewApproval={handlePreviewApproval}
                 />
               ))
             )}
@@ -269,6 +317,21 @@ export function NotificationBell({
             </Link>
           </div>
         </div>
+      )}
+
+      {previewLoading && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/20">
+          <Loader2 className="h-6 w-6 animate-spin text-white" />
+        </div>
+      )}
+
+      {previewApproval && (
+        <ApprovalPreviewDialog
+          approval={previewApproval}
+          viewerId={viewerId}
+          viewerRole={viewerRole}
+          onClose={() => setPreviewApproval(null)}
+        />
       )}
     </div>
   )

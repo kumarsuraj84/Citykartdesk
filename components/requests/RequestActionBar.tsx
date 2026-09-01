@@ -5,6 +5,7 @@ import { Loader2, UserCheck, ChevronDown, GitMerge, CheckCircle2, Search, X } fr
 import { assignRequest, updateRequestStatus } from '@/lib/actions/requests'
 import { sendAdHocApproval, searchManagersForApproval } from '@/lib/actions/approvals'
 import type { RequestStatus } from '@/types'
+import { ROLE_LABELS } from '@/lib/constants/roles'
 
 interface Props {
   requestId:          string
@@ -68,6 +69,8 @@ export function RequestActionBar({
   const [actionSuccess, setActionSuccess]      = useState<string | null>(null)
   const [activeTimer, setActiveTimer]          = useState(initialTimer ?? null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const approvalSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const approvalSearchSeq = useRef(0)
 
   // Keep in sync if the server re-renders this component with fresh props
   // (e.g. another actor changed status, or a status change from elsewhere on the
@@ -81,6 +84,9 @@ export function RequestActionBar({
   }
 
   const canStartWorking = localStatus === 'open' || localStatus === 'assigned'
+  // Start Working is mandatory before a request can go for approval — it
+  // can't be sent while it's still sitting unstarted in open/assigned.
+  const canSendForApproval = !canStartWorking
 
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -119,13 +125,28 @@ export function RequestActionBar({
     })
   }
 
-  async function handleApprovalSearch(q: string) {
+  // Debounced: searchManagersForApproval falls back to
+  // admin.auth.admin.listUsers({ perPage: 1000 }) whenever the name search
+  // doesn't turn up 8+ matches, so firing it on every keystroke would hit
+  // that expensive path repeatedly while someone is mid-type. 300ms settle,
+  // plus a request-sequence guard so a slow earlier lookup can't clobber a
+  // faster later one's results.
+  function handleApprovalSearch(q: string) {
     setApprovalSearch(q)
+    if (approvalSearchTimer.current) clearTimeout(approvalSearchTimer.current)
     if (!q.trim()) { setApprovalResults([]); return }
-    const results = await searchManagersForApproval(q)
-    // Filter out already-selected approvers
-    setApprovalResults(results.filter((r) => !selectedApprovers.some((a) => a.id === r.id)))
+    const seq = ++approvalSearchSeq.current
+    approvalSearchTimer.current = setTimeout(async () => {
+      const results = await searchManagersForApproval(q)
+      if (seq !== approvalSearchSeq.current) return // a newer keystroke superseded this lookup
+      // Filter out already-selected approvers
+      setApprovalResults(results.filter((r) => !selectedApprovers.some((a) => a.id === r.id)))
+    }, 300)
   }
+
+  useEffect(() => {
+    return () => { if (approvalSearchTimer.current) clearTimeout(approvalSearchTimer.current) }
+  }, [])
 
   function addApprover(u: { id: string; full_name: string }) {
     if (selectedApprovers.some((a) => a.id === u.id)) return
@@ -208,17 +229,21 @@ export function RequestActionBar({
                 <div className="p-1">
                   <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Approval</p>
                   <button
-                    onClick={() => setShowApprovalPicker((v) => !v)}
-                    disabled={isActing}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                    onClick={() => canSendForApproval && setShowApprovalPicker((v) => !v)}
+                    disabled={isActing || !canSendForApproval}
+                    title={!canSendForApproval ? 'Start working on this request before sending it for approval.' : undefined}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <GitMerge className="h-4 w-4 text-violet-500" />
                     Send for Approval
                     <ChevronDown className={`ml-auto h-3.5 w-3.5 text-muted-foreground transition-transform ${showApprovalPicker ? 'rotate-180' : ''}`} />
                   </button>
+                  {!canSendForApproval && (
+                    <p className="px-3 pb-1.5 text-[10px] text-muted-foreground">Start working first to send this for approval.</p>
+                  )}
 
                   {/* Inline approval picker */}
-                  {showApprovalPicker && (
+                  {showApprovalPicker && canSendForApproval && (
                     <div className="mx-1 mb-1 mt-0.5 rounded-lg border border-border bg-muted/40 p-2 space-y-2">
                       <p className="text-[11px] text-muted-foreground">Add one or more people. All must approve before the request resumes.</p>
 
@@ -263,7 +288,7 @@ export function RequestActionBar({
                                 className="w-full px-3 py-2 text-left text-xs hover:bg-muted flex items-center gap-2"
                               >
                                 <span className="flex-1 font-medium">{u.full_name}</span>
-                                <span className="text-[10px] capitalize text-muted-foreground">{u.role}</span>
+                                <span className="text-[10px] text-muted-foreground">{(ROLE_LABELS as Record<string, string>)[u.role] ?? u.role}</span>
                               </button>
                             </li>
                           ))}

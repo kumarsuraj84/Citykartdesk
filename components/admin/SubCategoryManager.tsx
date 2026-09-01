@@ -16,7 +16,17 @@ import {
   Trash2,
 } from 'lucide-react'
 import { upsertSubCategory, reorderSubCategories, toggleSubCategoryActive, deleteSubCategory } from '@/lib/actions/admin/categories'
-import type { ServiceSubCategory } from '@/types'
+import { IconPicker } from './IconPicker'
+import { CategoryIcon } from './CategoryIcon'
+import { PriorityBadge } from '@/components/requests/RequestBadges'
+import type { ServiceSubCategory, RequestPriority } from '@/types'
+
+export const SLA_PRIORITY_OPTIONS: { value: RequestPriority; label: string }[] = [
+  { value: 'urgent', label: 'Urgent' },
+  { value: 'high', label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low', label: 'Low' },
+]
 
 interface SubCategoryManagerProps {
   categoryId: string
@@ -39,26 +49,16 @@ interface EditFormProps {
 
 function EditForm({ categoryId, initial, nextSortOrder, onSave, onCancel }: EditFormProps) {
   const nameId = useId()
-  const slugId = useId()
   const [name, setName] = useState(initial?.name ?? '')
-  const [slug, setSlug] = useState(initial?.slug ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [icon, setIcon] = useState(initial?.icon ?? '')
+  const [iconImageUrl, setIconImageUrl] = useState<string | null>(initial?.icon_image_url ?? null)
+  const [slaPriority, setSlaPriority] = useState<RequestPriority | ''>(initial?.sla_priority ?? '')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  function deriveSlug(raw: string) {
-    return raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-  }
-
-  function handleNameChange(v: string) {
-    setName(v)
-    if (!initial) setSlug(deriveSlug(v))
-  }
-
   function handleSubmit() {
     if (!name.trim()) { setError('Name is required.'); return }
-    if (!slug.trim()) { setError('Slug is required.'); return }
     setError(null)
 
     startTransition(async () => {
@@ -66,11 +66,12 @@ function EditForm({ categoryId, initial, nextSortOrder, onSave, onCancel }: Edit
         id: initial?.id,
         categoryId,
         name: name.trim(),
-        slug: slug.trim(),
         description: description.trim() || undefined,
         icon: icon.trim() || undefined,
+        iconImageUrl,
         sortOrder: initial?.sort_order ?? nextSortOrder,
         isActive: initial?.is_active ?? true,
+        slaPriority: slaPriority || null,
       })
 
       if (result.error) {
@@ -80,11 +81,13 @@ function EditForm({ categoryId, initial, nextSortOrder, onSave, onCancel }: Edit
           id: result.id ?? initial?.id ?? '',
           category_id: categoryId,
           name: name.trim(),
-          slug: slug.trim(),
+          slug: initial?.slug ?? '',
           description: description.trim() || null,
           icon: icon.trim() || null,
+          icon_image_url: iconImageUrl,
           sort_order: initial?.sort_order ?? nextSortOrder,
           is_active: initial?.is_active ?? true,
+          sla_priority: slaPriority || null,
           created_at: initial?.created_at ?? new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -101,56 +104,50 @@ function EditForm({ categoryId, initial, nextSortOrder, onSave, onCancel }: Edit
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1">
-          <label htmlFor={nameId} className="block text-xs font-medium text-foreground">
-            Name <span className="text-destructive">*</span>
-          </label>
-          <input
-            id={nameId}
-            type="text"
-            value={name}
-            onChange={(e) => handleNameChange(e.target.value)}
-            placeholder="e.g. Computers & Laptops"
-            className={inputCls}
-          />
-        </div>
-        <div className="space-y-1">
-          <label htmlFor={slugId} className="block text-xs font-medium text-foreground">
-            Slug <span className="text-destructive">*</span>
-          </label>
-          <input
-            id={slugId}
-            type="text"
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            placeholder="computers-laptops"
-            className={inputCls}
-          />
+      <div className="flex gap-3">
+        <IconPicker emoji={icon} onEmojiChange={setIcon} imageUrl={iconImageUrl} onImageChange={setIconImageUrl} />
+        <div className="min-w-0 flex-1 space-y-3">
+          <div className="space-y-1">
+            <label htmlFor={nameId} className="block text-xs font-medium text-foreground">
+              Name <span className="text-destructive">*</span>
+            </label>
+            <input
+              id={nameId}
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Computers & Laptops"
+              className={inputCls}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-foreground">Description (optional)</label>
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Brief description of this sub-category"
+              className={inputCls}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1">
-          <label className="block text-xs font-medium text-foreground">Description (optional)</label>
-          <input
-            type="text"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Brief description of this sub-category"
-            className={inputCls}
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="block text-xs font-medium text-foreground">Icon (emoji, optional)</label>
-          <input
-            type="text"
-            value={icon}
-            onChange={(e) => setIcon(e.target.value)}
-            placeholder="💻"
-            className={inputCls}
-          />
-        </div>
+      <div className="space-y-1">
+        <label className="block text-xs font-medium text-foreground">SLA Priority (optional)</label>
+        <p className="text-[11px] text-muted-foreground">
+          Auto-sets a ticket&apos;s priority when this sub-category is picked. Actual response/resolution hours come from whichever service&apos;s SLA Policy applies — a sub-category can be tagged by more than one service.
+        </p>
+        <select
+          value={slaPriority}
+          onChange={(e) => setSlaPriority(e.target.value as RequestPriority | '')}
+          className={inputCls}
+        >
+          <option value="">None — leave the ticket&apos;s priority as-is</option>
+          {SLA_PRIORITY_OPTIONS.map((p) => (
+            <option key={p.value} value={p.value}>{p.label}</option>
+          ))}
+        </select>
       </div>
 
       <div className="flex items-center justify-end gap-2 pt-1">
@@ -209,13 +206,21 @@ function SubCategoryRow({
       }`}
     >
       <div className="flex items-center gap-3 px-4 py-3">
-        {sc.icon && <span className="shrink-0 text-lg">{sc.icon}</span>}
+        {(sc.icon || sc.icon_image_url) && (
+          <CategoryIcon icon={sc.icon} iconImageUrl={sc.icon_image_url} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-lg" />
+        )}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-foreground">{sc.name}</p>
           {sc.description && (
             <p className="truncate text-xs text-muted-foreground">{sc.description}</p>
           )}
-          <p className="text-[10px] text-muted-foreground font-mono">{sc.slug}</p>
+        </div>
+        <div className="shrink-0" title="SLA Priority — auto-applied to a ticket's priority when this sub-category is picked">
+          {sc.sla_priority ? (
+            <PriorityBadge priority={sc.sla_priority} size="sm" />
+          ) : (
+            <span className="text-xs text-muted-foreground">–</span>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           <button

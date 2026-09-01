@@ -31,18 +31,24 @@ export function MobileNav({ profile, navVisibility, navCounts }: MobileNavProps)
   // primary bottom bar, everything else lives behind "More".
   const items: MobileNavItem[] = [
     { label: 'Home',          href: '/home',          icon: Home,        show: true },
-    { label: 'Projects',      href: '/projects',      icon: FolderKanban, show: has('projects') },
+    // Tasks/Projects aren't fully built out yet — Admin/Owner only until
+    // that work ships, then reopened to everyone.
+    { label: 'Projects',      href: '/projects',      icon: FolderKanban, show: has('projects') && isAdmin },
     { label: 'New Request',   href: '/services',      icon: LayoutGrid,  show: has('services') },
     { label: 'Requests',      href: '/requests',      icon: Inbox,       show: has('requests') },
     { label: 'Agent Requests', href: '/requests/queue', icon: Headset,   show: has('requests') && (isAgent || isManager || isAdmin) },
-    { label: 'Tasks',         href: '/tasks',         icon: ListTodo,    show: has('tasks') },
+    { label: 'Tasks',         href: '/tasks',         icon: ListTodo,    show: has('tasks') && isAdmin },
     { label: 'Intake',        href: '/intake',        icon: Sparkles,    show: has('intake') && (isAgent || isManager || isAdmin) },
     { label: 'Approvals',     href: '/approvals',     icon: CheckCircle, show: has('approvals') && (isAgent || isManager || isAdmin) },
     { label: 'Notifications', href: '/notifications', icon: Bell,        show: true },
   ]
 
   const visible = items.filter((i) => i.show)
-  const showMore = isManager || isAdmin
+  // Mirrors Sidebar.tsx's Analytics section: Dashboards/DeskTime/Audit Logs
+  // stay manager/admin-only, but Report Builder is available to any role with
+  // the Requests module enabled — so "More" must open for them too, or that
+  // link would be reachable on desktop but not on mobile.
+  const showMore = isManager || isAdmin || has('requests')
 
   // When two items share a URL prefix (e.g. /requests and /requests/queue),
   // startsWith() alone would light up both — pick whichever visible item's

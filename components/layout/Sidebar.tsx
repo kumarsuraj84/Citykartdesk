@@ -8,10 +8,11 @@ import {
   BarChart3, Activity, Settings, Monitor, BookOpenText,
   Users, Tag, GitBranch, Building2, Database, Workflow,
   LogOut, BookOpen, KeyRound, ChevronDown, Sparkles, Filter,
-  PanelLeftClose, PanelLeftOpen, Timer, Table2, Zap, Headset, FileText,
+  PanelLeftClose, PanelLeftOpen, Timer, Table2, Zap, Headset, FileText, Clock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/actions/auth'
+import { ROLE_LABELS } from '@/lib/constants/roles'
 import type { ProfileWithTeams, NavVisibility } from '@/types'
 import type { NavCounts } from '@/lib/queries/profiles'
 
@@ -65,12 +66,16 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
     {
       key: 'analytics',
       label: 'Analytics',
-      show: isManager || isAdmin,
+      // Dashboards/DeskTime/Audit Logs stay manager/admin-only; Report Builder
+      // is scoped per-role by the data layer instead (Requester → own tickets,
+      // Technician → own+assigned, Manager → team, Admin/Owner → everything),
+      // so it's available to every role that has the Requests module enabled.
+      show: isManager || isAdmin || has('requests'),
       items: [
-        { label: 'Dashboards', href: '/admin/reports',  icon: BarChart3 },
-        { label: 'Report Builder', href: '/admin/reports/pivot', icon: Table2 },
-        { label: 'DeskTime',   href: '/admin/desktime',  icon: Timer     },
-        { label: 'Audit Logs', href: '/admin/audit',    icon: Activity  },
+        ...(isManager || isAdmin ? [{ label: 'Dashboards', href: '/admin/reports', icon: BarChart3 }] : []),
+        ...(has('requests') ? [{ label: 'Report Builder', href: '/admin/reports/pivot', icon: Table2 }] : []),
+        ...(isManager || isAdmin ? [{ label: 'DeskTime',   href: '/admin/desktime',  icon: Timer     }] : []),
+        ...(isManager || isAdmin ? [{ label: 'Audit Logs', href: '/admin/audit',    icon: Activity  }] : []),
       ],
     },
     {
@@ -81,10 +86,14 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
         ...(has('requests') ? [{ label: 'Requests',      href: '/requests',      icon: Inbox,       countKey: 'requests'      as keyof NavCounts }] : []),
         ...(has('requests') && (isAgent || isManager || isAdmin)
           ? [{ label: 'Agent Requests', href: '/requests/queue', icon: Headset } as NavItem] : []),
-        ...(has('tasks')    ? [{ label: 'Tasks',          href: '/tasks',         icon: ListTodo,    countKey: 'tasks'         as keyof NavCounts }] : []),
+        // Tasks/Projects aren't fully built out yet — restricted to
+        // Admin/Owner until that work ships, then reopened to everyone.
+        ...(has('tasks') && isAdmin
+          ? [{ label: 'Tasks',          href: '/tasks',         icon: ListTodo,    countKey: 'tasks'         as keyof NavCounts }] : []),
         ...(has('approvals') && (isAgent || isManager || isAdmin)
           ? [{ label: 'Approvals', href: '/approvals', icon: ShieldCheck, countKey: 'approvals' as keyof NavCounts }] : []),
-        ...(has('projects')  ? [{ label: 'Projects',      href: '/projects',      icon: FolderKanban, countKey: 'projects'      as keyof NavCounts }] : []),
+        ...(has('projects') && isAdmin
+          ? [{ label: 'Projects',      href: '/projects',      icon: FolderKanban, countKey: 'projects'      as keyof NavCounts }] : []),
         { label: 'Notifications', href: '/notifications', icon: Bell, countKey: 'notifications' as keyof NavCounts },
       ],
     },
@@ -121,6 +130,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
           items: [
             { label: 'Service Catalog', href: '/admin/services',       icon: LayoutGrid },
             { label: 'Form Templates',  href: '/admin/form-templates',  icon: FileText   },
+            { label: 'SLA Policies',    href: '/admin/sla-policies',    icon: Clock      },
             { label: 'Categories',      href: '/admin/categories',      icon: Tag        },
             { label: 'Business Rules',  href: '/admin/business-rules',  icon: Zap        },
             ...(has('approvals') ? [{ label: 'Approval Flows', href: '/admin/approvals',      icon: ShieldCheck }] : []),
@@ -364,7 +374,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
             </div>
             <div className="min-w-0 flex-1 leading-tight">
               <p className="truncate text-[12px] font-semibold text-foreground">{profile.full_name}</p>
-              <p className="text-[10px] text-sidebar-muted capitalize mt-0.5">{profile.role.replace('_', ' ')}</p>
+              <p className="text-[10px] text-sidebar-muted mt-0.5">{ROLE_LABELS[profile.role]}</p>
             </div>
             <form action={signOut}>
               <button type="submit" className="h-7 w-7 grid place-items-center rounded-md hover:bg-muted text-sidebar-muted hover:text-foreground transition-colors" title="Sign out">

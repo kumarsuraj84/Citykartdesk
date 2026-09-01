@@ -17,6 +17,7 @@ interface PendingFileFieldProps {
   value: File[]
   onChange: (files: File[]) => void
   multiple?: boolean
+  disabled?: boolean
 }
 
 function formatBytes(bytes: number): string {
@@ -25,7 +26,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export function PendingFileField({ id, value, onChange, multiple = true }: PendingFileFieldProps) {
+export function PendingFileField({ id, value, onChange, multiple = true, disabled = false }: PendingFileFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [validating, setValidating] = useState(false)
@@ -78,13 +79,15 @@ export function PendingFileField({ id, value, onChange, multiple = true }: Pendi
         onDragLeave={onDragLeave}
         onDragOver={onDragOver}
         onDrop={onDrop}
-        onClick={() => !validating && inputRef.current?.click()}
-        className={`flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed px-4 py-4 text-center transition-colors ${
-          isDragging
-            ? 'border-primary bg-primary/5'
+        onClick={() => !validating && !disabled && inputRef.current?.click()}
+        className={`flex flex-col items-center gap-2 rounded-xl border-2 border-dashed px-4 py-4 text-center transition-colors ${
+          disabled
+            ? 'cursor-not-allowed border-border bg-muted/30 opacity-50'
+            : isDragging
+            ? 'cursor-pointer border-primary bg-primary/5'
             : validating
             ? 'cursor-not-allowed border-border bg-muted/30 opacity-60'
-            : 'border-border bg-muted/20 hover:border-primary/40 hover:bg-muted/40'
+            : 'cursor-pointer border-border bg-muted/20 hover:border-primary/40 hover:bg-muted/40'
         }`}
       >
         <input
@@ -95,7 +98,7 @@ export function PendingFileField({ id, value, onChange, multiple = true }: Pendi
           multiple={multiple}
           className="hidden"
           onChange={onInputChange}
-          disabled={validating}
+          disabled={validating || disabled}
         />
         {validating ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">

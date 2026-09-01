@@ -17,7 +17,7 @@ import { SLABadge } from '@/components/requests/SLABadge'
 import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
 import { RequestSidebarPanel } from '@/components/requests/RequestSidebarPanel'
 import { SubmittedDataPanel } from '@/components/requests/SubmittedDataPanel'
-import { getActiveServicesForReclassify } from '@/lib/queries/services'
+import { getActiveServicesForReclassify, getAllowedSubCategoriesForService } from '@/lib/queries/services'
 import { RequestTasksTab } from '@/components/requests/RequestTasksTab'
 import { getTasksForRequest } from '@/lib/queries/tasks'
 import { getAllProjectsMini } from '@/lib/queries/projects'
@@ -27,6 +27,7 @@ import { AttachmentChips } from '@/components/requests/AttachmentChips'
 import { RequestDetailTabs } from '@/components/requests/RequestDetailTabs'
 import { RequestActionBar } from '@/components/requests/RequestActionBar'
 import { getActiveTimer } from '@/lib/actions/requests'
+import { filterFieldsForRequester, filterFlatFieldsForRequester } from '@/lib/forms/sections'
 import { formatRelativeTime } from '@/lib/utils'
 import { STATUS_LABELS, TERMINAL_STATUSES } from '@/lib/constants/requests'
 import type {
@@ -196,6 +197,48 @@ function CommentBubble({
   )
 }
 
+// Approval send/approve/reject events surfaced inline in the conversation
+// thread (in addition to the full History tab) so requesters/technicians
+// don't have to switch tabs to see who a ticket was sent to and what was
+// decided.
+function ApprovalEventCard({ item }: { item: RequestActivityWithActor }) {
+  const actor = item.actor?.full_name ?? 'System'
+
+  if (item.action === 'approval_requested') {
+    const m = item.metadata as { approver_names?: string[] } | null
+    const names = m?.approver_names?.length ? m.approver_names.join(', ') : 'the approver'
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-2.5 text-xs text-amber-800">
+        <Clock className="h-3.5 w-3.5 shrink-0" />
+        <span>
+          <span className="font-semibold">{actor}</span> sent this request for approval to{' '}
+          <span className="font-semibold">{names}</span>
+        </span>
+        <span className="ml-auto shrink-0 text-[10px] text-amber-700/70">{formatRelativeTime(item.created_at)}</span>
+      </div>
+    )
+  }
+
+  const approved = item.action === 'approved'
+  const m = item.metadata as { comment?: string } | null
+  return (
+    <div
+      className={`flex items-start gap-2 rounded-lg border px-4 py-2.5 text-xs ${
+        approved ? 'border-emerald-200 bg-emerald-50/60 text-emerald-800' : 'border-red-200 bg-red-50/60 text-red-800'
+      }`}
+    >
+      <span className="mt-px shrink-0">{approved ? '✓' : '✕'}</span>
+      <div className="flex-1 min-w-0">
+        <span>
+          <span className="font-semibold">{actor}</span> {approved ? 'approved' : 'rejected'} this request
+        </span>
+        {m?.comment && <p className="mt-0.5 text-[11px] opacity-90">{m.comment}</p>}
+      </div>
+      <span className="ml-auto shrink-0 text-[10px] opacity-70">{formatRelativeTime(item.created_at)}</span>
+    </div>
+  )
+}
+
 function HistoryRow({ item }: { item: RequestActivityWithActor }) {
   const actor = item.actor?.full_name ?? 'System'
   const label = ACTION_LABELS[item.action] ?? item.action
@@ -216,6 +259,14 @@ function HistoryRow({ item }: { item: RequestActivityWithActor }) {
   if (item.action === 'attachment_added' && item.metadata) {
     const m = item.metadata as { file_name?: string }
     if (m.file_name) detail = m.file_name
+  }
+  if (item.action === 'approval_requested' && item.metadata) {
+    const m = item.metadata as { approver_names?: string[] }
+    if (m.approver_names?.length) detail = `Sent to ${m.approver_names.join(', ')}`
+  }
+  if ((item.action === 'approved' || item.action === 'rejected') && item.metadata) {
+    const m = item.metadata as { comment?: string }
+    if (m.comment) detail = m.comment
   }
   if (
     (item.action === 'collaborator_added' || item.action === 'collaborator_removed') &&
@@ -288,13 +339,19 @@ export default async function RequestDetailPage({ params }: PageProps) {
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
   const isRequester = request.requester_id === profile.id
   const canManage   = isAgent
+  const isManager   = profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'
+  // Tasks is Admin/Owner-only for now (see components/layout/Sidebar.tsx) — a
+  // linked task here would otherwise deep-link to /tasks, which redirects any
+  // other role straight back to /home.
+  const isAdmin     = profile.role === 'admin' || profile.role === 'platform_owner'
   const isTerminal  = TERMINAL_STATUSES.includes(request.status)
 
   // Phase 2: only the queries that depend on request data (or are agent-only).
-  const [teamMembers, csatSurvey, reclassifyOptions] = await Promise.all([
+  const [teamMembers, csatSurvey, reclassifyOptions, allowedSubCategories] = await Promise.all([
     canManage ? getTeamMembers(request.team_id) : Promise.resolve([]),
     isRequester ? getCsatSurveyForRequest(id) : Promise.resolve(null),
     canManage ? getActiveServicesForReclassify() : Promise.resolve([]),
+    canManage ? getAllowedSubCategoriesForService(request.service_id) : Promise.resolve([]),
   ])
 
   // Show Approvals tab if the service has a predefined workflow OR any ad-hoc approval was sent
@@ -302,12 +359,17 @@ export default async function RequestDetailPage({ params }: PageProps) {
     (request.service as { approval_workflow_id?: string | null }).approval_workflow_id
   ) || approvals.length > 0
 
-  const formSchema = Array.isArray(request.form_schema_snapshot)
+  const formSchemaRaw = Array.isArray(request.form_schema_snapshot)
     ? (request.form_schema_snapshot as unknown as FormField[])
     : []
-  const formSections = Array.isArray(request.form_sections_snapshot)
+  const formSectionsRaw = Array.isArray(request.form_sections_snapshot)
     ? (request.form_sections_snapshot as unknown as FormSection[])
     : []
+  // A requester never sees a technician-only (requester_can_view === false)
+  // field, on the create form or here when revisiting their own request —
+  // an agent viewer sees everything, including the fields the requester can't.
+  const formSchema   = isAgent ? formSchemaRaw   : filterFlatFieldsForRequester(formSchemaRaw)
+  const formSections = isAgent ? formSectionsRaw : filterFieldsForRequester(formSectionsRaw)
   const formData = (request.form_data ?? {}) as Record<string, unknown>
 
   // Server-side time calculations (server component — Date.now() is intentional)
@@ -342,6 +404,18 @@ export default async function RequestDetailPage({ params }: PageProps) {
     }
   }
 
+  // Approval send/decision events are interleaved into the conversation thread
+  // (alongside the full record on the History tab) so the "sent for approval
+  // to X" / "approved by X" / "rejected by X" moments show up where people are
+  // already reading, not just in a separate tab.
+  const approvalEvents = activity.filter(
+    (item) => item.action === 'approval_requested' || item.action === 'approved' || item.action === 'rejected'
+  )
+  const conversationEvents: ({ kind: 'comment'; created_at: string; comment: RequestCommentWithAuthor } | { kind: 'approval'; created_at: string; item: RequestActivityWithActor })[] = [
+    ...comments.map((comment) => ({ kind: 'comment' as const, created_at: comment.created_at, comment })),
+    ...approvalEvents.map((item) => ({ kind: 'approval' as const, created_at: item.created_at, item })),
+  ].sort((a, b) => b.created_at.localeCompare(a.created_at))
+
   const conversationsTab = (
     <div className="flex flex-col" style={{ minHeight: '480px', maxHeight: '70vh' }}>
       {/* Scrollable message thread */}
@@ -355,7 +429,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
           </div>
         )}
 
-        {comments.length === 0 && submissionAttachments.length === 0 ? (
+        {conversationEvents.length === 0 && submissionAttachments.length === 0 ? (
           <div className="py-10 text-center">
             <p className="text-sm text-muted-foreground">No messages yet.</p>
             {!isTerminal && (
@@ -366,15 +440,19 @@ export default async function RequestDetailPage({ params }: PageProps) {
           </div>
         ) : (
           <div className="space-y-3">
-            {comments.map((comment) => (
-              <CommentBubble
-                key={comment.id}
-                comment={comment}
-                attachments={attachmentsByComment.get(comment.id) ?? []}
-                currentUserId={profile.id}
-                canManageAll={isAgent}
-              />
-            ))}
+            {conversationEvents.map((event) =>
+              event.kind === 'comment' ? (
+                <CommentBubble
+                  key={event.comment.id}
+                  comment={event.comment}
+                  attachments={attachmentsByComment.get(event.comment.id) ?? []}
+                  currentUserId={profile.id}
+                  canManageAll={isAgent}
+                />
+              ) : (
+                <ApprovalEventCard key={event.item.id} item={event.item} />
+              )
+            )}
             {submissionAttachments.length > 0 && (
               <div className="rounded-xl border border-border bg-muted/20 p-4">
                 <p className="mb-2 text-xs font-semibold text-muted-foreground">
@@ -448,7 +526,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
             className="border-t border-border"
           />
           {request.assignee && (
-            <TicketCell label="Assigned To" value={request.assignee.full_name} className="border-t border-border" />
+            <TicketCell label="Technician" value={request.assignee.full_name} className="border-t border-border" />
           )}
           <TicketCell
             label="Project"
@@ -702,9 +780,11 @@ export default async function RequestDetailPage({ params }: PageProps) {
         teamName={request.team.name}
         serviceId={request.service_id}
         serviceName={request.service.name}
-        categoryName={request.service.category?.name ?? null}
-        subCategoryName={request.service.sub_category?.name ?? null}
+        categoryName={request.category?.name ?? null}
+        subCategoryId={request.sub_category?.id ?? null}
+        subCategoryName={request.sub_category?.name ?? null}
         reclassifyOptions={reclassifyOptions}
+        allowedSubCategories={allowedSubCategories}
         requesterId={request.requester_id}
         requesterName={request.requester.full_name}
         resolutionDueAt={request.resolution_due_at}
@@ -714,6 +794,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
         teamId={request.team_id}
         viewerId={profile.id}
         isAgent={isAgent}
+        isManager={isManager}
         isRequester={isRequester}
         isTerminal={isTerminal}
         teamMembers={teamMembers}
@@ -774,7 +855,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
             requestId={request.id}
             viewerId={profile.id}
             isAgent={isAgent}
-            isManager={profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'}
+            isManager={isManager}
             isAssignedToViewer={request.assigned_to === profile.id}
             isTerminal={isTerminal}
             status={request.status}
@@ -828,6 +909,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
             teamId={request.team_id}
             initialTasks={linkedTasks}
             canManage={canManage}
+            canOpenTask={isAdmin}
           />
         }
         approvals={approvalsTab}

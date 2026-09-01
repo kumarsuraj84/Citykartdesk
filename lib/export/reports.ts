@@ -122,7 +122,7 @@ export async function exportRequestsCSV(orgId: string, f?: ExportFilters): Promi
     { key: 'service',      label: 'Service' },
     { key: 'team',         label: 'Team' },
     { key: 'requester',    label: 'Requester' },
-    { key: 'assignee',     label: 'Assignee' },
+    { key: 'assignee',     label: 'Technician' },
     { key: 'created_at',   label: 'Created' },
     { key: 'updated_at',   label: 'Updated' },
     { key: 'sla_deadline', label: 'SLA Deadline' },

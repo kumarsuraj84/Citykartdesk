@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { getCategoryBySlug } from '@/lib/queries/services'
 import { SubCategoryManager } from '@/components/admin/SubCategoryManager'
+import { CategoryIcon } from '@/components/admin/CategoryIcon'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -26,8 +27,10 @@ export default async function AdminCategorySlugPage({ params }: PageProps) {
     slug: sc.slug,
     description: sc.description ?? null,
     icon: sc.icon ?? null,
+    icon_image_url: sc.icon_image_url ?? null,
     sort_order: sc.sort_order,
     is_active: sc.is_active,
+    sla_priority: sc.sla_priority,
     created_at: sc.created_at,
     updated_at: sc.updated_at,
   }))
@@ -45,9 +48,11 @@ export default async function AdminCategorySlugPage({ params }: PageProps) {
 
       {/* Header */}
       <div className="flex items-start gap-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-2xl">
-          {category.icon ?? '📋'}
-        </div>
+        <CategoryIcon
+          icon={category.icon}
+          iconImageUrl={category.icon_image_url}
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-2xl"
+        />
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">{category.name}</h1>
           {category.description && (

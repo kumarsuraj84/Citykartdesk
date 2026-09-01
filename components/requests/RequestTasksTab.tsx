@@ -64,6 +64,9 @@ interface RequestTasksTabProps {
   teamId: string
   initialTasks: TaskWithDetails[]
   canManage: boolean
+  /** Tasks is Admin/Owner-only for now — everyone else can see this summary
+   * but the row shouldn't link to /tasks, which would redirect them to /home. */
+  canOpenTask: boolean
 }
 
 export function RequestTasksTab({
@@ -71,6 +74,7 @@ export function RequestTasksTab({
   teamId,
   initialTasks,
   canManage,
+  canOpenTask,
 }: RequestTasksTabProps) {
   const [tasks, setTasks] = useState<TaskWithDetails[]>(initialTasks)
   const [showForm, setShowForm] = useState(false)
@@ -200,12 +204,8 @@ export function RequestTasksTab({
           {tasks.map((task) => {
             const cfg = STATUS_CONFIG[task.status]
             const isDone = task.status === 'done'
-            return (
-              <Link
-                key={task.id}
-                href={`/tasks?task=${task.id}`}
-                className="flex items-center gap-3 bg-card px-4 py-3 hover:bg-muted/30 transition-colors group"
-              >
+            const rowContent = (
+              <>
                 {/* Status icon */}
                 <cfg.Icon className={`h-4 w-4 shrink-0 ${cfg.cls}`} />
 
@@ -230,9 +230,27 @@ export function RequestTasksTab({
                   ) : (
                     <User className="h-3.5 w-3.5 text-muted-foreground/40" />
                   )}
-                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  {canOpenTask && (
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  )}
                 </div>
+              </>
+            )
+            // Tasks is Admin/Owner-only for now — for everyone else, /tasks
+            // redirects to /home, so this row is a read-only summary instead
+            // of a dead-end link.
+            return canOpenTask ? (
+              <Link
+                key={task.id}
+                href={`/tasks?task=${task.id}`}
+                className="flex items-center gap-3 bg-card px-4 py-3 hover:bg-muted/30 transition-colors group"
+              >
+                {rowContent}
               </Link>
+            ) : (
+              <div key={task.id} className="flex items-center gap-3 bg-card px-4 py-3">
+                {rowContent}
+              </div>
             )
           })}
         </div>

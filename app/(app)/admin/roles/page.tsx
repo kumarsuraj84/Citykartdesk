@@ -6,6 +6,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { PermissionMatrixClient } from './PermissionMatrixClient'
 import { Check, Minus } from 'lucide-react'
+import { ROLE_LABELS } from '@/lib/constants/roles'
 
 type Tab = 'overview' | 'users' | 'permissions'
 
@@ -19,31 +20,31 @@ const TABS: { id: Tab; label: string }[] = [
 
 const ROLE_META: Record<string, { label: string; color: string; description: string; badge: string }> = {
   user: {
-    label:       'End User',
+    label:       ROLE_LABELS.user,
     color:       'bg-slate-100 text-slate-700 border-slate-200',
     badge:       'bg-slate-50 text-slate-600 border border-slate-200',
     description: 'Can submit requests via the service catalog, track their own requests, and respond to CSAT surveys. No access to agent queues or admin areas.',
   },
   agent: {
-    label:       'Agent',
+    label:       ROLE_LABELS.agent,
     color:       'bg-blue-100 text-blue-700 border-blue-200',
     badge:       'bg-blue-50 text-blue-600 border border-blue-200',
     description: 'Handles requests assigned to their team. Can update status, add comments (including internal notes), manage tasks, and trigger SLA actions.',
   },
   manager: {
-    label:       'Manager',
+    label:       ROLE_LABELS.manager,
     color:       'bg-violet-100 text-violet-700 border-violet-200',
     badge:       'bg-violet-50 text-violet-600 border border-violet-200',
     description: 'All agent capabilities plus approval authority, full request visibility across their teams, analytics access, and limited admin configuration.',
   },
   admin: {
-    label:       'Administrator',
+    label:       ROLE_LABELS.admin,
     color:       'bg-amber-100 text-amber-700 border-amber-200',
     badge:       'bg-amber-50 text-amber-600 border border-amber-200',
     description: 'Full access to all configuration — service catalog, SLA policies, routing rules, user management, platform settings, and monitoring.',
   },
   platform_owner: {
-    label:       'Platform Owner',
+    label:       ROLE_LABELS.platform_owner,
     color:       'bg-red-100 text-red-700 border-red-200',
     badge:       'bg-red-50 text-red-600 border border-red-200',
     description: 'Super-admin with unrestricted access to every page, action, and configuration in the platform including owner-only portal features.',

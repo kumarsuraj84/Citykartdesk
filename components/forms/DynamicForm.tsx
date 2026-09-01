@@ -5,16 +5,22 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2, Send, UserSearch, X } from 'lucide-react'
 import { FieldRenderer, isShortField } from './FieldRenderer'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { createRequest, searchOrgMembers } from '@/lib/actions/requests'
 import { uploadAttachment } from '@/lib/actions/attachments'
 import { validateFields } from '@/lib/validation/formFields'
-import { resolveServiceFormSections } from '@/lib/forms/sections'
-import type { FormField, FormSection, ServiceWithRelations } from '@/types'
+import { resolveServiceFormSections, filterFieldsForRequester } from '@/lib/forms/sections'
+import type { AllowedSubCategory, FormField, FormSection, ServiceWithRelations } from '@/types'
 
 interface DynamicFormProps {
   service: ServiceWithRelations
   /** Agents/managers only — lets them raise this request for someone else. */
   canBookOnBehalf?: boolean
+  /** Sub-categories this service is tagged to (grouped by category) — the
+   *  requester picks one as a built-in field, separate from the template's
+   *  own custom fields. Empty means this service has nothing tagged, so the
+   *  picker is skipped entirely. */
+  allowedSubCategories: AllowedSubCategory[]
 }
 
 type OrgMember = { id: string; full_name: string }
@@ -135,9 +141,14 @@ interface FieldGridProps {
   values: Record<string, FieldValue>
   errors: Record<string, string>
   onChange: (fieldId: string, val: FieldValue) => void
+  /** Set when rendering the requester's own create/view form — disables
+   *  fields the requester can see but not set (requester_can_set === false).
+   *  Left unset for the technician-editing surfaces (SubmittedDataPanel),
+   *  where every visible field stays editable regardless of this flag. */
+  requesterContext?: boolean
 }
 
-export function FieldGrid({ fields, values, errors, onChange }: FieldGridProps) {
+export function FieldGrid({ fields, values, errors, onChange, requesterContext }: FieldGridProps) {
   // Build rows by pairing consecutive short fields
   const rows: FormField[][] = []
   let i = 0
@@ -166,6 +177,7 @@ export function FieldGrid({ fields, values, errors, onChange }: FieldGridProps) 
               value={values[field.id] ?? getDefaultValue(field)}
               onChange={(val) => onChange(field.id, val)}
               error={errors[field.id]}
+              disabled={requesterContext && field.requester_can_set === false}
             />
           ))}
         </div>
@@ -181,9 +193,10 @@ interface SectionBlockProps {
   values: Record<string, FieldValue>
   errors: Record<string, string>
   onChange: (fieldId: string, val: FieldValue) => void
+  requesterContext?: boolean
 }
 
-export function SectionBlock({ section, values, errors, onChange }: SectionBlockProps) {
+export function SectionBlock({ section, values, errors, onChange, requesterContext }: SectionBlockProps) {
   const fields = [...section.fields].sort((a, b) => a.order - b.order)
   if (fields.length === 0) return null
 
@@ -200,20 +213,33 @@ export function SectionBlock({ section, values, errors, onChange }: SectionBlock
       {section.description && (
         <p className="mb-4 text-xs text-muted-foreground">{section.description}</p>
       )}
-      <FieldGrid fields={fields} values={values} errors={errors} onChange={onChange} />
+      <FieldGrid fields={fields} values={values} errors={errors} onChange={onChange} requesterContext={requesterContext} />
     </div>
   )
 }
 
 // ── DynamicForm ───────────────────────────────────────────────────────────────
 
-export function DynamicForm({ service, canBookOnBehalf }: DynamicFormProps) {
+export function DynamicForm({ service, canBookOnBehalf, allowedSubCategories }: DynamicFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [serverError, setServerError] = useState<string | null>(null)
   const [attachmentWarning, setAttachmentWarning] = useState<string | null>(null)
   const [createdRequestId, setCreatedRequestId] = useState<string | null>(null)
   const [onBehalfOf, setOnBehalfOf] = useState<OrgMember | null>(null)
+
+  // Built-in Category / Sub-category — a submission-time field, not inherited
+  // from the service, so it lives in its own state separate from `values`
+  // (the template's custom fields). Skipped entirely if nothing is tagged.
+  const categories = Array.from(
+    new Map(allowedSubCategories.map((sc) => [sc.category_id, sc.category_name])).entries()
+  ).map(([id, name]) => ({ id, name }))
+  const [categoryId, setCategoryId] = useState('')
+  const [subCategoryId, setSubCategoryId] = useState('')
+  const [categoryError, setCategoryError] = useState<string | null>(null)
+  const subCategoriesInCategory = categoryId
+    ? allowedSubCategories.filter((sc) => sc.category_id === categoryId)
+    : []
 
   // A tagged template is always section-based (it never has a legacy flat
   // shape) — an untagged/legacy service keeps rendering flat, header-less
@@ -222,7 +248,10 @@ export function DynamicForm({ service, canBookOnBehalf }: DynamicFormProps) {
     ? true
     : Array.isArray(service.form_sections) && service.form_sections.length > 0
 
-  const sections = resolveServiceFormSections(service)
+  // Technician-only fields (requester_can_view === false) never reach the
+  // requester's create-request form at all — filtered here so they're absent
+  // from values/validation/rendering all at once.
+  const sections = filterFieldsForRequester(resolveServiceFormSections(service))
   const allFields: FormField[] = flattenSections(sections)
 
   const [values, setValues] = useState<Record<string, FieldValue>>(() =>
@@ -236,14 +265,17 @@ export function DynamicForm({ service, canBookOnBehalf }: DynamicFormProps) {
   }
 
   function validate(): boolean {
-    const newErrors = validateFields(allFields, values)
+    const newErrors = validateFields(allFields, values, 'requester')
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!validate()) return
+    const fieldsValid = validate()
+    const categoryValid = allowedSubCategories.length === 0 || Boolean(subCategoryId)
+    setCategoryError(categoryValid ? null : 'Category is required.')
+    if (!fieldsValid || !categoryValid) return
     setServerError(null)
     setAttachmentWarning(null)
 
@@ -258,6 +290,7 @@ export function DynamicForm({ service, canBookOnBehalf }: DynamicFormProps) {
     const formData = new FormData()
     formData.set('service_id', service.id)
     formData.set('form_data', JSON.stringify(submittableValues))
+    if (subCategoryId) formData.set('sub_category_id', subCategoryId)
     if (onBehalfOf) formData.set('requester_id', onBehalfOf.id)
 
     startTransition(async () => {
@@ -323,6 +356,39 @@ export function DynamicForm({ service, canBookOnBehalf }: DynamicFormProps) {
         <RequesterOnBehalfPicker value={onBehalfOf} onChange={setOnBehalfOf} />
       )}
 
+      {categories.length > 0 && (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="mr-0.5 text-destructive">*</span>
+              Category
+            </label>
+            <SearchableSelect
+              value={categoryId}
+              onChange={(v) => { setCategoryId(v as string); setSubCategoryId(''); if (categoryError) setCategoryError(null) }}
+              options={categories.map((c) => ({ value: c.id, label: c.name }))}
+              placeholder="Search category…"
+              className={categoryError ? 'border-destructive focus-visible:ring-destructive/20' : undefined}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="mr-0.5 text-destructive">*</span>
+              Sub Category
+            </label>
+            <SearchableSelect
+              value={subCategoryId}
+              onChange={(v) => { setSubCategoryId(v as string); if (categoryError) setCategoryError(null) }}
+              options={subCategoriesInCategory.map((sc) => ({ value: sc.id, label: sc.name }))}
+              placeholder={categoryId ? 'Search sub category…' : 'Pick a category first'}
+              disabled={!categoryId}
+              className={categoryError ? 'border-destructive focus-visible:ring-destructive/20' : undefined}
+            />
+            {categoryError && <p className="text-[11px] font-medium text-destructive">{categoryError}</p>}
+          </div>
+        </div>
+      )}
+
       {isEmpty ? (
         <p className="py-4 text-center text-sm text-muted-foreground">
           No additional information required for this service.
@@ -338,6 +404,7 @@ export function DynamicForm({ service, canBookOnBehalf }: DynamicFormProps) {
                 values={values}
                 errors={errors}
                 onChange={handleChange}
+                requesterContext
               />
             ))}
         </div>
@@ -347,6 +414,7 @@ export function DynamicForm({ service, canBookOnBehalf }: DynamicFormProps) {
           values={values}
           errors={errors}
           onChange={handleChange}
+          requesterContext
         />
       )}
 

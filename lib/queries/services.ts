@@ -1,11 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import type {
+  AllowedSubCategory,
   ServiceCategory,
   ServiceCategoryWithSubCategories,
   ServiceSubCategory,
-  ServiceSubCategoryWithServices,
   ServiceWithRelations,
+  SlaPolicy,
 } from '@/types'
 
 // ── Role-based status filter helper ───────────────────────────────────────────
@@ -25,30 +26,31 @@ async function getAllowedStatuses(): Promise<string[]> {
 }
 
 // ── Shared select fragment ─────────────────────────────────────────────────────
+// A service no longer owns a category/sub-category (that's now a submission-
+// time field, tagged to the service many-to-many via service_sub_category_tags —
+// see getAllowedSubCategoriesForService below) so neither select fragment joins
+// category/sub_category anymore.
 
 const SERVICE_SELECT = `
   *,
-  category:service_categories (*),
-  sub_category:service_sub_categories (*),
   team:teams (*),
   approval_workflow:approval_workflows (*),
   owner:profiles!services_owner_id_fkey (id, full_name, avatar_url),
   backup_owner:profiles!services_backup_owner_id_fkey (id, full_name, avatar_url),
   escalation_policy:escalation_policies (*),
-  template:form_templates (id, name, form_sections)
+  template:form_templates (id, name, form_sections),
+  sla_policy:sla_policies (id, name, config)
 `
 
 /**
- * Lean projection for catalog/browse views (cards). Excludes the heavy form/SLA JSONB
- * columns (form_fields, form_sections, form_schema_snapshot, sla_config, visibility_scope,
- * keywords) and the owner/approval/escalation relations — those are only needed on the
- * service launch page (getServiceBySlug) and admin editor. Keeps just what a card renders.
+ * Lean projection for catalog/browse views (cards). Excludes the heavy form JSONB
+ * columns (form_fields, form_sections, form_schema_snapshot, visibility_scope,
+ * keywords) and the owner/approval/escalation/SLA-policy relations — those are only
+ * needed on the service launch page (getServiceBySlug) and admin editor. Keeps just
+ * what a card renders.
  */
 const SERVICE_CARD_SELECT = `
-  id, name, slug, icon, description, status, sort_order, is_active,
-  category_id, sub_category_id, team_id, default_priority,
-  category:service_categories (id, name, slug, icon),
-  sub_category:service_sub_categories (id, name, slug),
+  id, name, slug, icon, icon_image_url, description, status, sort_order, is_active, team_id, default_priority,
   team:teams (id, name)
 `
 
@@ -64,113 +66,27 @@ export async function getServiceCategories(): Promise<ServiceCategory[]> {
   return data ?? []
 }
 
-/** Fetch all categories with their sub-categories and service counts for the catalog landing. */
-export async function getCategoriesWithSubCategories(): Promise<ServiceCategoryWithSubCategories[]> {
-  const [supabase, allowedStatuses] = await Promise.all([createClient(), getAllowedStatuses()])
-  const { data } = await supabase
-    .from('service_categories')
-    .select(`
-      *,
-      sub_categories:service_sub_categories (
-        *,
-        services (${SERVICE_SELECT})
-      )
-    `)
-    .eq('is_active', true)
-    .order('sort_order')
-
-  if (!data) return []
-
-  // Filter sub-categories to active only, services to active + allowed status
-  return data.map((cat) => ({
-    ...cat,
-    sub_categories: (cat.sub_categories ?? [])
-      .filter((sc: ServiceSubCategory) => sc.is_active)
-      .sort((a: ServiceSubCategory, b: ServiceSubCategory) => a.sort_order - b.sort_order)
-      .map((sc) => ({
-        ...sc,
-        services: ((sc.services ?? []) as ServiceWithRelations[])
-          .filter((s) => s.is_active && allowedStatuses.includes((s as ServiceWithRelations & { status?: string }).status ?? 'published'))
-          .sort((a, b) => a.sort_order - b.sort_order),
-      })),
-  })) as ServiceCategoryWithSubCategories[]
-}
-
-/** Fetch a category by slug with its sub-categories for the category landing page. */
+/** Category + its sub-categories, for the admin Categories detail page
+ *  (Admin sees everything regardless of active/inactive — this isn't the
+ *  requester-facing catalog browsing that used to live here). */
 export async function getCategoryBySlug(slug: string): Promise<ServiceCategoryWithSubCategories | null> {
-  const [supabase, allowedStatuses] = await Promise.all([createClient(), getAllowedStatuses()])
+  const supabase = await createClient()
   const { data } = await supabase
     .from('service_categories')
-    .select(`
-      *,
-      sub_categories:service_sub_categories (
-        *,
-        services (${SERVICE_SELECT})
-      )
-    `)
+    .select(`*, sub_categories:service_sub_categories (*)`)
     .eq('slug', slug)
-    .eq('is_active', true)
     .single()
 
   if (!data) return null
 
   return {
     ...data,
-    sub_categories: (data.sub_categories ?? [])
-      .filter((sc: ServiceSubCategory) => sc.is_active)
-      .sort((a: ServiceSubCategory, b: ServiceSubCategory) => a.sort_order - b.sort_order)
-      .map((sc) => ({
-        ...sc,
-        services: ((sc.services ?? []) as ServiceWithRelations[])
-          .filter((s) => s.is_active && allowedStatuses.includes((s as ServiceWithRelations & { status?: string }).status ?? 'published'))
-          .sort((a, b) => a.sort_order - b.sort_order),
-      })),
+    sub_categories: ((data.sub_categories ?? []) as ServiceSubCategory[])
+      .sort((a, b) => a.sort_order - b.sort_order),
   } as ServiceCategoryWithSubCategories
 }
 
-/** Fetch a sub-category (and its services) by category slug + sub-category slug. */
-export async function getSubCategoryBySlug(
-  categorySlug: string,
-  subSlug: string
-): Promise<{ category: ServiceCategory; subCategory: ServiceSubCategoryWithServices } | null> {
-  const supabase = await createClient()
-
-  // First resolve the category
-  const { data: cat } = await supabase
-    .from('service_categories')
-    .select('*')
-    .eq('slug', categorySlug)
-    .eq('is_active', true)
-    .single()
-
-  if (!cat) return null
-
-  // Fetch sub-category and allowedStatuses in parallel
-  const [{ data: sub }, allowedStatuses] = await Promise.all([
-    supabase
-      .from('service_sub_categories')
-      .select(`*, services (${SERVICE_CARD_SELECT})`)
-      .eq('category_id', cat.id)
-      .eq('slug', subSlug)
-      .eq('is_active', true)
-      .single(),
-    getAllowedStatuses(),
-  ])
-
-  if (!sub) return null
-
-  return {
-    category: cat as ServiceCategory,
-    subCategory: {
-      ...sub,
-      services: ((sub.services ?? []) as ServiceWithRelations[])
-        .filter((s) => s.is_active && allowedStatuses.includes((s as ServiceWithRelations & { status?: string }).status ?? 'published'))
-        .sort((a, b) => a.sort_order - b.sort_order),
-    } as ServiceSubCategoryWithServices,
-  }
-}
-
-/** DB-side search — filters by name/description/keywords using Postgres ilike. */
+/** DB-side search — filters by name/description using Postgres ilike. Flat, no category grouping. */
 export async function searchServices(query: string): Promise<ServiceWithRelations[]> {
   const [supabase, allowedStatuses] = await Promise.all([createClient(), getAllowedStatuses()])
   const safe = query.replace(/[%_]/g, '\\$&').slice(0, 100)
@@ -194,16 +110,23 @@ export async function searchServices(query: string): Promise<ServiceWithRelation
   return (data ?? []) as ServiceWithRelations[]
 }
 
-export async function getServices(categoryId?: string, subCategoryId?: string): Promise<ServiceWithRelations[]> {
-  const supabase = await createClient()
+/** Flat, active-and-visible service list for the /services catalog root — the
+ *  whole catalog is now a flat list of broad services, no category tree to browse. */
+export async function getServices(): Promise<ServiceWithRelations[]> {
+  const [supabase, allowedStatuses] = await Promise.all([createClient(), getAllowedStatuses()])
   let query = supabase
     .from('services')
-    .select(SERVICE_SELECT)
+    .select(SERVICE_CARD_SELECT)
     .eq('is_active', true)
     .order('sort_order')
 
-  if (categoryId) query = query.eq('category_id', categoryId)
-  if (subCategoryId) query = query.eq('sub_category_id', subCategoryId)
+  if (allowedStatuses.length === 1 && allowedStatuses[0] === 'published') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query = (query as any).eq('status', 'published')
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query = (query as any).in('status', allowedStatuses)
+  }
 
   const { data } = await query
   return (data ?? []) as ServiceWithRelations[]
@@ -223,33 +146,34 @@ export async function getServiceSubCategoriesForFilter(): Promise<ServiceSubCate
     .map((s) => ({ id: s.id, name: s.name, category_name: s.category?.name ?? '—' }))
 }
 
-export type ReclassifyServiceOption = {
-  id: string
-  name: string
-  category_id: string | null
-  category_name: string
-  sub_category_id: string | null
-  sub_category_name: string | null
-}
-
-/** Lean active-service list for the "reclassify this request" picker — just
- *  enough to group/label options (and cascade Category → Sub Category →
- *  Service), not the full catalog card/detail shape. */
-export async function getActiveServicesForReclassify(): Promise<ReclassifyServiceOption[]> {
+/** Lean active-service list for the "move to a different service" reclassify
+ *  control — services no longer carry a category, so this is just {id, name}. */
+export async function getActiveServicesForReclassify(): Promise<{ id: string; name: string }[]> {
   const supabase = await createClient()
   const { data } = await supabase
     .from('services')
-    .select('id, name, category_id, sub_category_id, category:service_categories(name), sub_category:service_sub_categories(name)')
+    .select('id, name')
     .eq('is_active', true)
     .order('sort_order')
-  return ((data ?? []) as unknown as { id: string; name: string; category_id: string | null; sub_category_id: string | null; category: { name: string } | null; sub_category: { name: string } | null }[])
-    .map((s) => ({
-      id: s.id,
-      name: s.name,
-      category_id: s.category_id,
-      category_name: s.category?.name ?? '—',
-      sub_category_id: s.sub_category_id,
-      sub_category_name: s.sub_category?.name ?? null,
+  return data ?? []
+}
+
+/** Sub-categories a service is tagged to (grouped by category), for (a) the
+ *  built-in Category/Sub-category picker on the submission form and (b) the
+ *  "change category" reclassify control — the requester/agent picks one. */
+export async function getAllowedSubCategoriesForService(serviceId: string): Promise<AllowedSubCategory[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('service_sub_category_tags')
+    .select('sub_category:service_sub_categories(id, name, category_id, category:service_categories(name))')
+    .eq('service_id', serviceId)
+  return ((data ?? []) as unknown as { sub_category: { id: string; name: string; category_id: string; category: { name: string } | null } | null }[])
+    .filter((r) => r.sub_category)
+    .map((r) => ({
+      id: r.sub_category!.id,
+      name: r.sub_category!.name,
+      category_id: r.sub_category!.category_id,
+      category_name: r.sub_category!.category?.name ?? '—',
     }))
 }
 
@@ -266,50 +190,37 @@ export async function getServiceBySlug(slug: string): Promise<ServiceWithRelatio
 
 // ── Admin-only queries ─────────────────────────────────────────────────────────
 
-export async function getServiceById(id: string): Promise<ServiceWithRelations | null> {
-  const supabase = await createClient()
-  const { data } = await supabase
-    .from('services')
-    .select(SERVICE_SELECT)
-    .eq('id', id)
-    .single()
-  return data as ServiceWithRelations | null
-}
+export type ServiceWithTags = ServiceWithRelations & { sub_category_tag_ids: string[] }
 
-export async function getAllServicesForAdmin(): Promise<ServiceWithRelations[]> {
+/** Admin Service Catalog list — each service plus which sub-categories it's
+ *  tagged to, so the edit modal's "Tag Categories" checklist can pre-check
+ *  the right ones. */
+export async function getAllServicesForAdmin(): Promise<ServiceWithTags[]> {
   const supabase = await createClient()
   const { data } = await supabase
     .from('services')
-    .select(SERVICE_SELECT)
+    .select(`${SERVICE_SELECT}, tags:service_sub_category_tags(sub_category_id)`)
     .order('sort_order')
-  return (data ?? []) as ServiceWithRelations[]
+  return ((data ?? []) as unknown as (ServiceWithRelations & { tags: { sub_category_id: string }[] })[])
+    .map(({ tags, ...s }) => ({ ...s, sub_category_tag_ids: tags.map((t) => t.sub_category_id) }))
 }
 
-/** Full category → sub-category → service tree for the admin form builder. Includes inactive items. */
+/** Category → sub-category tree (no services nested — they're tagged, not
+ *  nested, now) for the admin Categories screen and the Service Catalog's
+ *  "Tag Categories" picker. Includes inactive items. */
 export async function getCategoryTreeForAdmin(): Promise<ServiceCategoryWithSubCategories[]> {
   const supabase = await createClient()
   const { data } = await supabase
     .from('service_categories')
-    .select(`
-      *,
-      sub_categories:service_sub_categories (
-        *,
-        services (${SERVICE_SELECT})
-      )
-    `)
+    .select(`*, sub_categories:service_sub_categories (*)`)
     .order('sort_order')
 
   if (!data) return []
 
   return data.map((cat) => ({
     ...cat,
-    sub_categories: ((cat.sub_categories ?? []) as ServiceSubCategoryWithServices[])
-      .sort((a, b) => a.sort_order - b.sort_order)
-      .map((sc) => ({
-        ...sc,
-        services: ((sc.services ?? []) as ServiceWithRelations[])
-          .sort((a, b) => a.sort_order - b.sort_order),
-      })),
+    sub_categories: ((cat.sub_categories ?? []) as ServiceSubCategory[])
+      .sort((a, b) => a.sort_order - b.sort_order),
   })) as ServiceCategoryWithSubCategories[]
 }
 
@@ -383,4 +294,39 @@ export async function getActiveFormTemplatesForPicker(): Promise<{ id: string; n
     .eq('is_active', true)
     .order('name')
   return data ?? []
+}
+
+// ── SLA Policies ──────────────────────────────────────────────────────────────
+
+/** Lean {id, name} list for the Service Catalog's "SLA Policy" picker. */
+export async function getActiveSlaPoliciesForPicker(): Promise<{ id: string; name: string }[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('sla_policies')
+    .select('id, name')
+    .eq('is_active', true)
+    .order('name')
+  return data ?? []
+}
+
+export type SlaPolicySummary = SlaPolicy & { service_count: number }
+
+/** All SLA policies for the admin library page, with how many services are mapped to each. */
+export async function getSlaPolicies(): Promise<SlaPolicySummary[]> {
+  const supabase = await createClient()
+  const [{ data: policies }, { data: services }] = await Promise.all([
+    supabase
+      .from('sla_policies')
+      .select('id, org_id, name, description, config, is_active, created_at, updated_at')
+      .order('name'),
+    supabase.from('services').select('sla_policy_id').not('sla_policy_id', 'is', null),
+  ])
+
+  const counts = new Map<string, number>()
+  for (const s of services ?? []) {
+    const id = (s as { sla_policy_id: string | null }).sla_policy_id
+    if (id) counts.set(id, (counts.get(id) ?? 0) + 1)
+  }
+
+  return (policies ?? []).map((p) => ({ ...p, service_count: counts.get(p.id) ?? 0 })) as SlaPolicySummary[]
 }

@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logAdminAudit } from './audit'
-import type { FormSection, SLAConfig } from '@/types'
+import type { FormSection } from '@/types'
 
 type ActionResult = { error?: string }
 
@@ -57,6 +57,10 @@ function validateSections(sections: FormSection[]): string | null {
         (!field.options || field.options.length === 0)
       ) {
         return `Section "${section.title}", field "${field.label}": select/multiselect fields require at least one option.`
+      }
+
+      if (field.requester_can_set === true && field.requester_can_view === false) {
+        return `Section "${section.title}", field "${field.label}": cannot be settable by requesters while hidden from them.`
       }
     }
   }
@@ -116,8 +120,15 @@ export type ServiceInput = {
   name: string
   description?: string
   icon?: string
-  category_id: string
-  sub_category_id?: string
+  // Uploaded icon image (Service Desk → Service Catalog's icon picker) —
+  // takes priority over `icon` (the emoji) whenever set. See
+  // lib/actions/admin/icons.ts's uploadIconImage().
+  icon_image_url?: string | null
+  // Sub-categories this service is tagged to — the requester picks one at
+  // submission time as a built-in form field (see resolveServiceFormSections()'s
+  // sibling picker in DynamicForm). A service is no longer nested under a
+  // single category/sub-category; this replaces that structural placement.
+  sub_category_tag_ids?: string[]
   team_id: string
   default_priority?: 'low' | 'medium' | 'high' | 'urgent'
   is_active?: boolean
@@ -126,11 +137,11 @@ export type ServiceInput = {
   backup_owner_id?: string | null
   version?: string
   visibility?: 'all' | 'agents_only' | 'managers_only'
-  // Per-priority response/resolution hour overrides for this service. A priority tier
-  // omitted here (or with a null field) falls back to a matching Field SLA Matrix
-  // override if one exists, or otherwise gets no SLA deadline — see
-  // lib/sla/resolve.ts resolveSlaDeadlines.
-  sla_config?: SLAConfig
+  // The SLA Policy this service is mapped to (Service Desk → SLA Policies) —
+  // null/undefined means unmapped, in which case only a matching Field SLA
+  // Matrix override (if any) applies; otherwise the request gets no SLA
+  // deadline. See lib/sla/resolve.ts resolveSlaDeadlines.
+  sla_policy_id?: string | null
   // Form Template this service is tagged to — null/undefined means untagged,
   // in which case the service keeps rendering its own form_sections/form_fields
   // (see lib/forms/sections.ts's resolveServiceFormSections()). Once tagged, the
@@ -152,7 +163,6 @@ export async function createService(
   if ('error' in guard) return guard
 
   if (!data.name?.trim()) return { error: 'Name is required.' }
-  if (!data.category_id) return { error: 'Category is required.' }
   if (!data.team_id) return { error: 'Team is required.' }
 
   const supabase = await createClient()
@@ -175,8 +185,7 @@ export async function createService(
     slug,
     description: data.description?.trim() || null,
     icon: data.icon?.trim() || null,
-    category_id: data.category_id,
-    sub_category_id: data.sub_category_id || null,
+    icon_image_url: data.icon_image_url || null,
     team_id: data.team_id,
     default_priority: data.default_priority ?? 'medium',
     is_active: data.is_active ?? true,
@@ -185,7 +194,7 @@ export async function createService(
     backup_owner_id: data.backup_owner_id ?? null,
     version: data.version?.trim() || '1.0',
     visibility: data.visibility ?? 'all',
-    sla_config: data.sla_config ?? {},
+    sla_policy_id: data.sla_policy_id || null,
     template_id: data.template_id || null,
   }
 
@@ -198,6 +207,16 @@ export async function createService(
   if (error) {
     console.error('[createService]', error.message)
     return { error: 'Failed to create service.' }
+  }
+
+  if (data.sub_category_tag_ids && data.sub_category_tag_ids.length > 0) {
+    const { error: tagError } = await supabase
+      .from('service_sub_category_tags')
+      .insert(data.sub_category_tag_ids.map((sub_category_id) => ({ service_id: row.id, sub_category_id })))
+    if (tagError) {
+      console.error('[createService] tag', tagError.message)
+      return { error: `Service created, but tagging categories failed: ${tagError.message}` }
+    }
   }
 
   await logAdminAudit({
@@ -225,8 +244,7 @@ export async function updateService(
     ...(data.name !== undefined ? { name: data.name.trim() } : {}),
     ...(data.description !== undefined ? { description: data.description?.trim() || null } : {}),
     ...(data.icon !== undefined ? { icon: data.icon?.trim() || null } : {}),
-    ...(data.category_id !== undefined ? { category_id: data.category_id } : {}),
-    ...(data.sub_category_id !== undefined ? { sub_category_id: data.sub_category_id || null } : {}),
+    ...(data.icon_image_url !== undefined ? { icon_image_url: data.icon_image_url || null } : {}),
     ...(data.team_id !== undefined ? { team_id: data.team_id } : {}),
     ...(data.default_priority !== undefined ? { default_priority: data.default_priority } : {}),
     ...(data.is_active !== undefined ? { is_active: data.is_active } : {}),
@@ -235,7 +253,7 @@ export async function updateService(
     ...(data.backup_owner_id !== undefined ? { backup_owner_id: data.backup_owner_id || null } : {}),
     ...(data.version !== undefined ? { version: data.version?.trim() || '1.0' } : {}),
     ...(data.visibility !== undefined ? { visibility: data.visibility } : {}),
-    ...(data.sla_config !== undefined ? { sla_config: data.sla_config } : {}),
+    ...(data.sla_policy_id !== undefined ? { sla_policy_id: data.sla_policy_id || null } : {}),
     ...(data.template_id !== undefined ? { template_id: data.template_id || null } : {}),
   }
 
@@ -247,6 +265,28 @@ export async function updateService(
   if (error) {
     console.error('[updateService]', error.message)
     return { error: 'Failed to update service.' }
+  }
+
+  // Replace-all: only touched when the caller actually sent a tag set (the
+  // modal always sends one, but a partial/programmatic update might not).
+  if (data.sub_category_tag_ids !== undefined) {
+    const { error: clearError } = await supabase
+      .from('service_sub_category_tags')
+      .delete()
+      .eq('service_id', id)
+    if (clearError) {
+      console.error('[updateService] clear tags', clearError.message)
+      return { error: `Service updated, but retagging categories failed: ${clearError.message}` }
+    }
+    if (data.sub_category_tag_ids.length > 0) {
+      const { error: tagError } = await supabase
+        .from('service_sub_category_tags')
+        .insert(data.sub_category_tag_ids.map((sub_category_id) => ({ service_id: id, sub_category_id })))
+      if (tagError) {
+        console.error('[updateService] tag', tagError.message)
+        return { error: `Service updated, but tagging categories failed: ${tagError.message}` }
+      }
+    }
   }
 
   await logAdminAudit({

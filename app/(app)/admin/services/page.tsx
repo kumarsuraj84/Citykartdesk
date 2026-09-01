@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { getCurrentProfile } from '@/lib/queries/profiles'
-import { getCategoryTreeForAdmin, getActiveFormTemplatesForPicker } from '@/lib/queries/services'
+import { getCategoryTreeForAdmin, getActiveFormTemplatesForPicker, getActiveSlaPoliciesForPicker, getAllServicesForAdmin } from '@/lib/queries/services'
 import { createClient } from '@/lib/supabase/server'
 import ServicesAdminClient from './ServicesAdminClient'
 import type { Profile, Team } from '@/types'
@@ -26,21 +26,23 @@ export default async function AdminServicesPage() {
   if (!profile) redirect('/login')
   if (profile.role !== 'admin' && profile.role !== 'platform_owner') redirect('/home')
 
-  const [categories, teams, profiles, templates] = await Promise.all([
+  const [services, categoryTree, teams, profiles, templates, slaPolicies] = await Promise.all([
+    getAllServicesForAdmin(),
     getCategoryTreeForAdmin(),
     getTeams(),
     getProfiles(),
     getActiveFormTemplatesForPicker(),
+    getActiveSlaPoliciesForPicker(),
   ])
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Service Management"
-        description="Create and manage services in the catalog. Tag a service to a Form Template to give it an intake form."
+        description="Create and manage services in the catalog. Tag categories/sub-categories the requester can pick, and a Form Template to give it an intake form."
         breadcrumbs={[{ label: 'Admin' }, { label: 'Services' }]}
       />
-      <ServicesAdminClient categories={categories} teams={teams} profiles={profiles} templates={templates} />
+      <ServicesAdminClient services={services} categoryTree={categoryTree} teams={teams} profiles={profiles} templates={templates} slaPolicies={slaPolicies} />
     </div>
   )
 }

@@ -198,7 +198,7 @@ function AlertRuleForm({
               onChange={(e) => set('notify_assignee', e.target.checked)}
               className="rounded"
             />
-            Notify Assignee
+            Notify Technician
           </label>
           <label className="flex items-center gap-2 text-xs cursor-pointer">
             <input

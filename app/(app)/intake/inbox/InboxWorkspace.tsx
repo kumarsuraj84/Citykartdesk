@@ -17,13 +17,14 @@ import { PipelineStatusBanner } from '@/components/intake/PipelineStatusBanner'
 // pane: the list, or — once a message is open — the reading view with a Back
 // button. Selection loads the review detail inline via a server action.
 export function InboxWorkspace({
-  messages, channels, initialFolder, initialChannel, profileId,
+  messages, channels, initialFolder, initialChannel, profileId, isAdmin,
 }: {
   messages: InboxMessage[]
   channels: IntakeChannel[]
   initialFolder?: string
   initialChannel?: string
   profileId: string
+  isAdmin: boolean
 }) {
   const router = useRouter()
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null)
@@ -109,6 +110,7 @@ export function InboxWorkspace({
             services={detail.services}
             teams={detail.teams}
             profileId={profileId}
+            isAdmin={isAdmin}
           />
         ) : (
           // detail failed to load (classification pending or review not yet created).

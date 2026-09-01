@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useTransition, useMemo, useRef, useEffect } from 'react'
+import { toast } from 'sonner'
 import {
-  Plus, Trash2, ChevronDown, ChevronRight, X, UserMinus, UserPlus, Search,
+  Plus, Trash2, ChevronDown, ChevronRight, X, UserMinus, UserPlus, Search, Pencil,
 } from 'lucide-react'
 import {
   createTeam,
@@ -189,6 +190,7 @@ function TeamCard({
       if (result.error) { setError(result.error); return }
       setEditingName(false)
       setError(null)
+      toast.success(`Renamed to "${name.trim()}"`)
     })
   }
 
@@ -227,9 +229,11 @@ function TeamCard({
         ) : (
           <button
             onClick={() => setEditingName(true)}
-            className="flex-1 text-left text-sm font-semibold text-foreground hover:text-primary transition-colors"
+            title="Click to rename"
+            className="group/name flex flex-1 items-center gap-1.5 text-left text-sm font-semibold text-foreground hover:text-primary transition-colors"
           >
             {name}
+            <Pencil className="h-3 w-3 shrink-0 text-muted-foreground opacity-60 group-hover/name:opacity-100 group-hover/name:text-primary transition-opacity" />
           </button>
         )}
 

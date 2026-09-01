@@ -8,9 +8,9 @@ import { logActivity } from '@/lib/activity'
 import { notify, getRequestAudience, parseMentions } from '@/lib/notifications'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
 import { getEnabledModules } from '@/lib/queries/profiles'
-import { validateFieldValue } from '@/lib/validation/formFields'
+import { validateFieldValue, isFieldValueEmpty } from '@/lib/validation/formFields'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
-import { resolveServiceFormSections } from '@/lib/forms/sections'
+import { resolveServiceFormSections, filterFlatFieldsForRequester, isTechnicianMandatory } from '@/lib/forms/sections'
 import { toCSV } from '@/lib/export/csv'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus } from '@/types'
 import type { Database, Json } from '@/types/database'
@@ -84,22 +84,51 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
 
   const { data: service, error: serviceError } = await supabase
     .from('services')
-    .select('*, team:teams (*), template:form_templates (form_sections)')
+    .select('*, team:teams (*), template:form_templates (form_sections), sla_policy:sla_policies (config)')
     .eq('id', serviceId)
     .eq('is_active', true)
     .single()
 
   if (serviceError || !service) return { error: 'Service not found.' }
 
+  // ── Category / Sub-category — a built-in field on every submission now
+  // (not inherited from the service). Only sub_category_id is submitted; the
+  // category is derived server-side from it so the two can never disagree.
+  // Validated against this service's tagged set — defense-in-depth beyond
+  // the client-side picker only offering tagged options.
+  const submittedSubCategoryId = (formData.get('sub_category_id') as string | null) || null
+  const { data: taggedSubCats } = await supabase
+    .from('service_sub_category_tags')
+    .select('sub_category:service_sub_categories(id, category_id, sla_priority)')
+    .eq('service_id', serviceId)
+  const taggedList = (taggedSubCats ?? [])
+    .map((t) => t.sub_category as { id: string; category_id: string; sla_priority: RequestPriority | null } | null)
+    .filter((s): s is { id: string; category_id: string; sla_priority: RequestPriority | null } => !!s)
+
+  if (taggedList.length > 0 && !submittedSubCategoryId) return { error: 'Category is required.' }
+
+  const matchedSubCat = submittedSubCategoryId ? taggedList.find((s) => s.id === submittedSubCategoryId) : undefined
+  if (submittedSubCategoryId && !matchedSubCat) return { error: 'Selected category is not valid for this service.' }
+
+  const categoryId = matchedSubCat?.category_id ?? null
+  const subCategoryId = matchedSubCat?.id ?? null
+
   // ── Resolve the form: template (if tagged) is the live source of truth,
   // otherwise the service's own sections/legacy flat fields — see
   // resolveServiceFormSections() in lib/forms/sections.ts.
   const sections = resolveServiceFormSections(service)
 
-  // All fields in submission order (for validation and title extraction)
+  // All fields in submission order (for SLA resolution, which is intentionally
+  // unfiltered — no technician field has a value yet at creation time either way)
   const allFields: FormField[] = [...sections]
     .sort((a, b) => a.order - b.order)
     .flatMap((s) => [...s.fields].sort((a, b) => a.order - b.order))
+
+  // Requester-visible subset — the requester never sees or submits a value for
+  // a technician-only field, so validation and title extraction must only
+  // consider what they could actually see, or a technician-mandatory field
+  // would wrongly block every submission.
+  const requesterFields = filterFlatFieldsForRequester(allFields)
 
   // ── Server-side validation ─────────────────────────────────────────────────
   // Source of truth — the client's DynamicForm runs the same check for instant
@@ -110,19 +139,19 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
   // exists — DynamicForm never puts them in form_data at all, uploading them
   // in a follow-up step once it has a real requestId. Required-ness for file
   // fields is therefore enforced client-side only (DynamicForm's validate()).
-  for (const field of allFields) {
+  for (const field of requesterFields) {
     if (field.type === 'file') continue
-    const err = validateFieldValue(field, parsedFormData[field.id])
+    const err = validateFieldValue(field, parsedFormData[field.id], 'requester')
     if (err) return { error: err }
   }
 
   // ── Request title ──────────────────────────────────────────────────────────
   // Priority: text → textarea → select value → radio value → multiselect (joined) → service name
   const titleField =
-    allFields.find((f) => f.type === 'text') ??
-    allFields.find((f) => f.type === 'textarea') ??
-    allFields.find((f) => (f.type === 'select' || f.type === 'radio') && parsedFormData[f.id]) ??
-    allFields.find((f) => f.type === 'multiselect' && Array.isArray(parsedFormData[f.id]) && (parsedFormData[f.id] as string[]).length > 0)
+    requesterFields.find((f) => f.type === 'text') ??
+    requesterFields.find((f) => f.type === 'textarea') ??
+    requesterFields.find((f) => (f.type === 'select' || f.type === 'radio') && parsedFormData[f.id]) ??
+    requesterFields.find((f) => f.type === 'multiselect' && Array.isArray(parsedFormData[f.id]) && (parsedFormData[f.id] as string[]).length > 0)
 
   let titleValue: string | undefined
   if (titleField) {
@@ -141,7 +170,11 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
 
   const title = titleValue ? `${service.name}: ${titleValue}` : service.name
 
-  const priority = service.default_priority as RequestPriority
+  // Priority is auto-set from the picked sub-category's assigned SLA tier when
+  // it has one (Service Desk → Categories → Sub-Category "SLA Priority"),
+  // falling back to the service's own default when it doesn't — same
+  // "not mandatory" rule the SOP describes.
+  const priority = (matchedSubCat?.sla_priority ?? service.default_priority) as RequestPriority
   const now = new Date()
   const { data: requesterProfile } = await supabase.from('profiles').select('org_id').eq('id', user.id).single()
   const orgId = requesterProfile?.org_id
@@ -150,16 +183,17 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
   //   1. field_sla_overrides — a specific dropdown/radio value selected on this
   //      submission (e.g. "Screen Repair" under Laptop Repair), configured via the
   //      Field SLA Matrix (Request Configuration → Field SLA Matrix).
-  //   2. services.sla_config — the service's own per-priority overrides, set via the
-  //      "SLA Overrides" section on the service form.
+  //   2. sla_policies.config[priority] — the SLA Policy this service is mapped to
+  //      (Service Desk → SLA Policies), looked up for the priority above.
   // No org-wide default beneath that (the old "SLA Targets" screen was removed) — a
   // service/field with no explicit override gets no SLA deadline. Both deadlines are
   // business-hours-aware (skip nights/weekends/holidays) from the moment they're first
   // computed, so there's no separate flat estimate + later recompute step.
+  const servicePolicy = service.sla_policy as unknown as { config: SLAConfig } | null
   const { responseDueAt, resolutionDueAt } = await resolveSlaDeadlines(supabase, {
     serviceId,
     priority,
-    serviceSlaConfig: service.sla_config as unknown as SLAConfig | null,
+    servicePolicyConfig: servicePolicy?.config ?? null,
     allFields,
     formData: parsedFormData,
     from: now,
@@ -174,6 +208,8 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
     .insert({
       request_no: '',
       service_id: serviceId,
+      category_id: categoryId,
+      sub_category_id: subCategoryId,
       team_id: service.team_id,
       requester_id: requesterId,
       org_id: orgId,
@@ -276,7 +312,7 @@ export async function updateRequestStatus(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, status, priority, requester_id, team_id, assigned_to, responded_at, waiting_since, response_due_at, resolution_due_at')
+    .select('id, status, priority, requester_id, team_id, assigned_to, responded_at, waiting_since, response_due_at, resolution_due_at, form_data, form_sections_snapshot, form_schema_snapshot')
     .eq('id', requestId)
     .single()
 
@@ -293,12 +329,38 @@ export async function updateRequestStatus(
   const allowedForAgent = AGENT_TRANSITIONS[currentStatus] ?? []
   const allowedForRequester = REQUESTER_TRANSITIONS[currentStatus] ?? []
 
+  const agentInitiated = isAgent && allowedForAgent.includes(newStatus)
   const canTransition =
-    (isAgent && allowedForAgent.includes(newStatus)) ||
+    agentInitiated ||
     (isRequester && allowedForRequester.includes(newStatus))
 
   if (!canTransition) {
     return { error: `Transition to "${newStatus}" is not permitted.` }
+  }
+
+  // Technician-mandatory fields (required, but hidden or read-only for the
+  // requester) must be filled in before an agent can move the ticket at all —
+  // only applies to the agent-initiated path; a requester reopening/cancelling
+  // their own ticket is never subject to this (they can't see these fields).
+  if (agentInitiated) {
+    const snapshotSections = Array.isArray(request.form_sections_snapshot)
+      ? (request.form_sections_snapshot as unknown as FormSection[])
+      : null
+    const snapshotLegacy = Array.isArray(request.form_schema_snapshot)
+      ? (request.form_schema_snapshot as unknown as FormField[])
+      : []
+    const snapshotFields: FormField[] = snapshotSections
+      ? snapshotSections.flatMap((s) => s.fields)
+      : snapshotLegacy
+    const formDataForCheck = (request.form_data ?? {}) as Record<string, unknown>
+    const missing = snapshotFields.filter(
+      (f) => isTechnicianMandatory(f) && isFieldValueEmpty(formDataForCheck[f.id])
+    )
+    if (missing.length > 0) {
+      return {
+        error: `Fill in the required field${missing.length > 1 ? 's' : ''} before changing status: ${missing.map((f) => f.label).join(', ')}.`,
+      }
+    }
   }
 
   const now = new Date()
@@ -402,7 +464,7 @@ export async function updateRequestStatus(
   }
 
   // REOPEN: recalculate resolution_due_at from current time and clear resolution timestamps.
-  // Uses the same field-override > service-override resolution as request creation — a
+  // Uses the same field-override > policy resolution as request creation — a
   // reopened ticket should still get the SLA its selected field values/service imply, not
   // just whatever the (removed) org-wide default used to say.
   if (newStatus === 'open' && (currentStatus === 'resolved' || currentStatus === 'closed')) {
@@ -410,14 +472,14 @@ export async function updateRequestStatus(
       const priority = request.priority as RequestPriority
       const { data: full } = await supabase
         .from('requests')
-        .select('service_id, form_data, service:services(sla_config, form_sections, form_fields, template:form_templates(form_sections))')
+        .select('service_id, form_data, service:services(sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections))')
         .eq('id', requestId)
         .single()
 
       let resolutionDueAt: string | null = null
       if (full) {
         const svc = full.service as unknown as {
-          sla_config?: SLAConfig
+          sla_policy?: { config?: SLAConfig } | null
           form_sections?: FormSection[]
           form_fields?: FormField[]
           template?: { form_sections?: FormSection[] } | null
@@ -426,7 +488,7 @@ export async function updateRequestStatus(
         const resolved = await resolveSlaDeadlines(supabase, {
           serviceId: full.service_id,
           priority,
-          serviceSlaConfig: svc.sla_config ?? null,
+          servicePolicyConfig: svc.sla_policy?.config ?? null,
           allFields,
           formData: (full.form_data ?? {}) as Record<string, unknown>,
           from: new Date(),
@@ -693,7 +755,9 @@ export async function bulkExportRequests(requestIds: string[]): Promise<{ csv?: 
     .from('requests')
     .select(`
       request_no, title, status, priority, created_at, updated_at, resolution_due_at,
-      service:services (name, category:service_categories(name), sub_category:service_sub_categories(name)),
+      service:services (name),
+      category:service_categories (name),
+      sub_category:service_sub_categories (name),
       team:teams (name),
       requester:profiles!requests_requester_id_fkey (full_name),
       assignee:profiles!requests_assigned_to_fkey (full_name)
@@ -705,7 +769,9 @@ export async function bulkExportRequests(requestIds: string[]): Promise<{ csv?: 
   type Row = {
     request_no: string; title: string; status: string; priority: string
     created_at: string; updated_at: string; resolution_due_at: string | null
-    service: { name: string; category: { name: string } | null; sub_category: { name: string } | null } | null
+    service: { name: string } | null
+    category: { name: string } | null
+    sub_category: { name: string } | null
     team: { name: string } | null
     requester: { full_name: string } | null
     assignee: { full_name: string } | null
@@ -716,8 +782,8 @@ export async function bulkExportRequests(requestIds: string[]): Promise<{ csv?: 
     title: r.title,
     status: r.status,
     priority: r.priority,
-    category: r.service?.category?.name ?? '',
-    sub_category: r.service?.sub_category?.name ?? '',
+    category: r.category?.name ?? '',
+    sub_category: r.sub_category?.name ?? '',
     service: r.service?.name ?? '',
     team: r.team?.name ?? '',
     requester: r.requester?.full_name ?? '',
@@ -735,7 +801,7 @@ export async function bulkExportRequests(requestIds: string[]): Promise<{ csv?: 
     { key: 'service', label: 'Service' },
     { key: 'team', label: 'Team' },
     { key: 'requester', label: 'Requester' },
-    { key: 'assignee', label: 'Assignee' },
+    { key: 'assignee', label: 'Technician' },
     { key: 'created_at', label: 'Created' },
     { key: 'updated_at', label: 'Updated' },
     { key: 'resolution_due_at', label: 'Resolution Due' },
@@ -840,7 +906,7 @@ export async function addCollaborator(
   if (!isOnTeam) return { error: 'Not authorized to add collaborators for this team.' }
 
   if (request.assigned_to === userId) {
-    return { error: 'Assignee is already the primary owner.' }
+    return { error: 'Technician is already the primary owner.' }
   }
 
   // Fetch collaborator (RLS-scoped to the caller's org — also validates the target is a
@@ -1196,7 +1262,7 @@ export async function changePriority(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, priority, team_id, status, created_at, waiting_since, assigned_to, service_id, form_data, service:services(sla_config, form_sections, form_fields, template:form_templates(form_sections))')
+    .select('id, priority, team_id, status, created_at, waiting_since, assigned_to, service_id, form_data, service:services(sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections))')
     .eq('id', requestId)
     .single()
 
@@ -1214,10 +1280,13 @@ export async function changePriority(
   if (oldPriority === newPriority) return {}
 
   // Recalculate SLA deadlines from created_at with the new priority tier — same
-  // field-override > service-override resolution as request creation, so the request's
-  // already-selected field values still drive the deadline under the new priority.
+  // field-override > SLA Policy resolution as request creation, so the
+  // request's already-selected field values still drive the deadline under
+  // the new priority. This is a manual override — it doesn't touch the
+  // request's sub-category, so a later reclassify can still re-derive
+  // priority from whatever tier that sub-category carries.
   const svc = request.service as unknown as {
-    sla_config?: SLAConfig
+    sla_policy?: { config?: SLAConfig } | null
     form_sections?: FormSection[]
     form_fields?: FormField[]
     template?: { form_sections?: FormSection[] } | null
@@ -1228,7 +1297,7 @@ export async function changePriority(
   let { responseDueAt: newResponseDue, resolutionDueAt: newResolutionDue } = await resolveSlaDeadlines(supabase, {
     serviceId: request.service_id,
     priority: newPriority,
-    serviceSlaConfig: svc.sla_config ?? null,
+    servicePolicyConfig: svc.sla_policy?.config ?? null,
     allFields,
     formData: (request.form_data ?? {}) as Record<string, unknown>,
     from: createdAt,
@@ -1307,13 +1376,15 @@ export async function reclassifyRequest(
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
 
-  const isAgentOrManager =
-    profile.role === 'agent' ||
+  // Moving a ticket to a different Service entirely is manager+ only — a
+  // technician (plain agent) may only reclassify Category/Sub Category
+  // within the current service, via updateRequestCategory below.
+  const isManagerTier =
     profile.role === 'manager' ||
     profile.role === 'admin' ||
     profile.role === 'platform_owner'
 
-  if (!isAgentOrManager) return { error: 'Not authorized to reclassify requests.' }
+  if (!isManagerTier) return { error: 'Not authorized to change the service — only Category/Sub Category can be changed.' }
 
   const { data: request } = await supabase
     .from('requests')
@@ -1323,11 +1394,7 @@ export async function reclassifyRequest(
 
   if (!request) return { error: 'Request not found.' }
 
-  const isOnTeam =
-    profile.role === 'manager' ||
-    profile.role === 'admin' ||
-    profile.role === 'platform_owner' ||
-    (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
+  const isOnTeam = isManagerTier
 
   if (!isOnTeam) return { error: 'Not authorized to reclassify requests for this team.' }
 
@@ -1335,7 +1402,7 @@ export async function reclassifyRequest(
 
   const { data: newService } = await supabase
     .from('services')
-    .select('id, name, team_id, sla_config')
+    .select('id, name, team_id, sla_policy:sla_policies(config)')
     .eq('id', newServiceId)
     .eq('is_active', true)
     .single()
@@ -1345,14 +1412,17 @@ export async function reclassifyRequest(
   // The originally submitted form_data belongs to the OLD service's field schema
   // (field ids are per-service, generated fresh for every service) — it can't be
   // remapped onto the new service's fields, so this recomputes SLA from the new
-  // service's own config only (no field-level override lookup) and leaves
-  // form_data as-is, a historical record of what was actually submitted. The SLA
-  // clock still runs from the original created_at, same as changePriority.
+  // service's own mapped SLA Policy only (no field-level override lookup) and
+  // leaves form_data as-is, a historical record of what was actually submitted.
+  // Priority itself is left unchanged (there's no sub-category left post-move
+  // to derive a tier from) — the SLA clock still runs from the original
+  // created_at, same as changePriority.
+  const newServicePolicy = newService.sla_policy as unknown as { config?: SLAConfig } | null
   const createdAt = new Date(request.created_at)
   let { responseDueAt: newResponseDue, resolutionDueAt: newResolutionDue } = await resolveSlaDeadlines(supabase, {
     serviceId: newServiceId,
     priority: request.priority as RequestPriority,
-    serviceSlaConfig: newService.sla_config as unknown as SLAConfig | null,
+    servicePolicyConfig: newServicePolicy?.config ?? null,
     from: createdAt,
   })
 
@@ -1376,6 +1446,12 @@ export async function reclassifyRequest(
       team_id: newService.team_id,
       response_due_at: newResponseDue,
       resolution_due_at: newResolutionDue,
+      // The old category/sub-category were tagged to the OLD service — they
+      // may not even be valid options for the new one, so they're cleared
+      // rather than left stale. Use updateRequestCategory() afterward to set
+      // the correct classification for the new service.
+      category_id: null,
+      sub_category_id: null,
       // A move to a different team invalidates the current assignee — they may
       // not even be a member of the new team, and requests_select's RLS grants
       // visibility via team membership, not via assigned_to, so leaving a stale
@@ -1391,7 +1467,7 @@ export async function reclassifyRequest(
     requestId,
     actorId: profile.id,
     action: 'reclassified',
-    metadata: { service_to: newService.name },
+    metadata: { service_to: newService.name, category_cleared: true },
   })
   if (activityResult.error) return { error: activityResult.error }
 
@@ -1423,6 +1499,114 @@ export async function reclassifyRequest(
     await runRulesForTrigger('updated', requestId)
   } catch (e) {
     console.error('[reclassifyRequest] Business rules (updated) failed', e)
+  }
+
+  revalidatePath(`/requests/${requestId}`)
+  revalidatePath('/requests')
+  return {}
+}
+
+// ── Change category/sub-category (same service) ─────────────────────────────
+// The common reclassify path now that category is decoupled from service:
+// correcting which of the CURRENT service's tagged sub-categories applies,
+// without moving the ticket to a different service/team. reclassifyRequest()
+// above is the rarer "wrong service entirely" case.
+
+export async function updateRequestCategory(
+  requestId: string,
+  subCategoryId: string
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const profile = await getCurrentProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+
+  const isAgentOrManager =
+    profile.role === 'agent' ||
+    profile.role === 'manager' ||
+    profile.role === 'admin' ||
+    profile.role === 'platform_owner'
+
+  if (!isAgentOrManager) return { error: 'Not authorized to reclassify requests.' }
+
+  const { data: request } = await supabase
+    .from('requests')
+    .select('id, service_id, team_id, priority, created_at, waiting_since, sub_category_id, service:services(sla_policy:sla_policies(config))')
+    .eq('id', requestId)
+    .single()
+
+  if (!request) return { error: 'Request not found.' }
+
+  const isOnTeam =
+    profile.role === 'manager' ||
+    profile.role === 'admin' ||
+    profile.role === 'platform_owner' ||
+    (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
+
+  if (!isOnTeam) return { error: 'Not authorized to reclassify requests for this team.' }
+
+  if (request.sub_category_id === subCategoryId) return {}
+
+  // Validate the new sub-category is actually tagged to this request's service.
+  const { data: tag } = await supabase
+    .from('service_sub_category_tags')
+    .select('sub_category:service_sub_categories(id, name, category_id, sla_priority)')
+    .eq('service_id', request.service_id)
+    .eq('sub_category_id', subCategoryId)
+    .single()
+  const subCat = tag?.sub_category as { id: string; name: string; category_id: string; sla_priority: RequestPriority | null } | null
+  if (!subCat) return { error: 'Selected category is not valid for this service.' }
+
+  // Priority is re-derived from the new sub-category's assigned tier when it
+  // has one — same "not mandatory" rule as createRequest — otherwise it's
+  // left as whatever it already was.
+  const oldPriority = request.priority as RequestPriority
+  const newPriority = subCat.sla_priority ?? oldPriority
+
+  const createdAt = new Date(request.created_at)
+  const requestService = request.service as unknown as { sla_policy?: { config?: SLAConfig } | null } | null
+  let { responseDueAt: newResponseDue, resolutionDueAt: newResolutionDue } = await resolveSlaDeadlines(supabase, {
+    serviceId: request.service_id,
+    priority: newPriority,
+    servicePolicyConfig: requestService?.sla_policy?.config ?? null,
+    from: createdAt,
+  })
+
+  if (request.waiting_since) {
+    const alreadyPausedMs = Date.now() - new Date(request.waiting_since).getTime()
+    if (newResponseDue) newResponseDue = new Date(new Date(newResponseDue).getTime() + alreadyPausedMs).toISOString()
+    if (newResolutionDue) newResolutionDue = new Date(new Date(newResolutionDue).getTime() + alreadyPausedMs).toISOString()
+  }
+
+  const admin = createAdminClient()
+  const { error: updateError } = await admin
+    .from('requests')
+    .update({
+      category_id: subCat.category_id,
+      sub_category_id: subCat.id,
+      priority: newPriority,
+      response_due_at: newResponseDue,
+      resolution_due_at: newResolutionDue,
+    })
+    .eq('id', requestId)
+
+  if (updateError) return { error: updateError.message }
+
+  const activityResult = await logActivity({
+    requestId,
+    actorId: profile.id,
+    action: 'reclassified',
+    metadata:
+      newPriority !== oldPriority
+        ? { sub_category_to: subCat.name, priority_from: oldPriority, priority_to: newPriority }
+        : { sub_category_to: subCat.name },
+  })
+  if (activityResult.error) return { error: activityResult.error }
+
+  try {
+    const { runRulesForTrigger } = await import('@/lib/rules/run')
+    await runRulesForTrigger('updated', requestId)
+  } catch (e) {
+    console.error('[updateRequestCategory] Business rules (updated) failed', e)
   }
 
   revalidatePath(`/requests/${requestId}`)
@@ -1498,7 +1682,7 @@ export async function updateRequestFormData(
   if (fieldsToUpdate.length === 0) return { error: 'No editable fields to update.' }
 
   for (const field of fieldsToUpdate) {
-    const err = validateFieldValue(field, parsed[field.id])
+    const err = validateFieldValue(field, parsed[field.id], 'technician')
     if (err) return { error: err }
   }
 
@@ -1608,7 +1792,7 @@ export async function duplicateRequest(requestId: string): Promise<{ id?: string
 
   const { data: src } = await supabase
     .from('requests')
-    .select('title, description, service_id, team_id, priority, form_data, form_schema_snapshot')
+    .select('title, description, service_id, team_id, priority, form_data, form_schema_snapshot, form_sections_snapshot')
     .eq('id', requestId)
     .single()
 
@@ -1617,16 +1801,17 @@ export async function duplicateRequest(requestId: string): Promise<{ id?: string
   const { data: newReq, error } = await admin
     .from('requests')
     .insert({
-      request_no:           '', // overwritten by trg_requests_assign_no before insert
-      title:                src.title + ' (copy)',
-      description:          src.description,
-      service_id:           src.service_id,
-      team_id:              src.team_id,
-      requester_id:         profile.id,
-      priority:             src.priority,
-      status:               'open',
-      form_data:            src.form_data,
-      form_schema_snapshot: src.form_schema_snapshot,
+      request_no:             '', // overwritten by trg_requests_assign_no before insert
+      title:                  src.title + ' (copy)',
+      description:            src.description,
+      service_id:             src.service_id,
+      team_id:                src.team_id,
+      requester_id:           profile.id,
+      priority:               src.priority,
+      status:                 'open',
+      form_data:              src.form_data,
+      form_schema_snapshot:   src.form_schema_snapshot,
+      form_sections_snapshot: src.form_sections_snapshot,
     })
     .select('id')
     .single()
@@ -1679,6 +1864,8 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
 
   if (existing) return { error: 'An approval is already in progress for this request.' }
 
+  let usedWorkflowId = workflowId
+
   if (!workflowId) {
     // No workflow on service — look for any default workflow
     const { data: defaultWorkflow } = await supabase
@@ -1687,6 +1874,7 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
       .limit(1)
       .maybeSingle()
     if (!defaultWorkflow) return { error: 'No approval workflow is configured. Ask an admin to set one up.' }
+    usedWorkflowId = defaultWorkflow.id
 
     const { error: wfErr } = await admin
       .from('approvals')
@@ -1717,36 +1905,38 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
   // Notify approvers that their review is needed
   {
     const admin = createAdminClient()
-    const effectiveWorkflowId = workflowId ?? (() => {
-      // workflowId may be null when a default workflow was used — re-query
-      return null
-    })()
 
-    if (effectiveWorkflowId) {
+    if (usedWorkflowId) {
       const { data: firstStep } = await admin
         .from('approval_workflow_steps')
-        .select('approver_type, approver_user_id')
-        .eq('workflow_id', effectiveWorkflowId)
+        .select('approver_type, approver_user_id, approver:profiles!approval_workflow_steps_approver_user_id_fkey(full_name)')
+        .eq('workflow_id', usedWorkflowId)
         .order('step_order', { ascending: true })
         .limit(1)
         .single()
 
-      if (firstStep?.approver_type === 'specific_user' && firstStep.approver_user_id && firstStep.approver_user_id !== profile.id) {
-        notify({
-          recipientId: firstStep.approver_user_id,
-          actorId: profile.id,
-          type: 'approval_requested',
-          title: 'Approval required',
-          body: `${req.title} has been submitted for your approval.`,
-          requestId,
-          link: `/requests/${requestId}?tab=approvals`,
-        }).catch(() => {})
+      let approverNames: string[] = []
+
+      if (firstStep?.approver_type === 'specific_user' && firstStep.approver_user_id) {
+        approverNames = firstStep.approver ? [firstStep.approver.full_name] : []
+        if (firstStep.approver_user_id !== profile.id) {
+          notify({
+            recipientId: firstStep.approver_user_id,
+            actorId: profile.id,
+            type: 'approval_requested',
+            title: 'Approval required',
+            body: `${req.title} has been submitted for your approval.`,
+            requestId,
+            link: `/requests/${requestId}?tab=approvals`,
+          }).catch(() => {})
+        }
       } else if (firstStep?.approver_type === 'any_manager') {
         const { data: managers } = await admin
           .from('profiles')
-          .select('id')
+          .select('id, full_name')
           .in('role', ['manager', 'admin'])
           .eq('is_active', true)
+        approverNames = (managers ?? []).map((m) => m.full_name)
         for (const mgr of managers ?? []) {
           if (mgr.id !== profile.id) {
             notify({
@@ -1760,6 +1950,15 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
             }).catch(() => {})
           }
         }
+      }
+
+      if (approverNames.length > 0) {
+        await logActivity({
+          requestId,
+          actorId: profile.id,
+          action: 'approval_requested',
+          metadata: { approver_names: approverNames },
+        }).catch(() => {})
       }
     }
   }

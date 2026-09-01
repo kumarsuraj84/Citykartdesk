@@ -16,12 +16,49 @@ export async function getRequestById(id: string): Promise<RequestWithRelations |
       *,
       requester:profiles!requests_requester_id_fkey (*),
       assignee:profiles!requests_assigned_to_fkey (*),
-      service:services (*, category:service_categories(name), sub_category:service_sub_categories(name)),
+      service:services (*),
+      category:service_categories(id, name),
+      sub_category:service_sub_categories(id, name),
       team:teams (*)
     `)
     .eq('id', id)
     .single()
   return data as RequestWithRelations | null
+}
+
+export type RequestPreviewSummary = {
+  id: string
+  request_no: string
+  title: string
+  description: string | null
+  status: RequestStatus
+  priority: RequestPriority
+  created_at: string
+  requester: { full_name: string } | null
+  service: { name: string } | null
+  category: { name: string } | null
+  sub_category: { name: string } | null
+}
+
+// Lean counterpart to getRequestById() for read-only summary surfaces (the
+// Approvals preview dialog / notification-bell preview) that only ever show
+// these fields — getRequestById's `*` pulls form_data/form_schema_snapshot/
+// form_sections_snapshot (JSONB, can be large) plus full nested profile/
+// service/team rows, none of which the preview renders.
+export async function getRequestPreviewSummary(id: string): Promise<RequestPreviewSummary | null> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('requests')
+    .select(`
+      id, request_no, title, description, status, priority, created_at,
+      requester:profiles!requests_requester_id_fkey (full_name),
+      service:services (name),
+      category:service_categories (name),
+      sub_category:service_sub_categories (name)
+    `)
+    .eq('id', id)
+    .single()
+  return data as RequestPreviewSummary | null
 }
 
 export async function getRequestActivity(requestId: string): Promise<RequestActivityWithActor[]> {
@@ -82,7 +119,12 @@ export interface GetRequestsOptions {
   view: RequestView | WorkbenchView
   /** userId of the current viewer — avoids a redundant getUser() call */
   userId: string
-  status?: RequestStatus | 'active'
+  /** 'active' excludes closed/cancelled only (resolved still shows) — the
+   *  existing default. 'unresolved' additionally excludes resolved — used by
+   *  the "Requests by Technician" dashboard widget's Total column, which
+   *  counts only the still-in-flight statuses (open/assigned/in_progress/
+   *  waiting_user/pending_approval). */
+  status?: RequestStatus | 'active' | 'unresolved'
   /** Matches title/request_no AND the body of any comment on the request (internal
    *  notes included — RLS on request_comments already hides those the viewer
    *  can't see, same as it would if they opened the thread directly). */
@@ -214,6 +256,69 @@ function sanitizeQuery(q: string): string {
   return q.replace(/[(),]/g, '').trim()
 }
 
+// ── Requests by Technician (admin/manager home dashboard widget) ───────────────
+
+/** The still-in-flight statuses a technician's workload is measured across —
+ *  deliberately excludes resolved/closed/cancelled. */
+export const ACTIVE_TECH_STATUSES: RequestStatus[] = ['open', 'assigned', 'in_progress', 'waiting_user', 'pending_approval']
+
+export type TechnicianWorkloadRow = {
+  /** null = the "Unassigned" row. */
+  technicianId: string | null
+  technicianName: string
+  counts: Partial<Record<RequestStatus, number>>
+  total: number
+}
+
+/**
+ * One row per technician currently holding at least one active (non-resolved/
+ * closed/cancelled) request, plus an "Unassigned" row, each broken down by
+ * status. RLS scopes this to the viewer's org the same way getWorkloadMetrics()
+ * above relies on it — no explicit org_id filter needed. Technicians with zero
+ * active requests right now simply don't appear (matches the reference UI —
+ * this is a workload snapshot, not a full roster).
+ */
+export async function getTechnicianWorkloadBoard(): Promise<TechnicianWorkloadRow[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('requests')
+    .select('assigned_to, status')
+    .in('status', ACTIVE_TECH_STATUSES)
+
+  const rows = (data ?? []) as { assigned_to: string | null; status: RequestStatus }[]
+  if (rows.length === 0) return []
+
+  const byAssignee = new Map<string, Partial<Record<RequestStatus, number>>>()
+  for (const r of rows) {
+    const key = r.assigned_to ?? 'unassigned'
+    const bucket = byAssignee.get(key) ?? {}
+    bucket[r.status] = (bucket[r.status] ?? 0) + 1
+    byAssignee.set(key, bucket)
+  }
+
+  const technicianIds = [...byAssignee.keys()].filter((k) => k !== 'unassigned')
+  const { data: profiles } = technicianIds.length > 0
+    ? await supabase.from('profiles').select('id, full_name').in('id', technicianIds)
+    : { data: [] as { id: string; full_name: string }[] }
+  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]))
+
+  const result: TechnicianWorkloadRow[] = [...byAssignee.entries()].map(([key, counts]) => ({
+    technicianId: key === 'unassigned' ? null : key,
+    technicianName: key === 'unassigned' ? 'Unassigned' : (nameById.get(key) ?? 'Unknown'),
+    counts,
+    total: Object.values(counts).reduce((sum: number, n) => sum + (n ?? 0), 0),
+  }))
+
+  // Busiest technician first; Unassigned always last regardless of count.
+  result.sort((a, b) => {
+    if (a.technicianId === null) return 1
+    if (b.technicianId === null) return -1
+    return b.total - a.total
+  })
+
+  return result
+}
+
 export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRequests> {
   const supabase = await createClient()
   const { userId, view, status, q, assignedTo, priority, serviceId, categoryId, subCategoryId, requesterId } = opts
@@ -230,9 +335,12 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
       id, request_no, title, description, requester_id, assigned_to, service_id, team_id,
       org_id, priority, status, response_due_at, resolution_due_at, responded_at,
       waiting_since, resolved_at, closed_at, created_at, updated_at, source_metadata,
+      category_id, sub_category_id,
       requester:profiles!requests_requester_id_fkey (id, full_name, avatar_url),
       assignee:profiles!requests_assigned_to_fkey (id, full_name, avatar_url),
-      service:services!inner (id, name, icon, slug, category_id, sub_category_id, category:service_categories(id, name), sub_category:service_sub_categories(id, name)),
+      service:services (id, name, icon, slug),
+      category:service_categories (id, name),
+      sub_category:service_sub_categories (id, name),
       team:teams (id, name)
     `
 
@@ -356,6 +464,8 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
 
   if (status === 'active') {
     query = query.not('status', 'in', '("closed","cancelled")')
+  } else if (status === 'unresolved') {
+    query = query.not('status', 'in', '("resolved","closed","cancelled")')
   } else if (status) {
     query = query.eq('status', status)
   }
@@ -375,8 +485,8 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
 
   if (priority) query = query.eq('priority', priority)
   if (serviceId) query = query.eq('service_id', serviceId)
-  if (categoryId) query = query.eq('service.category_id', categoryId)
-  if (subCategoryId) query = query.eq('service.sub_category_id', subCategoryId)
+  if (categoryId) query = query.eq('category_id', categoryId)
+  if (subCategoryId) query = query.eq('sub_category_id', subCategoryId)
 
   // ── Requester filter (agent viewing specific user's history) ─────────────
 

@@ -23,23 +23,29 @@ type RawRequest = {
   status: string
   service_id: string
   team_id: string
+  project_id: string | null
   requester_id: string
   assigned_to: string | null
   org_id: string | null
   created_at: string
+  resolved_at: string | null
+  closed_at: string | null
+  source_metadata: unknown
   form_data: Record<string, unknown> | null
   waiting_since: string | null
   response_due_at: string | null
   resolution_due_at: string | null
+  category_id: string | null
+  sub_category_id: string | null
   service: {
-    category_id: string | null
-    sub_category_id: string | null
-    sla_config: SLAConfig | null
+    template_id: string | null
+    sla_policy: { config: SLAConfig | null } | null
     form_sections: FormSection[] | null
     form_fields: FormField[] | null
     template: { form_sections: FormSection[] | null } | null
   } | null
   requester: {
+    role: string
     department_id: string | null
     location_id: string | null
     designation_id: string | null
@@ -48,28 +54,62 @@ type RawRequest = {
 }
 
 const SELECT =
-  'id, title, description, priority, status, service_id, team_id, requester_id, assigned_to, org_id, created_at, form_data, waiting_since, response_due_at, resolution_due_at, service:services(category_id, sub_category_id, sla_config, form_sections, form_fields, template:form_templates(form_sections)), requester:profiles!requester_id(department_id, location_id, designation_id, function_id)'
+  'id, title, description, priority, status, service_id, team_id, project_id, requester_id, assigned_to, org_id, created_at, resolved_at, closed_at, source_metadata, form_data, waiting_since, response_due_at, resolution_due_at, category_id, sub_category_id, service:services(template_id, sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections)), requester:profiles!requester_id(role, department_id, location_id, designation_id, function_id)'
 
 async function fetchRequest(admin: AnyClient, requestId: string): Promise<RawRequest | null> {
   const { data } = await admin.from('requests').select(SELECT).eq('id', requestId).single()
   return (data as RawRequest) ?? null
 }
 
-function toEvalRequest(request: RawRequest): RuleEvaluationRequest {
+function sourceChannelOf(sourceMetadata: unknown): string {
+  const createdVia = (sourceMetadata as { created_via?: string } | null)?.created_via
+  return createdVia === 'intake' ? 'intake' : 'portal'
+}
+
+function isSlaBreached(request: RawRequest): boolean {
+  if (!request.resolution_due_at) return false
+  const closedLike = request.resolved_at ?? request.closed_at
+  const now = new Date().toISOString()
+  return closedLike ? closedLike > request.resolution_due_at : now > request.resolution_due_at
+}
+
+function ageDays(request: RawRequest): number {
+  return Math.round((Date.now() - new Date(request.created_at).getTime()) / 86_400_000)
+}
+
+async function hasAttachment(admin: AnyClient, requestId: string): Promise<boolean> {
+  const { data } = await admin
+    .from('request_attachments')
+    .select('id')
+    .eq('request_id', requestId)
+    .is('deleted_at', null)
+    .limit(1)
+  return (data?.length ?? 0) > 0
+}
+
+async function toEvalRequest(admin: AnyClient, request: RawRequest): Promise<RuleEvaluationRequest> {
   return {
     priority: request.priority,
     status: request.status,
     service_id: request.service_id,
-    category_id: request.service?.category_id ?? null,
-    sub_category_id: request.service?.sub_category_id ?? null,
+    category_id: request.category_id,
+    sub_category_id: request.sub_category_id,
+    template_id: request.service?.template_id ?? null,
     team_id: request.team_id,
+    project_id: request.project_id,
+    assigned_to: request.assigned_to,
     requester_id: request.requester_id,
+    requester_role: request.requester?.role ?? '',
     requester_department_id: request.requester?.department_id ?? null,
     requester_location_id: request.requester?.location_id ?? null,
     requester_designation_id: request.requester?.designation_id ?? null,
     requester_function_id: request.requester?.function_id ?? null,
     title: request.title,
     description: request.description,
+    source_channel: sourceChannelOf(request.source_metadata),
+    is_sla_breached: isSlaBreached(request),
+    has_attachment: await hasAttachment(admin, request.id),
+    age_days: ageDays(request),
     form_data: request.form_data,
   }
 }
@@ -90,7 +130,7 @@ function toActionRequest(request: RawRequest): ActionRequest {
     response_due_at: request.response_due_at,
     resolution_due_at: request.resolution_due_at,
     service: {
-      sla_config: request.service?.sla_config ?? null,
+      sla_policy: request.service?.sla_policy ?? null,
       form_sections: request.service?.form_sections ?? null,
       form_fields: request.service?.form_fields ?? null,
       template: request.service?.template ?? null,
@@ -132,12 +172,21 @@ export async function runRulesForTrigger(trigger: 'created' | 'updated', request
 
   if (!rules || rules.length === 0) return
 
+  // Computed once per request "version" rather than once per rule — one of
+  // its fields (has_attachment) costs a real DB query, and the request only
+  // actually changes when a rule's actions run (recomputed below in that
+  // case), not on every loop iteration.
+  let evalRequest = await toEvalRequest(admin, request)
+
   for (const rule of rules as BusinessRuleRow[]) {
-    if (!matchesConditions(toEvalRequest(request), rule.conditions ?? [], rule.conditions_logic)) continue
+    if (!matchesConditions(evalRequest, rule.conditions ?? [], rule.conditions_logic)) continue
 
     await executeActions(admin, toActionRequest(request), rule.actions ?? [], { ruleId: rule.id, ruleName: rule.name })
 
     const refreshed = await fetchRequest(admin, requestId)
-    if (refreshed) request = refreshed
+    if (refreshed) {
+      request = refreshed
+      evalRequest = await toEvalRequest(admin, request)
+    }
   }
 }

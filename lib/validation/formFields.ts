@@ -1,4 +1,7 @@
 import type { FormField } from '@/types'
+import { requesterCanView, requesterCanSet } from '@/lib/forms/sections'
+
+export type FieldAudience = 'requester' | 'technician'
 
 // Permissive but real-world-useful — rejects obviously malformed input
 // ("john", "a@b") without being pedantic about the RFC 5322 edge cases.
@@ -9,7 +12,7 @@ export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 // international pattern) per explicit product requirement.
 export const PHONE_REGEX = /^[0-9]{10}$/
 
-function isEmpty(val: unknown): boolean {
+export function isFieldValueEmpty(val: unknown): boolean {
   return (
     val === undefined ||
     val === null ||
@@ -19,18 +22,29 @@ function isEmpty(val: unknown): boolean {
   )
 }
 
+/** Whether `required` actually applies for the given audience — a field is
+ *  requester-mandatory only when the requester can both see and set it;
+ *  otherwise (hidden, or visible-but-read-only) a required field is the
+ *  technician's responsibility instead. See lib/forms/sections.ts. */
+function isRequiredFor(field: FormField, audience: FieldAudience): boolean {
+  if (!field.required) return false
+  const requesterFacing = requesterCanView(field) && requesterCanSet(field)
+  return audience === 'requester' ? requesterFacing : !requesterFacing
+}
+
 /**
  * Validate a single dynamic-form field's submitted value against its type and
  * `required`/`validation` config. Returns an error message, or null if valid.
  * Shared by DynamicForm (client) and createRequest (server) so the two can
  * never drift out of sync — the server is the source of truth, the client
- * just gives the user faster feedback.
+ * just gives the user faster feedback. `audience` decides whether `required`
+ * applies — see isRequiredFor().
  */
-export function validateFieldValue(field: FormField, value: unknown): string | null {
-  if (field.required && isEmpty(value)) {
+export function validateFieldValue(field: FormField, value: unknown, audience: FieldAudience = 'requester'): string | null {
+  if (isRequiredFor(field, audience) && isFieldValueEmpty(value)) {
     return `${field.label} is required.`
   }
-  if (isEmpty(value)) return null
+  if (isFieldValueEmpty(value)) return null
 
   if (field.type === 'email') {
     if (!EMAIL_REGEX.test(String(value).trim())) {
@@ -71,11 +85,12 @@ export function validateFieldValue(field: FormField, value: unknown): string | n
 /** Validate a set of fields against submitted values. Returns a map of fieldId → error message. */
 export function validateFields(
   fields: FormField[],
-  values: Record<string, unknown>
+  values: Record<string, unknown>,
+  audience: FieldAudience = 'requester'
 ): Record<string, string> {
   const errors: Record<string, string> = {}
   for (const field of fields) {
-    const err = validateFieldValue(field, values[field.id])
+    const err = validateFieldValue(field, values[field.id], audience)
     if (err) errors[field.id] = err
   }
   return errors

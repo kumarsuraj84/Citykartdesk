@@ -16,7 +16,10 @@ import {
 import type { RuleCondition, RuleConditionField, RuleConditionOperator, RuleConditionsLogic } from '@/lib/rules/evaluate'
 import type { RuleAction } from '@/lib/rules/actions'
 import { flattenLeafOptions } from '@/lib/forms/options'
-import type { Profile, FormFieldType, FormFieldOption } from '@/types'
+import { SearchableSelect } from '@/components/ui/searchable-select'
+import { ROLE_LABELS } from '@/lib/constants/roles'
+import type { ServiceFormFieldRef } from '@/lib/forms/sections'
+import type { Profile, FormFieldType, FormFieldOption, UserRole } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,14 +27,7 @@ type Ref = { id: string; name: string }
 type SubCatRef = Ref & { category_id: string }
 type ProfileRef = Pick<Profile, 'id' | 'full_name' | 'role'>
 
-export type RuleFormFieldRef = {
-  id: string
-  label: string
-  type: FormFieldType
-  options?: FormFieldOption[]
-  serviceId: string
-  serviceName: string
-}
+export type RuleFormFieldRef = ServiceFormFieldRef
 
 type BusinessRuleRow = {
   id: string
@@ -54,10 +50,16 @@ interface BusinessRulesClientProps {
   subCategories: SubCatRef[]
   teams: Ref[]
   profiles: ProfileRef[]
+  // Agent-tier only (agent/manager/admin/platform_owner) — for the "Assign to"
+  // action's picker. Distinct from `profiles` (the Requester condition's
+  // picker), which deliberately stays unfiltered.
+  agents: ProfileRef[]
   departments: Ref[]
   locations: Ref[]
   designations: Ref[]
   functions: Ref[]
+  projects: Ref[]
+  templates: Ref[]
   formFields: RuleFormFieldRef[]
   legacyRulesAvailable: boolean
 }
@@ -75,15 +77,23 @@ const REQUEST_FIELD_OPTIONS: { value: RuleConditionField; label: string }[] = [
   { value: 'priority', label: 'Priority' },
   { value: 'status', label: 'Status' },
   { value: 'service_id', label: 'Service' },
-  { value: 'category_id', label: 'Service Group' },
-  { value: 'sub_category_id', label: 'Service Sub Group' },
+  { value: 'category_id', label: 'Category' },
+  { value: 'sub_category_id', label: 'Sub Category' },
+  { value: 'template_id', label: 'Template' },
   { value: 'team_id', label: 'Team' },
+  { value: 'project_id', label: 'Project' },
+  { value: 'assigned_to', label: 'Technician' },
   { value: 'title', label: 'Title' },
   { value: 'description', label: 'Description' },
+  { value: 'source_channel', label: 'Source' },
+  { value: 'is_sla_breached', label: 'SLA Breached' },
+  { value: 'has_attachment', label: 'Has Attachment' },
+  { value: 'age_days', label: 'Age (days)' },
 ]
 
 const REQUESTER_FIELD_OPTIONS: { value: RuleConditionField; label: string }[] = [
   { value: 'requester_id', label: 'Requester' },
+  { value: 'requester_role', label: 'Requester Role' },
   { value: 'requester_department_id', label: 'Requester Department' },
   { value: 'requester_location_id', label: 'Requester Location' },
   { value: 'requester_designation_id', label: 'Requester Designation' },
@@ -103,6 +113,10 @@ const OPERATOR_OPTIONS: { value: RuleConditionOperator; label: string }[] = [
   { value: 'not_contains', label: "doesn't contain" },
   { value: 'is_empty', label: 'is empty' },
   { value: 'is_not_empty', label: 'is not empty' },
+  { value: 'gt', label: 'is greater than' },
+  { value: 'gte', label: 'is at least' },
+  { value: 'lt', label: 'is less than' },
+  { value: 'lte', label: 'is at most' },
 ]
 
 const ACTION_TYPE_LABELS: Record<RuleAction['type'], string> = {
@@ -112,7 +126,7 @@ const ACTION_TYPE_LABELS: Record<RuleAction['type'], string> = {
   notify: 'Notify',
 }
 
-const NOTIFY_ROLE_OPTIONS = ['manager', 'admin', 'platform_owner']
+const NOTIFY_ROLE_OPTIONS: UserRole[] = ['manager', 'admin', 'platform_owner']
 
 // ── Small UI primitives ──────────────────────────────────────────────────────
 
@@ -140,19 +154,30 @@ const inputCls = selectCls
 
 // ── Condition row ────────────────────────────────────────────────────────────
 
+const SOURCE_CHANNEL_OPTIONS = [
+  { value: 'portal', label: 'Portal' },
+  { value: 'intake', label: 'Intake' },
+]
+
 function conditionValueOptions(field: RuleConditionField, refs: BusinessRulesClientProps): { value: string; label: string }[] | null {
   if (field === 'priority') return Object.entries(PRIORITY_LABELS).map(([value, label]) => ({ value, label }))
   if (field === 'status') return Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))
   if (field === 'service_id') return refs.services.map((s) => ({ value: s.id, label: s.name }))
   if (field === 'category_id') return refs.categories.map((c) => ({ value: c.id, label: c.name }))
   if (field === 'sub_category_id') return refs.subCategories.map((c) => ({ value: c.id, label: c.name }))
+  if (field === 'template_id') return refs.templates.map((t) => ({ value: t.id, label: t.name }))
   if (field === 'team_id') return refs.teams.map((t) => ({ value: t.id, label: t.name }))
+  if (field === 'project_id') return refs.projects.map((p) => ({ value: p.id, label: p.name }))
+  if (field === 'assigned_to') return refs.agents.map((p) => ({ value: p.id, label: p.full_name }))
   if (field === 'requester_id') return refs.profiles.map((p) => ({ value: p.id, label: p.full_name }))
+  if (field === 'requester_role') return (Object.keys(ROLE_LABELS) as UserRole[]).map((r) => ({ value: r, label: ROLE_LABELS[r] }))
   if (field === 'requester_department_id') return refs.departments.map((d) => ({ value: d.id, label: d.name }))
   if (field === 'requester_location_id') return refs.locations.map((l) => ({ value: l.id, label: l.name }))
   if (field === 'requester_designation_id') return refs.designations.map((d) => ({ value: d.id, label: d.name }))
   if (field === 'requester_function_id') return refs.functions.map((f) => ({ value: f.id, label: f.name }))
-  return null // title/description — free text
+  if (field === 'source_channel') return SOURCE_CHANNEL_OPTIONS
+  if (field === 'is_sla_breached' || field === 'has_attachment') return YES_NO_OPTIONS
+  return null // title/description/age_days — free text/number input
 }
 
 // 'toggle' is intentionally excluded — FieldRenderer.tsx has no case for it
@@ -172,6 +197,16 @@ function formFieldValueOptions(field: RuleFormFieldRef): { value: string; label:
   return null // text/textarea/number/date/email/phone/file — free input
 }
 
+/** Summarizes a rule's per-condition AND/OR connectors for the card list —
+ *  "all"/"any" when every connector agrees, "mixed" when it's a real
+ *  sum-of-products (some AND, some OR). See matchesConditions() in evaluate.ts. */
+function summarizeConditionLogic(rule: BusinessRuleRow): 'all' | 'any' | 'mixed' {
+  const connectors = rule.conditions.slice(1).map((c) => c.logic ?? rule.conditions_logic)
+  if (connectors.every((l) => l === 'AND')) return 'all'
+  if (connectors.every((l) => l === 'OR')) return 'any'
+  return 'mixed'
+}
+
 function formFieldInputType(field: RuleFormFieldRef): string {
   if (field.type === 'number') return 'number'
   if (field.type === 'date') return 'date'
@@ -180,11 +215,13 @@ function formFieldInputType(field: RuleFormFieldRef): string {
 
 function ConditionRow({
   condition,
+  isFirst,
   onChange,
   onRemove,
   refs,
 }: {
   condition: RuleCondition
+  isFirst: boolean
   onChange: (c: RuleCondition) => void
   onRemove: () => void
   refs: BusinessRulesClientProps
@@ -202,6 +239,18 @@ function ConditionRow({
     formFieldsByService.set(f.serviceName, list)
   }
 
+  // Grouped, searchable field picker — group headers are non-leaf entries
+  // (SearchableSelect renders those as disabled section labels).
+  const fieldOptions: FormFieldOption[] = [
+    { value: 'group:request', label: 'Request', children: REQUEST_FIELD_OPTIONS.map((f) => ({ value: f.value, label: f.label })) },
+    { value: 'group:requester', label: 'Requester', children: REQUESTER_FIELD_OPTIONS.map((f) => ({ value: f.value, label: f.label })) },
+    ...[...formFieldsByService.entries()].map(([serviceName, fields]) => ({
+      value: `group:svc:${serviceName}`,
+      label: serviceName,
+      children: fields.map((f) => ({ value: `${FORM_FIELD_PREFIX}${f.id}`, label: f.label })),
+    })),
+  ]
+
   function handleFieldChange(raw: string) {
     if (raw.startsWith(FORM_FIELD_PREFIX)) {
       onChange({ field: 'form_field', form_field_id: raw.slice(FORM_FIELD_PREFIX.length), operator: 'equals', value: null })
@@ -212,29 +261,34 @@ function ConditionRow({
 
   return (
     <div className="flex items-center gap-2">
-      <select
+      {isFirst ? (
+        <span className="w-14 shrink-0" />
+      ) : (
+        <div className="flex w-14 shrink-0 overflow-hidden rounded-md border border-border text-[11px] font-semibold">
+          {(['AND', 'OR'] as const).map((logic) => (
+            <button
+              key={logic}
+              type="button"
+              onClick={() => onChange({ ...condition, logic })}
+              className={cn(
+                'flex-1 py-1.5 transition-colors',
+                (condition.logic ?? 'AND') === logic
+                  ? 'bg-primary/10 text-primary'
+                  : 'bg-background text-muted-foreground hover:bg-muted'
+              )}
+            >
+              {logic}
+            </button>
+          ))}
+        </div>
+      )}
+      <SearchableSelect
+        options={fieldOptions}
         value={encodeFieldSelection(condition)}
-        onChange={(e) => handleFieldChange(e.target.value)}
-        className={cn(selectCls, 'flex-1')}
-      >
-        <optgroup label="Request">
-          {REQUEST_FIELD_OPTIONS.map((f) => (
-            <option key={f.value} value={f.value}>{f.label}</option>
-          ))}
-        </optgroup>
-        <optgroup label="Requester">
-          {REQUESTER_FIELD_OPTIONS.map((f) => (
-            <option key={f.value} value={f.value}>{f.label}</option>
-          ))}
-        </optgroup>
-        {[...formFieldsByService.entries()].map(([serviceName, fields]) => (
-          <optgroup key={serviceName} label={serviceName}>
-            {fields.map((f) => (
-              <option key={f.id} value={`${FORM_FIELD_PREFIX}${f.id}`}>{f.label}</option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
+        onChange={handleFieldChange}
+        placeholder="Search fields…"
+        className="flex-1"
+      />
       <select
         value={condition.operator}
         onChange={(e) => onChange({ ...condition, operator: e.target.value as RuleConditionOperator })}
@@ -246,22 +300,19 @@ function ConditionRow({
       </select>
       {needsValue && (
         options ? (
-          <select
+          <SearchableSelect
+            options={options}
             value={typeof condition.value === 'string' ? condition.value : ''}
-            onChange={(e) => onChange({ ...condition, value: e.target.value })}
-            className={cn(selectCls, 'flex-1')}
-          >
-            <option value="">Select…</option>
-            {options.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+            onChange={(v) => onChange({ ...condition, value: v })}
+            placeholder="Search…"
+            className="flex-1"
+          />
         ) : (
           <input
-            type={condition.field === 'form_field' && formField ? formFieldInputType(formField) : 'text'}
+            type={condition.field === 'form_field' && formField ? formFieldInputType(formField) : condition.field === 'age_days' ? 'number' : 'text'}
             value={typeof condition.value === 'string' ? condition.value : ''}
             onChange={(e) => onChange({ ...condition, value: e.target.value })}
-            placeholder="Text…"
+            placeholder={condition.field === 'age_days' ? 'Days…' : 'Text…'}
             className={cn(inputCls, 'flex-1')}
           />
         )
@@ -317,23 +368,13 @@ function ActionRow({
             <option value="round_robin">Round-robin</option>
             <option value="load_balanced">Load-balanced (fewest open)</option>
           </select>
-          <div className="max-h-32 overflow-y-auto rounded-lg border border-border p-2 space-y-1">
-            {refs.profiles.map((p) => (
-              <label key={p.id} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={action.params.assigneeIds.includes(p.id)}
-                  onChange={(e) => {
-                    const next = e.target.checked
-                      ? [...action.params.assigneeIds, p.id]
-                      : action.params.assigneeIds.filter((id) => id !== p.id)
-                    onChange({ type: 'assign', params: { ...action.params, assigneeIds: next } })
-                  }}
-                />
-                {p.full_name} <span className="text-xs text-muted-foreground capitalize">({p.role})</span>
-              </label>
-            ))}
-          </div>
+          <SearchableSelect
+            multiple
+            options={refs.agents.map((p) => ({ value: p.id, label: `${p.full_name} (${ROLE_LABELS[p.role]})` }))}
+            value={action.params.assigneeIds}
+            onChange={(next) => onChange({ type: 'assign', params: { ...action.params, assigneeIds: next } })}
+            placeholder="Search agents…"
+          />
         </div>
       )}
 
@@ -365,7 +406,7 @@ function ActionRow({
         <div className="space-y-2 text-sm">
           <div className="flex flex-wrap gap-3">
             {NOTIFY_ROLE_OPTIONS.map((role) => (
-              <label key={role} className="flex items-center gap-1.5 capitalize">
+              <label key={role} className="flex items-center gap-1.5">
                 <input
                   type="checkbox"
                   checked={action.params.roles.includes(role)}
@@ -374,7 +415,7 @@ function ActionRow({
                     onChange({ type: 'notify', params: { ...action.params, roles: next } })
                   }}
                 />
-                {role}
+                {ROLE_LABELS[role]}
               </label>
             ))}
           </div>
@@ -385,7 +426,7 @@ function ActionRow({
                 checked={action.params.notifyAssignee}
                 onChange={(e) => onChange({ type: 'notify', params: { ...action.params, notifyAssignee: e.target.checked } })}
               />
-              Assignee
+              Technician
             </label>
             <label className="flex items-center gap-1.5">
               <input
@@ -478,7 +519,8 @@ function RuleEditor({
   }
 
   function addCondition() {
-    set('conditions', [...form.conditions, { field: 'priority', operator: 'equals', value: null }])
+    const logic: RuleConditionsLogic | undefined = form.conditions.length > 0 ? 'AND' : undefined
+    set('conditions', [...form.conditions, { field: 'priority', operator: 'equals', value: null, logic }])
   }
   function addAction() {
     set('actions', [...form.actions, { type: 'assign', params: { strategy: 'direct', assigneeIds: [] } }])
@@ -603,38 +645,19 @@ function RuleEditor({
               <label className="block text-sm font-medium text-foreground">Conditions</label>
               <button type="button" onClick={addCondition} className="text-xs text-primary hover:underline">+ Add condition</button>
             </div>
-            {form.conditions.length > 1 && (
-              <div className="mb-2 flex gap-2">
-                {(['AND', 'OR'] as const).map((logic) => (
-                  <button
-                    key={logic}
-                    type="button"
-                    aria-pressed={form.conditions_logic === logic}
-                    onClick={() => set('conditions_logic', logic)}
-                    className={cn(
-                      'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                      form.conditions_logic === logic ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'
-                    )}
-                  >
-                    {logic === 'AND' ? 'Match ALL (AND)' : 'Match ANY (OR)'}
-                  </button>
-                ))}
-              </div>
-            )}
             <p className="mb-2 text-xs text-muted-foreground">
               {form.conditions.length === 0
                 ? 'No conditions — matches every request.'
                 : form.conditions.length === 1
                 ? 'This condition must match.'
-                : form.conditions_logic === 'OR'
-                ? 'Any one condition must match.'
-                : 'All conditions must match.'}
+                : 'Each condition combines with the one above it — AND groups tighter than OR, so "X AND Y OR A AND B" means (X AND Y) OR (A AND B).'}
             </p>
             <div className="space-y-2">
               {form.conditions.map((c, i) => (
                 <ConditionRow
                   key={i}
                   condition={c}
+                  isFirst={i === 0}
                   refs={refs}
                   onChange={(next) => set('conditions', form.conditions.map((c2, i2) => (i2 === i ? next : c2)))}
                   onRemove={() => set('conditions', form.conditions.filter((_, i2) => i2 !== i))}
@@ -722,7 +745,7 @@ function RuleCard({ rule, onEdit, onDelete }: { rule: BusinessRuleRow; onEdit: (
         <p className="text-xs text-muted-foreground">
           {rule.conditions.length === 0
             ? 'Matches every request'
-            : `${rule.conditions.length} condition${rule.conditions.length === 1 ? '' : 's'}${rule.conditions.length > 1 ? ` (${rule.conditions_logic === 'OR' ? 'any' : 'all'})` : ''}`}
+            : `${rule.conditions.length} condition${rule.conditions.length === 1 ? '' : 's'}${rule.conditions.length > 1 ? ` (${summarizeConditionLogic(rule)})` : ''}`}
           {' · '}
           {rule.actions.length} action{rule.actions.length === 1 ? '' : 's'}
           {' · order '}{rule.execution_order}

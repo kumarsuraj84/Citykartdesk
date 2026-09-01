@@ -3,13 +3,7 @@ import { User, Shield, Users, Building2, Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { EditableName, AvatarUpload, PasswordResetButton } from './ProfileClient'
-
-const ROLE_LABELS: Record<string, string> = {
-  admin:   'Administrator',
-  manager: 'Manager',
-  agent:   'Support Agent',
-  user:    'End User',
-}
+import { ROLE_LABELS } from '@/lib/constants/roles'
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (

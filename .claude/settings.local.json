@@ -22,7 +22,21 @@
       "Bash(node node_modules/eslint/bin/eslint.js \"app/\\(app\\)/admin/org/OrgStructureClient.tsx\" \"app/\\(app\\)/admin/routing/RoutingRulesClient.tsx\" \"app/\\(app\\)/admin/users/UserManagementClient.tsx\" \"app/\\(app\\)/intake/review/[id]/ReviewClient.tsx\" \"app/\\(app\\)/profile/ProfileClient.tsx\" \"app/\\(app\\)/requests/[id]/page.tsx\" \"app/\\(app\\)/tasks/TasksClient.tsx\" \"app/\\(app\\)/trial-expired/page.tsx\" \"app/\\(auth\\)/reset-password/page.tsx\" \"components/analytics/Charts.tsx\" \"components/analytics/DetailDrawer.tsx\" \"components/analytics/TaskDashboard.tsx\" \"components/intake/AiBrief.tsx\" \"components/intake/PipelineStatusBanner.tsx\" \"components/layout/GlobalSearch.tsx\" \"components/layout/Sidebar.tsx\" \"components/layout/ThemeSwitcher.tsx\" \"components/requests/CommentForm.tsx\" \"components/requests/ExportButton.tsx\" \"components/requests/LinkedTasksPanel.tsx\" \"components/requests/RequestActionBar.tsx\" \"components/requests/RequestBoardView.tsx\" \"components/requests/RequestSidebarPanel.tsx\" \"components/requests/RequestTasksTab.tsx\" \"components/tasks/CustomColumnManager.tsx\" \"components/tasks/CustomFieldCell.tsx\" \"components/tasks/SubtaskList.tsx\" \"components/tasks/TaskActivityFeed.tsx\" \"components/tasks/TaskBoardView.tsx\" \"components/tasks/TaskCalendarView.tsx\" \"components/tasks/TaskDetailPanel.tsx\" \"components/tasks/TaskDetailSidebar.tsx\" \"components/ui/SourceCell.tsx\")",
       "Bash(node node_modules/eslint/bin/eslint.js \"app/\\(app\\)/admin/runbooks/RunbooksClient.tsx\")",
       "Bash(xargs grep -l \"profiles\")",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(docker exec *)",
+      "Bash(npx supabase *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(rm -f gen_types_err4.log)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(rm -f \"app/\\(app\\)/admin/services/[id]/page.tsx\" \"components/admin/ServiceTemplateTag.tsx\")",
+      "Bash(rmdir \"app/\\(app\\)/admin/services/[id]\")",
+      "PowerShell(Get-NetTCPConnection -LocalPort 3210 -ErrorAction SilentlyContinue)",
+      "Bash(timeout 120 bash -c 'until docker ps >/dev/null 2>&1; do sleep 3; done; echo \"DOCKER_READY\"')",
+      "Bash(timeout 90 bash -c ' *)",
+      "Bash(awk -F: '$1>3483 && $1<3700')",
+      "Bash(xargs grep -l \"CREATE POLICY\")",
+      "Bash(xargs grep -l \"policy.*requests\\\\|POLICY.*requests\")"
     ]
   }
 }

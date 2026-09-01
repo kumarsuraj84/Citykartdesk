@@ -13,14 +13,14 @@ import {
   searchOrgMembers,
   searchAgentTierMembers,
   reclassifyRequest,
+  updateRequestCategory,
 } from '@/lib/actions/requests'
 import { StatusBadge, PriorityBadge } from './RequestBadges'
 import { SLABadge } from './SLABadge'
 import { SubmittedFieldRow } from './SubmittedFieldRow'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
 import { formatRelativeTime } from '@/lib/utils'
-import type { RequestStatus, RequestPriority, RequestCollaborator, FormField, FormSection } from '@/types'
-import type { ReclassifyServiceOption } from '@/lib/queries/services'
+import type { RequestStatus, RequestPriority, RequestCollaborator, FormField, FormSection, AllowedSubCategory } from '@/types'
 
 interface TeamMember { id: string; full_name: string }
 
@@ -35,8 +35,10 @@ interface RequestSidebarPanelProps {
   serviceId: string
   serviceName: string
   categoryName: string | null
+  subCategoryId: string | null
   subCategoryName: string | null
-  reclassifyOptions: ReclassifyServiceOption[]
+  reclassifyOptions: { id: string; name: string }[]
+  allowedSubCategories: AllowedSubCategory[]
   requesterId: string
   requesterName: string
   resolutionDueAt: string | null
@@ -46,6 +48,7 @@ interface RequestSidebarPanelProps {
   teamId: string
   viewerId: string
   isAgent: boolean
+  isManager: boolean
   isRequester: boolean
   isTerminal: boolean
   teamMembers: TeamMember[]
@@ -232,7 +235,7 @@ function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMember
   }
 
   return (
-    <PropRow label="Assignee">
+    <PropRow label="Technician">
       <div ref={ref} className="relative">
         <button
           onClick={() => isAgent && setOpen(v => !v)}
@@ -301,25 +304,21 @@ function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMember
   )
 }
 
-// Inline service (category / sub category / service) corrector — lets an agent
-// fully re-route a wrongly-submitted ticket to any active service anywhere in
-// the catalog (any category, any team), via three cascading dropdowns rather
-// than one combined picker — picking a Category narrows Sub Category, picking
-// a Sub Category narrows Service, and choosing a Service commits immediately
-// (reclassifyRequest already supports moving across teams/categories freely).
+// Inline service corrector — the rare "this was raised against the wrong
+// broad service entirely" case. Flat org-wide list (services no longer nest
+// under a category, so there's nothing to cascade through); picking a
+// different service clears the request's category/sub-category server-side
+// since the old tags may not apply to the new service — the requester/agent
+// re-picks via CategoryRow below.
 function ServiceRow({ requestId, serviceId, serviceName, isAgent, options }: {
   requestId: string; serviceId: string; serviceName: string; isAgent: boolean
-  options: ReclassifyServiceOption[]
+  options: { id: string; name: string }[]
 }) {
   const [open, setOpen] = useState(false)
   const [cur, setCur] = useState({ id: serviceId, name: serviceName })
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
-
-  const currentOption = options.find((o) => o.id === cur.id) ?? null
-  const [draftCategoryId, setDraftCategoryId] = useState<string | null>(currentOption?.category_id ?? null)
-  const [draftSubCategoryId, setDraftSubCategoryId] = useState<string | null>(currentOption?.sub_category_id ?? null)
 
   useEffect(() => {
     if (!open) return
@@ -328,38 +327,10 @@ function ServiceRow({ requestId, serviceId, serviceName, isAgent, options }: {
     return () => document.removeEventListener('mousedown', h)
   }, [open])
 
-  function openPicker() {
-    // Re-seed the draft selection from whatever is current every time the
-    // picker opens, so a prior aborted attempt doesn't linger.
-    setDraftCategoryId(currentOption?.category_id ?? null)
-    setDraftSubCategoryId(currentOption?.sub_category_id ?? null)
-    setOpen(true)
-  }
-
-  const categories = Array.from(
-    new Map(options.filter((o) => o.category_id).map((o) => [o.category_id!, o.category_name])).entries()
-  ).map(([id, name]) => ({ id, name }))
-
-  const subCategoriesInCategory = draftCategoryId
-    ? Array.from(
-        new Map(
-          options
-            .filter((o) => o.category_id === draftCategoryId && o.sub_category_id)
-            .map((o) => [o.sub_category_id!, o.sub_category_name!])
-        ).entries()
-      ).map(([id, name]) => ({ id, name }))
-    : []
-
-  const servicesInScope = draftCategoryId
-    ? options.filter((o) =>
-        o.category_id === draftCategoryId &&
-        (draftSubCategoryId ? o.sub_category_id === draftSubCategoryId : true)
-      )
-    : []
-
-  function pick(o: ReclassifyServiceOption) {
+  function pick(o: { id: string; name: string }) {
+    if (o.id === cur.id) { setOpen(false); return }
     const prev = cur
-    setCur({ id: o.id, name: o.name }); setOpen(false); setError(null)
+    setCur(o); setOpen(false); setError(null)
     startTransition(async () => {
       const result = await reclassifyRequest(requestId, o.id)
       if (result?.error) { setError(result.error); setCur(prev) }
@@ -367,58 +338,115 @@ function ServiceRow({ requestId, serviceId, serviceName, isAgent, options }: {
   }
 
   return (
-      <PropRow label="Service">
+    <PropRow label="Service">
+      <div ref={ref} className="relative">
+        <button
+          onClick={() => isAgent && setOpen((v) => !v)}
+          className={`flex items-center gap-1 ${isAgent ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+          title={error ?? undefined}
+        >
+          <span className={`text-xs ${error ? 'text-destructive' : 'text-foreground'}`}>{cur.name}</span>
+          {isAgent && !isPending && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+          {isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+        </button>
+        {open && (
+          <div className="absolute right-0 top-full z-50 mt-1 w-60 max-h-72 space-y-0.5 overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow-xl">
+            <p className="px-1.5 pb-1 text-[10px] text-muted-foreground">Moving to a different service clears Category/Sub Category — you&apos;ll need to re-pick them.</p>
+            {options.map((o) => (
+              <button
+                key={o.id}
+                onClick={() => pick(o)}
+                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted transition-colors ${o.id === cur.id ? 'bg-muted/60 font-medium' : ''}`}
+              >
+                {o.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </PropRow>
+  )
+}
+
+// Inline category corrector — the common "wrong classification, same
+// service" case. Picking a sub-category (category is derived from it)
+// re-runs SLA using that sub-category's own sla_config via
+// updateRequestCategory, distinct from ServiceRow's rarer cross-service move.
+function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, isAgent, allowedSubCategories }: {
+  requestId: string; categoryName: string | null; subCategoryId: string | null; subCategoryName: string | null
+  isAgent: boolean; allowedSubCategories: AllowedSubCategory[]
+}) {
+  const [open, setOpen] = useState(false)
+  const [cur, setCur] = useState({ id: subCategoryId, name: subCategoryName, categoryName })
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Re-sync if the server-provided classification changes underneath us —
+  // e.g. ServiceRow's reclassify clears it, which lands here as fresh props
+  // once the server action's revalidation completes. Adjusted during render
+  // (React's documented pattern for this), not in an effect, so it can't
+  // trigger a cascading extra render.
+  const [prevSubCategoryId, setPrevSubCategoryId] = useState(subCategoryId)
+  if (subCategoryId !== prevSubCategoryId) {
+    setPrevSubCategoryId(subCategoryId)
+    setCur({ id: subCategoryId, name: subCategoryName, categoryName })
+  }
+
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+
+  const canEdit = isAgent && allowedSubCategories.length > 0
+
+  function pick(sc: AllowedSubCategory) {
+    if (sc.id === cur.id) { setOpen(false); return }
+    const prev = cur
+    setCur({ id: sc.id, name: sc.name, categoryName: sc.category_name }); setOpen(false); setError(null)
+    startTransition(async () => {
+      const result = await updateRequestCategory(requestId, sc.id)
+      if (result?.error) { setError(result.error); setCur(prev) }
+    })
+  }
+
+  return (
+    <>
+      <PropRow label="Category">
         <div ref={ref} className="relative">
           <button
-            onClick={() => isAgent && (open ? setOpen(false) : openPicker())}
-            className={`flex items-center gap-1 ${isAgent ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+            onClick={() => canEdit && setOpen((v) => !v)}
+            className={`flex items-center gap-1 ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
             title={error ?? undefined}
           >
-            <span className={`text-xs ${error ? 'text-destructive' : 'text-foreground'}`}>{cur.name}</span>
-            {isAgent && !isPending && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+            <span className={`text-xs ${error ? 'text-destructive' : 'text-foreground'}`}>{cur.categoryName ?? '—'}</span>
+            {canEdit && !isPending && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
             {isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
           </button>
           {open && (
-            <div className="absolute right-0 top-full z-50 mt-1 w-72 space-y-2 rounded-xl border border-border bg-card p-2.5 shadow-xl">
-              <div>
-                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Category</label>
-                <select
-                  value={draftCategoryId ?? ''}
-                  onChange={(e) => { setDraftCategoryId(e.target.value || null); setDraftSubCategoryId(null) }}
-                  className="w-full rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            <div className="absolute right-0 top-full z-50 mt-1 w-60 max-h-72 space-y-0.5 overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow-xl">
+              {allowedSubCategories.map((sc) => (
+                <button
+                  key={sc.id}
+                  onClick={() => pick(sc)}
+                  className={`flex w-full flex-col items-start rounded-lg px-2 py-1.5 text-left hover:bg-muted transition-colors ${sc.id === cur.id ? 'bg-muted/60' : ''}`}
                 >
-                  <option value="">Select category…</option>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Sub Category</label>
-                <select
-                  value={draftSubCategoryId ?? ''}
-                  onChange={(e) => setDraftSubCategoryId(e.target.value || null)}
-                  disabled={!draftCategoryId || subCategoriesInCategory.length === 0}
-                  className="w-full rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                >
-                  <option value="">{subCategoriesInCategory.length === 0 ? 'None for this category' : 'All sub categories'}</option>
-                  {subCategoriesInCategory.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Service</label>
-                <select
-                  value={servicesInScope.some((o) => o.id === cur.id) ? cur.id : ''}
-                  onChange={(e) => { const o = options.find((x) => x.id === e.target.value); if (o) pick(o) }}
-                  disabled={!draftCategoryId}
-                  className="w-full rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                >
-                  <option value="">{draftCategoryId ? 'Select service…' : 'Pick a category first'}</option>
-                  {servicesInScope.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                </select>
-              </div>
+                  <span className="text-xs text-foreground">{sc.name}</span>
+                  <span className="text-[10px] text-muted-foreground">{sc.category_name}</span>
+                </button>
+              ))}
             </div>
           )}
         </div>
       </PropRow>
+      {cur.name && (
+        <PropRow label="Sub Category">
+          <span className="text-xs text-foreground">{cur.name}</span>
+        </PropRow>
+      )}
+    </>
   )
 }
 
@@ -537,10 +565,10 @@ function CollaboratorsRow({ requestId, assigneeId, viewerId, initialCollaborator
 export function RequestSidebarPanel({
   requestId, requestNo, status, priority,
   assigneeId, assigneeName, teamName, serviceId, serviceName,
-  categoryName, subCategoryName, reclassifyOptions,
+  categoryName, subCategoryId, subCategoryName, reclassifyOptions, allowedSubCategories,
   requesterId, requesterName,
   resolutionDueAt, responseDueAt, createdAt,
-  viewerId, isAgent, isRequester, isTerminal,
+  viewerId, isAgent, isManager, isRequester, isTerminal,
   teamMembers, initialCollaborators,
   formSections, formSchema, formData,
 }: RequestSidebarPanelProps) {
@@ -600,25 +628,29 @@ export function RequestSidebarPanel({
           <span className="text-xs text-foreground">{teamName}</span>
         </PropRow>
 
-        {/* Editable (agent-only): Service — corrects a wrongly-submitted
-            Category/Sub Category/Item. Non-agents just see it read-only. */}
-        {isAgent ? (
-          <ServiceRow requestId={requestId} serviceId={serviceId} serviceName={serviceName} isAgent={isAgent} options={reclassifyOptions} />
+        {/* Editable (manager+ only): Service — corrects a wrongly-submitted
+            Category/Sub Category/Item. A technician (plain agent) can only
+            reclassify within the current service via Category below, never
+            move the ticket to a different service entirely. */}
+        {isManager ? (
+          <ServiceRow requestId={requestId} serviceId={serviceId} serviceName={serviceName} isAgent={isManager} options={reclassifyOptions} />
         ) : (
           <PropRow label="Service">
             <span className="text-xs text-foreground">{serviceName}</span>
           </PropRow>
         )}
 
-        {/* Read-only: Category / Sub Category — visible to agent and requester alike. */}
-        <PropRow label="Category">
-          <span className="text-xs text-foreground">{categoryName ?? '—'}</span>
-        </PropRow>
-        {subCategoryName && (
-          <PropRow label="Sub Category">
-            <span className="text-xs text-foreground">{subCategoryName}</span>
-          </PropRow>
-        )}
+        {/* Category / Sub Category — editable in place for agents/technicians
+            (change classification within the same service, re-running
+            Business Rules for reassignment); read-only otherwise. */}
+        <CategoryRow
+          requestId={requestId}
+          categoryName={categoryName}
+          subCategoryId={subCategoryId}
+          subCategoryName={subCategoryName}
+          isAgent={isAgent}
+          allowedSubCategories={allowedSubCategories}
+        />
 
         {/* Every submitted intake-form field, editable in place for agents —
             same click-to-edit popover pattern as the Service row above. */}

@@ -3,9 +3,12 @@ import Link from 'next/link'
 import { Sidebar } from './Sidebar'
 import { MobileNav } from './MobileNav'
 import { NotificationBell } from './NotificationBell'
+import { ApprovalsBell } from './ApprovalsBell'
 import { GlobalSearch } from './GlobalSearch'
 import { ThemeSwitcher } from './ThemeSwitcher'
 import { BrandLogo } from './BrandLogo'
+import { AutoRefresh } from './AutoRefresh'
+import { ROLE_LABELS } from '@/lib/constants/roles'
 import type { ProfileWithTeams, NavVisibility, NotificationWithActor } from '@/types'
 import type { NavCounts } from '@/lib/queries/profiles'
 
@@ -52,15 +55,50 @@ async function DeferredMobileNav({
 async function DeferredNotificationBell({
   navCountsPromise,
   notificationsPromise,
+  viewerId,
+  viewerRole,
 }: {
   navCountsPromise: Promise<NavCounts>
   notificationsPromise: Promise<NotificationWithActor[]>
+  viewerId: string
+  viewerRole: ProfileWithTeams['role']
 }) {
   const [navCounts, notifications] = await Promise.all([navCountsPromise, notificationsPromise])
+  // Approval-required items live in their own bell (see DeferredApprovalsBell)
+  // — kept out of the general feed so an actionable item never gets buried
+  // among comments/assignments/SLA warnings.
+  const generalNotifications = notifications.filter((n) => n.type !== 'approval_requested')
+  const approvalUnreadCount = notifications.filter((n) => n.type === 'approval_requested' && !n.read_at).length
   return (
     <NotificationBell
-      initialNotifications={notifications}
-      initialUnreadCount={navCounts.notifications}
+      initialNotifications={generalNotifications}
+      initialUnreadCount={Math.max(0, navCounts.notifications - approvalUnreadCount)}
+      viewerId={viewerId}
+      viewerRole={viewerRole}
+      dark
+    />
+  )
+}
+
+async function DeferredApprovalsBell({
+  navCountsPromise,
+  notificationsPromise,
+  viewerId,
+  viewerRole,
+}: {
+  navCountsPromise: Promise<NavCounts>
+  notificationsPromise: Promise<NotificationWithActor[]>
+  viewerId: string
+  viewerRole: ProfileWithTeams['role']
+}) {
+  const [navCounts, notifications] = await Promise.all([navCountsPromise, notificationsPromise])
+  const approvalNotifications = notifications.filter((n) => n.type === 'approval_requested')
+  return (
+    <ApprovalsBell
+      initialNotifications={approvalNotifications}
+      initialCount={navCounts.approvals}
+      viewerId={viewerId}
+      viewerRole={viewerRole}
       dark
     />
   )
@@ -69,6 +107,7 @@ async function DeferredNotificationBell({
 export function AppShell({ profile, navVisibility, navCountsPromise, notificationsPromise, children }: AppShellProps) {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
+      <AutoRefresh />
 
       {/* ── Dark top bar (full width) ─────────────────────────────────────── */}
       <header className="flex h-16 shrink-0 items-center gap-4 px-4 border-b border-black/10 bg-[image:var(--gradient-nav)] z-40">
@@ -87,9 +126,19 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
         <div className="ml-auto flex items-center gap-1">
           <ThemeSwitcher />
           <Suspense fallback={<div className="w-9 h-9" />}>
+            <DeferredApprovalsBell
+              navCountsPromise={navCountsPromise}
+              notificationsPromise={notificationsPromise}
+              viewerId={profile.id}
+              viewerRole={profile.role}
+            />
+          </Suspense>
+          <Suspense fallback={<div className="w-9 h-9" />}>
             <DeferredNotificationBell
               navCountsPromise={navCountsPromise}
               notificationsPromise={notificationsPromise}
+              viewerId={profile.id}
+              viewerRole={profile.role}
             />
           </Suspense>
           <div className="h-5 w-px bg-white/15 mx-1" />
@@ -99,7 +148,7 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
             </div>
             <div className="hidden xl:block text-left leading-tight">
               <p className="text-[12px] font-semibold text-white">{profile.full_name}</p>
-              <p className="text-[10px] text-white/60 capitalize">{profile.role.replace('_', ' ')}</p>
+              <p className="text-[10px] text-white/60">{ROLE_LABELS[profile.role]}</p>
             </div>
           </Link>
         </div>

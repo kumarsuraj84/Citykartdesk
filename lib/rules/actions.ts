@@ -47,7 +47,7 @@ export type ActionRequest = {
   response_due_at: string | null
   resolution_due_at: string | null
   service: {
-    sla_config: SLAConfig | null
+    sla_policy: { config: SLAConfig | null } | null
     form_sections: FormSection[] | null
     form_fields: FormField[] | null
     template: { form_sections: FormSection[] | null } | null
@@ -127,14 +127,14 @@ async function runAssign(
 
 async function runSetPriority(admin: AnyClient, request: ActionRequest, priority: string, ctx: RuleActionContext): Promise<void> {
   // Recompute deadlines the same way the interactive changePriority() action
-  // does — from created_at, field override > service override, business-hours
-  // aware — instead of leaving the old priority's due dates in place under a
-  // new priority.
+  // does — from created_at, field override > the service's mapped SLA Policy,
+  // business-hours aware — instead of leaving the old priority's due dates in
+  // place under a new priority.
   const allFields = resolveServiceFormSections(request.service).flatMap((s) => s.fields)
   const { responseDueAt, resolutionDueAt } = await resolveSlaDeadlines(admin, {
     serviceId: request.service_id,
     priority: priority as 'low' | 'medium' | 'high' | 'urgent',
-    serviceSlaConfig: request.service.sla_config,
+    servicePolicyConfig: request.service.sla_policy?.config ?? null,
     allFields,
     formData: request.form_data,
     from: new Date(request.created_at),
@@ -188,7 +188,7 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
     const resolved = await resolveSlaDeadlines(admin, {
       serviceId: request.service_id,
       priority: request.priority as 'low' | 'medium' | 'high' | 'urgent',
-      serviceSlaConfig: request.service.sla_config,
+      servicePolicyConfig: request.service.sla_policy?.config ?? null,
       allFields,
       formData: request.form_data,
       from: now,

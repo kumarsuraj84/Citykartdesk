@@ -16,6 +16,8 @@ interface PageProps {
 export default async function TasksPage({ searchParams }: PageProps) {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
+  // Tasks isn't fully built out yet — Admin/Owner only until that work ships.
+  if (profile.role !== 'admin' && profile.role !== 'platform_owner') redirect('/home')
 
   const params = await searchParams
   const filter = (params.filter ?? 'my_tasks') as

@@ -1,4 +1,7 @@
-import type { FormField, FormSection } from '@/types'
+import type { FormField, FormFieldOption, FormFieldType, FormSection } from '@/types'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyClient = { from: (t: string) => any }
 
 /**
  * Resolve a service's intake form into sections, migrating the legacy flat
@@ -56,4 +59,89 @@ export function resolveServiceFormSections(service: {
 }): FormSection[] {
   if (service.template) return resolveFormSections(service.template)
   return resolveFormSections(service)
+}
+
+// ── Requester/Technician audience helpers ─────────────────────────────────────
+// A field's requester_can_view/requester_can_set are optional booleans, absent
+// on every field saved before this concept existed — treat absence as `true`
+// everywhere so old templates/services/historical snapshots keep behaving
+// exactly as before (fully requester-visible-and-settable).
+
+export function requesterCanView(field: FormField): boolean {
+  return field.requester_can_view !== false
+}
+
+export function requesterCanSet(field: FormField): boolean {
+  return field.requester_can_set !== false
+}
+
+/** required && the requester can actually see and fill it in themselves. */
+export function isRequesterMandatory(field: FormField): boolean {
+  return field.required && requesterCanView(field) && requesterCanSet(field)
+}
+
+/** required, but hidden from or read-only to the requester — so it's the
+ *  technician's responsibility instead, enforced at status-change time
+ *  (see updateRequestStatus() in lib/actions/requests.ts). */
+export function isTechnicianMandatory(field: FormField): boolean {
+  return field.required && !(requesterCanView(field) && requesterCanSet(field))
+}
+
+/** Drops requester_can_view===false fields from every section — the shared
+ *  filter for every requester-facing view of a form: DynamicForm's create-
+ *  request rendering, createRequest()'s server-side revalidation, and a
+ *  requester's own read-only view of an already-submitted request. */
+export function filterFieldsForRequester(sections: FormSection[]): FormSection[] {
+  return sections.map((s) => ({ ...s, fields: s.fields.filter(requesterCanView) }))
+}
+
+/** Same filter, for the legacy flat form_schema_snapshot shape. */
+export function filterFlatFieldsForRequester(fields: FormField[]): FormField[] {
+  return fields.filter(requesterCanView)
+}
+
+export type ServiceFormFieldRef = {
+  id: string
+  label: string
+  type: FormFieldType
+  options?: FormFieldOption[]
+  serviceId: string
+  serviceName: string
+}
+
+/**
+ * Every custom intake-form field defined across an org's active services,
+ * flattened into one lookup list — the shared source for "what custom fields
+ * exist on this service desk" consumed by both the Business Rules condition
+ * picker and the Report Builder's per-service custom-field columns, so a field
+ * added to (or removed from) a service's form shows up in both automatically,
+ * with no code change. Uses resolveServiceFormSections() (not the legacy-only
+ * resolveFormSections()) so a service tagged to a Form Template correctly
+ * reflects the template's current fields, not a stale service-level snapshot.
+ */
+export async function getServiceFormFieldsForOrg(admin: AnyClient, orgId: string): Promise<ServiceFormFieldRef[]> {
+  const { data } = await admin
+    .from('services')
+    .select('id, name, form_sections, form_fields, template:form_templates(form_sections, form_fields)')
+    .eq('org_id', orgId)
+    .eq('is_active', true)
+
+  type ServiceRow = {
+    id: string; name: string
+    form_sections: unknown; form_fields: unknown
+    template: { form_sections: unknown; form_fields: unknown } | null
+  }
+
+  return ((data ?? []) as ServiceRow[]).flatMap((service) =>
+    resolveServiceFormSections(service).flatMap((section) =>
+      section.fields.map((field) => ({
+        id: field.id,
+        label: field.label,
+        type: field.type,
+        options: field.options,
+        serviceId: service.id,
+        serviceName: service.name,
+      }))
+    )
+  )
 }
