@@ -358,8 +358,12 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
       .single()
 
     const resumeNow = new Date()
-    const updatePayload: { status: 'open'; waiting_since: null; response_due_at?: string; resolution_due_at?: string } = {
-      status: 'open',
+    // Resume straight into 'in_progress' (not 'open') — the technician
+    // already did their mandatory first response before this request could
+    // ever be sent for approval, so there's nothing left to gate; sending it
+    // back to 'open' would incorrectly re-surface the "Start Working" gate.
+    const updatePayload: { status: 'in_progress'; waiting_since: null; response_due_at?: string; resolution_due_at?: string } = {
+      status: 'in_progress',
       waiting_since: null,
     }
     if (req?.waiting_since) {
@@ -389,7 +393,7 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
       requestId: approval.request_id,
       actorId: profile.id,
       action: 'status_changed',
-      metadata: { from: 'pending_approval', to: 'open' },
+      metadata: { from: 'pending_approval', to: 'in_progress' },
     })
 
     // Notify requester: approval fully approved
@@ -399,7 +403,7 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
         actorId: profile.id,
         type: 'approval_approved',
         title: 'Your request has been approved',
-        body: `${profile.full_name} approved it — your request is now open.`,
+        body: `${profile.full_name} approved it — work is resuming.`,
         requestId: approval.request_id,
         link: `/requests/${approval.request_id}`,
       }).catch(() => {})

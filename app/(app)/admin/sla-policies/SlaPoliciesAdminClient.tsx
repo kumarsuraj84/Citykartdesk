@@ -48,13 +48,13 @@ function PolicyModal({ mode, onClose }: { mode: Exclude<ModalMode, null>; onClos
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="border-b border-border px-5 py-4 sticky top-0 bg-card z-10">
+        <div className="border-b border-border px-4 py-3 sticky top-0 bg-card z-10">
           <h2 className="text-base font-semibold text-foreground">
             {isEdit ? 'Edit SLA Policy' : 'Create SLA Policy'}
           </h2>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 px-5 py-4">
+        <form onSubmit={handleSubmit} className="space-y-3 px-4 py-3">
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">
               Name <span className="text-destructive">*</span>
@@ -253,7 +253,7 @@ export default function SlaPoliciesAdminClient({ policies }: { policies: SlaPoli
 
       {archiveTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-xl">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl">
             <h2 className="text-sm font-semibold text-foreground">Archive &ldquo;{archiveTarget.name}&rdquo;?</h2>
             <p className="mt-1.5 text-xs text-muted-foreground">
               Services still mapped to it keep using it — archiving only hides it from the picker for new mappings.
@@ -280,7 +280,7 @@ export default function SlaPoliciesAdminClient({ policies }: { policies: SlaPoli
 
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-xl">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl">
             <h2 className="text-sm font-semibold text-foreground">Delete &ldquo;{deleteTarget.name}&rdquo;?</h2>
             <p className="mt-1.5 text-xs text-muted-foreground">This cannot be undone.</p>
             {deleteError && <p className="mt-2 text-xs text-destructive">{deleteError}</p>}

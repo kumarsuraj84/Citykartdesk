@@ -128,7 +128,7 @@ export function AuditLogClient({ initialEntries, profiles }: AuditLogClientProps
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-1">
@@ -205,19 +205,19 @@ export function AuditLogClient({ initialEntries, profiles }: AuditLogClientProps
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+              <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Timestamp
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+              <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Entity
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+              <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Action
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+              <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Actor
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+              <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Details
               </th>
             </tr>
@@ -232,10 +232,10 @@ export function AuditLogClient({ initialEntries, profiles }: AuditLogClientProps
             ) : (
               entries.map((entry) => (
                 <tr key={entry.id} className="hover:bg-gray-50">
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">
+                  <td className="whitespace-nowrap px-4 py-2 text-xs text-gray-500">
                     {formatDate(entry.created_at)}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-2">
                     <div className="flex flex-col gap-1">
                       <EntityBadge type={entry.entity_type} />
                       <span className="text-xs text-gray-700 leading-tight">
@@ -243,15 +243,15 @@ export function AuditLogClient({ initialEntries, profiles }: AuditLogClientProps
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-2">
                     <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono text-gray-800">
                       {entry.action}
                     </code>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
+                  <td className="whitespace-nowrap px-4 py-2 text-sm text-gray-700">
                     {entry.actor_name}
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-500 font-mono max-w-xs truncate">
+                  <td className="px-4 py-2 text-xs text-gray-500 font-mono max-w-xs truncate">
                     {metadataSummary(entry.metadata)}
                   </td>
                 </tr>

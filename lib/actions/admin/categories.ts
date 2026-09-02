@@ -288,6 +288,177 @@ export async function upsertSubCategory(
   }
 }
 
+// ── bulkImportCategories ─────────────────────────────────────────────────────
+// One row per (category, sub-category) pair — a category repeated across rows
+// is only created once and reused for the rest, matching how someone would
+// naturally fill in a spreadsheet with several sub-categories per category.
+
+export type CategoryImportRow = {
+  category_name?: string
+  category_description?: string
+  category_icon?: string
+  sub_category_name?: string
+  sub_category_description?: string
+  sub_category_icon?: string
+  sla_priority?: string
+}
+
+const VALID_IMPORT_PRIORITIES: RequestPriority[] = ['low', 'medium', 'high', 'urgent']
+
+export async function bulkImportCategories(
+  rows: CategoryImportRow[]
+): Promise<{ error?: string; data?: { imported: number; errors: string[] } }> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return guard
+  if (rows.length === 0) return { error: 'No rows to import.' }
+
+  const supabase = await createClient()
+  const orgId = guard.profile!.org_id
+  if (!orgId) return { error: 'Your account is not linked to an organisation.' }
+
+  const { data: existingCategories } = await supabase
+    .from('service_categories')
+    .select('id, name, slug')
+    .eq('org_id', orgId)
+
+  const categoryByName = new Map<string, { id: string; slug: string }>(
+    (existingCategories ?? []).map((c) => [c.name.trim().toLowerCase(), { id: c.id, slug: c.slug }])
+  )
+  const usedCategorySlugs = new Set((existingCategories ?? []).map((c) => c.slug))
+  const existingCategoryIds = (existingCategories ?? []).map((c) => c.id)
+
+  const { data: existingSubCats } = existingCategoryIds.length > 0
+    ? await supabase
+        .from('service_sub_categories')
+        .select('id, name, slug, category_id, sort_order')
+        .in('category_id', existingCategoryIds)
+    : { data: [] as { id: string; name: string; slug: string; category_id: string; sort_order: number }[] }
+
+  const subCatNamesByCategory = new Map<string, Set<string>>()
+  const subCatSlugsByCategory = new Map<string, Set<string>>()
+  const nextSortOrderByCategory = new Map<string, number>()
+  for (const sc of existingSubCats ?? []) {
+    const names = subCatNamesByCategory.get(sc.category_id) ?? new Set<string>()
+    names.add(sc.name.trim().toLowerCase())
+    subCatNamesByCategory.set(sc.category_id, names)
+
+    const slugs = subCatSlugsByCategory.get(sc.category_id) ?? new Set<string>()
+    slugs.add(sc.slug)
+    subCatSlugsByCategory.set(sc.category_id, slugs)
+
+    const currentMax = nextSortOrderByCategory.get(sc.category_id) ?? 0
+    nextSortOrderByCategory.set(sc.category_id, Math.max(currentMax, sc.sort_order + 1))
+  }
+
+  const errors: string[] = []
+  let imported = 0
+
+  for (let i = 0; i < rows.length; i++) {
+    const rowLabel = `Row ${i + 2}`
+    const row = rows[i]
+    const categoryName = row.category_name?.trim()
+    const subCategoryName = row.sub_category_name?.trim()
+
+    if (!categoryName) { errors.push(`${rowLabel}: category name is required, skipped.`); continue }
+    if (!subCategoryName) { errors.push(`${rowLabel}: sub-category name is required, skipped.`); continue }
+
+    let slaPriority: RequestPriority | null = null
+    if (row.sla_priority?.trim()) {
+      const candidate = row.sla_priority.trim().toLowerCase()
+      if (!VALID_IMPORT_PRIORITIES.includes(candidate as RequestPriority)) {
+        errors.push(`${rowLabel}: SLA priority "${row.sla_priority}" is invalid (use low/medium/high/urgent), skipped.`)
+        continue
+      }
+      slaPriority = candidate as RequestPriority
+    }
+
+    let category = categoryByName.get(categoryName.toLowerCase())
+    if (!category) {
+      const baseSlug = slugify(categoryName) || 'category'
+      let slug = baseSlug
+      let n = 2
+      while (usedCategorySlugs.has(slug)) { slug = `${baseSlug}-${n++}` }
+      usedCategorySlugs.add(slug)
+
+      const { data: newCat, error: catError } = await supabase
+        .from('service_categories')
+        .insert({
+          org_id: orgId,
+          name: categoryName,
+          slug,
+          description: row.category_description?.trim() || null,
+          icon: row.category_icon?.trim() || null,
+        })
+        .select('id, slug')
+        .single()
+      if (catError || !newCat) {
+        errors.push(`${rowLabel}: failed to create category "${categoryName}", skipped.`)
+        continue
+      }
+      category = { id: newCat.id, slug: newCat.slug }
+      categoryByName.set(categoryName.toLowerCase(), category)
+
+      await logAdminAudit({
+        orgId: orgId!, actorId: guard.profile!.id,
+        entityType: 'service_category', entityId: category.id, action: 'category_created',
+        metadata: { name: categoryName, via: 'bulk_import' },
+      })
+    }
+
+    const existingNames = subCatNamesByCategory.get(category.id) ?? new Set<string>()
+    if (existingNames.has(subCategoryName.toLowerCase())) {
+      errors.push(`${rowLabel}: sub-category "${subCategoryName}" already exists under "${categoryName}", skipped.`)
+      continue
+    }
+
+    const subSlugs = subCatSlugsByCategory.get(category.id) ?? new Set<string>()
+    const baseSubSlug = slugify(subCategoryName) || 'sub-category'
+    let subSlug = baseSubSlug
+    let m = 2
+    while (subSlugs.has(subSlug)) { subSlug = `${baseSubSlug}-${m++}` }
+    subSlugs.add(subSlug)
+    subCatSlugsByCategory.set(category.id, subSlugs)
+
+    const sortOrder = nextSortOrderByCategory.get(category.id) ?? 0
+    nextSortOrderByCategory.set(category.id, sortOrder + 1)
+
+    const { data: newSubCat, error: subError } = await supabase
+      .from('service_sub_categories')
+      .insert({
+        category_id: category.id,
+        name: subCategoryName,
+        slug: subSlug,
+        description: row.sub_category_description?.trim() || null,
+        icon: row.sub_category_icon?.trim() || null,
+        sort_order: sortOrder,
+        is_active: true,
+        sla_priority: slaPriority,
+      })
+      .select('id')
+      .single()
+
+    if (subError || !newSubCat) {
+      errors.push(`${rowLabel}: failed to create sub-category "${subCategoryName}", skipped.`)
+      continue
+    }
+
+    existingNames.add(subCategoryName.toLowerCase())
+    subCatNamesByCategory.set(category.id, existingNames)
+
+    await logAdminAudit({
+      orgId: orgId!, actorId: guard.profile!.id,
+      entityType: 'service_sub_category', entityId: newSubCat.id, action: 'sub_category_created',
+      metadata: { name: subCategoryName, categoryId: category.id, via: 'bulk_import' },
+    })
+
+    imported++
+  }
+
+  revalidatePath('/admin/categories')
+  revalidatePath('/services')
+  return { data: { imported, errors } }
+}
+
 // ── reorderSubCategories ──────────────────────────────────────────────────────
 
 export async function reorderSubCategories(

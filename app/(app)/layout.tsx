@@ -28,6 +28,14 @@ export default async function AppLayout({
     redirect('/trial-expired')
   }
 
+  // Set by bulkCreateUsers/adminSetPassword — the user never chose this
+  // password themselves, so they must set their own before touching anything
+  // else. /reset-password lives outside this layout (app/(auth)) and doubles
+  // as this flow: resetPassword() clears the flag on success.
+  if (profile.must_reset_password) {
+    redirect('/reset-password')
+  }
+
   // Start these fetches immediately; they resolve while React streams the shell.
   const navCountsPromise = getNavCounts(profile.id)
   const notificationsPromise = getNotifications(profile.id, { limit: 10 })

@@ -183,7 +183,7 @@ export function WorkspaceClient({
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         {/* Email header */}
-        <div className="border-b border-border px-6 py-4">
+        <div className="border-b border-border px-4 py-3">
           <h1 className={`text-lg font-semibold leading-snug text-foreground ${!isRead ? 'font-bold' : ''}`}>
             {message.subject ?? '(no subject)'}
           </h1>
@@ -260,7 +260,7 @@ export function WorkspaceClient({
         </div>
 
         {/* AI brief — Gmail-style summary */}
-        <div className="border-b border-border px-6 py-3">
+        <div className="border-b border-border px-4 py-2.5">
           <AiBrief
             subject={message.subject ?? null}
             bodyText={message.body_text ?? null}
@@ -311,7 +311,7 @@ export function WorkspaceClient({
 
         {/* ── Compose panel ── */}
         {sendMode && (
-          <div className="border-b border-border bg-muted/10 px-6 py-4 space-y-3">
+          <div className="border-b border-border bg-muted/10 px-4 py-3 space-y-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground capitalize">
               {sendMode.replace('_', ' ')}
             </p>
@@ -329,7 +329,7 @@ export function WorkspaceClient({
 
         {/* ── Convert form ── */}
         {convertType && !isConverted && (
-          <div className={`border-b border-border px-6 py-4 space-y-3 ${
+          <div className={`border-b border-border px-4 py-3 space-y-3 ${
             convertType === 'request' ? 'bg-blue-50/30' : convertType === 'task' ? 'bg-violet-50/30' : 'bg-amber-50/30'
           }`}>
             <div className={`flex items-center gap-1.5 text-sm font-semibold ${CONVERT_META[convertType].color}`}>
@@ -367,7 +367,7 @@ export function WorkspaceClient({
 
         {/* ── Internal note box ── */}
         {showNote && (
-          <div className="border-b border-border bg-amber-50/50 px-6 py-4 space-y-3">
+          <div className="border-b border-border bg-amber-50/50 px-4 py-3 space-y-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Internal note</p>
             <textarea value={noteBody} onChange={e => setNoteBody(e.target.value)} rows={3}
               placeholder="Visible only to your team…" className={`${iCls} bg-white`} />
@@ -384,13 +384,13 @@ export function WorkspaceClient({
         )}
 
         {/* ── Email body ── */}
-        <div className="px-6 py-5">
+        <div className="px-4 py-4">
           <EmailBody html={message.body_html} text={message.body_text} />
         </div>
 
         {/* ── Attachments ── */}
         {attachments.length > 0 && (
-          <div className="border-t border-border px-6 py-3">
+          <div className="border-t border-border px-4 py-2.5">
             <div className="flex flex-wrap gap-2">
               {attachments.map(a => (
                 <a key={a.id} href={a.signedUrl ?? '#'} target="_blank" rel="noreferrer"
@@ -404,7 +404,7 @@ export function WorkspaceClient({
 
         {/* ── Thread ── */}
         {thread.length > 1 && (
-          <div className="border-t border-border px-6 py-3">
+          <div className="border-t border-border px-4 py-2.5">
             <button
               onClick={() => setShowThread(v => !v)}
               className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"

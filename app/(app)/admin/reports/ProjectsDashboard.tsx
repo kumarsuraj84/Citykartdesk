@@ -18,7 +18,7 @@ function Section({ title, icon: Icon, children, className = '' }: {
   title: string; icon: React.ElementType; children: React.ReactNode; className?: string
 }) {
   return (
-    <div className={`rounded-xl border border-border bg-card p-5 space-y-4 ${className}`}>
+    <div className={`rounded-xl border border-border bg-card p-4 space-y-3 ${className}`}>
       <div className="flex items-center gap-2">
         <Icon className="h-4 w-4 text-muted-foreground" />
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
@@ -493,7 +493,7 @@ export function ProjectsDashboard({ data, isAdmin }: { data: ProjectAnalyticsDat
       </Section>
 
       {/* ── Status Mix + Projects by Owner ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Section title="Status Mix" icon={PieChart}>
           <DonutChart
             data={data.projectsByStatus.map((s) => ({
@@ -529,7 +529,7 @@ export function ProjectsDashboard({ data, isAdmin }: { data: ProjectAnalyticsDat
       </Section>
 
       {/* ── Workload + Overdue Milestone Aging ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Section title="Project Workload" icon={Users}>
           {data.projectOwnerWorkload.length === 0 ? (
             <p className="text-xs text-muted-foreground py-2">No open project tasks assigned yet</p>

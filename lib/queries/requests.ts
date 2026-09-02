@@ -104,7 +104,7 @@ export async function getRequestCollaborators(requestId: string): Promise<Reques
 export type AssignedToFilter = 'me' | 'unassigned' | (string & {})
 
 /** Standard user/agent views */
-export type RequestView = 'mine' | 'queue' | 'collaborated'
+export type RequestView = 'mine' | 'queue' | 'collaborated' | 'subordinates'
 
 /** Agent workbench views */
 export type WorkbenchView =
@@ -358,7 +358,20 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
   const hasExplicitSort = Boolean(opts.sort) && opts.sort !== 'updated_at'
   const sortAsc = (opts.dir ?? 'desc') === 'asc'
 
-  if (view === 'collaborated') {
+  if (view === 'subordinates') {
+    // "My Team" — anyone whose direct reports (profiles.manager_id = me)
+    // raised a request as requester, or are working one as assignee. RLS
+    // (requests_select's subordinate clause) already permits seeing these
+    // rows; this just scopes the query to exactly that set rather than
+    // relying on RLS alone to define the result.
+    const { data: subs } = await supabase.from('profiles').select('id').eq('manager_id', userId)
+    const subIds = (subs ?? []).map((s) => s.id)
+    if (subIds.length === 0) return { data: [], total: 0, page: pg, pageSize: size, totalPages: 0 }
+    query = query.or(`requester_id.in.(${subIds.join(',')}),assigned_to.in.(${subIds.join(',')})`)
+    query = hasExplicitSort
+      ? query.order(opts.sort!, { ascending: sortAsc, nullsFirst: false })
+      : query.order('updated_at', { ascending: sortAsc })
+  } else if (view === 'collaborated') {
     // Fetch request IDs where this user is an explicit collaborator
     const { data: collabRows } = await supabase
       .from('request_collaborators')

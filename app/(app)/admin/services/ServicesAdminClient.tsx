@@ -201,7 +201,7 @@ function ServiceModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-lg rounded-2xl border border-border bg-card shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="border-b border-border px-5 py-4 sticky top-0 bg-card z-10">
+        <div className="border-b border-border px-4 py-3 sticky top-0 bg-card z-10">
           <h2 className="text-base font-semibold text-foreground">
             {isEdit ? 'Edit Service' : isDuplicate ? `Duplicate "${mode.source.name}"` : 'Create Service'}
           </h2>
@@ -216,7 +216,7 @@ function ServiceModal({
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 px-5 py-4">
+        <form onSubmit={handleSubmit} className="space-y-3 px-4 py-3">
           {/* Name + Icon row */}
           <div className="flex gap-3">
             <IconPicker emoji={icon} onEmojiChange={setIcon} imageUrl={iconImageUrl} onImageChange={setIconImageUrl} />
@@ -539,7 +539,7 @@ function ServiceRow({
   const tagCount = service.sub_category_tag_ids.length
 
   return (
-    <div className="group flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 transition-all hover:border-primary/40 hover:bg-primary/[0.02] hover:shadow-sm">
+    <div className="group flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2 transition-all hover:border-primary/40 hover:bg-primary/[0.02] hover:shadow-sm">
       {/* Icon */}
       <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-lg">
         {service.icon_image_url ? (
@@ -716,7 +716,7 @@ export default function ServicesAdminClient({ services, categoryTree, teams, pro
       {/* Archive confirmation dialog */}
       {archiveTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-xl">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl">
             <h3 className="text-base font-semibold text-foreground">Archive service?</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               <strong>{archiveTarget.name}</strong> will be hidden from the catalog. You can re-activate it via Edit.
@@ -746,7 +746,7 @@ export default function ServicesAdminClient({ services, categoryTree, teams, pro
       {/* Delete confirmation dialog */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-xl">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl">
             <h3 className="text-base font-semibold text-destructive">Delete service permanently?</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               <strong>{deleteTarget.name}</strong> will be permanently removed. This action cannot be undone.

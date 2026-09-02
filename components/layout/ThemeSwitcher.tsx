@@ -5,6 +5,7 @@ import { Palette, Check } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -63,25 +64,27 @@ export function ThemeSwitcher() {
         }
       />
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-          Theme
-        </DropdownMenuLabel>
-        {THEME_OPTIONS.map((opt) => {
-          const active = opt.value === theme
-          return (
-            <DropdownMenuItem key={opt.value} onClick={() => choose(opt.value)} className="gap-2.5">
-              <span
-                className="h-5 w-5 flex-shrink-0 rounded-full ring-1 ring-border"
-                style={{ background: opt.swatch }}
-              />
-              <span className="min-w-0 flex-1 leading-tight">
-                <span className="block text-[12px] font-semibold">{opt.label}</span>
-                <span className="block text-[10px] text-muted-foreground">{opt.hint}</span>
-              </span>
-              {active && <Check className="h-4 w-4 flex-shrink-0 text-primary" />}
-            </DropdownMenuItem>
-          )
-        })}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+            Theme
+          </DropdownMenuLabel>
+          {THEME_OPTIONS.map((opt) => {
+            const active = opt.value === theme
+            return (
+              <DropdownMenuItem key={opt.value} onClick={() => choose(opt.value)} className="gap-2.5">
+                <span
+                  className="h-5 w-5 flex-shrink-0 rounded-full ring-1 ring-border"
+                  style={{ background: opt.swatch }}
+                />
+                <span className="min-w-0 flex-1 leading-tight">
+                  <span className="block text-[12px] font-semibold">{opt.label}</span>
+                  <span className="block text-[10px] text-muted-foreground">{opt.hint}</span>
+                </span>
+                {active && <Check className="h-4 w-4 flex-shrink-0 text-primary" />}
+              </DropdownMenuItem>
+            )
+          })}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )

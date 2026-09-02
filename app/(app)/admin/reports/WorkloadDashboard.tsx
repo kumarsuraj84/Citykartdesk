@@ -16,7 +16,7 @@ export function WorkloadDashboard({ rows, threshold }: { rows: WorkloadRow[]; th
         <KpiCard label="Over Threshold" value={overloadedCount} sub={`> ${threshold} open`} danger={overloadedCount > 0} />
       </div>
 
-      <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold text-foreground">Technician Workload</h2>

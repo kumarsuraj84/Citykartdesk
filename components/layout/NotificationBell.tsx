@@ -61,7 +61,7 @@ function NotificationRow({
 
   const inner = (
     <div
-      className={`group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/40 ${
+      className={`group flex items-start gap-3 px-4 py-2 transition-colors hover:bg-muted/40 ${
         isUnread ? 'bg-primary/[0.03]' : ''
       }`}
     >

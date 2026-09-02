@@ -11,6 +11,7 @@ import {
 } from '@/lib/actions/admin/categories'
 import { IconPicker } from '@/components/admin/IconPicker'
 import { CategoryIcon } from '@/components/admin/CategoryIcon'
+import { BulkImportCategoriesDialog } from '@/components/admin/BulkImportCategoriesDialog'
 import CategoryTreeView from './CategoryTreeView'
 import type { ServiceCategoryWithSubCategories } from '@/types'
 
@@ -71,7 +72,7 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
   return (
     <div className="rounded-2xl border border-border bg-card shadow-sm">
       {/* Category header row */}
-      <div className="flex items-start gap-4 px-5 py-4">
+      <div className="flex items-start gap-4 px-4 py-3">
         {editing ? (
           <>
             <IconPicker emoji={icon} onEmojiChange={setIcon} imageUrl={iconImageUrl} onImageChange={setIconImageUrl} />
@@ -179,7 +180,7 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
 
       {/* Delete confirmation */}
       {confirmingDelete && (
-        <div className="border-t border-destructive/30 bg-destructive/5 px-5 py-4">
+        <div className="border-t border-destructive/30 bg-destructive/5 px-4 py-3">
           <p className="text-sm text-foreground">
             Permanently delete <strong>{cat.name}</strong>? This cannot be undone.
             Deletion will be blocked while any service is still tagged to one of its sub-categories — untag them first.
@@ -206,7 +207,7 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
       {/* Sub-category list — capped height + scroll so a category with many
           (40+) sub-categories doesn't push the rest of the page down. */}
       {cat.sub_categories.length > 0 && (
-        <div className="border-t border-border px-5 pb-4 pt-3">
+        <div className="border-t border-border px-4 pb-3 pt-2.5">
           <div className="max-h-64 overflow-y-auto pr-1 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 content-start">
             {cat.sub_categories.map((sc) => (
               <div
@@ -258,10 +259,10 @@ function CreateCategoryForm({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="rounded-2xl border border-primary/40 bg-card shadow-sm">
-      <div className="border-b border-border px-5 py-3">
+      <div className="border-b border-border px-4 py-2.5">
         <p className="text-sm font-semibold text-foreground">New Category</p>
       </div>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3 px-5 py-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3 px-4 py-3">
         <div className="flex gap-3">
           <IconPicker emoji={icon} onEmojiChange={setIcon} imageUrl={iconImageUrl} onImageChange={setIconImageUrl} />
           <div className="flex-1">
@@ -346,13 +347,16 @@ export default function CategoriesAdminClient({
           </button>
         </div>
         {view === 'cards' && !creating && (
-          <button
-            onClick={() => setCreating(true)}
-            className="btn-gradient text-white"
-          >
-            <Plus className="h-4 w-4" />
-            New Category
-          </button>
+          <div className="flex items-center gap-2">
+            <BulkImportCategoriesDialog />
+            <button
+              onClick={() => setCreating(true)}
+              className="btn-gradient text-white"
+            >
+              <Plus className="h-4 w-4" />
+              New Category
+            </button>
+          </div>
         )}
       </div>
 

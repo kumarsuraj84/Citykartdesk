@@ -55,7 +55,7 @@ export function ApprovalRow({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="group flex w-full items-center gap-4 px-4 py-3.5 text-left transition-colors hover:bg-muted/40"
+        className="group flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-muted/40"
       >
         <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${colorCls}`}>
           <Icon className="h-4 w-4" />

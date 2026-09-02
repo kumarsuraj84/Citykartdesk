@@ -662,12 +662,12 @@ export function SectionBuilder({
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* 3-column grid */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[260px_minmax(0,1fr)_380px]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)_380px]">
 
         {/* ── LEFT: Field library + Validation ─────────────────────────────── */}
-        <aside className="lg:sticky lg:top-20 lg:self-start space-y-4">
+        <aside className="lg:sticky lg:top-20 lg:self-start space-y-3">
           {/* Field library */}
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
@@ -728,7 +728,7 @@ export function SectionBuilder({
         </aside>
 
         {/* ── CENTER: Canvas ────────────────────────────────────────────────── */}
-        <section className="min-w-0 space-y-4">
+        <section className="min-w-0 space-y-3">
           {sections.length === 0 && (
             <div className="rounded-2xl border-2 border-dashed border-border py-16 text-center">
               <p className="text-sm font-medium text-foreground">No sections yet</p>
@@ -741,7 +741,7 @@ export function SectionBuilder({
           {sections.map((section) => (
             <div
               key={section.id}
-              className="rounded-2xl border border-border bg-card p-5 shadow-sm"
+              className="rounded-2xl border border-border bg-card p-4 shadow-sm"
             >
               {/* Section header */}
               <header className="mb-1 flex items-start gap-3">
@@ -766,7 +766,7 @@ export function SectionBuilder({
                   updateSection(section.id, { description: e.target.value || undefined })
                 }
                 placeholder="Optional description shown to the requester"
-                className="mb-4 w-full border-0 bg-transparent text-sm text-muted-foreground outline-none focus:ring-0"
+                className="mb-3 w-full border-0 bg-transparent text-sm text-muted-foreground outline-none focus:ring-0"
               />
 
               {/* Field list */}
@@ -877,7 +877,7 @@ export function SectionBuilder({
         </section>
 
         {/* ── RIGHT: Inspector + Live preview ──────────────────────────────── */}
-        <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+        <aside className="space-y-3 lg:sticky lg:top-20 lg:self-start">
           {/* Field inspector */}
           {selectedField && selectedSection ? (
             <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
@@ -1046,7 +1046,7 @@ export function SectionBuilder({
               )}
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
+            <div className="rounded-2xl border border-dashed border-border bg-card p-4 text-center text-sm text-muted-foreground">
               Select a field to edit its settings.
             </div>
           )}
@@ -1076,7 +1076,7 @@ export function SectionBuilder({
                 </button>
               </div>
             </div>
-            <div className="space-y-5 p-4">
+            <div className="space-y-4 p-4">
               {sections.map((s) => {
                 const visibleFields = previewAudience === 'technician' ? s.fields : s.fields.filter(requesterCanView)
                 return (
@@ -1113,7 +1113,7 @@ export function SectionBuilder({
 
       {/* ── Sticky save bar ──────────────────────────────────────────────────── */}
       <div className="sticky bottom-4 z-10">
-        <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card px-5 py-3.5 shadow-lg">
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card px-4 py-3 shadow-lg">
           <div className="min-w-0">
             {saveState.type === 'success' && (
               <div className="flex items-center gap-2 text-sm text-emerald-600">

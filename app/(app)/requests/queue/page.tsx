@@ -340,7 +340,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
             No requests found.
           </div>
         ) : (
-          <RequestBoardView requests={requests} />
+          <RequestBoardView requests={requests} pathname="/requests/queue" currentSearch={currentSearch} />
         )
       ) : (
         <RequestsTable

@@ -97,7 +97,7 @@ function NewRoleModal({ onClose, onCreated }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-card shadow-2xl p-6 space-y-4">
+      <div className="w-full max-w-md rounded-2xl border border-border bg-card shadow-2xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground">Add Custom Role</h2>
           <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">

@@ -90,7 +90,10 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
         // Admin/Owner until that work ships, then reopened to everyone.
         ...(has('tasks') && isAdmin
           ? [{ label: 'Tasks',          href: '/tasks',         icon: ListTodo,    countKey: 'tasks'         as keyof NavCounts }] : []),
-        ...(has('approvals') && (isAgent || isManager || isAdmin)
+        // Any active user can be sent an ad-hoc approval (not just agent-
+        // tier roles), so this can't be role-gated — a plain requester
+        // designated as an approver still needs a way in.
+        ...(has('approvals')
           ? [{ label: 'Approvals', href: '/approvals', icon: ShieldCheck, countKey: 'approvals' as keyof NavCounts }] : []),
         ...(has('projects') && isAdmin
           ? [{ label: 'Projects',      href: '/projects',      icon: FolderKanban, countKey: 'projects'      as keyof NavCounts }] : []),

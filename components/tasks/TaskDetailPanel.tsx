@@ -217,7 +217,7 @@ export function TaskDetailPanel({
         >
 
           {/* ── Header ── */}
-          <div className="flex items-center gap-3 border-b border-border px-5 py-3 shrink-0">
+          <div className="flex items-center gap-3 border-b border-border px-4 py-2.5 shrink-0">
             {/* Task type pill */}
             <span className="flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2.5 py-1 text-xs font-medium text-muted-foreground">
               <Circle className="h-3 w-3" />
@@ -304,7 +304,7 @@ export function TaskDetailPanel({
           <div className="flex min-h-0 flex-1 overflow-hidden">
 
             {/* ── LEFT: main content ── */}
-            <div className="flex flex-1 flex-col overflow-y-auto px-7 py-6 gap-5 border-r border-border">
+            <div className="flex flex-1 flex-col overflow-y-auto px-5 py-4 gap-4 border-r border-border">
 
               {/* Title */}
               {editingTitle ? (
@@ -492,12 +492,12 @@ export function TaskDetailPanel({
             {/* ── RIGHT: Activity + Comment ── */}
             <div className="flex w-[340px] shrink-0 flex-col overflow-hidden">
               {/* Activity label */}
-              <div className="border-b border-border px-5 py-3 shrink-0">
+              <div className="border-b border-border px-4 py-2.5 shrink-0">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Activity</p>
               </div>
 
               {/* Feed — scrollable */}
-              <div className="flex-1 overflow-y-auto px-5 py-4">
+              <div className="flex-1 overflow-y-auto px-4 py-3">
                 <TaskActivityFeed
                   taskId={task.id}
                   comments={comments}

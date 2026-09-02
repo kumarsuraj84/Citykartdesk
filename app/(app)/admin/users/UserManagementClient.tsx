@@ -15,6 +15,7 @@ import {
 import type { UserWithTeams, Department, Location, CostCenter, JobFunction, Designation, ProfileMini, TeamOption } from './page'
 import type { UserRole } from '@/types'
 import { ROLE_LABELS, ROLE_BADGE_STYLES } from '@/lib/constants/roles'
+import { BulkImportUsersDialog } from '@/components/admin/BulkImportUsersDialog'
 
 // Every role the DB/RLS actually recognizes (user_role enum) — the role select
 // previously hardcoded just ['admin','manager','user'], silently omitting
@@ -239,7 +240,7 @@ function EditDrawer({ user, departments, locations, costCenters, jobFunctions, d
       {/* Modal */}
       <div className="relative flex w-full max-w-lg flex-col rounded-2xl bg-background shadow-2xl border border-border max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-5 py-4 shrink-0">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3 shrink-0">
           <div className="flex items-center gap-3">
             <Avatar name={form.full_name || user.email || '?'} />
             <div>
@@ -253,7 +254,7 @@ function EditDrawer({ user, departments, locations, costCenters, jobFunctions, d
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
 
           {/* Identity */}
           <section className="space-y-3">
@@ -341,7 +342,7 @@ function EditDrawer({ user, departments, locations, costCenters, jobFunctions, d
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-border px-5 py-4 shrink-0">
+        <div className="flex items-center justify-between border-t border-border px-4 py-3 shrink-0">
           {isAdmin && !isSelf && <ToggleActiveButton user={user} />}
           <div className="flex items-center gap-2 ml-auto">
             <button onClick={onClose} className="rounded-lg border border-border px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted">
@@ -438,7 +439,7 @@ function InviteModal({ departments, profiles, teams, onClose }: InviteModalProps
       <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} />
       <div className="relative w-full max-w-md rounded-2xl bg-background shadow-2xl border border-border">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div>
             <h2 className="text-sm font-semibold text-foreground">Invite New User</h2>
             <p className="text-xs text-muted-foreground">A new account will be created immediately.</p>
@@ -449,7 +450,7 @@ function InviteModal({ departments, profiles, teams, onClose }: InviteModalProps
         </div>
 
         {/* Body */}
-        <div className="px-5 py-5 space-y-4">
+        <div className="px-4 py-4 space-y-3">
           <Field label="Email *">
             <input
               type="email"
@@ -513,7 +514,7 @@ function InviteModal({ departments, profiles, teams, onClose }: InviteModalProps
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
+        <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
           <button onClick={onClose} className="rounded-lg border border-border px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted">
             Cancel
           </button>
@@ -674,7 +675,7 @@ export function UserManagementClient({ initialUsers, currentUserId, isAdmin, dep
   }, [initialUsers, search])
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-3">
       {/* Toolbar */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-sm">
@@ -693,13 +694,16 @@ export function UserManagementClient({ initialUsers, currentUserId, isAdmin, dep
           {filtered.length} {filtered.length === 1 ? 'user' : 'users'}
         </p>
         {isAdmin && (
-          <button
-            onClick={() => setShowInvite(true)}
-            className="btn-gradient flex items-center gap-1.5"
-          >
-            <UserPlus className="h-3.5 w-3.5" />
-            Invite User
-          </button>
+          <div className="flex items-center gap-2">
+            <BulkImportUsersDialog />
+            <button
+              onClick={() => setShowInvite(true)}
+              className="btn-gradient flex items-center gap-1.5"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              Invite User
+            </button>
+          </div>
         )}
       </div>
 

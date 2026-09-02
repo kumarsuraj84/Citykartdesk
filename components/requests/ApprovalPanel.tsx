@@ -103,7 +103,7 @@ export function ApprovalPanel({ approval, viewerId, viewerRole }: ApprovalPanelP
   const totalSteps    = approval.steps.length
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
 
       {/* ── Header card ── */}
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">

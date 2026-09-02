@@ -187,6 +187,14 @@ export function RequestsTable({
   const allSelected = requests.length > 0 && selected.size === requests.length
   const someSelected = selected.size > 0 && !allSelected
 
+  // Preserve where the click came from (e.g. Agent Requests vs. My Requests)
+  // so the ticket detail page's "Requests" breadcrumb can send them back to
+  // the same tab/filters instead of always defaulting to My Requests.
+  const backHref = `${pathname}${currentSearch ? `?${currentSearch}` : ''}`
+  function rowHref(id: string) {
+    return `/requests/${id}?from=${encodeURIComponent(backHref)}`
+  }
+
   function toggleOne(id: string) {
     setSelected((prev) => {
       const next = new Set(prev)
@@ -294,7 +302,7 @@ export function RequestsTable({
               return (
                 <tr
                   key={req.id}
-                  onClick={() => router.push(`/requests/${req.id}`)}
+                  onClick={() => router.push(rowHref(req.id))}
                   className={`cursor-pointer border-b border-border/60 last:border-0 transition-colors ${isSelected ? 'bg-primary/[0.04]' : 'hover:bg-muted/30'}`}
                 >
                   <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>

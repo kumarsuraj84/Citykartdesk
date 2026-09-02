@@ -103,7 +103,7 @@ function ReportModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-4 space-y-3">
         <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -278,7 +278,7 @@ export function ScheduledReportsClient({ reports: initialReports }: Props) {
         </div>
       )}
 
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <div>
           <h2 className="text-base font-semibold text-gray-900">Scheduled Reports</h2>
           <p className="text-sm text-gray-500 mt-0.5">Automatically email CSV reports to recipients.</p>
@@ -300,29 +300,29 @@ export function ScheduledReportsClient({ reports: initialReports }: Props) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
-                <th className="px-5 py-3">Name</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Frequency</th>
-                <th className="px-4 py-3">Recipients</th>
-                <th className="px-4 py-3">Active</th>
-                <th className="px-4 py-3">Last Sent</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="px-4 py-2">Name</th>
+                <th className="px-4 py-2">Type</th>
+                <th className="px-4 py-2">Frequency</th>
+                <th className="px-4 py-2">Recipients</th>
+                <th className="px-4 py-2">Active</th>
+                <th className="px-4 py-2">Last Sent</th>
+                <th className="px-4 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {reports.map(r => (
                 <tr key={r.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-5 py-3 font-medium text-gray-900">{r.name}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-2 font-medium text-gray-900">{r.name}</td>
+                  <td className="px-4 py-2">
                     <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize ${TYPE_COLORS[r.report_type]}`}>
                       {r.report_type}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{FREQ_LABELS[r.frequency]}</td>
-                  <td className="px-4 py-3 text-gray-600">
+                  <td className="px-4 py-2 text-gray-600">{FREQ_LABELS[r.frequency]}</td>
+                  <td className="px-4 py-2 text-gray-600">
                     {r.recipients.length} {r.recipients.length === 1 ? 'recipient' : 'recipients'}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-2">
                     <button
                       role="switch"
                       aria-checked={r.is_active}
@@ -333,12 +333,12 @@ export function ScheduledReportsClient({ reports: initialReports }: Props) {
                       <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${r.is_active ? 'translate-x-4' : 'translate-x-0'}`} />
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">
+                  <td className="px-4 py-2 text-gray-500">
                     {r.last_sent_at
                       ? new Date(r.last_sent_at).toLocaleDateString()
                       : <span className="text-gray-300">Never</span>}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-2">
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => handleSendNow(r.id)}

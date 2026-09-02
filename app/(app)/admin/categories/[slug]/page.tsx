@@ -36,7 +36,7 @@ export default async function AdminCategorySlugPage({ params }: PageProps) {
   }))
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
         <Link href="/admin/categories" className="hover:text-foreground transition-colors">
@@ -65,7 +65,7 @@ export default async function AdminCategorySlugPage({ params }: PageProps) {
       </div>
 
       {/* Sub-category manager */}
-      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
         <SubCategoryManager
           categoryId={category.id}
           categoryName={category.name}

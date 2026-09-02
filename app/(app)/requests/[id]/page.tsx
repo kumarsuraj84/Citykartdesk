@@ -43,6 +43,7 @@ import type {
 
 interface PageProps {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ from?: string }>
 }
 
 // ── Activity labels ────────────────────────────────────────────────────────────
@@ -92,7 +93,7 @@ function TicketCell({
   className?: string
 }) {
   return (
-    <div className={['flex flex-col gap-0.5 px-4 py-3', className].filter(Boolean).join(' ')}>
+    <div className={['flex flex-col gap-0.5 px-4 py-2', className].filter(Boolean).join(' ')}>
       <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
       <div className="text-xs font-medium text-foreground">{value}</div>
     </div>
@@ -278,7 +279,7 @@ function HistoryRow({ item }: { item: RequestActivityWithActor }) {
   }
 
   return (
-    <div className="flex items-start gap-4 border-b border-border py-3 last:border-0">
+    <div className="flex items-start gap-4 border-b border-border py-2 last:border-0">
       <div className="w-28 shrink-0 space-y-0.5">
         <p className="text-xs font-medium text-foreground">
           {new Date(item.created_at).toLocaleDateString('en-US', {
@@ -308,11 +309,19 @@ function HistoryRow({ item }: { item: RequestActivityWithActor }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default async function RequestDetailPage({ params }: PageProps) {
+export default async function RequestDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params
+  const { from } = await searchParams
 
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
+
+  // Sends the breadcrumb back to wherever the ticket was opened from (e.g.
+  // Agent Requests vs. My Requests) instead of always defaulting to My
+  // Requests — only trust an internal relative path, never an absolute/
+  // protocol-relative URL a caller could smuggle in via the query string.
+  const backHref = from && from.startsWith('/') && !from.startsWith('//') ? from : '/requests'
+  const backLabel = backHref.startsWith('/requests/queue') ? 'Agent Requests' : 'Requests'
 
   // Phase 1: everything that only needs `id` runs in parallel.
   // teamMembers and csatSurvey are gated on request data so they stay in Phase 2.
@@ -420,7 +429,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
   const conversationsTab = (
     <div className="flex flex-col" style={{ minHeight: '480px', maxHeight: '70vh' }}>
       {/* Scrollable message thread */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-4 min-h-0">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
         {request.status === 'waiting_user' && isRequester && !isAgent && (
           <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
             <p className="text-sm font-semibold text-orange-900">Action needed</p>
@@ -472,11 +481,11 @@ export default async function RequestDetailPage({ params }: PageProps) {
 
       {/* Pinned reply composer */}
       {!isTerminal ? (
-        <div className="shrink-0 border-t border-border bg-card px-5 py-4 space-y-3">
+        <div className="shrink-0 border-t border-border bg-card px-4 py-3 space-y-3">
           <CommentForm requestId={request.id} canPostInternal={isAgent} />
         </div>
       ) : (
-        <div className="shrink-0 border-t border-border bg-muted/20 px-5 py-3 text-center">
+        <div className="shrink-0 border-t border-border bg-muted/20 px-4 py-2.5 text-center">
           <p className="text-xs text-muted-foreground">This request is closed — no further replies can be added.</p>
         </div>
       )}
@@ -485,7 +494,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
 
   // ── Tab: Details ────────────────────────────────────────────────────────────
   const detailsTab = (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {(formSections.length > 0 || formSchema.length > 0) && (
         <SubmittedDataPanel
           requestId={request.id}
@@ -605,7 +614,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
 
   // ── Tab: Approvals ──────────────────────────────────────────────────────────
   const approvalsTab = approvals.length > 0 ? (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {approvals.map((a, idx) => (
         <div key={a.id}>
           {approvals.length > 1 && (
@@ -630,7 +639,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
 
   // ── Tab: Time Elapsed ───────────────────────────────────────────────────────
   const timeElapsedTab = (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MetricCard
           label="Life of Request"
@@ -826,11 +835,11 @@ export default async function RequestDetailPage({ params }: PageProps) {
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm">
         <Link
-          href="/requests"
+          href={backHref}
           className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" />
-          Requests
+          {backLabel}
         </Link>
         <span className="text-muted-foreground/40">/</span>
         <span className="font-medium text-foreground">{request.request_no}</span>
@@ -841,7 +850,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
       )}
 
       {/* Header card */}
-      <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
+      <div className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
         {/* Action bar row */}
         <div className="mb-3 flex items-center justify-between gap-3">
           {/* Left: title meta */}
@@ -866,6 +875,11 @@ export default async function RequestDetailPage({ params }: PageProps) {
             isTerminal={isTerminal}
             status={request.status}
             activeTimer={activeTimer}
+            responseDueAt={request.response_due_at}
+            resolutionDueAt={request.resolution_due_at}
+            respondedAt={request.responded_at}
+            resolvedAt={request.resolved_at}
+            waitingSince={request.waiting_since}
           />
         </div>
 

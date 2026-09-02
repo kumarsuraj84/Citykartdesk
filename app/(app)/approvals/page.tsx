@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
-import { ShieldOff, ArrowRight, CheckCircle2 } from 'lucide-react'
+import { CheckCircle2 } from 'lucide-react'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { getApprovals } from '@/lib/queries/approvals'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -47,32 +47,14 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
 
+  // Any active user can be designated an ad-hoc approver (sendAdHocApproval
+  // isn't restricted to managers), so this page can't be manager-only either
+  // — a plain requester/technician sent an approval had no way to see or act
+  // on it at all otherwise. RLS (approvals_select / is_request_approver)
+  // already scopes what getApprovals() and the count queries below return
+  // per viewer, so a non-manager naturally sees only approvals assigned to
+  // them; a manager still sees everything for their org/team.
   const isManager = profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'
-
-  if (!isManager) {
-    return (
-      <div className="mx-auto max-w-2xl">
-        <div className="flex flex-col items-center gap-6 rounded-2xl border border-border bg-card px-8 py-16 text-center shadow-sm">
-          <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-muted">
-            <ShieldOff className="h-10 w-10 text-muted-foreground" />
-          </div>
-          <div className="space-y-2">
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Approval Workflows</h1>
-            <p className="max-w-sm text-sm text-muted-foreground">
-              You do not have approval permissions. Approval workflows are managed by managers and administrators.
-            </p>
-          </div>
-          <Link
-            href="/requests"
-            className="btn-gradient text-white"
-          >
-            View Requests
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-      </div>
-    )
-  }
 
   const params = await searchParams
   const activeTab = (
@@ -110,13 +92,15 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
         <PageHeader
           title="Approvals"
-          description="Review and action approval requests from your team"
+          description={isManager ? 'Review and action approval requests from your team' : 'Approvals sent to you for review'}
         />
-        <ApprovalsExportButton activeTab={activeTab} />
+        {/* exportApprovals() is an org-wide admin-bypass export — kept
+            manager+ only even though the page itself no longer is. */}
+        {isManager && <ApprovalsExportButton activeTab={activeTab} />}
       </div>
 
       {/* Tabs */}

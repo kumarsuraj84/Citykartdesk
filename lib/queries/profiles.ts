@@ -200,6 +200,18 @@ export const getUnreadNotificationCount = cache(async function (
   return count ?? 0
 })
 
+/** Whether this user has any direct reports at all — drives whether the
+ *  "My Team" view on /requests is worth showing (org-chart based, via
+ *  profiles.manager_id — a separate concept from Team membership). */
+export const hasSubordinates = cache(async function (userId: string): Promise<boolean> {
+  const supabase = await createClient()
+  const { count } = await supabase
+    .from('profiles')
+    .select('id', { count: 'exact', head: true })
+    .eq('manager_id', userId)
+  return (count ?? 0) > 0
+})
+
 export type NavCounts = {
   requests: number
   tasks: number
@@ -208,10 +220,32 @@ export type NavCounts = {
   projects: number
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function countPendingApprovalsForUser(supabase: any, userId: string): Promise<number> {
+  // approvals and approval_workflow_steps are SIBLINGS under
+  // approval_workflows (no direct FK between them), so PostgREST can't embed
+  // one under the other in a single .select() — that query silently errors
+  // and falls back to 0. Two plain queries instead: which workflows this
+  // user is a step-approver on, then how many of THOSE are still pending.
+  const { data: steps } = await supabase
+    .from('approval_workflow_steps')
+    .select('workflow_id')
+    .or(`approver_user_id.eq.${userId},approver_type.eq.any_manager`)
+  const workflowIds = [...new Set((steps ?? []).map((s: { workflow_id: string }) => s.workflow_id))]
+  if (workflowIds.length === 0) return 0
+
+  const { count } = await supabase
+    .from('approvals')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'pending')
+    .in('workflow_id', workflowIds)
+  return count ?? 0
+}
+
 export const getNavCounts = cache(async function (userId: string): Promise<NavCounts> {
   const supabase = await createClient()
 
-  const [requestsRes, tasksRes, approvalsRes, notifRes, projectsRes] = await Promise.all([
+  const [requestsRes, tasksRes, approvalsCount, notifRes, projectsRes] = await Promise.all([
     supabase
       .from('requests')
       .select('*', { count: 'exact', head: true })
@@ -222,11 +256,7 @@ export const getNavCounts = cache(async function (userId: string): Promise<NavCo
       .select('*', { count: 'exact', head: true })
       .eq('assignee_id', userId)
       .in('status', ['open', 'in_progress']),
-    supabase
-      .from('approvals')
-      .select('id, approval_workflow_steps!inner(approver_user_id, approver_type)', { count: 'exact', head: true })
-      .eq('status', 'pending')
-      .or(`approver_user_id.eq.${userId},approver_type.eq.any_manager`, { foreignTable: 'approval_workflow_steps' }),
+    countPendingApprovalsForUser(supabase, userId),
     supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
@@ -243,7 +273,7 @@ export const getNavCounts = cache(async function (userId: string): Promise<NavCo
   return {
     requests: requestsRes.count ?? 0,
     tasks: tasksRes.count ?? 0,
-    approvals: approvalsRes.count ?? 0,
+    approvals: approvalsCount,
     notifications: notifRes.count ?? 0,
     projects: projectsRes.count ?? 0,
   }

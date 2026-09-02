@@ -123,6 +123,7 @@ const ACTION_TYPE_LABELS: Record<RuleAction['type'], string> = {
   assign: 'Assign to',
   set_priority: 'Set priority',
   set_status: 'Set status',
+  set_team: 'Route to team',
   notify: 'Notify',
 }
 
@@ -260,7 +261,7 @@ function ConditionRow({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
       {isFirst ? (
         <span className="w-14 shrink-0" />
       ) : (
@@ -287,12 +288,15 @@ function ConditionRow({
         value={encodeFieldSelection(condition)}
         onChange={handleFieldChange}
         placeholder="Search fields…"
-        className="flex-1"
+        className="min-w-[160px] flex-1 basis-[160px]"
       />
+      {/* Fixed width, not flex-1 — a native <select> won't shrink gracefully
+          like the Combobox-based fields do; sharing flex-1 with them squeezes
+          this down to just the arrow with the selected label invisible. */}
       <select
         value={condition.operator}
         onChange={(e) => onChange({ ...condition, operator: e.target.value as RuleConditionOperator })}
-        className={cn(selectCls, 'flex-1')}
+        className={cn(selectCls, 'w-40 shrink-0')}
       >
         {OPERATOR_OPTIONS.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
@@ -305,7 +309,7 @@ function ConditionRow({
             value={typeof condition.value === 'string' ? condition.value : ''}
             onChange={(v) => onChange({ ...condition, value: v })}
             placeholder="Search…"
-            className="flex-1"
+            className="min-w-[160px] flex-1 basis-[160px]"
           />
         ) : (
           <input
@@ -313,7 +317,7 @@ function ConditionRow({
             value={typeof condition.value === 'string' ? condition.value : ''}
             onChange={(e) => onChange({ ...condition, value: e.target.value })}
             placeholder={condition.field === 'age_days' ? 'Days…' : 'Text…'}
-            className={cn(inputCls, 'flex-1')}
+            className={cn(inputCls, 'min-w-[160px] flex-1 basis-[160px]')}
           />
         )
       )}
@@ -341,6 +345,7 @@ function ActionRow({
     if (type === 'assign') onChange({ type: 'assign', params: { strategy: 'direct', assigneeIds: [] } })
     else if (type === 'set_priority') onChange({ type: 'set_priority', params: { priority: 'medium' } })
     else if (type === 'set_status') onChange({ type: 'set_status', params: { status: 'in_progress' } })
+    else if (type === 'set_team') onChange({ type: 'set_team', params: { teamId: '' } })
     else onChange({ type: 'notify', params: { roles: ['manager'], notifyAssignee: false, notifyRequester: false, channels: ['in_app'] } })
   }
 
@@ -400,6 +405,24 @@ function ActionRow({
             <option key={value} value={value}>{label}</option>
           ))}
         </select>
+      )}
+
+      {action.type === 'set_team' && (
+        <div className="space-y-1.5">
+          <select
+            value={action.params.teamId}
+            onChange={(e) => onChange({ type: 'set_team', params: { teamId: e.target.value } })}
+            className={selectCls}
+          >
+            <option value="" disabled>Select a team…</option>
+            {refs.teams.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          <p className="text-[11px] text-muted-foreground">
+            Moves the ticket to this Team without changing its Service — for splitting one Service's tickets across several sub-teams by Category (e.g. via a Sub Category condition above), so only that sub-team sees it in their Team Queue.
+          </p>
+        </div>
       )}
 
       {action.type === 'notify' && (
@@ -566,15 +589,15 @@ function RuleEditor({
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-end bg-black/40">
-      <div className="h-full w-full max-w-xl overflow-y-auto bg-background shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+      <div className="h-full w-full max-w-2xl overflow-y-auto bg-background shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 className="text-lg font-semibold text-foreground">{editRule ? 'Edit Business Rule' : 'New Business Rule'}</h2>
           <button onClick={onClose} className="rounded-md p-1.5 hover:bg-muted transition-colors text-muted-foreground">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="flex-1 space-y-5 px-6 py-5">
+        <div className="flex-1 space-y-4 px-4 py-4">
           {error && <p className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-sm text-red-600">{error}</p>}
 
           <div>
@@ -705,7 +728,7 @@ function RuleEditor({
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-border px-6 py-4 flex gap-3 justify-end">
+        <div className="shrink-0 border-t border-border px-4 py-3 flex gap-3 justify-end">
           <button onClick={onClose} className="btn-soft">Cancel</button>
           <button onClick={submit} disabled={saving} className="btn-gradient disabled:opacity-50">
             {saving ? 'Saving…' : editRule ? 'Save Changes' : 'Create Rule'}
@@ -770,9 +793,9 @@ function ConfirmDialog({ open, title, body, onConfirm, onCancel }: { open: boole
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-xl">
+      <div className="w-full max-w-sm rounded-xl border border-border bg-background p-4 shadow-xl">
         <h3 className="text-base font-semibold text-foreground mb-2">{title}</h3>
-        <p className="text-sm text-muted-foreground mb-6">{body}</p>
+        <p className="text-sm text-muted-foreground mb-4">{body}</p>
         <div className="flex gap-3 justify-end">
           <button onClick={onCancel} className="btn-soft">Cancel</button>
           <button onClick={onConfirm} className="btn-danger">Confirm</button>

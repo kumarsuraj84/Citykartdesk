@@ -4,6 +4,7 @@ import { useState, useTransition, useRef, useEffect } from 'react'
 import { Loader2, UserCheck, ChevronDown, GitMerge, CheckCircle2, Search, X } from 'lucide-react'
 import { assignRequest, updateRequestStatus } from '@/lib/actions/requests'
 import { sendAdHocApproval, searchManagersForApproval } from '@/lib/actions/approvals'
+import { SLACountdownClocks } from './SLACountdownClocks'
 import type { RequestStatus } from '@/types'
 import { ROLE_LABELS } from '@/lib/constants/roles'
 
@@ -16,6 +17,11 @@ interface Props {
   isTerminal:         boolean
   status:             RequestStatus
   activeTimer?:       { id: string; started_at: string } | null
+  responseDueAt:      string | null
+  resolutionDueAt:    string | null
+  respondedAt:        string | null
+  resolvedAt:         string | null
+  waitingSince:       string | null
 }
 
 // ── Live elapsed timer ────────────────────────────────────────────────────────
@@ -53,6 +59,11 @@ export function RequestActionBar({
   isTerminal,
   status,
   activeTimer: initialTimer,
+  responseDueAt,
+  resolutionDueAt,
+  respondedAt,
+  resolvedAt,
+  waitingSince,
 }: Props) {
   const [isPending, startTransition]           = useTransition()
   const [isStartingWork, startWorkTransition]  = useTransition()
@@ -68,6 +79,8 @@ export function RequestActionBar({
   const [actionError, setActionError]          = useState<string | null>(null)
   const [actionSuccess, setActionSuccess]      = useState<string | null>(null)
   const [activeTimer, setActiveTimer]          = useState(initialTimer ?? null)
+  const [showStartWorkModal, setShowStartWorkModal] = useState(false)
+  const [startWorkMessage, setStartWorkMessage]     = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
   const approvalSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const approvalSearchSeq = useRef(0)
@@ -111,10 +124,22 @@ export function RequestActionBar({
     })
   }
 
-  function handleStartWorking() {
+  // Starting work is also the ticket's first response — the requester's
+  // first real word from a technician, not just a status flip — so it opens
+  // a modal requiring that message instead of firing immediately. The
+  // message becomes the first conversation comment (server-enforced too,
+  // see updateRequestStatus's in_progress + !responded_at guard).
+  function openStartWorkModal() {
+    setStartWorkError(null)
+    setStartWorkMessage('')
+    setShowStartWorkModal(true)
+  }
+
+  function confirmStartWorking() {
+    if (!startWorkMessage.trim()) { setStartWorkError('Please add an initial response message before starting work.'); return }
     setStartWorkError(null)
     startWorkTransition(async () => {
-      const result = await updateRequestStatus(requestId, 'in_progress')
+      const result = await updateRequestStatus(requestId, 'in_progress', startWorkMessage)
       if (result?.error) { setStartWorkError(result.error); return }
       setLocalStatus('in_progress')
       // updateRequestStatus auto-starts a time entry server-side — reflect it
@@ -122,6 +147,8 @@ export function RequestActionBar({
       // is unused client-side (nothing manually stops it anymore), so a placeholder
       // is fine here.
       setActiveTimer({ id: 'pending', started_at: new Date().toISOString() })
+      setShowStartWorkModal(false)
+      setStartWorkMessage('')
     })
   }
 
@@ -195,7 +222,7 @@ export function RequestActionBar({
             not just while the transition is in flight, so it can't be clicked twice. */}
         {isAgent && isAssignedToViewer && canStartWorking && (
           <button
-            onClick={handleStartWorking}
+            onClick={openStartWorkModal}
             disabled={isStartingWork}
             className="btn-gradient disabled:opacity-50"
           >
@@ -204,13 +231,16 @@ export function RequestActionBar({
           </button>
         )}
 
-        {/* Active timer indicator */}
-        {activeTimer && (
-          <div className="flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-            <ElapsedTimer startedAt={activeTimer.started_at} />
-          </div>
-        )}
+        {/* Response/Resolution SLA countdowns — what a technician actually
+            needs to watch, replacing the old single work-elapsed badge. */}
+        <SLACountdownClocks
+          responseDueAt={responseDueAt}
+          resolutionDueAt={resolutionDueAt}
+          respondedAt={respondedAt}
+          resolvedAt={resolvedAt}
+          status={localStatus}
+          waitingSince={waitingSince}
+        />
 
         {/* Actions dropdown */}
         <div className="relative" ref={dropdownRef}>
@@ -322,6 +352,50 @@ export function RequestActionBar({
         <p className="flex items-center gap-1 text-xs text-emerald-600">
           <CheckCircle2 className="h-3 w-3" /> {actionSuccess}
         </p>
+      )}
+
+      {showStartWorkModal && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
+          onClick={() => !isStartingWork && setShowStartWorkModal(false)}
+        >
+          <div
+            className="w-full max-w-md space-y-3 rounded-2xl border border-border bg-card p-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Start working on this request</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                This is your first response to the requester — it&apos;s required, posts to the conversation, and starts the clock on your resolution SLA.
+              </p>
+            </div>
+            <textarea
+              autoFocus
+              value={startWorkMessage}
+              onChange={(e) => { setStartWorkMessage(e.target.value); if (startWorkError) setStartWorkError(null) }}
+              placeholder="e.g. Looking into this now, will update you shortly…"
+              rows={4}
+              className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            {startWorkError && <p className="text-xs text-destructive">{startWorkError}</p>}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowStartWorkModal(false)}
+                disabled={isStartingWork}
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmStartWorking}
+                disabled={isStartingWork}
+                className="btn-gradient px-3 py-1.5 text-xs disabled:opacity-50"
+              >
+                {isStartingWork ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Start Working →'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

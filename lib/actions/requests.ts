@@ -10,7 +10,7 @@ import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/reques
 import { getEnabledModules } from '@/lib/queries/profiles'
 import { validateFieldValue, isFieldValueEmpty } from '@/lib/validation/formFields'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
-import { resolveServiceFormSections, filterFlatFieldsForRequester, isTechnicianMandatory } from '@/lib/forms/sections'
+import { resolveServiceFormSections, filterFlatFieldsForRequester, isTechnicianMandatory, requesterCanSet } from '@/lib/forms/sections'
 import { toCSV } from '@/lib/export/csv'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus } from '@/types'
 import type { Database, Json } from '@/types/database'
@@ -349,6 +349,13 @@ export async function updateRequestStatus(
 
   const isResolvedReopenByRequester =
     isRequester && !agentInitiated && currentStatus === 'resolved' && newStatus === 'open'
+  // A technician reopening their own resolved ticket counts as a reopen too
+  // (badge + reportable reopen_count) — just without the requester's 72h
+  // window/deadline check, since they're not bound by the "did you notice in
+  // time" clock the same way.
+  const isResolvedReopenByAgent =
+    agentInitiated && currentStatus === 'resolved' && newStatus === 'open'
+  const isResolvedReopen = isResolvedReopenByRequester || isResolvedReopenByAgent
 
   const canTransition =
     agentInitiated ||
@@ -366,9 +373,10 @@ export async function updateRequestStatus(
     return { error: `Transition to "${newStatus}" is not permitted.` }
   }
 
-  // Resolved → Open by the requester ("I'm not satisfied") is time-boxed and
-  // requires a remark explaining why — unlike an agent reopening their own
-  // resolved work, which stays unrestricted.
+  // Resolved → Open by the requester ("I'm not satisfied") is time-boxed —
+  // an agent reopening their own resolved work (isResolvedReopenByAgent,
+  // guarded separately below) always requires the same remark but isn't
+  // bound by this 72h deadline.
   if (isResolvedReopenByRequester) {
     const RESOLVED_REOPEN_WINDOW_HOURS = 72
     const deadline = request.resolved_at
@@ -382,11 +390,36 @@ export async function updateRequestStatus(
     }
   }
 
+  // Agent reopening their own resolved ticket — no deadline, but still needs
+  // to say why (surfaces in the conversation for anyone else looking at it).
+  if (isResolvedReopenByAgent && !comment?.trim()) {
+    return { error: 'Please explain why you are reopening this request.' }
+  }
+
   // A technician directly cancelling a ticket must say why — the requester
   // can never reopen it (only an approval-rejected cancellation is
   // reopenable), so this remark is their only visibility into the reason.
   if (agentInitiated && newStatus === 'cancelled' && !comment?.trim()) {
     return { error: 'Please explain why you are cancelling this request.' }
+  }
+
+  // Starting work (open/assigned -> in_progress) for the very first time IS
+  // the response — mandatory because it's also the first message the
+  // requester actually sees from a technician, not just a status flip.
+  // Re-entering in_progress later (e.g. from waiting_user) isn't gated —
+  // responded_at is already set by then.
+  if (agentInitiated && newStatus === 'in_progress' && !request.responded_at && !comment?.trim()) {
+    return { error: 'Please add an initial response message before starting work.' }
+  }
+
+  // Waiting on User and Resolved are both messages the requester actually
+  // reads, not just a status flip — mandatory for the same reason Start
+  // Working's first response is.
+  if (agentInitiated && newStatus === 'waiting_user' && !comment?.trim()) {
+    return { error: 'Please add a message explaining what you need from the requester.' }
+  }
+  if (agentInitiated && newStatus === 'resolved' && !comment?.trim()) {
+    return { error: 'Please add a resolution message before marking this resolved.' }
   }
 
   // Technician-mandatory fields (required, but hidden or read-only for the
@@ -445,7 +478,7 @@ export async function updateRequestStatus(
   // Successfully reopening (either path) clears the reopen state and counts
   // toward reopen_count — surfaced as a distinct badge in the UI and as a
   // reportable field ("which tickets were reopened").
-  if (isApprovalRejectionReopen || isResolvedReopenByRequester) {
+  if (isApprovalRejectionReopen || isResolvedReopen) {
     updatePayload.cancellation_reason = null
     updatePayload.reopen_deadline_at = null
     updatePayload.reopen_count = (request.reopen_count ?? 0) + 1
@@ -615,13 +648,17 @@ export async function updateRequestStatus(
   // reopenable cases this was, so the conversation/history timeline makes
   // clear *why* a technician is looking at a ticket that was already
   // resolved or rejected once.
-  if (isApprovalRejectionReopen || isResolvedReopenByRequester) {
+  if (isApprovalRejectionReopen || isResolvedReopen) {
     await logActivity({
       requestId,
       actorId: profile.id,
       action: 'reopened',
       metadata: {
-        reason: isApprovalRejectionReopen ? 'approval_rejected' : 'unsatisfied_with_resolution',
+        reason: isApprovalRejectionReopen
+          ? 'approval_rejected'
+          : isResolvedReopenByRequester
+            ? 'unsatisfied_with_resolution'
+            : 'agent_reopened',
         remark: comment?.trim() || null,
       },
     })
@@ -720,14 +757,32 @@ export async function assignRequest(
 
   if (!request) return { error: 'Request not found.' }
 
+  const isManager = ['manager', 'admin', 'platform_owner'].includes(profile.role)
+
   // Verify caller is on the request's team (defence-in-depth; RLS also enforces)
   const isOnTeam =
-    profile.role === 'manager' ||
-    profile.role === 'admin' ||
-    profile.role === 'platform_owner' ||
+    isManager ||
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
 
   if (!isOnTeam) return { error: 'Not authorized to assign requests for this team.' }
+
+  // A plain technician (not a manager+) can only hand a ticket to a teammate
+  // on the same team — never leave it unassigned, and never forward it to
+  // another team's technician. Managers keep the unrestricted "forward to
+  // anyone" picker for legitimate cross-team escalation.
+  if (!isManager) {
+    if (!assigneeId) {
+      return { error: 'Technicians cannot unassign a ticket — assign it to a teammate instead.' }
+    }
+    const { count } = await supabase
+      .from('team_members')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('team_id', request.team_id)
+      .eq('user_id', assigneeId)
+    if (!count) {
+      return { error: 'You can only assign this ticket to a teammate on the same team.' }
+    }
+  }
 
   const newStatus: RequestStatus =
     request.status === 'open' && assigneeId ? 'assigned' : (request.status as RequestStatus)
@@ -1631,7 +1686,7 @@ export async function updateRequestCategory(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, service_id, team_id, priority, created_at, waiting_since, sub_category_id, service:services(sla_policy:sla_policies(config))')
+    .select('id, service_id, team_id, priority, created_at, waiting_since, sub_category_id, assigned_to, service:services(sla_policy:sla_policies(config))')
     .eq('id', requestId)
     .single()
 
@@ -1678,6 +1733,13 @@ export async function updateRequestCategory(
     if (newResolutionDue) newResolutionDue = new Date(new Date(newResolutionDue).getTime() + alreadyPausedMs).toISOString()
   }
 
+  // The old assignment was made for the OLD category (directly or via a
+  // Business Rule) and may not make sense for the new one — e.g. Kaushlesh
+  // covers IT H/W & S/W, not Genisys, so reclassifying into Genisys must not
+  // leave it sitting in his queue. Clear it first and let the Business Rules
+  // re-run below decide the new owner from scratch: a matching rule
+  // reassigns it, and if nothing matches it's left unassigned rather than
+  // silently stuck with whoever had it before.
   const admin = createAdminClient()
   const { error: updateError } = await admin
     .from('requests')
@@ -1687,6 +1749,7 @@ export async function updateRequestCategory(
       priority: newPriority,
       response_due_at: newResponseDue,
       resolution_due_at: newResolutionDue,
+      assigned_to: null,
     })
     .eq('id', requestId)
 
@@ -1708,6 +1771,21 @@ export async function updateRequestCategory(
     await runRulesForTrigger('updated', requestId)
   } catch (e) {
     console.error('[updateRequestCategory] Business rules (updated) failed', e)
+  }
+
+  // No rule matched the new category and reassigned it — surface the
+  // unassignment explicitly instead of leaving it implicit in the diff
+  // between "before" and "after" screens.
+  if (request.assigned_to) {
+    const { data: after } = await admin.from('requests').select('assigned_to').eq('id', requestId).single()
+    if (!after?.assigned_to) {
+      await logActivity({
+        requestId,
+        actorId: profile.id,
+        action: 'assigned',
+        metadata: { assigned_to: null, reason: 'category_changed_no_matching_rule' },
+      })
+    }
   }
 
   revalidatePath(`/requests/${requestId}`)
@@ -1774,7 +1852,10 @@ export async function updateRequestFormData(
 
   // File-type fields live in request_attachments, never in form_data — not
   // part of this edit surface, same exclusion createRequest itself applies.
-  const editableFields = allFields.filter((f) => f.type !== 'file')
+  // A technician may only correct fields the requester never filled in
+  // themselves (technician-only/mandatory fields) — enforced here too, not
+  // just hidden in the UI, since this is the actual write boundary.
+  const editableFields = allFields.filter((f) => f.type !== 'file' && !requesterCanSet(f))
 
   // Only the fields actually present in this payload are touched — lets a
   // caller save one field at a time without re-submitting (and re-validating)

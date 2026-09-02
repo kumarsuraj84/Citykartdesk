@@ -134,8 +134,8 @@ function AlertRuleForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className="grid grid-cols-2 gap-4">
+    <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm">
+      <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2">
           <label className="text-xs font-medium text-muted-foreground">Name</label>
           <input
@@ -341,7 +341,7 @@ export function AlertRulesClient({ initialRules }: { initialRules: AlertRule[] }
           ) : (
             <div
               key={rule.id}
-              className="grid grid-cols-[1fr_120px_80px_120px_120px_80px_80px] items-center border-b border-border/50 last:border-0 px-4 py-3 gap-2"
+              className="grid grid-cols-[1fr_120px_80px_120px_120px_80px_80px] items-center border-b border-border/50 last:border-0 px-4 py-2 gap-2"
             >
               <span className="text-sm font-medium text-foreground truncate">{rule.name}</span>
 

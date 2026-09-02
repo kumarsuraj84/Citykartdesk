@@ -205,7 +205,7 @@ function SubCategoryRow({
         sc.is_active ? 'border-border bg-card' : 'border-border bg-muted/30 opacity-60'
       }`}
     >
-      <div className="flex items-center gap-3 px-4 py-3">
+      <div className="flex items-center gap-3 px-4 py-2.5">
         {(sc.icon || sc.icon_image_url) && (
           <CategoryIcon icon={sc.icon} iconImageUrl={sc.icon_image_url} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-lg" />
         )}
@@ -269,7 +269,7 @@ function SubCategoryRow({
       </div>
 
       {confirmingDelete && (
-        <div className="border-t border-destructive/30 bg-destructive/5 px-4 py-3">
+        <div className="border-t border-destructive/30 bg-destructive/5 px-4 py-2.5">
           <p className="text-xs text-foreground">
             Permanently delete <strong>{sc.name}</strong>? This cannot be undone. Services tagged with it will lose the tag but are not deleted.
           </p>
@@ -380,7 +380,7 @@ export function SubCategoryManager({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Toast */}
       {toast && (
         <div
@@ -455,7 +455,7 @@ export function SubCategoryManager({
         <button
           type="button"
           onClick={() => setEditingId('new')}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-3 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
         >
           <Plus className="h-4 w-4" />
           Add sub-category

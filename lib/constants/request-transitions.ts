@@ -18,15 +18,28 @@
 
 import type { RequestStatus } from '@/types'
 
+/**
+ * open/assigned → in_progress is deliberately NOT here even though it's a
+ * real transition an agent can make — it's reachable ONLY through the
+ * dedicated "Start Working" button (RequestActionBar), which forces the
+ * mandatory first-response message through the same modal. Listing it here
+ * too would let the generic status dropdown (RequestSidebarPanel's
+ * StatusRow) skip that message entirely.
+ *
+ * closed has no outgoing transitions at all — only a *resolved* ticket can
+ * be reopened; once auto-closed (72h after resolving with no reopen) it's
+ * permanent, for both agents and requesters.
+ */
+
 /** Transitions an agent/manager may trigger via the status panel. */
 export const AGENT_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
-  open:             ['in_progress', 'cancelled'],
-  assigned:         ['in_progress', 'cancelled'],
+  open:             ['cancelled'],
+  assigned:         ['cancelled'],
   in_progress:      ['waiting_user', 'resolved', 'cancelled'],
   waiting_user:     ['in_progress', 'resolved'],
   pending_approval: [],
-  resolved:         ['closed', 'open'],
-  closed:           ['open'],
+  resolved:         ['open'],
+  closed:           [],
   cancelled:        [],
 }
 
@@ -37,7 +50,7 @@ export const REQUESTER_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
   in_progress:      [],
   waiting_user:     ['open', 'cancelled'],
   pending_approval: [],
-  resolved:         ['closed', 'open'],
+  resolved:         ['open'],
   closed:           [],
   cancelled:        [],
 }

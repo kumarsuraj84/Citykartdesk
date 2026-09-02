@@ -2783,6 +2783,7 @@ export type Database = {
           job_title: string | null
           location_id: string | null
           manager_id: string | null
+          must_reset_password: boolean
           org_id: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
@@ -2801,6 +2802,7 @@ export type Database = {
           job_title?: string | null
           location_id?: string | null
           manager_id?: string | null
+          must_reset_password?: boolean
           org_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
@@ -2819,6 +2821,7 @@ export type Database = {
           job_title?: string | null
           location_id?: string | null
           manager_id?: string | null
+          must_reset_password?: boolean
           org_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string

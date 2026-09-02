@@ -94,7 +94,7 @@ export function NewProjectPanel({ profiles, teams, currentUserId, onCreated }: N
               className="relative w-full max-w-[640px] rounded-2xl bg-card shadow-2xl border border-border"
               onMouseDown={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between border-b border-border px-6 py-4">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <h2 className="text-sm font-semibold text-foreground">New Project</h2>
                 <button
                   onClick={handleClose}
@@ -104,7 +104,7 @@ export function NewProjectPanel({ profiles, teams, currentUserId, onCreated }: N
                 </button>
               </div>
 
-              <div className="px-6 pt-5 pb-4 space-y-4">
+              <div className="px-4 pt-4 pb-3 space-y-3">
                 <input
                   ref={nameRef}
                   type="text"
@@ -218,7 +218,7 @@ export function NewProjectPanel({ profiles, teams, currentUserId, onCreated }: N
                 )}
               </div>
 
-              <div className="flex items-center justify-between border-t border-border px-6 py-4">
+              <div className="flex items-center justify-between border-t border-border px-4 py-3">
                 <p className="text-xs text-muted-foreground">Press <kbd className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[10px]">Enter</kbd> to submit</p>
                 <div className="flex items-center gap-2">
                   <button

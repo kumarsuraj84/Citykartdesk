@@ -15,7 +15,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, User } from 'lucide-react'
+import { GripVertical, User, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateRequestStatus } from '@/lib/actions/requests'
 import { AGENT_TRANSITIONS } from '@/lib/constants/request-transitions'
@@ -37,9 +37,11 @@ const COLUMNS: { status: RequestStatus; accent: string }[] = [
 
 function SortableCard({
   request,
+  backHref,
   isDragging = false,
 }: {
   request: RequestWithRelations
+  backHref: string
   isDragging?: boolean
 }) {
   const { setNodeRef, transform, transition, attributes, listeners, isDragging: selfDragging } = useSortable({ id: request.id })
@@ -52,7 +54,7 @@ function SortableCard({
 
   return (
     <a
-      href={`/requests/${request.id}`}
+      href={`/requests/${request.id}?from=${encodeURIComponent(backHref)}`}
       ref={setNodeRef as unknown as React.Ref<HTMLAnchorElement>}
       style={style}
       onClick={(e) => { if (isDragging) e.preventDefault() }}
@@ -99,8 +101,8 @@ function SortableCard({
   )
 }
 
-function OverlayCard({ request }: { request: RequestWithRelations }) {
-  return <SortableCard request={request} isDragging />
+function OverlayCard({ request, backHref }: { request: RequestWithRelations; backHref: string }) {
+  return <SortableCard request={request} backHref={backHref} isDragging />
 }
 
 // ── Column drop zone ──────────────────────────────────────────────────────────
@@ -111,12 +113,14 @@ function BoardColumn({
   requests,
   isOver,
   isValidTarget,
+  backHref,
 }: {
   status: RequestStatus
   accent: string
   requests: RequestWithRelations[]
   isOver: boolean
   isValidTarget: boolean
+  backHref: string
 }) {
   const { setNodeRef: setDropRef } = useDroppable({ id: status })
 
@@ -139,7 +143,7 @@ function BoardColumn({
           className={`flex flex-col gap-2 min-h-[60px] rounded-lg transition-colors ${isOver && isValidTarget ? 'bg-primary/5 ring-1 ring-primary/20' : ''}`}
         >
           {requests.map((request) => (
-            <SortableCard key={request.id} request={request} />
+            <SortableCard key={request.id} request={request} backHref={backHref} />
           ))}
         </div>
       </SortableContext>
@@ -149,11 +153,28 @@ function BoardColumn({
 
 // ── Board root ────────────────────────────────────────────────────────────────
 
-export function RequestBoardView({ requests: initialRequests }: { requests: RequestWithRelations[] }) {
+export function RequestBoardView({
+  requests: initialRequests,
+  pathname,
+  currentSearch,
+}: {
+  requests: RequestWithRelations[]
+  pathname: string
+  currentSearch: string
+}) {
+  const backHref = `${pathname}${currentSearch ? `?${currentSearch}` : ''}`
   const [requests, setRequests] = useState<RequestWithRelations[]>(initialRequests)
   const [activeRequest, setActiveRequest] = useState<RequestWithRelations | null>(null)
   const [overColumn, setOverColumn] = useState<RequestStatus | null>(null)
   const [, startTransition] = useTransition()
+  // Waiting on User / Resolved / reopening a Resolved ticket all require a
+  // message that gets posted to the conversation (enforced server-side in
+  // updateRequestStatus) — a drag-and-drop has nowhere to type one, so these
+  // three targets pause here for it instead of firing the transition blind.
+  const [pendingDrop, setPendingDrop] = useState<{ requestId: string; fromCol: RequestStatus; toCol: RequestStatus; heading: string; placeholder: string; cta: string } | null>(null)
+  const [pendingDropText, setPendingDropText] = useState('')
+  const [pendingDropError, setPendingDropError] = useState<string | null>(null)
+  const [pendingDropSaving, setPendingDropSaving] = useState(false)
 
   // Re-sync local board state whenever the server passes a new snapshot of requests.
   // Adjusting state during render (React's documented pattern) instead of an effect.
@@ -209,6 +230,24 @@ export function RequestBoardView({ requests: initialRequests }: { requests: Requ
     if (!AGENT_TRANSITIONS[fromCol].includes(toCol)) return
 
     const requestId = String(active.id)
+
+    if (toCol === 'waiting_user' || toCol === 'resolved' || (fromCol === 'resolved' && toCol === 'open')) {
+      setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, status: toCol } : r)))
+      setPendingDrop({
+        requestId, fromCol, toCol,
+        heading: toCol === 'waiting_user' ? 'What do you need from the requester?'
+          : toCol === 'resolved' ? 'Resolution details'
+          : 'Why are you reopening this?',
+        placeholder: toCol === 'waiting_user' ? 'e.g. Please confirm your extension number…'
+          : toCol === 'resolved' ? 'What did you do to resolve this?'
+          : "Explain what's still wrong…",
+        cta: toCol === 'waiting_user' ? 'Set to Waiting on User'
+          : toCol === 'resolved' ? 'Mark Resolved'
+          : 'Reopen',
+      })
+      return
+    }
+
     setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, status: toCol } : r)))
     startTransition(async () => {
       const result = await updateRequestStatus(requestId, toCol)
@@ -219,34 +258,84 @@ export function RequestBoardView({ requests: initialRequests }: { requests: Requ
     })
   }
 
+  function cancelPendingDrop() {
+    if (!pendingDrop) return
+    setRequests((prev) => prev.map((r) => (r.id === pendingDrop.requestId ? { ...r, status: pendingDrop.fromCol } : r)))
+    setPendingDrop(null); setPendingDropText(''); setPendingDropError(null)
+  }
+
+  function confirmPendingDrop() {
+    if (!pendingDrop) return
+    if (!pendingDropText.trim()) { setPendingDropError('This message is required.'); return }
+    const { requestId, fromCol, toCol } = pendingDrop
+    setPendingDropSaving(true)
+    startTransition(async () => {
+      const result = await updateRequestStatus(requestId, toCol, pendingDropText)
+      setPendingDropSaving(false)
+      if (result.error) {
+        setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, status: fromCol } : r)))
+        toast.error(result.error)
+      }
+      setPendingDrop(null); setPendingDropText(''); setPendingDropError(null)
+    })
+  }
+
   const activeValidTargets = activeRequest ? AGENT_TRANSITIONS[activeRequest.status] : []
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCorners}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDragEnd={onDragEnd}
-    >
-      <div className="overflow-x-auto pb-4">
-        <div className="flex min-w-[1100px] items-start gap-4">
-          {COLUMNS.map(({ status, accent }) => (
-            <BoardColumn
-              key={status}
-              status={status}
-              accent={accent}
-              requests={grouped[status]}
-              isOver={overColumn === status}
-              isValidTarget={activeValidTargets.includes(status)}
-            />
-          ))}
+    <>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+      >
+        <div className="overflow-x-auto pb-4">
+          <div className="flex min-w-[1100px] items-start gap-3">
+            {COLUMNS.map(({ status, accent }) => (
+              <BoardColumn
+                key={status}
+                status={status}
+                accent={accent}
+                requests={grouped[status]}
+                isOver={overColumn === status}
+                isValidTarget={activeValidTargets.includes(status)}
+                backHref={backHref}
+              />
+            ))}
+          </div>
         </div>
-      </div>
 
-      <DragOverlay dropAnimation={{ duration: 180, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
-        {activeRequest ? <OverlayCard request={activeRequest} /> : null}
-      </DragOverlay>
-    </DndContext>
+        <DragOverlay dropAnimation={{ duration: 180, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
+          {activeRequest ? <OverlayCard request={activeRequest} backHref={backHref} /> : null}
+        </DragOverlay>
+      </DndContext>
+
+      {pendingDrop && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={() => !pendingDropSaving && cancelPendingDrop()}>
+          <div className="w-full max-w-md space-y-3 rounded-2xl border border-border bg-card p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-foreground">{pendingDrop.heading}</h3>
+            <textarea
+              autoFocus
+              value={pendingDropText}
+              onChange={(e) => { setPendingDropText(e.target.value); setPendingDropError(null) }}
+              placeholder={pendingDrop.placeholder}
+              rows={4}
+              className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            {pendingDropError && <p className="text-xs text-destructive">{pendingDropError}</p>}
+            <div className="flex justify-end gap-2">
+              <button onClick={cancelPendingDrop} disabled={pendingDropSaving} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50">
+                Cancel
+              </button>
+              <button onClick={confirmPendingDrop} disabled={pendingDropSaving} className="btn-gradient px-3 py-1.5 text-xs disabled:opacity-50">
+                {pendingDropSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : pendingDrop.cta}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }

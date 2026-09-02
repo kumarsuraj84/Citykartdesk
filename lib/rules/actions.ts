@@ -13,6 +13,13 @@ export type RuleAction =
   | { type: 'assign'; params: { strategy: 'direct' | 'round_robin' | 'load_balanced'; assigneeIds: string[] } }
   | { type: 'set_priority'; params: { priority: string } }
   | { type: 'set_status'; params: { status: string } }
+  // Re-routes the ticket to a different Team without changing its Service —
+  // e.g. one Service's Categories are actually split across several
+  // sub-teams of technicians; visibility (Team Queue, RLS) follows team_id,
+  // so a Category-conditioned rule can route each Category to the right
+  // sub-team's members only, instead of everyone on one big Team seeing
+  // every Category's tickets.
+  | { type: 'set_team'; params: { teamId: string } }
   | {
       type: 'notify'
       params: {
@@ -219,6 +226,18 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
   })
 }
 
+async function runSetTeam(admin: AnyClient, request: ActionRequest, teamId: string, ctx: RuleActionContext): Promise<void> {
+  if (!teamId) return // rule saved with no team selected yet — nothing to do
+  const { error } = await admin.from('requests').update({ team_id: teamId }).eq('id', request.id)
+  if (error) return
+  await logActivity({
+    requestId: request.id,
+    actorId: request.requester_id,
+    action: 'reclassified',
+    metadata: { team_id: teamId, via: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName },
+  })
+}
+
 async function runNotify(
   admin: AnyClient,
   request: ActionRequest,
@@ -283,6 +302,7 @@ export async function executeActions(
       if (action.type === 'assign') await runAssign(admin, request, action.params, ctx)
       else if (action.type === 'set_priority') await runSetPriority(admin, request, action.params.priority, ctx)
       else if (action.type === 'set_status') await runSetStatus(admin, request, action.params.status, ctx)
+      else if (action.type === 'set_team') await runSetTeam(admin, request, action.params.teamId, ctx)
       else if (action.type === 'notify') await runNotify(admin, request, action.params, ctx)
     } catch (e) {
       console.error(`[business-rules] Action "${action.type}" failed for rule ${ctx.ruleId}`, e)

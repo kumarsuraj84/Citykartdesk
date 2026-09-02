@@ -975,8 +975,8 @@ export default function RunbooksClient() {
   return (
     <div className="flex h-full min-h-[calc(100vh-4rem)] divide-x divide-border">
       {/* Sidebar */}
-      <nav className="w-64 shrink-0 overflow-y-auto py-6 pl-6 pr-4">
-        <p className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+      <nav className="w-64 shrink-0 overflow-y-auto py-4 pl-6 pr-4">
+        <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           <BookOpen className="h-3.5 w-3.5" />
           Runbooks
         </p>
@@ -1021,7 +1021,7 @@ export default function RunbooksClient() {
       </nav>
 
       {/* Content */}
-      <main className="min-w-0 flex-1 overflow-y-auto px-10 py-8">
+      <main className="min-w-0 flex-1 overflow-y-auto px-10 py-6">
         {activeContent ?? (
           <p className="text-sm text-muted-foreground">Select a topic from the sidebar.</p>
         )}

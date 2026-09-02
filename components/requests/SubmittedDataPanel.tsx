@@ -6,7 +6,7 @@ import { Pencil, Loader2 } from 'lucide-react'
 import { FieldGrid, SectionBlock, getDefaultValue } from '@/components/forms/DynamicForm'
 import type { FieldValue } from '@/components/forms/DynamicForm'
 import { validateFields } from '@/lib/validation/formFields'
-import { isTechnicianMandatory } from '@/lib/forms/sections'
+import { isTechnicianMandatory, requesterCanSet } from '@/lib/forms/sections'
 import { updateRequestFormData } from '@/lib/actions/requests'
 import type { FormField, FormSection } from '@/types'
 
@@ -31,7 +31,7 @@ export function displayFieldValue(field: FormField, raw: unknown): string {
 
 function FieldRow({ field, data }: { field: FormField; data: Record<string, unknown> }) {
   return (
-    <div className="flex items-start justify-between gap-4 px-4 py-2.5">
+    <div className="flex items-start justify-between gap-4 px-4 py-2">
       <dt className="shrink-0 text-xs text-muted-foreground">
         {isTechnicianMandatory(field) && <span className="mr-0.5 text-destructive">*</span>}
         {field.label}
@@ -70,7 +70,12 @@ export function SubmittedDataPanel({ requestId, sections, legacySchema, data, ca
   const allFields: FormField[] = hasSections
     ? [...sections].sort((a, b) => a.order - b.order).flatMap((s) => [...s.fields].sort((a, b) => a.order - b.order))
     : [...legacySchema].sort((a, b) => a.order - b.order)
-  const editableFields = allFields.filter((f) => f.type !== 'file')
+  // A technician may only correct fields the requester never filled in
+  // themselves (technician-only/mandatory fields) — everything the requester
+  // actually submitted (Subject, Description, Phone Number, …) is locked
+  // once submitted, same rule SubmittedFieldRow's per-field editor applies.
+  const editableFields = allFields.filter((f) => f.type !== 'file' && !requesterCanSet(f))
+  const canActuallyEdit = canEdit && editableFields.length > 0
 
   const [values, setValues] = useState<Record<string, FieldValue>>(() =>
     Object.fromEntries(editableFields.map((f) => [f.id, (data[f.id] as FieldValue | undefined) ?? getDefaultValue(f)]))
@@ -108,12 +113,12 @@ export function SubmittedDataPanel({ requestId, sections, legacySchema, data, ca
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Submitted Information
         </h3>
-        {canEdit && !editing && (
+        {canActuallyEdit && !editing && (
           <button
             type="button"
             onClick={startEdit}
@@ -131,14 +136,16 @@ export function SubmittedDataPanel({ requestId, sections, legacySchema, data, ca
       )}
 
       {editing ? (
-        <div className="space-y-6 rounded-lg border border-border p-4">
+        <div className="space-y-4 rounded-lg border border-border p-4">
           {hasSections ? (
             [...sections]
               .sort((a, b) => a.order - b.order)
+              .map((section) => ({ ...section, fields: section.fields.filter((f) => f.type !== 'file' && !requesterCanSet(f)) }))
+              .filter((section) => section.fields.length > 0)
               .map((section) => (
                 <SectionBlock
                   key={section.id}
-                  section={{ ...section, fields: section.fields.filter((f) => f.type !== 'file') }}
+                  section={section}
                   values={values}
                   errors={errors}
                   onChange={handleChange}

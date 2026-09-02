@@ -55,7 +55,7 @@ export function ApprovalPreviewDialog({ approval, viewerId, viewerRole, onClose 
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+        <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-xs text-muted-foreground">{req?.request_no}</span>
@@ -72,7 +72,7 @@ export function ApprovalPreviewDialog({ approval, viewerId, viewerRole, onClose 
           </button>
         </div>
 
-        <div className="max-h-[70vh] space-y-5 overflow-y-auto px-5 py-4">
+        <div className="max-h-[70vh] space-y-4 overflow-y-auto px-4 py-3">
           {loading ? (
             <div className="flex items-center justify-center py-10">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

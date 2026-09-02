@@ -1,8 +1,9 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { Pencil, Check, X, Camera, KeyRound } from 'lucide-react'
+import { Pencil, Check, X, Camera, KeyRound, Lock } from 'lucide-react'
 import { updateProfile, uploadAvatar, sendPasswordResetEmail } from '@/lib/actions/profile'
+import { changeOwnPassword } from '@/lib/actions/auth'
 
 export function EditableName({ initialName }: { initialName: string }) {
   const [editing, setEditing] = useState(false)
@@ -199,5 +200,105 @@ export function PasswordResetButton() {
         <p className="text-xs text-red-600">{error}</p>
       )}
     </div>
+  )
+}
+
+export function ChangePasswordForm() {
+  const [open, setOpen] = useState(false)
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+  const [isPending, startTransition] = useTransition()
+
+  function reset() {
+    setCurrent(''); setNext(''); setConfirm(''); setError(null)
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (next.length < 8) { setError('New password must be at least 8 characters.'); return }
+    if (next !== confirm) { setError("New passwords don't match."); return }
+    const fd = new FormData()
+    fd.set('currentPassword', current)
+    fd.set('newPassword', next)
+    startTransition(async () => {
+      const result = await changeOwnPassword(fd)
+      if (result.error) {
+        setError(result.error)
+      } else {
+        setSuccess(true)
+        reset()
+        setOpen(false)
+      }
+    })
+  }
+
+  if (!open) {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <button
+          type="button"
+          onClick={() => { setSuccess(false); setOpen(true) }}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground shadow-sm hover:bg-muted transition-colors"
+        >
+          <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+          Change password
+        </button>
+        {success && <span className="text-xs font-medium text-emerald-600">Password updated.</span>}
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex w-64 flex-col gap-2">
+      <input
+        type="password"
+        autoComplete="current-password"
+        placeholder="Current password"
+        value={current}
+        onChange={(e) => setCurrent(e.target.value)}
+        required
+        className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+      />
+      <input
+        type="password"
+        autoComplete="new-password"
+        placeholder="New password (min. 8 characters)"
+        value={next}
+        onChange={(e) => setNext(e.target.value)}
+        required
+        className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+      />
+      <input
+        type="password"
+        autoComplete="new-password"
+        placeholder="Confirm new password"
+        value={confirm}
+        onChange={(e) => setConfirm(e.target.value)}
+        required
+        className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+      />
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => { reset(); setOpen(false) }}
+          disabled={isPending}
+          className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={isPending}
+          className="btn-gradient text-white disabled:opacity-60"
+        >
+          {isPending ? 'Updating…' : 'Update'}
+        </button>
+      </div>
+    </form>
   )
 }

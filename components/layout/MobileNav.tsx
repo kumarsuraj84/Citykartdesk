@@ -39,7 +39,8 @@ export function MobileNav({ profile, navVisibility, navCounts }: MobileNavProps)
     { label: 'Agent Requests', href: '/requests/queue', icon: Headset,   show: has('requests') && (isAgent || isManager || isAdmin) },
     { label: 'Tasks',         href: '/tasks',         icon: ListTodo,    show: has('tasks') && isAdmin },
     { label: 'Intake',        href: '/intake',        icon: Sparkles,    show: has('intake') && (isAgent || isManager || isAdmin) },
-    { label: 'Approvals',     href: '/approvals',     icon: CheckCircle, show: has('approvals') && (isAgent || isManager || isAdmin) },
+    // Any active user can be sent an ad-hoc approval, not just agent-tier roles.
+    { label: 'Approvals',     href: '/approvals',     icon: CheckCircle, show: has('approvals') },
     { label: 'Notifications', href: '/notifications', icon: Bell,        show: true },
   ]
 

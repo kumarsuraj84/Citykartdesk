@@ -942,7 +942,7 @@ export default async function HomePage({
     : Promise.resolve({ activeCount: 0, blockedCount: 0, milestonesOverdue: 0, milestonesDueSoon: 0, atRiskCount: 0, atRisk: [] })
 
   return (
-    <div className="space-y-4 pb-6">
+    <div className="space-y-4 pb-4">
 
       {/* Greeting renders before the RPC resolves */}
       <div>

@@ -237,7 +237,7 @@ function CategoryNode({ cat, defaultExpanded }: { cat: ServiceCategoryWithSubCat
 
   return (
     <div className="rounded-xl border border-border bg-card">
-      <div className="flex items-center gap-2 px-3 py-2.5">
+      <div className="flex items-center gap-2 px-3 py-2">
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}

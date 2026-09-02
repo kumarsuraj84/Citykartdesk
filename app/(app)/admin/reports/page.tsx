@@ -95,7 +95,7 @@ export default async function ReportsPage({
   const showPeriod = tab === 'requests' || tab === 'sla' || tab === 'tasks'
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
 
       {/* ── Page header ──────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -189,14 +189,14 @@ export default async function ReportsPage({
       {/* ── Tab content ──────────────────────────────────────────────────────── */}
 
       {tab === 'requests' && !hasRequests && (
-        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/50 px-5 py-4 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-400">
+        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/50 px-4 py-3 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-400">
           <AlertCircle className="h-5 w-5 shrink-0" />
           <p className="text-sm">The <strong>Requests</strong> module is not enabled for your organisation. Enable it in Admin → Modules.</p>
         </div>
       )}
 
       {tab === 'tasks' && !hasTasks && (
-        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/50 px-5 py-4 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-400">
+        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/50 px-4 py-3 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-400">
           <AlertCircle className="h-5 w-5 shrink-0" />
           <p className="text-sm">The <strong>Tasks</strong> module is not enabled for your organisation. Enable it in Admin → Modules.</p>
         </div>
@@ -219,7 +219,7 @@ export default async function ReportsPage({
       )}
 
       {tab === 'projects' && !hasProjects && (
-        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/50 px-5 py-4 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-400">
+        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/50 px-4 py-3 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-400">
           <AlertCircle className="h-5 w-5 shrink-0" />
           <p className="text-sm">The <strong>Projects</strong> module is not enabled for your organisation. Enable it in Admin → Modules.</p>
         </div>

@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { User, Shield, Users, Building2, Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
-import { EditableName, AvatarUpload, PasswordResetButton } from './ProfileClient'
+import { EditableName, AvatarUpload, PasswordResetButton, ChangePasswordForm } from './ProfileClient'
 import { ROLE_LABELS } from '@/lib/constants/roles'
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -98,7 +98,8 @@ export default async function ProfilePage() {
           <h2 className="text-sm font-semibold text-foreground">Security</h2>
         </div>
         <div className="divide-y divide-border px-5">
-          <InfoRow label="Password" value={<PasswordResetButton />} />
+          <InfoRow label="Password" value={<ChangePasswordForm />} />
+          <InfoRow label="Forgot it?" value={<PasswordResetButton />} />
         </div>
       </div>
 

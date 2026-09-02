@@ -18,6 +18,7 @@ import {
 import { StatusBadge, PriorityBadge } from './RequestBadges'
 import { SLABadge } from './SLABadge'
 import { SubmittedFieldRow } from './SubmittedFieldRow'
+import { requesterCanSet } from '@/lib/forms/sections'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
 import { formatRelativeTime } from '@/lib/utils'
 import type { RequestStatus, RequestPriority, RequestCollaborator, FormField, FormSection, AllowedSubCategory } from '@/types'
@@ -87,8 +88,12 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
   const [open, setOpen] = useState(false)
   const [cur, setCur] = useState(status)
   const [isPending, startTransition] = useTransition()
-  const [reopenRemark, setReopenRemark] = useState<string | null>(null)
-  const [reopenError, setReopenError] = useState<string | null>(null)
+  // A handful of transitions need a message first — it's posted to the
+  // conversation server-side, so it's collected here instead of firing the
+  // transition blind and finding out from a rejected server response.
+  const [pendingComment, setPendingComment] = useState<{ next: RequestStatus; heading: string; placeholder: string; cta: string } | null>(null)
+  const [pendingCommentText, setPendingCommentText] = useState('')
+  const [pendingCommentError, setPendingCommentError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   // Re-sync if the server-provided status changes underneath us — e.g. the
@@ -112,7 +117,7 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
 
   function apply(next: RequestStatus, comment?: string) {
     const prev = cur
-    setCur(next); setOpen(false); setReopenRemark(null); setReopenError(null)
+    setCur(next); setOpen(false); setPendingComment(null); setPendingCommentText(''); setPendingCommentError(null)
     startTransition(async () => {
       const result = await updateRequestStatus(requestId, next, comment)
       if (result?.error) { toast.error(result.error); setCur(prev) }
@@ -120,19 +125,32 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
   }
 
   function pick(next: RequestStatus) {
-    // A pure requester reopening a resolved ticket ("I'm not satisfied")
-    // must explain why — the remark is required server-side too, but
-    // collecting it here avoids a round-trip just to find that out.
-    if (!isAgent && isRequester && cur === 'resolved' && next === 'open') {
-      setReopenRemark('')
+    // Reopening a resolved ticket ("I'm not satisfied" / "reopening my own
+    // work") must explain why — agent or requester, both required
+    // server-side too, but collecting it here avoids a round-trip just to
+    // find that out.
+    if (cur === 'resolved' && next === 'open') {
+      setPendingComment({ next, heading: 'Why are you reopening this?', placeholder: "Explain what's still wrong…", cta: 'Reopen' })
+      return
+    }
+    // Waiting on User / Resolved are messages the requester actually reads,
+    // not just a status flip — mandatory for the same reason Start
+    // Working's first response is (see RequestActionBar).
+    if (isAgent && next === 'waiting_user') {
+      setPendingComment({ next, heading: 'What do you need from the requester?', placeholder: 'e.g. Please confirm your extension number…', cta: 'Set to Waiting on User' })
+      return
+    }
+    if (isAgent && next === 'resolved') {
+      setPendingComment({ next, heading: 'Resolution details', placeholder: 'What did you do to resolve this?', cta: 'Mark Resolved' })
       return
     }
     apply(next)
   }
 
-  function confirmReopen() {
-    if (!reopenRemark?.trim()) { setReopenError('Please explain why you are reopening this request.'); return }
-    apply('open', reopenRemark)
+  function confirmPendingComment() {
+    if (!pendingComment) return
+    if (!pendingCommentText.trim()) { setPendingCommentError('This message is required.'); return }
+    apply(pendingComment.next, pendingCommentText)
   }
 
   return (
@@ -156,23 +174,23 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
             ))}
           </div>
         )}
-        {reopenRemark !== null && (
+        {pendingComment && (
           <div className="absolute right-0 top-full z-50 mt-1 w-64 space-y-2 rounded-xl border border-border bg-card p-3 shadow-xl">
-            <p className="text-[11px] font-medium text-foreground">Why are you reopening this?</p>
+            <p className="text-[11px] font-medium text-foreground">{pendingComment.heading}</p>
             <textarea
               autoFocus
-              value={reopenRemark}
-              onChange={(e) => { setReopenRemark(e.target.value); setReopenError(null) }}
-              placeholder="Explain what's still wrong…"
+              value={pendingCommentText}
+              onChange={(e) => { setPendingCommentText(e.target.value); setPendingCommentError(null) }}
+              placeholder={pendingComment.placeholder}
               rows={3}
               className="w-full resize-none rounded-lg border border-input bg-background px-2 py-1.5 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
-            {reopenError && <p className="text-[11px] text-destructive">{reopenError}</p>}
+            {pendingCommentError && <p className="text-[11px] text-destructive">{pendingCommentError}</p>}
             <div className="flex gap-2">
-              <button onClick={confirmReopen} disabled={isPending} className="btn-gradient flex-1 !py-1 !text-xs">
-                {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Reopen'}
+              <button onClick={confirmPendingComment} disabled={isPending} className="btn-gradient flex-1 !py-1 !text-xs">
+                {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : pendingComment.cta}
               </button>
-              <button onClick={() => { setReopenRemark(null); setReopenError(null) }} className="btn-soft !py-1 !text-xs">
+              <button onClick={() => { setPendingComment(null); setPendingCommentText(''); setPendingCommentError(null) }} className="btn-soft !py-1 !text-xs">
                 Cancel
               </button>
             </div>
@@ -237,12 +255,12 @@ function PriorityRow({ requestId, priority, isAgent }: {
 
 // Inline assignee selector
 // Assignee row — team members are listed directly (no typing needed for the
-// common case), plus a search box to forward the ticket to ANY active org
-// member, not just this team — assignRequest itself doesn't restrict the
-// target to the request's team, so the picker shouldn't either.
-function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMembers, isAgent }: {
+// common case). The org-wide "forward to anyone" search is manager-only —
+// a plain technician can only hand a ticket to a teammate, never unassign it
+// or forward it to another team (enforced again server-side in assignRequest).
+function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMembers, isAgent, isManager }: {
   requestId: string; assigneeId: string | null; assigneeName: string | null
-  viewerId: string; teamMembers: TeamMember[]; isAgent: boolean
+  viewerId: string; teamMembers: TeamMember[]; isAgent: boolean; isManager: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [curId, setCurId] = useState(assigneeId)
@@ -253,6 +271,17 @@ function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMember
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Re-sync if the assignment changes from OUTSIDE this row — e.g. a
+  // Category/Sub Category change re-runs Business Rules server-side, which
+  // can reassign or unassign the ticket without this component's own
+  // pick()/apply() ever running. Same prevProp pattern as StatusRow/CategoryRow.
+  const [prevAssigneeId, setPrevAssigneeId] = useState(assigneeId)
+  if (assigneeId !== prevAssigneeId) {
+    setPrevAssigneeId(assigneeId)
+    setCurId(assigneeId)
+    setCurName(assigneeName)
+  }
 
   useEffect(() => {
     if (!open) return
@@ -303,13 +332,21 @@ function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMember
         </button>
         {open && (
           <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-xl border border-border bg-card shadow-xl">
-            <div className="border-b border-border px-2 py-1.5">
-              <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
-                placeholder="Forward to anyone…"
-                className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none" />
-            </div>
+            {/* Org-wide "forward to anyone" search — managers only. A plain
+                technician may only hand a ticket to a teammate (the list
+                below), never to another team's technician; enforced again
+                server-side in assignRequest(). */}
+            {isManager && (
+              <div className="border-b border-border px-2 py-1.5">
+                <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
+                  placeholder="Forward to anyone…"
+                  className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none" />
+              </div>
+            )}
             <div className="max-h-64 overflow-y-auto py-1">
-              {curId && (
+              {/* Unassign — managers only; a technician can't leave a ticket
+                  with no owner, only hand it to a teammate. */}
+              {isManager && curId && (
                 <button onClick={() => pick(null, null)}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted transition-colors">
                   <X className="h-3 w-3" />Unassign
@@ -321,7 +358,7 @@ function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMember
                   Assign to me
                 </button>
               )}
-              {!query.trim() ? (
+              {!isManager || !query.trim() ? (
                 <>
                   <div className="my-1 border-t border-border/50" />
                   {teamMembers.map(m => (
@@ -421,18 +458,29 @@ function ServiceRow({ requestId, serviceId, serviceName, isAgent, options }: {
 }
 
 // Inline category corrector — the common "wrong classification, same
-// service" case. Picking a sub-category (category is derived from it)
-// re-runs SLA using that sub-category's own sla_config via
-// updateRequestCategory, distinct from ServiceRow's rarer cross-service move.
+// service" case. Two-step cascade: pick a Category first (its own popover,
+// listing distinct categories only — not a flat list of every sub-category),
+// then Sub Category's popover is scoped to just that category's children.
+// Only picking a sub-category actually saves (via updateRequestCategory,
+// which re-runs SLA using that sub-category's own sla_config) — picking a
+// category alone just changes what the Sub Category popover offers.
 function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, isAgent, allowedSubCategories }: {
   requestId: string; categoryName: string | null; subCategoryId: string | null; subCategoryName: string | null
   isAgent: boolean; allowedSubCategories: AllowedSubCategory[]
 }) {
-  const [open, setOpen] = useState(false)
+  const [catOpen, setCatOpen] = useState(false)
+  const [subOpen, setSubOpen] = useState(false)
   const [cur, setCur] = useState({ id: subCategoryId, name: subCategoryName, categoryName })
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
-  const ref = useRef<HTMLDivElement>(null)
+  const catRef = useRef<HTMLDivElement>(null)
+  const subRef = useRef<HTMLDivElement>(null)
+
+  const savedCategoryId = allowedSubCategories.find((sc) => sc.id === subCategoryId)?.category_id ?? null
+  // The category currently being browsed — independent from `cur` (the saved
+  // sub-category) so picking a category can open Sub Category's popover
+  // without saving anything until an actual sub-category is picked.
+  const [pendingCategoryId, setPendingCategoryId] = useState(savedCategoryId)
 
   // Re-sync if the server-provided classification changes underneath us —
   // e.g. ServiceRow's reclassify clears it, which lands here as fresh props
@@ -443,59 +491,118 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
   if (subCategoryId !== prevSubCategoryId) {
     setPrevSubCategoryId(subCategoryId)
     setCur({ id: subCategoryId, name: subCategoryName, categoryName })
+    setPendingCategoryId(allowedSubCategories.find((sc) => sc.id === subCategoryId)?.category_id ?? null)
   }
 
   useEffect(() => {
-    if (!open) return
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    if (!catOpen) return
+    const h = (e: MouseEvent) => { if (catRef.current && !catRef.current.contains(e.target as Node)) setCatOpen(false) }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
-  }, [open])
+  }, [catOpen])
+
+  useEffect(() => {
+    if (!subOpen) return
+    const h = (e: MouseEvent) => {
+      if (subRef.current && !subRef.current.contains(e.target as Node)) {
+        setSubOpen(false)
+        // Didn't pick a sub-category under the newly browsed category —
+        // revert to whatever's actually saved rather than leaving Category
+        // and Sub Category showing a mismatched, unsaved combination.
+        setPendingCategoryId(savedCategoryId)
+      }
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [subOpen, savedCategoryId])
 
   const canEdit = isAgent && allowedSubCategories.length > 0
 
-  function pick(sc: AllowedSubCategory) {
-    if (sc.id === cur.id) { setOpen(false); return }
+  // Distinct categories from the allowed list — same derivation the
+  // create-request form's own Category/Sub Category cascade uses.
+  const categories = Array.from(
+    new Map(allowedSubCategories.map((sc) => [sc.category_id, sc.category_name])).entries()
+  ).map(([id, name]) => ({ id, name }))
+
+  const subCategoriesInPendingCategory = pendingCategoryId
+    ? allowedSubCategories.filter((sc) => sc.category_id === pendingCategoryId)
+    : []
+
+  function pickCategory(catId: string) {
+    setPendingCategoryId(catId)
+    setCatOpen(false)
+    setSubOpen(true)
+  }
+
+  function pickSubCategory(sc: AllowedSubCategory) {
+    if (sc.id === cur.id) { setSubOpen(false); return }
     const prev = cur
-    setCur({ id: sc.id, name: sc.name, categoryName: sc.category_name }); setOpen(false); setError(null)
+    setCur({ id: sc.id, name: sc.name, categoryName: sc.category_name }); setSubOpen(false); setError(null)
     startTransition(async () => {
       const result = await updateRequestCategory(requestId, sc.id)
-      if (result?.error) { setError(result.error); setCur(prev) }
+      if (result?.error) {
+        setError(result.error)
+        setCur(prev)
+        setPendingCategoryId(savedCategoryId)
+      }
     })
   }
+
+  const pendingCategoryName = categories.find((c) => c.id === pendingCategoryId)?.name ?? cur.categoryName
 
   return (
     <>
       <PropRow label="Category">
-        <div ref={ref} className="relative">
+        <div ref={catRef} className="relative">
           <button
-            onClick={() => canEdit && setOpen((v) => !v)}
+            onClick={() => canEdit && setCatOpen((v) => !v)}
             className={`flex items-center gap-1 ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
             title={error ?? undefined}
           >
-            <span className={`text-xs ${error ? 'text-destructive' : 'text-foreground'}`}>{cur.categoryName ?? '—'}</span>
+            <span className={`text-xs ${error ? 'text-destructive' : 'text-foreground'}`}>{pendingCategoryName ?? '—'}</span>
             {canEdit && !isPending && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
             {isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
           </button>
-          {open && (
-            <div className="absolute right-0 top-full z-50 mt-1 w-60 max-h-72 space-y-0.5 overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow-xl">
-              {allowedSubCategories.map((sc) => (
+          {catOpen && (
+            <div className="absolute right-0 top-full z-50 mt-1 w-52 max-h-72 space-y-0.5 overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow-xl">
+              {categories.map((c) => (
                 <button
-                  key={sc.id}
-                  onClick={() => pick(sc)}
-                  className={`flex w-full flex-col items-start rounded-lg px-2 py-1.5 text-left hover:bg-muted transition-colors ${sc.id === cur.id ? 'bg-muted/60' : ''}`}
+                  key={c.id}
+                  onClick={() => pickCategory(c.id)}
+                  className={`flex w-full items-center rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted transition-colors ${c.id === pendingCategoryId ? 'bg-muted/60 font-medium' : ''}`}
                 >
-                  <span className="text-xs text-foreground">{sc.name}</span>
-                  <span className="text-[10px] text-muted-foreground">{sc.category_name}</span>
+                  {c.name}
                 </button>
               ))}
             </div>
           )}
         </div>
       </PropRow>
-      {cur.name && (
+      {pendingCategoryId && (
         <PropRow label="Sub Category">
-          <span className="text-xs text-foreground">{cur.name}</span>
+          <div ref={subRef} className="relative">
+            <button
+              onClick={() => canEdit && setSubOpen((v) => !v)}
+              className={`flex items-center gap-1 ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+            >
+              <span className="text-xs text-foreground">{cur.name ?? 'Select…'}</span>
+              {canEdit && !isPending && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+              {isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+            </button>
+            {subOpen && (
+              <div className="absolute right-0 top-full z-50 mt-1 w-52 max-h-72 space-y-0.5 overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow-xl">
+                {subCategoriesInPendingCategory.map((sc) => (
+                  <button
+                    key={sc.id}
+                    onClick={() => pickSubCategory(sc)}
+                    className={`flex w-full items-center rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted transition-colors ${sc.id === cur.id ? 'bg-muted/60 font-medium' : ''}`}
+                  >
+                    {sc.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </PropRow>
       )}
     </>
@@ -664,6 +771,7 @@ export function RequestSidebarPanel({
             viewerId={viewerId}
             teamMembers={teamMembers}
             isAgent={!isTerminal}
+            isManager={isManager}
           />
         )}
 
@@ -674,6 +782,21 @@ export function RequestSidebarPanel({
             <span className="text-xs font-medium text-foreground">{requesterName}</span>
           </div>
         </PropRow>
+
+        {/* Read-only: Technician — agents get the editable AssigneeRow above
+            instead; a requester only needs to see who it's assigned to. */}
+        {!isAgent && (
+          <PropRow label="Technician">
+            {assigneeName ? (
+              <div className="flex items-center gap-1.5">
+                <Avatar name={assigneeName} />
+                <span className="text-xs font-medium text-foreground">{assigneeName}</span>
+              </div>
+            ) : (
+              <span className="text-xs text-muted-foreground">Unassigned</span>
+            )}
+          </PropRow>
+        )}
 
         {/* Read-only: Team */}
         <PropRow label="Team">
@@ -704,15 +827,19 @@ export function RequestSidebarPanel({
           allowedSubCategories={allowedSubCategories}
         />
 
-        {/* Every submitted intake-form field, editable in place for agents —
-            same click-to-edit popover pattern as the Service row above. */}
+        {/* Every submitted intake-form field, shown for visibility — but only
+            technician-only fields (never ones the requester themselves set,
+            like Subject/Description/Phone Number) are actually editable
+            here. Category/Sub Category above is the one requester-set
+            classification a technician may still correct, via its own
+            dedicated row, not this generic field editor. */}
         {submittedFields.map((field) => (
           <SubmittedFieldRow
             key={field.id}
             requestId={requestId}
             field={field}
             value={formData[field.id]}
-            canEdit={isAgent}
+            canEdit={isAgent && !requesterCanSet(field)}
           />
         ))}
 

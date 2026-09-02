@@ -36,7 +36,7 @@ export default async function AdminServicesPage() {
   ])
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Service Management"
         description="Create and manage services in the catalog. Tag categories/sub-categories the requester can pick, and a Form Template to give it an intake form."

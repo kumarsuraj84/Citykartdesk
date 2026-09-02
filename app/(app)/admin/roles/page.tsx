@@ -170,7 +170,7 @@ export default async function RolesPage({
   const canEdit = ['admin', 'platform_owner'].includes(profile.role)
 
   return (
-    <div className="space-y-5 max-w-5xl">
+    <div className="space-y-4 max-w-5xl">
       <PageHeader
         title="Roles & Permissions"
         description="Understand role capabilities, manage user assignments, and configure the permission matrix."
@@ -198,16 +198,16 @@ export default async function RolesPage({
 
       {/* ── Role Overview ── */}
       {tab === 'overview' && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Citykart Desk uses 5 hierarchical roles. Each role inherits the capabilities of roles below it.
           </p>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {ROLES.map((role) => {
               const meta  = ROLE_META[role]
               const count = roleCounts[role] ?? 0
               return (
-                <div key={role} className="rounded-xl border border-border bg-card p-4 flex items-start gap-4">
+                <div key={role} className="rounded-xl border border-border bg-card p-4 flex items-start gap-3">
                   <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${meta.color}`}>
                     {meta.label}
                   </span>
@@ -234,7 +234,7 @@ export default async function RolesPage({
 
       {/* ── User → Role ── */}
       {tab === 'users' && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">{(profiles ?? []).length} users across all roles</p>
             <Link href="/admin/users" className="btn-glossy-light btn-glossy-light-hover">

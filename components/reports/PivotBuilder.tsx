@@ -272,7 +272,7 @@ export function PivotBuilder() {
         </div>
       ) : (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-3">
             {/* Available fields */}
             <div className="space-y-2 rounded-xl border border-border bg-card p-3">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-1">Fields</div>

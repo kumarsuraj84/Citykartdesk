@@ -101,7 +101,7 @@ export function ApprovalsBell({
                     key={n.id}
                     type="button"
                     onClick={() => handlePreview(n)}
-                    className={`flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left transition-colors last:border-0 hover:bg-muted/40 ${!n.read_at ? 'bg-primary/[0.03]' : ''}`}
+                    className={`flex w-full items-start gap-3 border-b border-border px-4 py-2 text-left transition-colors last:border-0 hover:bg-muted/40 ${!n.read_at ? 'bg-primary/[0.03]' : ''}`}
                   >
                     <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[10px] font-bold text-violet-700">
                       {initials}

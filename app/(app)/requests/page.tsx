@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { ExportButton } from '@/components/requests/ExportButton'
 import { exportRequests } from '@/lib/actions/export'
 import { redirect } from 'next/navigation'
-import { getCurrentProfile } from '@/lib/queries/profiles'
+import { getCurrentProfile, hasSubordinates } from '@/lib/queries/profiles'
 import { getRequests } from '@/lib/queries/requests'
 import { getActiveServicesForReclassify, getServiceCategories, getServiceSubCategoriesForFilter } from '@/lib/queries/services'
 import { RequestsTable } from '@/components/requests/RequestsTable'
@@ -65,7 +65,8 @@ export default async function RequestsPage({ searchParams }: PageProps) {
 
   const params = await searchParams
 
-  const rawView: 'mine' | 'collaborated' = params.view === 'collaborated' ? 'collaborated' : 'mine'
+  const rawView: 'mine' | 'collaborated' | 'subordinates' =
+    params.view === 'collaborated' ? 'collaborated' : params.view === 'subordinates' ? 'subordinates' : 'mine'
   const rawStatus     = params.status as string | undefined
   const q             = params.q
   const rawPriority   = params.priority
@@ -91,7 +92,7 @@ export default async function RequestsPage({ searchParams }: PageProps) {
   const categoryFilter = rawCategory || undefined
   const subCategoryFilter = rawSubCategory || undefined
 
-  const [result, serviceOptions, categoryOptions, subCategoryOptions] = await Promise.all([
+  const [result, serviceOptions, categoryOptions, subCategoryOptions, showTeamView] = await Promise.all([
     getRequests({
       view: rawView,
       userId: profile.id,
@@ -109,6 +110,7 @@ export default async function RequestsPage({ searchParams }: PageProps) {
     getActiveServicesForReclassify(),
     getServiceCategories(),
     getServiceSubCategoriesForFilter(),
+    hasSubordinates(profile.id),
   ])
   const requests = result.data
 
@@ -140,6 +142,7 @@ export default async function RequestsPage({ searchParams }: PageProps) {
         title="Requests"
         description={
           rawView === 'collaborated' ? 'Tickets you have been added to as a collaborator'
+          : rawView === 'subordinates' ? 'Tickets your direct reports raised or are working'
           : 'Your submitted requests'
         }
         actions={
@@ -161,7 +164,10 @@ export default async function RequestsPage({ searchParams }: PageProps) {
         {([
           { value: 'mine', label: 'My Requests' },
           { value: 'collaborated', label: 'Collaborated' },
-        ] as { value: 'mine' | 'collaborated'; label: string }[]).map(({ value: v, label }) => {
+          // Org-chart based (profiles.manager_id) — only shown to someone
+          // who actually has direct reports.
+          ...(showTeamView ? [{ value: 'subordinates', label: 'My Team' } as const] : []),
+        ] as { value: 'mine' | 'collaborated' | 'subordinates'; label: string }[]).map(({ value: v, label }) => {
           const href = `/requests?view=${v}${rawStatus && rawStatus !== 'active' ? `&status=${rawStatus}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`
           return (
             <Link
@@ -185,7 +191,7 @@ export default async function RequestsPage({ searchParams }: PageProps) {
         <div className="relative w-full max-w-xs">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <form>
-            {rawView === 'collaborated' && <input type="hidden" name="view" value="collaborated" />}
+            {rawView !== 'mine' && <input type="hidden" name="view" value={rawView} />}
             {rawStatus && rawStatus !== 'active' && (
               <input type="hidden" name="status" value={rawStatus} />
             )}

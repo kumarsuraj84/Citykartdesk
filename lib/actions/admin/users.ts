@@ -194,6 +194,144 @@ export async function inviteUser(fields: {
   return {}
 }
 
+// ── bulkCreateUsers ───────────────────────────────────────────────────────────
+// Unlike inviteUser (email-invite, user sets their own password), a bulk
+// import creates the account with a password right away — an admin can't
+// realistically wait on 50 invite emails — so every bulk-created user is
+// flagged must_reset_password so they're forced onto their own password
+// before touching the portal.
+
+export type UserImportRow = {
+  full_name?: string
+  email?: string
+  role?: string
+  password?: string
+  department?: string
+  job_title?: string
+  employee_id?: string
+  manager_email?: string
+}
+
+const VALID_IMPORT_ROLES: UserRole[] = ['user', 'agent', 'manager', 'admin', 'platform_owner']
+const DEFAULT_BULK_PASSWORD = 'Welcome@123'
+
+export async function bulkCreateUsers(
+  rows: UserImportRow[]
+): Promise<{ error?: string; data?: { imported: number; errors: string[] } }> {
+  const profile = await getCurrentProfile()
+  if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
+  if (rows.length === 0) return { error: 'No rows to import.' }
+
+  const admin = createAdminClient() as unknown as AnyClient
+  const orgId = profile.org_id
+
+  const { data: org } = await admin.from('organizations').select('seat_limit').eq('id', orgId).maybeSingle()
+  let remainingSeats = Infinity
+  if (org?.seat_limit) {
+    const { count } = await admin
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('is_active', true)
+    remainingSeats = Math.max(0, org.seat_limit - (count ?? 0))
+  }
+
+  const [{ data: departmentsData }, { data: orgProfiles }, { data: authList }] = await Promise.all([
+    admin.from('departments').select('id, name').eq('org_id', orgId),
+    admin.from('profiles').select('id').eq('org_id', orgId),
+    admin.auth.admin.listUsers({ perPage: 1000 }),
+  ])
+  const deptByName = new Map<string, string>(
+    (departmentsData ?? []).map((d: { id: string; name: string }) => [d.name.trim().toLowerCase(), d.id])
+  )
+  const orgProfileIds = new Set((orgProfiles ?? []).map((p: { id: string }) => p.id))
+  const emailToProfileId = new Map<string, string>(
+    ((authList?.users ?? []) as { id: string; email?: string }[])
+      .filter((u) => u.email && orgProfileIds.has(u.id))
+      .map((u) => [u.email!.trim().toLowerCase(), u.id])
+  )
+
+  const errors: string[] = []
+  let imported = 0
+
+  for (let i = 0; i < rows.length; i++) {
+    const rowLabel = `Row ${i + 2}`
+    const row = rows[i]
+    const fullName = row.full_name?.trim()
+    const email = row.email?.trim().toLowerCase()
+
+    if (!fullName) { errors.push(`${rowLabel}: name is required, skipped.`); continue }
+    if (!email) { errors.push(`${rowLabel}: email is required, skipped.`); continue }
+    if (emailToProfileId.has(email)) { errors.push(`${rowLabel}: "${email}" already has an account, skipped.`); continue }
+    if (imported >= remainingSeats) { errors.push(`${rowLabel}: seat limit reached, skipped.`); continue }
+
+    let role: UserRole = 'user'
+    if (row.role?.trim()) {
+      const candidate = row.role.trim().toLowerCase() as UserRole
+      if (!VALID_IMPORT_ROLES.includes(candidate)) {
+        errors.push(`${rowLabel}: role "${row.role}" is invalid, skipped.`)
+        continue
+      }
+      role = candidate
+    }
+
+    let departmentId: string | null = null
+    if (row.department?.trim()) {
+      const found = deptByName.get(row.department.trim().toLowerCase())
+      if (!found) { errors.push(`${rowLabel}: department "${row.department}" not found, skipped.`); continue }
+      departmentId = found
+    }
+
+    let managerId: string | null = null
+    if (row.manager_email?.trim()) {
+      const found = emailToProfileId.get(row.manager_email.trim().toLowerCase())
+      if (!found) { errors.push(`${rowLabel}: manager "${row.manager_email}" not found, skipped.`); continue }
+      managerId = found
+    }
+
+    const password = row.password?.trim() || DEFAULT_BULK_PASSWORD
+    if (password.length < 8) { errors.push(`${rowLabel}: password must be at least 8 characters, skipped.`); continue }
+
+    const { data: authData, error: authErr } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: fullName },
+    })
+    if (authErr || !authData?.user?.id) {
+      errors.push(`${rowLabel}: failed to create account for "${email}" (${authErr?.message ?? 'unknown error'}), skipped.`)
+      continue
+    }
+    const uid = authData.user.id
+
+    const profileUpdate: Record<string, unknown> = {
+      role,
+      full_name: fullName,
+      org_id: orgId,
+      must_reset_password: true,
+      updated_at: new Date().toISOString(),
+    }
+    if (departmentId) profileUpdate.department_id = departmentId
+    if (managerId) profileUpdate.manager_id = managerId
+    if (row.job_title?.trim()) profileUpdate.job_title = row.job_title.trim()
+    if (row.employee_id?.trim()) profileUpdate.employee_id = row.employee_id.trim()
+
+    const { error: profileErr } = await admin.from('profiles').update(profileUpdate).eq('id', uid)
+    if (profileErr) {
+      errors.push(`${rowLabel}: account created for "${email}" but profile setup failed (${profileErr.message}).`)
+      continue
+    }
+
+    // Available as a manager for any later row in this same batch.
+    emailToProfileId.set(email, uid)
+    imported++
+  }
+
+  revalidatePath('/admin/users')
+  return { data: { imported, errors } }
+}
+
 // ── adminSendPasswordReset ──────────────────────────────────────────────────
 // Sends the same "forgot password" email a user would trigger themselves.
 
@@ -234,5 +372,10 @@ export async function adminSetPassword(userId: string, newPassword: string): Pro
     email_confirm: true,
   })
   if (error) return { error: error.message }
+
+  // The user never chose this password themselves — force them to set their
+  // own on next login before they can use the portal.
+  await admin.from('profiles').update({ must_reset_password: true }).eq('id', userId)
+
   return {}
 }
