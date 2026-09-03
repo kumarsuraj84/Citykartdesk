@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Check, X, Layers, Power, Trash2, LayoutGrid, GitBranch } from 'lucide-react'
+import { Plus, Pencil, Check, X, Layers, Power, Trash2, LayoutGrid, GitBranch, Download } from 'lucide-react'
 import {
   createCategory,
   updateCategory,
@@ -13,7 +13,46 @@ import { IconPicker } from '@/components/admin/IconPicker'
 import { CategoryIcon } from '@/components/admin/CategoryIcon'
 import { BulkImportCategoriesDialog } from '@/components/admin/BulkImportCategoriesDialog'
 import CategoryTreeView from './CategoryTreeView'
+import { toCSV, downloadCSV } from '@/lib/export/csv'
 import type { ServiceCategoryWithSubCategories } from '@/types'
+
+// Mirrors the bulk-import column shape (one row per sub-category) so an
+// export can be edited and re-imported without reshaping it first.
+const EXPORT_COLUMNS = [
+  { key: 'category_name', label: 'category_name' },
+  { key: 'category_description', label: 'category_description' },
+  { key: 'category_icon', label: 'category_icon' },
+  { key: 'sub_category_name', label: 'sub_category_name' },
+  { key: 'sub_category_description', label: 'sub_category_description' },
+  { key: 'sub_category_icon', label: 'sub_category_icon' },
+  { key: 'sla_priority', label: 'sla_priority' },
+]
+
+function exportCategoriesToCSV(categories: ServiceCategoryWithSubCategories[]) {
+  const rows = categories.flatMap((cat) =>
+    cat.sub_categories.length > 0
+      ? cat.sub_categories.map((sc) => ({
+          category_name: cat.name,
+          category_description: cat.description ?? '',
+          category_icon: cat.icon ?? '',
+          sub_category_name: sc.name,
+          sub_category_description: sc.description ?? '',
+          sub_category_icon: sc.icon ?? '',
+          sla_priority: sc.sla_priority ?? '',
+        }))
+      // A category with no sub-categories yet still gets one row, so it isn't silently dropped from the export.
+      : [{
+          category_name: cat.name,
+          category_description: cat.description ?? '',
+          category_icon: cat.icon ?? '',
+          sub_category_name: '',
+          sub_category_description: '',
+          sub_category_icon: '',
+          sla_priority: '',
+        }]
+  )
+  downloadCSV('categories-export.csv', toCSV(rows, EXPORT_COLUMNS))
+}
 
 // ── Inline edit for category name/icon ───────────────────────────────────────
 
@@ -348,6 +387,14 @@ export default function CategoriesAdminClient({
         </div>
         {view === 'cards' && !creating && (
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => exportCategoriesToCSV(categories)}
+              disabled={categories.length === 0}
+              className="btn-glossy-light btn-glossy-light-hover disabled:opacity-50"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export
+            </button>
             <BulkImportCategoriesDialog />
             <button
               onClick={() => setCreating(true)}

@@ -305,6 +305,17 @@ function ServiceModal({
                   const selectedCount = selectable.filter((id) => tagIds.includes(id)).length
                   const allSelected = selectable.length > 0 && selectedCount === selectable.length
                   const someSelected = selectedCount > 0 && !allSelected
+
+                  // A category is "owned" by another service once every one
+                  // of its sub-categories is tagged there — surfaced here so
+                  // two categories that happen to share a name (e.g. two
+                  // "Fire" rows, one per department) are distinguishable at a
+                  // glance instead of only discoverable by opening each one.
+                  const ownedByOther = cat.sub_categories.length > 0
+                    && cat.sub_categories.every((sc) => takenBy.has(sc.id) && !tagIds.includes(sc.id))
+                    ? takenBy.get(cat.sub_categories[0].id)?.serviceName
+                    : null
+
                   return (
                     <div key={cat.id}>
                       <div className="mb-1 flex items-center gap-1.5">
@@ -329,6 +340,14 @@ function ServiceModal({
                           {cat.icon && <span>{cat.icon}</span>}
                           {cat.name}
                         </p>
+                        {ownedByOther && (
+                          <span
+                            className="ml-1 shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+                            title={`Every sub-category here is already tagged to "${ownedByOther}" — this category belongs to that service.`}
+                          >
+                            🔒 {ownedByOther}
+                          </span>
+                        )}
                       </div>
                       {cat.sub_categories.length === 0 ? (
                         <p className="ml-4 text-[11px] italic text-muted-foreground/60">No sub-categories</p>
