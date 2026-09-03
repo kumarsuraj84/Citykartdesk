@@ -349,6 +349,15 @@ function ServiceModal({
                           </span>
                         )}
                       </div>
+                      {/* Never shown to requesters (getAllowedSubCategoriesForService
+                          only selects category name, never description) — safe to use
+                          as an admin-only disambiguator for same-named categories
+                          (e.g. three "Fire" rows, one per department) before any of
+                          them have been tagged yet, when the lock badge above has
+                          nothing to show. */}
+                      {cat.description && (
+                        <p className="ml-4 mb-1 text-[10px] italic text-muted-foreground/70">{cat.description}</p>
+                      )}
                       {cat.sub_categories.length === 0 ? (
                         <p className="ml-4 text-[11px] italic text-muted-foreground/60">No sub-categories</p>
                       ) : (
