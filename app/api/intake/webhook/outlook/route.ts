@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { secureCompare } from '@/lib/secure-compare'
 
 // POST /api/intake/webhook/outlook?token=<INTAKE_WORKER_SECRET>
 // GET  /api/intake/webhook/outlook?validationToken=...   (Microsoft subscription validation)
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token')
   const secret = process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
-  if (!secret || token !== secret) {
+  if (!secret || !token || !secureCompare(token, secret)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
     if (!messageId) continue
 
     // Verify clientState matches our secret.
-    if (notification.clientState !== secret) continue
+    if (!notification.clientState || !secureCompare(notification.clientState, secret)) continue
 
     // Find the channel for this subscription.
     const { data: channel } = await admin

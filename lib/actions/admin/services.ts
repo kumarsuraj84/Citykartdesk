@@ -18,6 +18,28 @@ async function requireAdmin() {
   return { profile }
 }
 
+// ── Friendly message for a sub_category_id tag conflict ────────────────────────
+// service_sub_category_tags.sub_category_id is UNIQUE — a race between two
+// admins tagging the same sub-category to different services surfaces here as
+// a raw Postgres "duplicate key value violates unique constraint" error. This
+// looks up which sub-category(ies) and which other service actually holds
+// them, so the admin sees the same "Used by X" message the picker's
+// client-side check already shows for the non-race case, instead of a
+// Postgres internals string.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function describeTagConflict(supabase: any, subCategoryIds: string[], excludeServiceId?: string): Promise<string> {
+  let query = supabase
+    .from('service_sub_category_tags')
+    .select('sub_category:service_sub_categories(name), service:services(name)')
+    .in('sub_category_id', subCategoryIds)
+  if (excludeServiceId) query = query.neq('service_id', excludeServiceId)
+  const { data } = await query
+  const conflicts = (data ?? []) as { sub_category: { name: string } | null; service: { name: string } | null }[]
+  if (conflicts.length === 0) return 'One or more of these categories is already tagged to another service.'
+  const list = conflicts.map((c) => `"${c.sub_category?.name ?? '?'}" (already tagged to "${c.service?.name ?? '?'}")`).join(', ')
+  return `Couldn't tag: ${list} — untag ${conflicts.length === 1 ? 'it' : 'them'} there first.`
+}
+
 // ── Validate sections ─────────────────────────────────────────────────────────
 
 function validateSections(sections: FormSection[]): string | null {
@@ -215,7 +237,10 @@ export async function createService(
       .insert(data.sub_category_tag_ids.map((sub_category_id) => ({ service_id: row.id, sub_category_id })))
     if (tagError) {
       console.error('[createService] tag', tagError.message)
-      return { error: `Service created, but tagging categories failed: ${tagError.message}` }
+      const message = tagError.code === '23505'
+        ? await describeTagConflict(supabase, data.sub_category_tag_ids, row.id)
+        : tagError.message
+      return { error: `Service created, but tagging categories failed: ${message}` }
     }
   }
 
@@ -269,23 +294,20 @@ export async function updateService(
 
   // Replace-all: only touched when the caller actually sent a tag set (the
   // modal always sends one, but a partial/programmatic update might not).
+  // Delete+insert happens atomically inside retag_service_categories() — a
+  // failed insert (e.g. a race losing the sub_category_id uniqueness check)
+  // rolls back the delete too, instead of leaving the service with zero tags.
   if (data.sub_category_tag_ids !== undefined) {
-    const { error: clearError } = await supabase
-      .from('service_sub_category_tags')
-      .delete()
-      .eq('service_id', id)
-    if (clearError) {
-      console.error('[updateService] clear tags', clearError.message)
-      return { error: `Service updated, but retagging categories failed: ${clearError.message}` }
-    }
-    if (data.sub_category_tag_ids.length > 0) {
-      const { error: tagError } = await supabase
-        .from('service_sub_category_tags')
-        .insert(data.sub_category_tag_ids.map((sub_category_id) => ({ service_id: id, sub_category_id })))
-      if (tagError) {
-        console.error('[updateService] tag', tagError.message)
-        return { error: `Service updated, but tagging categories failed: ${tagError.message}` }
-      }
+    const { error: tagError } = await supabase.rpc('retag_service_categories', {
+      p_service_id: id,
+      p_sub_category_ids: data.sub_category_tag_ids,
+    })
+    if (tagError) {
+      console.error('[updateService] retag', tagError.message)
+      const message = tagError.code === '23505'
+        ? await describeTagConflict(supabase, data.sub_category_tag_ids, id)
+        : tagError.message
+      return { error: `Retagging categories failed, your previous tags are unchanged: ${message}` }
     }
   }
 

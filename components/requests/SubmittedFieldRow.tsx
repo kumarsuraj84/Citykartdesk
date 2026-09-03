@@ -31,6 +31,19 @@ export function SubmittedFieldRow({ requestId, field, value, canEdit }: Submitte
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
 
+  // Re-sync if the server-provided value changes underneath us — e.g. a
+  // reclassify/Business Rule edits form_data and the page refreshes, which
+  // re-renders this component with a fresh `value` prop but would otherwise
+  // leave `cur` frozen at its very first value. Structural comparison
+  // (rather than !==) since a field's value can be an array/object for
+  // multiselect-style fields, not just a primitive. Same pattern as
+  // StatusRow/PriorityRow/CategoryRow in RequestSidebarPanel.tsx.
+  const [prevValue, setPrevValue] = useState(value)
+  if (JSON.stringify(value) !== JSON.stringify(prevValue)) {
+    setPrevValue(value)
+    setCur(value)
+  }
+
   useEffect(() => {
     if (!open) return
     // Select/multiselect fields render their option list via a Base UI portal

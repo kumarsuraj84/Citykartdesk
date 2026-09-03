@@ -5,17 +5,23 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logActivity } from '@/lib/activity'
+import { validateAttachment } from '@/lib/attachments/validate'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25 MB
 
+// image/svg+xml is deliberately excluded: attachments are opened via a
+// direct target="_blank" link to a signed URL with no Content-Disposition
+// (see AttachmentChips.tsx / getRequestAttachments()), so the browser
+// renders — not downloads — the file. An SVG's embedded <script> executes
+// on direct navigation like that (unlike when loaded via an <img> tag),
+// making SVG upload a stored-XSS vector against anyone who opens it.
 const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
   'image/gif',
   'image/webp',
-  'image/svg+xml',
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -34,7 +40,7 @@ const ALLOWED_MIME_TYPES = new Set([
 ])
 
 const ALLOWED_EXTENSIONS = new Set([
-  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
+  'png', 'jpg', 'jpeg', 'gif', 'webp',
   'pdf',
   'doc', 'docx',
   'xls', 'xlsx',
@@ -111,12 +117,22 @@ export async function uploadAttachment(
     }
   }
 
-  // Content-type check against allowlist (client-supplied, not buffer-inspected per spec)
+  // Content-type check against allowlist (client-supplied)
   const mimeType = file.type || 'application/octet-stream'
   if (!ALLOWED_MIME_TYPES.has(mimeType)) {
     return {
       error: `File content type "${mimeType}" is not allowed.`,
     }
+  }
+
+  // Buffer-level check: confirms the file's actual bytes match the declared
+  // MIME type instead of trusting the client-supplied Content-Type alone —
+  // this runs server-side, so it can't be bypassed the way the identical
+  // client-side check in CommentForm/PendingFileField can (a direct call to
+  // this action skips the browser entirely).
+  const magicByteCheck = await validateAttachment(file)
+  if (!magicByteCheck.valid) {
+    return { error: magicByteCheck.error ?? 'File content does not match its declared type.' }
   }
 
   // ── Request access check ──────────────────────────────────────────────────

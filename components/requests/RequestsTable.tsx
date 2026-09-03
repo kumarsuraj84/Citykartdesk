@@ -329,7 +329,7 @@ export function RequestsTable({
                   <td className="px-3 py-2">
                     <SLABadge resolutionDueAt={req.resolution_due_at} responseDueAt={req.response_due_at} status={req.status} showLabel />
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{formatRelativeTime(req.updated_at)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground" suppressHydrationWarning>{formatRelativeTime(req.updated_at)}</td>
                 </tr>
               )
             })}

@@ -78,7 +78,7 @@ function NotificationItem({
             {isUnread && (
               <span className="h-2 w-2 rounded-full bg-primary" />
             )}
-            <span className="text-xs text-muted-foreground whitespace-nowrap">
+            <span className="text-xs text-muted-foreground whitespace-nowrap" suppressHydrationWarning>
               {formatRelativeTime(notification.created_at)}
             </span>
           </div>

@@ -105,13 +105,20 @@ export async function resolveSlaDeadlines(
   const responseHours = fieldTier?.response_hours ?? policyTier?.response_hours ?? null
   const resolutionHours = fieldTier?.resolution_hours ?? policyTier?.resolution_hours ?? null
 
+  // Clamp to >= 0: a negative or non-finite hours value (misconfigured SLA
+  // Policy/override, or a bad manual DB edit) would otherwise produce a due
+  // date before `from` — a ticket that's already "breached" the instant
+  // it's created/reprioritised, before anyone had a chance to act on it.
+  const safeHours = (h: number | null): number | null =>
+    h != null && Number.isFinite(Number(h)) ? Math.max(0, Number(h)) : null
+
   const responseDueAt =
-    responseHours != null
-      ? (await computeSLADeadline(from, Math.round(Number(responseHours) * 60))).toISOString()
+    safeHours(responseHours) != null
+      ? (await computeSLADeadline(from, Math.round(safeHours(responseHours)! * 60))).toISOString()
       : null
   const resolutionDueAt =
-    resolutionHours != null
-      ? (await computeSLADeadline(from, Math.round(Number(resolutionHours) * 60))).toISOString()
+    safeHours(resolutionHours) != null
+      ? (await computeSLADeadline(from, Math.round(safeHours(resolutionHours)! * 60))).toISOString()
       : null
 
   return { responseDueAt, resolutionDueAt }

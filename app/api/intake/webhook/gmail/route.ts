@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { secureCompare } from '@/lib/secure-compare'
 
 // POST /api/intake/webhook/gmail?token=<INTAKE_WORKER_SECRET>
 //
@@ -18,7 +19,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 export async function POST(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token')
   const secret = process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
-  if (!secret || token !== secret) {
+  if (!secret || !token || !secureCompare(token, secret)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

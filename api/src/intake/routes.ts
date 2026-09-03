@@ -10,6 +10,7 @@ import type { IntakeEnvelope } from './classify/types.js'
 import { sendEmail } from './smtp.js'
 import { syncGmailChannel } from './gmail-sync.js'
 import { syncGraphMessage } from './graph-sync.js'
+import { secureCompare } from '../lib/secure-compare.js'
 
 export const intakeRouter = Router()
 
@@ -21,8 +22,9 @@ function requireWorkerSecret(req: Request, res: Response, next: NextFunction) {
     res.status(503).json({ error: 'worker secret not configured' })
     return
   }
-  const provided = req.headers['x-intake-worker-secret'] ?? req.headers['x-cron-secret']
-  if (provided !== secret) {
+  const providedHeader = req.headers['x-intake-worker-secret'] ?? req.headers['x-cron-secret']
+  const provided = Array.isArray(providedHeader) ? providedHeader[0] : providedHeader
+  if (!provided || !secureCompare(provided, secret)) {
     res.status(401).json({ error: 'unauthorized' })
     return
   }

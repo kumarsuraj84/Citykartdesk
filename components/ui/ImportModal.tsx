@@ -39,13 +39,47 @@ export function ImportModal({ title, sampleFilename, sampleColumns, sampleRows, 
       // UTF-8") writes non-ASCII characters in the system codepage — usually
       // Windows-1252 — not UTF-8. Decoding that as UTF-8 turns every such
       // character into U+FFFD ("�"), corrupting names right at the start of
-      // import. Detect that and re-decode as Windows-1252, which recovers
-      // the original text correctly.
-      let text = new TextDecoder('utf-8').decode(buffer)
-      if (text.includes('�')) {
+      // import. `fatal: true` makes decode() throw on genuinely invalid
+      // UTF-8 bytes, so only THAT case falls back to Windows-1252 — unlike
+      // a loose "does the output contain �" check, which would also fire
+      // (and wrongly re-decode, i.e. corrupt, an already-valid UTF-8 file
+      // that happens to contain a literal U+FFFD character as real data).
+      let text: string
+      try {
+        text = new TextDecoder('utf-8', { fatal: true }).decode(buffer)
+      } catch {
         text = new TextDecoder('windows-1252').decode(buffer)
       }
-      const rows = rowsToObjects(parseCSV(text))
+      const csvRows = parseCSV(text)
+      if (csvRows.length === 0) { setError('No data rows found in this file.'); setParsedRows(null); return }
+
+      // Duplicate headers silently lose data: rowsToObjects keys each row by
+      // header name, so a repeated column overwrites the first one's value
+      // with the second's for every row, with no error at all.
+      const rawHeaders = csvRows[0].map((h) => h.trim().toLowerCase())
+      const seen = new Set<string>()
+      const duplicates = new Set<string>()
+      for (const h of rawHeaders) {
+        if (h) { if (seen.has(h)) duplicates.add(h); seen.add(h) }
+      }
+      if (duplicates.size > 0) {
+        setError(`This file has duplicate column headers: ${[...duplicates].join(', ')}. Please fix the file and re-upload.`)
+        setParsedRows(null)
+        return
+      }
+
+      // If NONE of the expected columns are present, this is almost always
+      // the wrong file/template rather than a file with a few optional
+      // columns left out — fail fast with a clear message instead of
+      // importing zero usable rows silently.
+      const expectedKeys = sampleColumns.map((c) => c.key.toLowerCase())
+      if (!expectedKeys.some((k) => rawHeaders.includes(k))) {
+        setError(`This doesn't look like the expected template — none of the expected columns (${sampleColumns.map((c) => c.label).join(', ')}) were found. Download the sample CSV and check your column headers.`)
+        setParsedRows(null)
+        return
+      }
+
+      const rows = rowsToObjects(csvRows)
       if (rows.length === 0) { setError('No data rows found in this file.'); setParsedRows(null); return }
       setParsedRows(rows)
     }

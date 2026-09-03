@@ -7,11 +7,13 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logActivity } from '@/lib/activity'
 import { notify, getRequestAudience, parseMentions } from '@/lib/notifications'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
+import { RESOLVED_REOPEN_WINDOW_HOURS } from '@/lib/constants/requests'
 import { getEnabledModules } from '@/lib/queries/profiles'
 import { validateFieldValue, isFieldValueEmpty } from '@/lib/validation/formFields'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
 import { resolveServiceFormSections, filterFlatFieldsForRequester, isTechnicianMandatory, requesterCanSet } from '@/lib/forms/sections'
 import { toCSV } from '@/lib/export/csv'
+import { mapWithConcurrency } from '@/lib/async/concurrency'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus } from '@/types'
 import type { Database, Json } from '@/types/database'
 
@@ -20,6 +22,27 @@ type RequestUpdate = Database['public']['Tables']['requests']['Update']
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 type ActionResult = { error?: string }
+
+/**
+ * Applies accumulated pause credit — every completed waiting_user/
+ * pending_approval pause this request has ever had (paused_ms_total), plus
+ * one currently in progress, if any — on top of a freshly-recomputed due
+ * date. Without this, recomputing a due date from created_at (priority
+ * change, reclassify, category change) silently discards every pause that
+ * had already completed before the change, not just the active one.
+ */
+function withPauseCredit(
+  dueAtIso: string | null,
+  pausedMsTotal: number | string | null | undefined,
+  currentlyWaitingSince: string | null
+): string | null {
+  if (!dueAtIso) return null
+  const creditMs =
+    Number(pausedMsTotal ?? 0) +
+    (currentlyWaitingSince ? Date.now() - new Date(currentlyWaitingSince).getTime() : 0)
+  if (creditMs === 0) return dueAtIso
+  return new Date(new Date(dueAtIso).getTime() + creditMs).toISOString()
+}
 
 // ── Create request ────────────────────────────────────────────────────────────
 
@@ -312,7 +335,7 @@ export async function updateRequestStatus(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, status, priority, requester_id, team_id, assigned_to, responded_at, waiting_since, response_due_at, resolution_due_at, resolved_at, form_data, form_sections_snapshot, form_schema_snapshot, cancellation_reason, reopen_deadline_at, reopen_count')
+    .select('id, status, priority, requester_id, team_id, assigned_to, responded_at, waiting_since, response_due_at, resolution_due_at, resolved_at, form_data, form_sections_snapshot, form_schema_snapshot, cancellation_reason, reopen_deadline_at, reopen_count, paused_ms_total')
     .eq('id', requestId)
     .single()
 
@@ -329,7 +352,17 @@ export async function updateRequestStatus(
   const allowedForAgent = AGENT_TRANSITIONS[currentStatus] ?? []
   const allowedForRequester = REQUESTER_TRANSITIONS[currentStatus] ?? []
 
-  const agentInitiated = isAgent && allowedForAgent.includes(newStatus)
+  // open/assigned → in_progress is deliberately absent from AGENT_TRANSITIONS
+  // (see request-transitions.ts) so the generic status dropdown can never
+  // offer it — it must go through the dedicated "Start Working" button/modal
+  // instead. That button calls this same action, so it needs its own way in;
+  // folding it into `agentInitiated` (rather than a parallel bypass) means
+  // every downstream agentInitiated-gated check below — the mandatory first-
+  // response message, the technician-mandatory-fields gate, etc. — applies
+  // to it automatically instead of needing to be updated in two places.
+  const isStartWorking =
+    isAgent && (currentStatus === 'open' || currentStatus === 'assigned') && newStatus === 'in_progress'
+  const agentInitiated = (isAgent && allowedForAgent.includes(newStatus)) || isStartWorking
 
   // Reopening a ticket that was cancelled because an approval was rejected
   // isn't in the static transition matrix at all (cancelled has no outgoing
@@ -378,7 +411,6 @@ export async function updateRequestStatus(
   // guarded separately below) always requires the same remark but isn't
   // bound by this 72h deadline.
   if (isResolvedReopenByRequester) {
-    const RESOLVED_REOPEN_WINDOW_HOURS = 72
     const deadline = request.resolved_at
       ? new Date(new Date(request.resolved_at).getTime() + RESOLVED_REOPEN_WINDOW_HOURS * 3_600_000)
       : null
@@ -471,7 +503,6 @@ export async function updateRequestStatus(
   // approval-rejection path uses, so autoCloseRequests() only needs one
   // sweep for both cases.
   if (newStatus === 'resolved') {
-    const RESOLVED_REOPEN_WINDOW_HOURS = 72
     updatePayload.reopen_deadline_at = new Date(now.getTime() + RESOLVED_REOPEN_WINDOW_HOURS * 3_600_000).toISOString()
   }
 
@@ -489,7 +520,9 @@ export async function updateRequestStatus(
     updatePayload.waiting_since = nowIso
   }
 
-  // SLA resume: leaving waiting_user → extend deadlines by paused duration
+  // SLA resume: leaving waiting_user → extend deadlines by paused duration,
+  // and credit it to the running ledger so a later priority/category/service
+  // change (which recomputes deadlines from created_at) doesn't discard it.
   if (currentStatus === 'waiting_user' && request.waiting_since) {
     const pausedMs = now.getTime() - new Date(request.waiting_since).getTime()
     if (request.response_due_at) {
@@ -503,6 +536,7 @@ export async function updateRequestStatus(
       ).toISOString()
     }
     updatePayload.waiting_since = null
+    updatePayload.paused_ms_total = Number(request.paused_ms_total ?? 0) + pausedMs
   }
 
   // responded_at: first agent action that moves the request to an active state
@@ -510,12 +544,22 @@ export async function updateRequestStatus(
     updatePayload.responded_at = nowIso
   }
 
-  const { error: updateError } = await supabase
+  // Guard against a second transition landing on the same request between
+  // this function's initial read and this write (e.g. two agents resolving
+  // vs. cancelling the same ticket at once) — matches the pattern already
+  // used in approveApproval/rejectApproval for the same class of race.
+  const { data: updatedRow, error: updateError } = await supabase
     .from('requests')
     .update(updatePayload)
     .eq('id', requestId)
+    .eq('status', currentStatus)
+    .select('id')
+    .maybeSingle()
 
   if (updateError) return { error: updateError.message }
+  if (!updatedRow) {
+    return { error: 'This request was just changed by someone else — please refresh and try again.' }
+  }
 
   // Auto time-tracking: starts the instant work actually begins (→ in_progress) and
   // stops the instant it stops (leaving in_progress for any reason — waiting_user,
@@ -610,6 +654,9 @@ export async function updateRequestStatus(
         resolutionDueAt = resolved.resolutionDueAt
       }
 
+      // A reopen starts a brand-new SLA clock from now — any pause credit
+      // accumulated against the OLD (pre-reopen) clock no longer means
+      // anything and must not leak into the new one.
       if (resolutionDueAt) {
         await supabase
           .from('requests')
@@ -618,13 +665,14 @@ export async function updateRequestStatus(
             resolved_at: null,
             closed_at: null,
             waiting_since: null,
+            paused_ms_total: 0,
           })
           .eq('id', requestId)
       } else {
         // No applicable SLA config found — still clear the timestamps
         await supabase
           .from('requests')
-          .update({ resolved_at: null, closed_at: null, waiting_since: null })
+          .update({ resolved_at: null, closed_at: null, waiting_since: null, paused_ms_total: 0 })
           .eq('id', requestId)
       }
     } catch (e) {
@@ -787,12 +835,23 @@ export async function assignRequest(
   const newStatus: RequestStatus =
     request.status === 'open' && assigneeId ? 'assigned' : (request.status as RequestStatus)
 
-  const { error: updateError } = await supabase
+  // Guard against two concurrent assignments racing (e.g. one tech "Pick
+  // up"-ing while a manager reassigns to someone else in the same instant) —
+  // without this, both calls report success but only the last write sticks,
+  // silently leaving the loser believing they own a ticket they don't.
+  let updateQuery = supabase
     .from('requests')
     .update({ assigned_to: assigneeId, status: newStatus })
     .eq('id', requestId)
+  updateQuery = request.assigned_to === null
+    ? updateQuery.is('assigned_to', null)
+    : updateQuery.eq('assigned_to', request.assigned_to)
+  const { data: updatedRow, error: updateError } = await updateQuery.select('id').maybeSingle()
 
   if (updateError) return { error: updateError.message }
+  if (!updatedRow) {
+    return { error: 'This request was just assigned by someone else — please refresh and try again.' }
+  }
 
   const action = assigneeId ? 'assigned' : 'unassigned'
   const activityResult = await logActivity({
@@ -845,13 +904,17 @@ export async function assignRequest(
 
 export type BulkResult = { succeeded: string[]; failed: { id: string; error: string }[] }
 
+// A bulk action can be run over hundreds of selected requests at once — each
+// one fans out into several DB round trips (read, write, activity log,
+// notify, business-rules trigger), so an unbounded Promise.all over the
+// whole selection risked exhausting the DB connection pool. Bounded instead.
+const BULK_ACTION_CONCURRENCY = 10
+
 export async function bulkAssignRequests(
   requestIds: string[],
   assigneeId: string | null
 ): Promise<BulkResult> {
-  const settled = await Promise.all(
-    requestIds.map(async (id) => ({ id, r: await assignRequest(id, assigneeId) }))
-  )
+  const settled = await mapWithConcurrency(requestIds, BULK_ACTION_CONCURRENCY, async (id) => ({ id, r: await assignRequest(id, assigneeId) }))
   const result: BulkResult = { succeeded: [], failed: [] }
   for (const { id, r } of settled) {
     if (r.error) result.failed.push({ id, error: r.error })
@@ -866,9 +929,7 @@ export async function bulkUpdateStatus(
   requestIds: string[],
   newStatus: RequestStatus
 ): Promise<BulkResult> {
-  const settled = await Promise.all(
-    requestIds.map(async (id) => ({ id, r: await updateRequestStatus(id, newStatus) }))
-  )
+  const settled = await mapWithConcurrency(requestIds, BULK_ACTION_CONCURRENCY, async (id) => ({ id, r: await updateRequestStatus(id, newStatus) }))
   const result: BulkResult = { succeeded: [], failed: [] }
   for (const { id, r } of settled) {
     if (r.error) result.failed.push({ id, error: r.error })
@@ -883,9 +944,7 @@ export async function bulkChangePriority(
   requestIds: string[],
   newPriority: RequestPriority
 ): Promise<BulkResult> {
-  const settled = await Promise.all(
-    requestIds.map(async (id) => ({ id, r: await changePriority(id, newPriority) }))
-  )
+  const settled = await mapWithConcurrency(requestIds, BULK_ACTION_CONCURRENCY, async (id) => ({ id, r: await changePriority(id, newPriority) }))
   const result: BulkResult = { succeeded: [], failed: [] }
   for (const { id, r } of settled) {
     if (r.error) result.failed.push({ id, error: r.error })
@@ -1201,7 +1260,7 @@ export async function addComment(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, status, requester_id, team_id, responded_at, waiting_since, response_due_at, resolution_due_at')
+    .select('id, status, requester_id, team_id, responded_at, waiting_since, response_due_at, resolution_due_at, paused_ms_total')
     .eq('id', requestId)
     .single()
 
@@ -1337,6 +1396,7 @@ export async function addComment(
           new Date(request.resolution_due_at).getTime() + pausedMs
         ).toISOString()
       }
+      autoUpdatePayload.paused_ms_total = Number(request.paused_ms_total ?? 0) + pausedMs
     }
 
     const { error: transitionError } = await admin
@@ -1418,7 +1478,7 @@ export async function changePriority(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, priority, team_id, status, created_at, waiting_since, assigned_to, service_id, form_data, service:services(sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections))')
+    .select('id, priority, team_id, status, created_at, waiting_since, assigned_to, service_id, form_data, paused_ms_total, service:services(sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections))')
     .eq('id', requestId)
     .single()
 
@@ -1459,16 +1519,11 @@ export async function changePriority(
     from: createdAt,
   })
 
-  // Extend new deadlines by time already paused in waiting_user (if currently paused)
-  if (request.waiting_since) {
-    const alreadyPausedMs = Date.now() - new Date(request.waiting_since).getTime()
-    if (newResponseDue) {
-      newResponseDue = new Date(new Date(newResponseDue).getTime() + alreadyPausedMs).toISOString()
-    }
-    if (newResolutionDue) {
-      newResolutionDue = new Date(new Date(newResolutionDue).getTime() + alreadyPausedMs).toISOString()
-    }
-  }
+  // Preserve every pause this request has ever accumulated (completed ones
+  // via the ledger, plus one currently in progress) on top of the fresh
+  // baseline — not just a pause active at this exact moment.
+  newResponseDue = withPauseCredit(newResponseDue, request.paused_ms_total, request.waiting_since)
+  newResolutionDue = withPauseCredit(newResolutionDue, request.paused_ms_total, request.waiting_since)
 
   const { error: updateError } = await supabase
     .from('requests')
@@ -1544,7 +1599,7 @@ export async function reclassifyRequest(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, service_id, team_id, priority, status, created_at, waiting_since, assigned_to')
+    .select('id, service_id, team_id, priority, status, created_at, waiting_since, assigned_to, paused_ms_total')
     .eq('id', requestId)
     .single()
 
@@ -1582,11 +1637,8 @@ export async function reclassifyRequest(
     from: createdAt,
   })
 
-  if (request.waiting_since) {
-    const alreadyPausedMs = Date.now() - new Date(request.waiting_since).getTime()
-    if (newResponseDue) newResponseDue = new Date(new Date(newResponseDue).getTime() + alreadyPausedMs).toISOString()
-    if (newResolutionDue) newResolutionDue = new Date(new Date(newResolutionDue).getTime() + alreadyPausedMs).toISOString()
-  }
+  newResponseDue = withPauseCredit(newResponseDue, request.paused_ms_total, request.waiting_since)
+  newResolutionDue = withPauseCredit(newResolutionDue, request.paused_ms_total, request.waiting_since)
 
   // requests_update's RLS WITH CHECK pins service_id/team_id to their current
   // value (they're normally immutable post-creation) — this is the one
@@ -1686,7 +1738,7 @@ export async function updateRequestCategory(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, service_id, team_id, priority, created_at, waiting_since, sub_category_id, assigned_to, service:services(sla_policy:sla_policies(config))')
+    .select('id, service_id, team_id, priority, created_at, waiting_since, sub_category_id, assigned_to, paused_ms_total, service:services(sla_policy:sla_policies(config))')
     .eq('id', requestId)
     .single()
 
@@ -1727,11 +1779,8 @@ export async function updateRequestCategory(
     from: createdAt,
   })
 
-  if (request.waiting_since) {
-    const alreadyPausedMs = Date.now() - new Date(request.waiting_since).getTime()
-    if (newResponseDue) newResponseDue = new Date(new Date(newResponseDue).getTime() + alreadyPausedMs).toISOString()
-    if (newResolutionDue) newResolutionDue = new Date(new Date(newResolutionDue).getTime() + alreadyPausedMs).toISOString()
-  }
+  newResponseDue = withPauseCredit(newResponseDue, request.paused_ms_total, request.waiting_since)
+  newResolutionDue = withPauseCredit(newResolutionDue, request.paused_ms_total, request.waiting_since)
 
   // The old assignment was made for the OLD category (directly or via a
   // Business Rule) and may not make sense for the new one — e.g. Kaushlesh
@@ -1908,6 +1957,11 @@ export async function updateRequestFormData(
 export async function autoCloseRequests(): Promise<{ closed: number }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { closed: 0 }
+  // This runs fire-and-forget on every Home page load by any manager+ — it
+  // must never sweep another tenant's data just because it was incidentally
+  // triggered by someone in a different org (createAdminClient() below
+  // bypasses RLS entirely, so this filter is the ONLY thing scoping it).
+  if (!profile.org_id) return { closed: 0 }
 
   const admin = createAdminClient()
 
@@ -1921,7 +1975,8 @@ export async function autoCloseRequests(): Promise<{ closed: number }> {
   const nowIso = new Date().toISOString()
   const { data: toClose } = await admin
     .from('requests')
-    .select('id, requester_id, title, status')
+    .select('id, requester_id, title, status, reopen_deadline_at')
+    .eq('org_id', profile.org_id)
     .in('status', ['resolved', 'cancelled'])
     .not('reopen_deadline_at', 'is', null)
     .lt('reopen_deadline_at', nowIso)
@@ -1932,12 +1987,20 @@ export async function autoCloseRequests(): Promise<{ closed: number }> {
   let closed = 0
 
   for (const req of toClose) {
-    const { error } = await admin
+    // Guard against a reopen landing between the SELECT above and this
+    // UPDATE: if the request was reopened in that window, its status and/or
+    // reopen_deadline_at will have already changed, so this conditional
+    // update simply matches zero rows instead of clobbering the reopen.
+    const { data: updated, error } = await admin
       .from('requests')
       .update({ status: 'closed', closed_at: nowIso, reopen_deadline_at: null })
       .eq('id', req.id)
+      .eq('status', req.status)
+      .eq('reopen_deadline_at', req.reopen_deadline_at)
+      .select('id')
+      .maybeSingle()
 
-    if (!error) {
+    if (!error && updated) {
       closed++
       notify({
         recipientId: req.requester_id,
@@ -2016,7 +2079,7 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
 
   const { data: req } = await supabase
     .from('requests')
-    .select('id, title, status, service_id, team_id, requester_id, services(approval_workflow_id)')
+    .select('id, title, status, service_id, team_id, requester_id, waiting_since, services(approval_workflow_id)')
     .eq('id', requestId)
     .single()
 
@@ -2070,9 +2133,20 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
     if (wfErr) return { error: wfErr.code === '23505' ? 'An approval is already in progress for this request.' : wfErr.message }
   }
 
+  // Put the request on hold — SLA pauses the same way sendAdHocApproval()
+  // does (and "Waiting on User" does): without this, a request submitted for
+  // approval through this path kept its clock running for the entire
+  // approval wait, unlike the ad-hoc-approval path, which correctly pauses
+  // it. pre_approval_status remembers what it actually was so a later full
+  // approval resumes there instead of always forcing in_progress.
   const { error: stErr } = await admin
     .from('requests')
-    .update({ status: 'pending_approval', updated_at: new Date().toISOString() })
+    .update({
+      status: 'pending_approval',
+      pre_approval_status: req.status,
+      updated_at: new Date().toISOString(),
+      waiting_since: req.waiting_since ?? new Date().toISOString(),
+    })
     .eq('id', requestId)
   if (stErr) return { error: stErr.message }
 

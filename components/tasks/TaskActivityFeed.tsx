@@ -228,7 +228,7 @@ export function TaskActivityFeed({
                   <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-medium text-foreground">{f.file_name}</p>
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-[10px] text-muted-foreground" suppressHydrationWarning>
                       {formatBytes(f.file_size)}{f.uploader ? ` · ${f.uploader.full_name}` : ''} · {formatRelativeTime(f.created_at)}
                     </p>
                   </div>
@@ -255,7 +255,7 @@ export function TaskActivityFeed({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2 mb-1">
                       <span className="text-xs font-semibold text-foreground">{c.author.full_name}</span>
-                      <span className="text-[11px] text-muted-foreground">
+                      <span className="text-[11px] text-muted-foreground" suppressHydrationWarning>
                         {isOptimistic ? 'just now' : formatRelativeTime(c.created_at)}
                       </span>
                     </div>
@@ -283,7 +283,7 @@ export function TaskActivityFeed({
                   <span className="font-medium text-foreground">{actorName}</span>
                   {' '}{label}
                   {detail && <span className="ml-1 text-muted-foreground">({detail})</span>}
-                  <span className="ml-2">{formatRelativeTime(a.created_at)}</span>
+                  <span className="ml-2" suppressHydrationWarning>{formatRelativeTime(a.created_at)}</span>
                 </p>
               </div>
             )

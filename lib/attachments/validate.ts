@@ -1,9 +1,11 @@
+// image/svg+xml is deliberately excluded — see the matching comment in
+// lib/actions/attachments.ts (SVG opened via a direct link can execute its
+// embedded script, unlike an SVG loaded through an <img> tag).
 export const ALLOWED_MIME_TYPES: string[] = [
   'image/jpeg',
   'image/png',
   'image/gif',
   'image/webp',
-  'image/svg+xml',
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

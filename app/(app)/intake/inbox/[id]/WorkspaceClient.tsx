@@ -203,7 +203,7 @@ export function WorkspaceClient({
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                 {message.to_addresses?.length ? <span>to {message.to_addresses.join(', ')}</span> : null}
                 <span>·</span>
-                <span>{message.received_at ? formatRelativeTime(message.received_at) : '—'}</span>
+                <span suppressHydrationWarning>{message.received_at ? formatRelativeTime(message.received_at) : '—'}</span>
                 {message.channel?.name && <><span>·</span><span>{message.channel.name}</span></>}
               </div>
             </div>
@@ -419,7 +419,7 @@ export function WorkspaceClient({
                     <span className={`truncate ${t.id === message.id ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
                       {t.subject ?? '(no subject)'} — {t.from_address ?? '—'}
                     </span>
-                    <span className="shrink-0 text-muted-foreground">{t.received_at ? formatRelativeTime(t.received_at) : ''}</span>
+                    <span className="shrink-0 text-muted-foreground" suppressHydrationWarning>{t.received_at ? formatRelativeTime(t.received_at) : ''}</span>
                   </div>
                 ))}
               </div>

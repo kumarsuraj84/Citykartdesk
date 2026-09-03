@@ -12,7 +12,7 @@ interface CommentFormProps {
   canPostInternal: boolean
 }
 
-const ACCEPT = '.png,.jpg,.jpeg,.gif,.webp,.svg,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.mp4,.webm,.mp3,.wav'
+const ACCEPT = '.png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.mp4,.webm,.mp3,.wav'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`

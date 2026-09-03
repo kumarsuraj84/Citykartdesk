@@ -87,7 +87,7 @@ function NotificationRow({
             {notification.body}
           </p>
         )}
-        <p className="mt-1 text-[10px] text-muted-foreground">
+        <p className="mt-1 text-[10px] text-muted-foreground" suppressHydrationWarning>
           {formatRelativeTime(notification.created_at)}
         </p>
       </div>

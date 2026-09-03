@@ -13,6 +13,9 @@ export const STATUS_LABELS: Record<RequestStatus, string> = {
   cancelled:        'Cancelled',
 }
 
+/** Hours after resolving a request that the requester (or the resolving agent) may still reopen it. */
+export const RESOLVED_REOPEN_WINDOW_HOURS = 72
+
 export const STATUS_STYLES: Record<RequestStatus, string> = {
   open:             'bg-blue-50 text-blue-700 border border-blue-100',
   assigned:         'bg-sky-50 text-sky-700 border border-sky-100',

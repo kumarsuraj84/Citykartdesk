@@ -10,7 +10,7 @@ import { validateAttachment } from '@/lib/attachments/validate'
 // client-validates File objects locally. The actual upload happens after createRequest
 // returns a real request id (see DynamicForm's handleSubmit).
 
-const ACCEPT = '.png,.jpg,.jpeg,.gif,.webp,.svg,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.mp4,.webm,.mp3,.wav'
+const ACCEPT = '.png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.mp4,.webm,.mp3,.wav'
 
 interface PendingFileFieldProps {
   id?: string

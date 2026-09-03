@@ -69,7 +69,10 @@ export async function createCategory(
 
   if (error) {
     console.error('[createCategory]', error.message)
-    return { error: 'Failed to create category.' }
+    // 23505 = a concurrent create picked the same slug before this insert
+    // landed (the TOCTOU window between the slug pre-check above and this
+    // write) — an expected race, not a real server error.
+    return { error: error.code === '23505' ? 'A category with a similar name already exists.' : 'Failed to create category.' }
   }
 
   await logAdminAudit({

@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server'
+import { secureCompare } from '@/lib/secure-compare'
 
 /**
  * Shared secret check for cron/internal-trigger API routes.
@@ -20,5 +21,5 @@ export function verifyCronSecret(req: NextRequest): boolean | null {
   const authHeader = req.headers.get('authorization') ?? ''
   const legacyHeader = req.headers.get('x-cron-secret') ?? ''
   const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : legacyHeader
-  return provided === cronSecret
+  return secureCompare(provided, cronSecret)
 }

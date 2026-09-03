@@ -366,7 +366,7 @@ export function TaskDetailInline({
                   </Link>
                 </div>
                 <p className="mt-1 text-sm font-medium text-foreground">{intakeContext.subject ?? '(no subject)'}</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground" suppressHydrationWarning>
                   {intakeContext.fromAddress ?? 'unknown'}
                   {intakeContext.threadCount > 1 && ` · ${intakeContext.threadCount} messages`}
                   {intakeContext.receivedAt && ` · ${formatRelativeTime(intakeContext.receivedAt)}`}

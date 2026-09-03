@@ -4,10 +4,24 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { rateLimit } from '@/lib/rate-limit'
 import type { UserRole } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: any }
+
+// A tenant admin could otherwise grant themselves (or anyone) `platform_owner`
+// — a cross-tenant, cross-org role — by simply calling updateUserRole with
+// that value, since createAdminClient() bypasses RLS entirely and nothing
+// previously checked WHICH role was being assigned, only that the caller had
+// *some* elevated role. Only an existing platform_owner may grant admin or
+// platform_owner; a plain admin may only assign the ordinary in-org roles.
+function assertCanAssignRole(callerRole: UserRole, targetRole: UserRole): string | null {
+  if ((targetRole === 'admin' || targetRole === 'platform_owner') && callerRole !== 'platform_owner') {
+    return `Only a platform owner can assign the "${targetRole}" role.`
+  }
+  return null
+}
 
 export async function updateUserRole(
   userId: string,
@@ -16,6 +30,8 @@ export async function updateUserRole(
   const profile = await getCurrentProfile()
   if (!profile || !['admin','platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
+  const roleError = assertCanAssignRole(profile.role, role)
+  if (roleError) return { error: roleError }
 
   const admin = createAdminClient()
   const { error } = await admin
@@ -130,6 +146,8 @@ export async function inviteUser(fields: {
   if (!profile || !['admin','platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!fields.email.trim()) return { error: 'Email is required.' }
   if (!fields.full_name.trim()) return { error: 'Name is required.' }
+  const roleError = assertCanAssignRole(profile.role, fields.role)
+  if (roleError) return { error: roleError }
 
   const admin = createAdminClient() as unknown as AnyClient
 
@@ -273,6 +291,8 @@ export async function bulkCreateUsers(
         errors.push(`${rowLabel}: role "${row.role}" is invalid, skipped.`)
         continue
       }
+      const roleError = assertCanAssignRole(profile.role, candidate)
+      if (roleError) { errors.push(`${rowLabel}: ${roleError}`); continue }
       role = candidate
     }
 
@@ -339,6 +359,11 @@ export async function adminSendPasswordReset(email: string): Promise<{ error?: s
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!email.trim()) return { error: 'User has no email on file.' }
+
+  // Without a limit, a compromised admin account could script this into an
+  // email-bombing vector against arbitrary org members.
+  const { limited } = await rateLimit(`admin-password-reset:${profile.id}`, 10, 60_000)
+  if (limited) return { error: 'Too many reset emails sent. Please wait a minute.' }
 
   const supabase = await createClient()
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {

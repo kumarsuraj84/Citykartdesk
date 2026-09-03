@@ -3,11 +3,15 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { validateAttachment } from '@/lib/attachments/validate'
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024
 
+// image/svg+xml is deliberately excluded — see the matching comment in
+// lib/actions/attachments.ts (SVG opened via a direct link can execute its
+// embedded script, unlike an SVG loaded through an <img> tag).
 const ALLOWED_MIME_TYPES = new Set([
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -19,7 +23,7 @@ const ALLOWED_MIME_TYPES = new Set([
 ])
 
 const ALLOWED_EXTENSIONS = new Set([
-  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
+  'png', 'jpg', 'jpeg', 'gif', 'webp',
   'pdf', 'doc', 'docx', 'xls', 'xlsx',
   'txt', 'csv', 'zip', 'mp4',
 ])
@@ -51,6 +55,11 @@ export async function uploadTaskAttachment(
 
   const mimeType = file.type || 'application/octet-stream'
   if (!ALLOWED_MIME_TYPES.has(mimeType)) return { error: `File content type "${mimeType}" is not allowed.` }
+
+  // Buffer-level check: confirms the file's actual bytes match the declared
+  // MIME type instead of trusting the client-supplied Content-Type alone.
+  const magicByteCheck = await validateAttachment(file)
+  if (!magicByteCheck.valid) return { error: magicByteCheck.error ?? 'File content does not match its declared type.' }
 
   // Verify access to the task
   const { data: task } = await supabase

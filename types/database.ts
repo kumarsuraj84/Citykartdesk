@@ -3498,6 +3498,8 @@ export type Database = {
           intake_message_id: string | null
           org_id: string | null
           parent_request_id: string | null
+          paused_ms_total: number
+          pre_approval_status: Database["public"]["Enums"]["request_status"] | null
           priority: Database["public"]["Enums"]["request_priority"]
           project_id: string | null
           reopen_count: number
@@ -3531,6 +3533,8 @@ export type Database = {
           intake_message_id?: string | null
           org_id?: string | null
           parent_request_id?: string | null
+          paused_ms_total?: number
+          pre_approval_status?: Database["public"]["Enums"]["request_status"] | null
           priority?: Database["public"]["Enums"]["request_priority"]
           project_id?: string | null
           reopen_count?: number
@@ -3564,6 +3568,8 @@ export type Database = {
           intake_message_id?: string | null
           org_id?: string | null
           parent_request_id?: string | null
+          paused_ms_total?: number
+          pre_approval_status?: Database["public"]["Enums"]["request_status"] | null
           priority?: Database["public"]["Enums"]["request_priority"]
           project_id?: string | null
           reopen_count?: number
@@ -4952,6 +4958,10 @@ export type Database = {
         Returns: string
       }
       owner_delete_org: { Args: { p_org_id: string }; Returns: Json }
+      retag_service_categories: {
+        Args: { p_service_id: string; p_sub_category_ids: string[] }
+        Returns: undefined
+      }
       seed_default_sla_config: {
         Args: { p_org_id: string }
         Returns: undefined

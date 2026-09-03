@@ -585,6 +585,10 @@ export async function getRelatedRequests(requestId: string) {
   })
 }
 
+// Bounded: a long-lived project can accumulate far more linked requests than
+// this page's UI (no pagination) is meant to render at once.
+const PROJECT_REQUESTS_LIMIT = 200
+
 export async function getRequestsForProject(projectId: string) {
   const supabase = await createClient()
   const { data } = await supabase
@@ -592,6 +596,7 @@ export async function getRequestsForProject(projectId: string) {
     .select('id, request_no, title, status, priority, updated_at, assignee:profiles!requests_assigned_to_fkey (id, full_name)')
     .eq('project_id', projectId)
     .order('updated_at', { ascending: false })
+    .limit(PROJECT_REQUESTS_LIMIT)
   return data ?? []
 }
 

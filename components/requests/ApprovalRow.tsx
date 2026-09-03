@@ -89,7 +89,7 @@ export function ApprovalRow({
           <PriorityBadge priority={req.priority} size="sm" />
         </div>
 
-        <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+        <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground" suppressHydrationWarning>
           {formatRelativeTime(approval.updated_at)}
         </span>
       </button>

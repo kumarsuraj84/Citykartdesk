@@ -123,7 +123,7 @@ export function ApprovalPreviewDialog({ approval, viewerId, viewerRole, onClose 
                       <div key={c.id} className="rounded-lg border border-border/60 bg-background px-3 py-2">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-xs font-medium text-foreground">{c.author_name}</span>
-                          <span className="text-[10px] text-muted-foreground">{formatRelativeTime(c.created_at)}</span>
+                          <span className="text-[10px] text-muted-foreground" suppressHydrationWarning>{formatRelativeTime(c.created_at)}</span>
                         </div>
                         <p className="mt-1 whitespace-pre-wrap text-xs text-foreground/90">{c.body}</p>
                       </div>

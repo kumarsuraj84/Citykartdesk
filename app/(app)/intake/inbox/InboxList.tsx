@@ -456,7 +456,7 @@ export function InboxList({
                       <p className={`min-w-0 flex-1 truncate text-[12px] ${unread ? 'font-bold text-foreground' : 'font-semibold text-muted-foreground'}`}>
                         {senderLabel(m.from_address)}
                       </p>
-                      <span className="shrink-0 text-[10px] text-muted-foreground" title={m.received_at ? new Date(m.received_at).toLocaleString() : ''}>
+                      <span className="shrink-0 text-[10px] text-muted-foreground" title={m.received_at ? new Date(m.received_at).toLocaleString() : ''} suppressHydrationWarning>
                         {m.received_at ? formatRelativeTime(m.received_at) : ''}
                       </span>
                     </div>

@@ -135,11 +135,15 @@ async function fireRule(admin: AnyClient, rule: BusinessRuleRow, request: RawReq
     status: request.status,
     priority: request.priority,
     service_id: request.service_id,
+    team_id: request.team_id,
     created_at: request.created_at,
     form_data: request.form_data ?? {},
     waiting_since: request.waiting_since,
     response_due_at: request.response_due_at,
     resolution_due_at: request.resolution_due_at,
+    reopen_count: request.reopen_count ?? 0,
+    responded_at: request.responded_at,
+    paused_ms_total: Number(request.paused_ms_total ?? 0),
     service: {
       sla_policy: request.service?.sla_policy ?? null,
       form_sections: request.service?.form_sections ?? null,
@@ -174,6 +178,9 @@ type RawRequest = {
   resolution_due_at: string | null
   category_id: string | null
   sub_category_id: string | null
+  reopen_count: number | null
+  responded_at: string | null
+  paused_ms_total: number | null
   service: {
     template_id: string | null
     sla_policy: { config: SLAConfig | null } | null
@@ -191,7 +198,7 @@ type RawRequest = {
 }
 
 const REQUEST_SELECT =
-  'id, title, description, priority, status, service_id, team_id, project_id, requester_id, assigned_to, org_id, created_at, resolved_at, closed_at, source_metadata, form_data, waiting_since, response_due_at, resolution_due_at, category_id, sub_category_id, service:services(template_id, sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections)), requester:profiles!requester_id(role, department_id, location_id, designation_id, function_id)'
+  'id, title, description, priority, status, service_id, team_id, project_id, requester_id, assigned_to, org_id, created_at, resolved_at, closed_at, source_metadata, form_data, waiting_since, response_due_at, resolution_due_at, category_id, sub_category_id, reopen_count, responded_at, paused_ms_total, service:services(template_id, sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections)), requester:profiles!requester_id(role, department_id, location_id, designation_id, function_id)'
 
 async function runSlaPctElapsed(admin: AnyClient, rule: BusinessRuleRow, now: Date): Promise<number> {
   const { data: requests } = await admin

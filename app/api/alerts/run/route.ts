@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { notify, type NotifyInput } from '@/lib/notifications'
 import { sendEmail } from '@/lib/email/send'
 import { verifyCronSecret } from '@/lib/cron-auth'
+import { mapWithConcurrency } from '@/lib/async/concurrency'
 import type { UserRole } from '@/types'
 
 // profiles has no `email` column in the generated schema — email is fetched
@@ -29,6 +30,10 @@ export async function GET(req: NextRequest) {
   todayStart.setHours(0, 0, 0, 0)
 
   const results: Record<string, number> = {}
+  // Bounds how many rows within one rule's batch are processed at once —
+  // each iteration below does its own independent notification-dedup check
+  // + notify + optional email round trips, previously fully sequential.
+  const ALERT_ITEM_CONCURRENCY = 5
 
   // Fetch active alert rules
   const { data: rules } = await admin
@@ -80,8 +85,7 @@ export async function GET(req: NextRequest) {
           .gte('due_date', now.toISOString())
           .lte('due_date', windowEnd.toISOString())
 
-        let count = 0
-        for (const task of tasks ?? []) {
+        const dueSoonFlags = await mapWithConcurrency(tasks ?? [], ALERT_ITEM_CONCURRENCY, async (task) => {
           // Check if already notified in last 25 hours
           const cutoff = new Date(now.getTime() - 25 * 60 * 60 * 1000)
           const { data: existing } = await admin
@@ -92,7 +96,7 @@ export async function GET(req: NextRequest) {
             .gte('created_at', cutoff.toISOString())
             .limit(1)
 
-          if (existing && existing.length > 0) continue
+          if (existing && existing.length > 0) return false
 
           const recipients: string[] = []
           if (rule.notify_assignee && task.assignee_id) recipients.push(task.assignee_id)
@@ -115,7 +119,6 @@ export async function GET(req: NextRequest) {
 
           if (notifications.length) {
             await notify(notifications)
-            count++
           }
 
           // Email channel
@@ -131,8 +134,10 @@ export async function GET(req: NextRequest) {
               }
             }
           }
-        }
-        results['due_soon'] = count
+
+          return notifications.length > 0
+        })
+        results['due_soon'] = dueSoonFlags.filter(Boolean).length
 
       } else if (rule.alert_type === 'overdue' && rule.entity_type === 'task') {
         const { data: tasks } = await admin
@@ -142,8 +147,7 @@ export async function GET(req: NextRequest) {
           .not('status', 'in', '("done","cancelled")')
           .lt('due_date', now.toISOString())
 
-        let count = 0
-        for (const task of tasks ?? []) {
+        const overdueFlags = await mapWithConcurrency(tasks ?? [], ALERT_ITEM_CONCURRENCY, async (task) => {
           const { data: existing } = await admin
             .from('notifications')
             .select('id')
@@ -152,7 +156,7 @@ export async function GET(req: NextRequest) {
             .gte('created_at', todayStart.toISOString())
             .limit(1)
 
-          if (existing && existing.length > 0) continue
+          if (existing && existing.length > 0) return false
 
           const recipients: string[] = []
           if (rule.notify_assignee && task.assignee_id) recipients.push(task.assignee_id)
@@ -175,7 +179,6 @@ export async function GET(req: NextRequest) {
 
           if (notifications.length) {
             await notify(notifications)
-            count++
           }
 
           if (rule.channels?.includes('email')) {
@@ -190,8 +193,10 @@ export async function GET(req: NextRequest) {
               }
             }
           }
-        }
-        results['overdue'] = count
+
+          return notifications.length > 0
+        })
+        results['overdue'] = overdueFlags.filter(Boolean).length
 
       } else if (rule.alert_type === 'due_soon' && rule.entity_type === 'milestone') {
         // Milestones ending between now and now+threshold_minutes, not done/cancelled
@@ -204,10 +209,9 @@ export async function GET(req: NextRequest) {
           .gte('end_date', now.toISOString().slice(0, 10))
           .lte('end_date', windowEnd.toISOString().slice(0, 10))
 
-        let count = 0
-        for (const milestone of milestones ?? []) {
+        const milestoneDueSoonFlags = await mapWithConcurrency(milestones ?? [], ALERT_ITEM_CONCURRENCY, async (milestone) => {
           const project = milestone.project as unknown as { id: string; name: string; owner_id: string } | null
-          if (!project) continue
+          if (!project) return false
 
           const cutoff = new Date(now.getTime() - 25 * 60 * 60 * 1000)
           const { data: existing } = await admin
@@ -218,7 +222,7 @@ export async function GET(req: NextRequest) {
             .gte('created_at', cutoff.toISOString())
             .limit(1)
 
-          if (existing && existing.length > 0) continue
+          if (existing && existing.length > 0) return false
 
           const recipients = new Set<string>()
           if (rule.notify_assignee) recipients.add(project.owner_id)
@@ -241,7 +245,6 @@ export async function GET(req: NextRequest) {
 
           if (notifications.length) {
             await notify(notifications)
-            count++
           }
 
           if (rule.channels?.includes('email')) {
@@ -256,8 +259,10 @@ export async function GET(req: NextRequest) {
               }
             }
           }
-        }
-        results['milestone_due_soon'] = count
+
+          return notifications.length > 0
+        })
+        results['milestone_due_soon'] = milestoneDueSoonFlags.filter(Boolean).length
 
       } else if (rule.alert_type === 'overdue' && rule.entity_type === 'milestone') {
         const { data: milestones } = await admin
@@ -267,10 +272,9 @@ export async function GET(req: NextRequest) {
           .not('status', 'in', '("done","cancelled")')
           .lt('end_date', now.toISOString().slice(0, 10))
 
-        let count = 0
-        for (const milestone of milestones ?? []) {
+        const milestoneOverdueFlags = await mapWithConcurrency(milestones ?? [], ALERT_ITEM_CONCURRENCY, async (milestone) => {
           const project = milestone.project as unknown as { id: string; name: string; owner_id: string } | null
-          if (!project) continue
+          if (!project) return false
 
           const { data: existing } = await admin
             .from('notifications')
@@ -280,7 +284,7 @@ export async function GET(req: NextRequest) {
             .gte('created_at', todayStart.toISOString())
             .limit(1)
 
-          if (existing && existing.length > 0) continue
+          if (existing && existing.length > 0) return false
 
           const recipients = new Set<string>()
           if (rule.notify_assignee) recipients.add(project.owner_id)
@@ -303,7 +307,6 @@ export async function GET(req: NextRequest) {
 
           if (notifications.length) {
             await notify(notifications)
-            count++
           }
 
           if (rule.channels?.includes('email')) {
@@ -318,8 +321,10 @@ export async function GET(req: NextRequest) {
               }
             }
           }
-        }
-        results['milestone_overdue'] = count
+
+          return notifications.length > 0
+        })
+        results['milestone_overdue'] = milestoneOverdueFlags.filter(Boolean).length
 
       } else if (rule.alert_type === 'unassigned' && rule.entity_type === 'request') {
         const cutoff = new Date(now.getTime() - (rule.threshold_minutes ?? 120) * 60 * 1000)
@@ -331,8 +336,7 @@ export async function GET(req: NextRequest) {
           .not('status', 'in', '("resolved","cancelled","closed")')
           .lt('created_at', cutoff.toISOString())
 
-        let count = 0
-        for (const request of requests ?? []) {
+        const unassignedFlags = await mapWithConcurrency(requests ?? [], ALERT_ITEM_CONCURRENCY, async (request) => {
           const { data: existing } = await admin
             .from('notifications')
             .select('id')
@@ -341,7 +345,7 @@ export async function GET(req: NextRequest) {
             .gte('created_at', todayStart.toISOString())
             .limit(1)
 
-          if (existing && existing.length > 0) continue
+          if (existing && existing.length > 0) return false
 
           const roleProfiles = await getProfilesByRoles(rule.notify_roles ?? ['manager'], rule.org_id)
           const notifications: NotifyInput[] = roleProfiles.map((p) => ({
@@ -356,10 +360,11 @@ export async function GET(req: NextRequest) {
 
           if (notifications.length) {
             await notify(notifications)
-            count++
           }
-        }
-        results['unassigned'] = count
+
+          return notifications.length > 0
+        })
+        results['unassigned'] = unassignedFlags.filter(Boolean).length
 
       } else if (rule.alert_type === 'daily_digest') {
         // Only run at hour 8, once per day
@@ -425,7 +430,7 @@ export async function GET(req: NextRequest) {
             </ul>
             <p><a href="${process.env.NEXT_PUBLIC_APP_URL ?? ''}/home">View Dashboard</a></p>
           `
-          for (const manager of managers) {
+          await mapWithConcurrency(managers, ALERT_ITEM_CONCURRENCY, async (manager) => {
             const email = await getUserEmail(manager.id)
             if (email) {
               await sendEmail({
@@ -434,7 +439,7 @@ export async function GET(req: NextRequest) {
                 html,
               })
             }
-          }
+          })
         }
 
         results['daily_digest'] = managers.length

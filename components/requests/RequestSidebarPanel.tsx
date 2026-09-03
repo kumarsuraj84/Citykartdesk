@@ -95,6 +95,9 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
   const [pendingCommentText, setPendingCommentText] = useState('')
   const [pendingCommentError, setPendingCommentError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  // Guards against a slow, now-superseded transition's error rollback
+  // clobbering a value set by a later, faster one (e.g. two rapid clicks).
+  const seqRef = useRef(0)
 
   // Re-sync if the server-provided status changes underneath us — e.g. the
   // approval-rejection reopen banner (a sibling component entirely outside
@@ -117,10 +120,11 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
 
   function apply(next: RequestStatus, comment?: string) {
     const prev = cur
+    const seq = ++seqRef.current
     setCur(next); setOpen(false); setPendingComment(null); setPendingCommentText(''); setPendingCommentError(null)
     startTransition(async () => {
       const result = await updateRequestStatus(requestId, next, comment)
-      if (result?.error) { toast.error(result.error); setCur(prev) }
+      if (result?.error) { toast.error(result.error); if (seqRef.current === seq) setCur(prev) }
     })
   }
 
@@ -157,8 +161,9 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
     <PropRow label="Status">
       <div ref={ref} className="relative">
         <button
-          onClick={() => allOpts.length > 0 && setOpen(v => !v)}
-          className={`flex items-center gap-1 ${allOpts.length > 0 ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+          onClick={() => allOpts.length > 0 && !isPending && setOpen(v => !v)}
+          disabled={isPending}
+          className={`flex items-center gap-1 ${allOpts.length > 0 && !isPending ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
         >
           <StatusBadge status={cur} size="sm" />
           {allOpts.length > 0 && !isPending && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
@@ -210,6 +215,20 @@ function PriorityRow({ requestId, priority, isAgent }: {
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
   const opts: RequestPriority[] = ['urgent', 'high', 'medium', 'low']
+  // Guards against a slow, now-superseded transition's error rollback
+  // clobbering a value set by a later, faster one (e.g. two rapid clicks).
+  const seqRef = useRef(0)
+
+  // Re-sync if the server-provided priority changes underneath us — e.g. a
+  // Business Rule's set_priority action fires and the page refreshes, which
+  // re-renders this component with a fresh `priority` prop but would
+  // otherwise leave `cur` frozen at its very first value. Same pattern as
+  // StatusRow/CategoryRow above.
+  const [prevPriority, setPrevPriority] = useState(priority)
+  if (priority !== prevPriority) {
+    setPrevPriority(priority)
+    setCur(priority)
+  }
 
   useEffect(() => {
     if (!open) return
@@ -220,10 +239,11 @@ function PriorityRow({ requestId, priority, isAgent }: {
 
   function pick(p: RequestPriority) {
     const prev = cur
+    const seq = ++seqRef.current
     setCur(p); setOpen(false)
     startTransition(async () => {
       const result = await changePriority(requestId, p)
-      if (result?.error) { toast.error(result.error); setCur(prev) }
+      if (result?.error) { toast.error(result.error); if (seqRef.current === seq) setCur(prev) }
     })
   }
 
@@ -231,8 +251,9 @@ function PriorityRow({ requestId, priority, isAgent }: {
     <PropRow label="Priority">
       <div ref={ref} className="relative">
         <button
-          onClick={() => isAgent && setOpen(v => !v)}
-          className={`flex items-center gap-1 ${isAgent ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+          onClick={() => isAgent && !isPending && setOpen(v => !v)}
+          disabled={isPending}
+          className={`flex items-center gap-1 ${isAgent && !isPending ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
         >
           <PriorityBadge priority={cur} size="sm" />
           {isAgent && !isPending && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
@@ -271,6 +292,9 @@ function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMember
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Guards against a slow, now-superseded transition's error rollback
+  // clobbering a value set by a later, faster one (e.g. two rapid clicks).
+  const seqRef = useRef(0)
 
   // Re-sync if the assignment changes from OUTSIDE this row — e.g. a
   // Category/Sub Category change re-runs Business Rules server-side, which
@@ -308,10 +332,11 @@ function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMember
 
   function pick(id: string | null, name: string | null) {
     const prevId = curId, prevName = curName
+    const seq = ++seqRef.current
     setCurId(id); setCurName(name); setOpen(false); setQuery('')
     startTransition(async () => {
       const result = await assignRequest(requestId, id)
-      if (result?.error) { toast.error(result.error); setCurId(prevId); setCurName(prevName) }
+      if (result?.error) { toast.error(result.error); if (seqRef.current === seq) { setCurId(prevId); setCurName(prevName) } }
     })
   }
 
@@ -319,8 +344,9 @@ function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMember
     <PropRow label="Technician">
       <div ref={ref} className="relative">
         <button
-          onClick={() => isAgent && setOpen(v => !v)}
-          className={`flex items-center gap-1.5 ${isAgent ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+          onClick={() => isAgent && !isPending && setOpen(v => !v)}
+          disabled={isPending}
+          className={`flex items-center gap-1.5 ${isAgent && !isPending ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
         >
           {curName ? (
             <><Avatar name={curName} /><span className="text-xs font-medium text-foreground">{curName}</span></>
@@ -475,6 +501,9 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
   const [error, setError] = useState<string | null>(null)
   const catRef = useRef<HTMLDivElement>(null)
   const subRef = useRef<HTMLDivElement>(null)
+  // Guards against a slow, now-superseded transition's error rollback
+  // clobbering a value set by a later, faster one (e.g. two rapid picks).
+  const seqRef = useRef(0)
 
   const savedCategoryId = allowedSubCategories.find((sc) => sc.id === subCategoryId)?.category_id ?? null
   // The category currently being browsed — independent from `cur` (the saved
@@ -537,10 +566,11 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
   function pickSubCategory(sc: AllowedSubCategory) {
     if (sc.id === cur.id) { setSubOpen(false); return }
     const prev = cur
+    const seq = ++seqRef.current
     setCur({ id: sc.id, name: sc.name, categoryName: sc.category_name }); setSubOpen(false); setError(null)
     startTransition(async () => {
       const result = await updateRequestCategory(requestId, sc.id)
-      if (result?.error) {
+      if (result?.error && seqRef.current === seq) {
         setError(result.error)
         setCur(prev)
         setPendingCategoryId(savedCategoryId)
@@ -555,8 +585,9 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
       <PropRow label="Category">
         <div ref={catRef} className="relative">
           <button
-            onClick={() => canEdit && setCatOpen((v) => !v)}
-            className={`flex items-center gap-1 ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+            onClick={() => canEdit && !isPending && setCatOpen((v) => !v)}
+            disabled={isPending}
+            className={`flex items-center gap-1 ${canEdit && !isPending ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
             title={error ?? undefined}
           >
             <span className={`text-xs ${error ? 'text-destructive' : 'text-foreground'}`}>{pendingCategoryName ?? '—'}</span>
@@ -582,8 +613,9 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
         <PropRow label="Sub Category">
           <div ref={subRef} className="relative">
             <button
-              onClick={() => canEdit && setSubOpen((v) => !v)}
-              className={`flex items-center gap-1 ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+              onClick={() => canEdit && !isPending && setSubOpen((v) => !v)}
+              disabled={isPending}
+              className={`flex items-center gap-1 ${canEdit && !isPending ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
             >
               <span className="text-xs text-foreground">{cur.name ?? 'Select…'}</span>
               {canEdit && !isPending && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
@@ -623,6 +655,21 @@ function CollaboratorsRow({ requestId, assigneeId, viewerId, initialCollaborator
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Re-sync if the server-provided list changes underneath us — e.g. someone
+  // else added/removed a collaborator and a revalidatePath elsewhere
+  // refreshed this page — but only on an actual content change, not on
+  // every render (the server always hands this component a fresh array
+  // reference, so a plain reference check would clobber this row's own
+  // just-applied optimistic add/remove before the corresponding
+  // revalidatePath catches up). Same intent as StatusRow/PriorityRow's
+  // resync, adapted for a list instead of a scalar.
+  const initialKey = initialCollaborators.map(c => c.user_id).sort().join(',')
+  const [prevInitialKey, setPrevInitialKey] = useState(initialKey)
+  if (initialKey !== prevInitialKey) {
+    setPrevInitialKey(initialKey)
+    setCollaborators(initialCollaborators)
+  }
 
   useEffect(() => {
     if (!open) return
@@ -845,7 +892,7 @@ export function RequestSidebarPanel({
 
         {/* Read-only: Created */}
         <PropRow label="Created">
-          <span className="text-xs text-muted-foreground">{formatRelativeTime(createdAt)}</span>
+          <span className="text-xs text-muted-foreground" suppressHydrationWarning>{formatRelativeTime(createdAt)}</span>
         </PropRow>
 
         {/* Read-only: Due */}

@@ -484,7 +484,7 @@ export function TaskDetailPanel({
               )}
 
               {/* Created timestamp */}
-              <p className="text-[10px] text-muted-foreground/50 -mt-2">
+              <p className="text-[10px] text-muted-foreground/50 -mt-2" suppressHydrationWarning>
                 Created {formatRelativeTime(task.created_at)}
               </p>
             </div>

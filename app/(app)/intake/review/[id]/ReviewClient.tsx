@@ -360,7 +360,7 @@ export function ReviewClient({
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold text-foreground">{fromAddr ?? '—'}</p>
-              <p className="truncate text-[11px] text-muted-foreground">
+              <p className="truncate text-[11px] text-muted-foreground" suppressHydrationWarning>
                 {msg?.to_addresses?.length ? <>To {msg.to_addresses.join(', ')} · </> : null}
                 via {msg?.channel?.name ?? '—'} · {msg?.received_at ? formatRelativeTime(msg.received_at) : '—'}
               </p>
@@ -444,7 +444,7 @@ export function ReviewClient({
                   <span className={`truncate ${t.id === msg?.id ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
                     {t.subject ?? '(no subject)'} — {senderName(t.from_address)}
                   </span>
-                  <span className="shrink-0 text-muted-foreground">{t.received_at ? formatRelativeTime(t.received_at) : ''}</span>
+                  <span className="shrink-0 text-muted-foreground" suppressHydrationWarning>{t.received_at ? formatRelativeTime(t.received_at) : ''}</span>
                 </div>
               ))}
             </div>

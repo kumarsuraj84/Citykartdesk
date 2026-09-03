@@ -113,7 +113,7 @@ export function ApprovalsBell({
                       {n.body && (
                         <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{n.body}</p>
                       )}
-                      <p className="mt-1 text-[10px] text-muted-foreground">{formatRelativeTime(n.created_at)}</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground" suppressHydrationWarning>{formatRelativeTime(n.created_at)}</p>
                     </div>
                   </button>
                 )

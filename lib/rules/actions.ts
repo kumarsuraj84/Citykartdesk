@@ -1,7 +1,7 @@
 import { notify } from '@/lib/notifications'
 import { sendEmail } from '@/lib/email/send'
 import { logActivity } from '@/lib/activity'
-import { STATUS_LABELS } from '@/lib/constants/requests'
+import { STATUS_LABELS, RESOLVED_REOPEN_WINDOW_HOURS } from '@/lib/constants/requests'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
 import { resolveServiceFormSections } from '@/lib/forms/sections'
 import type { SLAConfig, FormSection, FormField } from '@/types'
@@ -48,11 +48,15 @@ export type ActionRequest = {
   status: string
   priority: string
   service_id: string
+  team_id: string
   created_at: string
   form_data: Record<string, unknown>
   waiting_since: string | null
   response_due_at: string | null
   resolution_due_at: string | null
+  reopen_count: number
+  responded_at: string | null
+  paused_ms_total: number
   service: {
     sla_policy: { config: SLAConfig | null } | null
     form_sections: FormSection[] | null
@@ -112,6 +116,22 @@ async function runAssign(
 
   if (!chosenId) return
 
+  // A rule authored (or left stale) with an assigneeIds list that no longer
+  // matches the request's current team — teams/services get reorganized —
+  // could otherwise silently place a ticket with someone who has no RLS
+  // visibility into it, effectively orphaning it. assignRequest() (the
+  // interactive equivalent) already guards this; this direct admin-client
+  // write bypassed it entirely until now.
+  const { count: onTeam } = await admin
+    .from('team_members')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('team_id', request.team_id)
+    .eq('user_id', chosenId)
+  if (!onTeam) {
+    console.error(`[business-rules] assign action for rule ${ctx.ruleId} chose user ${chosenId}, who is not on request ${request.id}'s team — skipped.`)
+    return
+  }
+
   await admin.from('requests').update({ assigned_to: chosenId }).eq('id', request.id)
   await logActivity({
     requestId: request.id,
@@ -138,7 +158,7 @@ async function runSetPriority(admin: AnyClient, request: ActionRequest, priority
   // business-hours aware — instead of leaving the old priority's due dates in
   // place under a new priority.
   const allFields = resolveServiceFormSections(request.service).flatMap((s) => s.fields)
-  const { responseDueAt, resolutionDueAt } = await resolveSlaDeadlines(admin, {
+  let { responseDueAt, resolutionDueAt } = await resolveSlaDeadlines(admin, {
     serviceId: request.service_id,
     priority: priority as 'low' | 'medium' | 'high' | 'urgent',
     servicePolicyConfig: request.service.sla_policy?.config ?? null,
@@ -146,6 +166,15 @@ async function runSetPriority(admin: AnyClient, request: ActionRequest, priority
     formData: request.form_data,
     from: new Date(request.created_at),
   })
+
+  // Preserve every pause this request has ever accumulated (the ledger,
+  // plus one currently in progress) — same fix as changePriority()'s.
+  const creditMs =
+    request.paused_ms_total + (request.waiting_since ? Date.now() - new Date(request.waiting_since).getTime() : 0)
+  if (creditMs > 0) {
+    if (responseDueAt) responseDueAt = new Date(new Date(responseDueAt).getTime() + creditMs).toISOString()
+    if (resolutionDueAt) resolutionDueAt = new Date(new Date(resolutionDueAt).getTime() + creditMs).toISOString()
+  }
 
   await admin
     .from('requests')
@@ -166,15 +195,35 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
   const nowIso = now.toISOString()
   const update: Record<string, unknown> = { status }
 
-  if (status === 'resolved') update.resolved_at = nowIso
+  if (status === 'resolved') {
+    update.resolved_at = nowIso
+    // Same 72h "not satisfied? reopen it" window updateRequestStatus() grants
+    // an interactively-resolved ticket — a rule-resolved one needs it too, or
+    // autoCloseRequests()'s sweep (keyed off reopen_deadline_at) never picks
+    // it up and it stays open forever.
+    update.reopen_deadline_at = new Date(now.getTime() + RESOLVED_REOPEN_WINDOW_HOURS * 3_600_000).toISOString()
+  }
   if (status === 'closed') update.closed_at = nowIso
+  if (status === 'cancelled') {
+    update.cancellation_reason = 'manual'
+    update.reopen_deadline_at = null
+  }
   if (status === 'open') {
     update.resolved_at = null
     update.closed_at = null
+    // Reopening out of resolved/closed counts the same as an interactive
+    // reopen — same reopen_count metric, same cleared cancellation state.
+    if (request.status === 'resolved' || request.status === 'closed') {
+      update.cancellation_reason = null
+      update.reopen_deadline_at = null
+      update.reopen_count = (request.reopen_count ?? 0) + 1
+    }
   }
 
-  // Leaving waiting_user: extend both deadlines by the paused duration and
-  // clear waiting_since — same bookkeeping updateRequestStatus does.
+  // Leaving waiting_user: extend both deadlines by the paused duration,
+  // clear waiting_since, and credit the ledger — same bookkeeping
+  // updateRequestStatus does, so a later priority/category change doesn't
+  // discard this pause once it's no longer the active one.
   if (request.status === 'waiting_user' && status !== 'waiting_user' && request.waiting_since) {
     const pausedMs = now.getTime() - new Date(request.waiting_since).getTime()
     if (request.response_due_at) {
@@ -184,8 +233,17 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
       update.resolution_due_at = new Date(new Date(request.resolution_due_at).getTime() + pausedMs).toISOString()
     }
     update.waiting_since = null
+    update.paused_ms_total = request.paused_ms_total + pausedMs
   }
   if (status === 'waiting_user') update.waiting_since = nowIso
+
+  // responded_at: same "first time this request left the untouched state"
+  // bookkeeping updateRequestStatus() captures — a rule that moves a fresh
+  // ticket straight to in_progress/assigned shouldn't leave first-response
+  // metrics blank forever.
+  if (!request.responded_at && (status === 'in_progress' || status === 'assigned')) {
+    update.responded_at = nowIso
+  }
 
   // Reopen (resolved/closed -> open): recompute resolution_due_at from now,
   // same as the REOPEN branch in updateRequestStatus — otherwise a rule-driven
@@ -202,9 +260,23 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
     })
     if (resolved.resolutionDueAt) update.resolution_due_at = resolved.resolutionDueAt
     update.waiting_since = null
+    // A reopen starts a brand-new SLA clock from now — old pause credit
+    // belonged to the clock that just ended.
+    update.paused_ms_total = 0
   }
 
   await admin.from('requests').update(update).eq('id', request.id)
+
+  // CSAT: same as updateRequestStatus() — a rule-resolved ticket needs a
+  // survey record too, or the requester never gets asked to rate it.
+  // Upsert-ignore dedupes against UNIQUE(request_id) for a reopen->resolve cycle.
+  if (status === 'resolved' && request.requester_id && request.org_id) {
+    const { error: csatError } = await admin.from('csat_surveys').upsert(
+      { org_id: request.org_id, request_id: request.id, requester_id: request.requester_id, sent_at: nowIso },
+      { onConflict: 'request_id', ignoreDuplicates: true }
+    )
+    if (csatError) console.error('[business-rules] CSAT survey creation failed', csatError)
+  }
 
   // Auto time-tracking: a rule-driven status change away from in_progress must
   // close any open timer the same way the interactive updateRequestStatus()

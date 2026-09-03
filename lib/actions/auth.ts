@@ -50,9 +50,15 @@ export async function forgotPassword(formData: FormData) {
 }
 
 export async function resetPassword(formData: FormData) {
-  const supabase = await createClient()
   const password = formData.get('password') as string
+  // This is the exact path a bulk-imported user hits when leaving the shared
+  // DEFAULT_BULK_PASSWORD (admin/users.ts) — it must not be allowed to land
+  // on something weaker than what an admin is even permitted to set directly.
+  if (!password || password.length < 8) {
+    return { error: 'Password must be at least 8 characters.' }
+  }
 
+  const supabase = await createClient()
   const { error } = await supabase.auth.updateUser({ password })
 
   if (error) {

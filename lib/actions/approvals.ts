@@ -8,6 +8,7 @@ import { getRequestPreviewSummary, getRequestComments } from '@/lib/queries/requ
 import { getApprovalForRequest, type ApprovalWithDetails } from '@/lib/queries/approvals'
 import { logActivity } from '@/lib/activity'
 import { notify } from '@/lib/notifications'
+import { rateLimit } from '@/lib/rate-limit'
 import type { RequestPriority, RequestStatus } from '@/types'
 
 type ActionResult = { error?: string }
@@ -52,6 +53,15 @@ export async function searchManagersForApproval(
     .limit(8)
 
   if (byName && byName.length >= 8) return byName as { id: string; full_name: string; role: string }[]
+
+  // The name search above is a cheap, RLS-scoped table query — safe at any
+  // typing speed. This fallback calls the Auth Admin API's full-org user
+  // list, which is expensive and, with no gate, was callable by any logged-in
+  // user on nearly every keystroke (most partial names return &lt;8 matches).
+  // Rate-limited per-user rather than skipping the fallback outright, since a
+  // legitimate slow typist should still get email-search results most of the time.
+  const { limited } = await rateLimit(`approval-search-email:${profile.id}`, 20, 60_000)
+  if (limited) return byName as { id: string; full_name: string; role: string }[] ?? []
 
   // Looks like (or might be) an email — cross-reference auth.users.
   const { data: authData } = await admin.auth.admin.listUsers({ perPage: 1000 })
@@ -187,11 +197,16 @@ export async function sendAdHocApproval(
 
   // Put request on hold — SLA pauses the same way "Waiting on User" does.
   // If it was already paused (e.g. sent while waiting on the user), keep the
-  // original pause start rather than resetting the clock.
+  // original pause start rather than resetting the clock. pre_approval_status
+  // remembers whatever it actually was (in_progress OR waiting_user) so full
+  // approval can resume there instead of always forcing in_progress — a
+  // ticket sent for approval while genuinely waiting on the requester
+  // shouldn't come back looking ready for the technician to act.
   const { error: stErr } = await admin
     .from('requests')
     .update({
       status: 'pending_approval',
+      pre_approval_status: req.status,
       updated_at: new Date().toISOString(),
       waiting_since: req.waiting_since ?? new Date().toISOString(),
     })
@@ -353,18 +368,28 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
     // pending, so time spent on hold isn't counted against SLA.
     const { data: req } = await admin
       .from('requests')
-      .select('requester_id, waiting_since, response_due_at, resolution_due_at')
+      .select('requester_id, waiting_since, response_due_at, resolution_due_at, pre_approval_status, paused_ms_total')
       .eq('id', approval.request_id)
       .single()
 
     const resumeNow = new Date()
-    // Resume straight into 'in_progress' (not 'open') — the technician
-    // already did their mandatory first response before this request could
-    // ever be sent for approval, so there's nothing left to gate; sending it
-    // back to 'open' would incorrectly re-surface the "Start Working" gate.
-    const updatePayload: { status: 'in_progress'; waiting_since: null; response_due_at?: string; resolution_due_at?: string } = {
-      status: 'in_progress',
-      waiting_since: null,
+    // Resume into whatever it actually was before being sent for approval —
+    // in_progress or waiting_user — rather than always forcing in_progress.
+    // A ticket that was genuinely waiting on the requester when "Send for
+    // Approval" was clicked must go back to waiting_user, still paused (a
+    // fresh waiting_since — the approval hold's duration was already
+    // credited to the due dates below via the OLD waiting_since), not appear
+    // ready for the technician to act on. pre_approval_status may be null
+    // for an approval that was already in flight before this column existed;
+    // in_progress is the safe fallback (matches the old unconditional behavior).
+    const resumedStatus = (req?.pre_approval_status as RequestStatus | null) ?? 'in_progress'
+    const updatePayload: {
+      status: RequestStatus; pre_approval_status: null; waiting_since: string | null
+      response_due_at?: string; resolution_due_at?: string; paused_ms_total?: number
+    } = {
+      status: resumedStatus,
+      pre_approval_status: null,
+      waiting_since: resumedStatus === 'waiting_user' ? resumeNow.toISOString() : null,
     }
     if (req?.waiting_since) {
       const pausedMs = resumeNow.getTime() - new Date(req.waiting_since).getTime()
@@ -374,6 +399,7 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
       if (req.resolution_due_at) {
         updatePayload.resolution_due_at = new Date(new Date(req.resolution_due_at).getTime() + pausedMs).toISOString()
       }
+      updatePayload.paused_ms_total = Number(req.paused_ms_total ?? 0) + pausedMs
     }
 
     const { error: requestUpdateError } = await admin
@@ -590,7 +616,7 @@ export async function rejectApproval(approvalId: string, comment?: string): Prom
   // consistent if the request is ever reopened.
   const { data: reqForResume } = await admin
     .from('requests')
-    .select('waiting_since, response_due_at, resolution_due_at')
+    .select('waiting_since, response_due_at, resolution_due_at, paused_ms_total')
     .eq('id', approval.request_id)
     .single()
 
@@ -602,7 +628,7 @@ export async function rejectApproval(approvalId: string, comment?: string): Prom
   const REOPEN_WINDOW_HOURS = 48
   const cancelPayload: {
     status: 'cancelled'; waiting_since: null; cancellation_reason: 'approval_rejected'; reopen_deadline_at: string
-    response_due_at?: string; resolution_due_at?: string
+    response_due_at?: string; resolution_due_at?: string; paused_ms_total?: number
   } = {
     status: 'cancelled',
     waiting_since: null,
@@ -617,6 +643,7 @@ export async function rejectApproval(approvalId: string, comment?: string): Prom
     if (reqForResume.resolution_due_at) {
       cancelPayload.resolution_due_at = new Date(new Date(reqForResume.resolution_due_at).getTime() + pausedMs).toISOString()
     }
+    cancelPayload.paused_ms_total = Number(reqForResume.paused_ms_total ?? 0) + pausedMs
   }
 
   const { error: requestUpdateError } = await admin

@@ -24,30 +24,6 @@ interface Props {
   waitingSince:       string | null
 }
 
-// ── Live elapsed timer ────────────────────────────────────────────────────────
-
-function ElapsedTimer({ startedAt }: { startedAt: string }) {
-  const [elapsed, setElapsed] = useState(0)
-
-  useEffect(() => {
-    const base = Date.now() - new Date(startedAt).getTime()
-    // Seeds the live interval timer set up right below — external (clock) sync, not derived prop state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setElapsed(Math.floor(base / 1000))
-    const id = setInterval(() => setElapsed((s) => s + 1), 1000)
-    return () => clearInterval(id)
-  }, [startedAt])
-
-  const h = Math.floor(elapsed / 3600)
-  const m = Math.floor((elapsed % 3600) / 60)
-  const s = elapsed % 60
-  const fmt = h > 0
-    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-    : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-
-  return <span className="font-mono tabular-nums text-xs text-primary">{fmt}</span>
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function RequestActionBar({
@@ -84,6 +60,8 @@ export function RequestActionBar({
   const dropdownRef = useRef<HTMLDivElement>(null)
   const approvalSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const approvalSearchSeq = useRef(0)
+  const flashErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const flashSuccessTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Keep in sync if the server re-renders this component with fresh props
   // (e.g. another actor changed status, or a status change from elsewhere on the
@@ -112,9 +90,26 @@ export function RequestActionBar({
   }, [showActions])
 
   function flash(msg: string, isError = false) {
-    if (isError) { setActionError(msg); setTimeout(() => setActionError(null), 4000) }
-    else { setActionSuccess(msg); setTimeout(() => setActionSuccess(null), 3000) }
+    // Clear any timer from a previous flash() of the same kind — otherwise
+    // two error flashes in quick succession race: the first one's timeout
+    // still fires and clears the SECOND message early.
+    if (isError) {
+      if (flashErrorTimer.current) clearTimeout(flashErrorTimer.current)
+      setActionError(msg)
+      flashErrorTimer.current = setTimeout(() => setActionError(null), 4000)
+    } else {
+      if (flashSuccessTimer.current) clearTimeout(flashSuccessTimer.current)
+      setActionSuccess(msg)
+      flashSuccessTimer.current = setTimeout(() => setActionSuccess(null), 3000)
+    }
   }
+
+  useEffect(() => {
+    return () => {
+      if (flashErrorTimer.current) clearTimeout(flashErrorTimer.current)
+      if (flashSuccessTimer.current) clearTimeout(flashSuccessTimer.current)
+    }
+  }, [])
 
   function handlePickUp() {
     setPickUpError(null)

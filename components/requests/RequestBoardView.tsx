@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -175,6 +175,15 @@ export function RequestBoardView({
   const [pendingDropText, setPendingDropText] = useState('')
   const [pendingDropError, setPendingDropError] = useState<string | null>(null)
   const [pendingDropSaving, setPendingDropSaving] = useState(false)
+  // Guards against a slow, now-superseded drag's error rollback clobbering a
+  // status set by a later action on the same card (e.g. a second drag before
+  // the first's request resolves) — keyed per request id.
+  const dragSeqRef = useRef(new Map<string, number>())
+  function nextDragSeq(requestId: string): number {
+    const seq = (dragSeqRef.current.get(requestId) ?? 0) + 1
+    dragSeqRef.current.set(requestId, seq)
+    return seq
+  }
 
   // Re-sync local board state whenever the server passes a new snapshot of requests.
   // Adjusting state during render (React's documented pattern) instead of an effect.
@@ -249,9 +258,10 @@ export function RequestBoardView({
     }
 
     setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, status: toCol } : r)))
+    const seq = nextDragSeq(requestId)
     startTransition(async () => {
       const result = await updateRequestStatus(requestId, toCol)
-      if (result.error) {
+      if (result.error && dragSeqRef.current.get(requestId) === seq) {
         setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, status: fromCol } : r)))
         toast.error(result.error)
       }
@@ -269,10 +279,11 @@ export function RequestBoardView({
     if (!pendingDropText.trim()) { setPendingDropError('This message is required.'); return }
     const { requestId, fromCol, toCol } = pendingDrop
     setPendingDropSaving(true)
+    const seq = nextDragSeq(requestId)
     startTransition(async () => {
       const result = await updateRequestStatus(requestId, toCol, pendingDropText)
       setPendingDropSaving(false)
-      if (result.error) {
+      if (result.error && dragSeqRef.current.get(requestId) === seq) {
         setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, status: fromCol } : r)))
         toast.error(result.error)
       }
