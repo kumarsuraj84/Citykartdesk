@@ -34,13 +34,23 @@ export function ImportModal({ title, sampleFilename, sampleColumns, sampleRows, 
     setFileName(file.name)
     const reader = new FileReader()
     reader.onload = () => {
-      const text = String(reader.result ?? '')
+      const buffer = reader.result as ArrayBuffer
+      // Excel's plain "CSV (Comma delimited)" export (as opposed to "CSV
+      // UTF-8") writes non-ASCII characters in the system codepage — usually
+      // Windows-1252 — not UTF-8. Decoding that as UTF-8 turns every such
+      // character into U+FFFD ("�"), corrupting names right at the start of
+      // import. Detect that and re-decode as Windows-1252, which recovers
+      // the original text correctly.
+      let text = new TextDecoder('utf-8').decode(buffer)
+      if (text.includes('�')) {
+        text = new TextDecoder('windows-1252').decode(buffer)
+      }
       const rows = rowsToObjects(parseCSV(text))
       if (rows.length === 0) { setError('No data rows found in this file.'); setParsedRows(null); return }
       setParsedRows(rows)
     }
     reader.onerror = () => setError('Could not read that file.')
-    reader.readAsText(file)
+    reader.readAsArrayBuffer(file)
   }
 
   function handleImport() {
