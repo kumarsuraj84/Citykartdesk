@@ -6,15 +6,20 @@
 -- ============================================================
 -- DEPARTMENTS
 -- ============================================================
-INSERT INTO departments (id, name) VALUES
-  ('10000000-0000-0000-0000-000000000001', 'Information Technology'),
-  ('10000000-0000-0000-0000-000000000002', 'Human Resources'),
-  ('10000000-0000-0000-0000-000000000003', 'Operations');
+-- Migration 20240101000121 made org_id NOT NULL on this and several other
+-- tables below with no default and no insert-time trigger — the old
+-- "insert, then backfill org_id in bulk at the end" pattern (still present
+-- further down for defense-in-depth) no longer works on its own, so org_id
+-- is set directly on insert here too.
+INSERT INTO departments (id, name, org_id) VALUES
+  ('10000000-0000-0000-0000-000000000001', 'Information Technology', '00000000-0000-0000-0000-000000000001'),
+  ('10000000-0000-0000-0000-000000000002', 'Human Resources', '00000000-0000-0000-0000-000000000001'),
+  ('10000000-0000-0000-0000-000000000003', 'Operations', '00000000-0000-0000-0000-000000000001');
 
 -- ============================================================
 -- TEAMS
 -- ============================================================
-INSERT INTO teams (id, name, slug, prefix, department_id, notification_email, is_active) VALUES
+INSERT INTO teams (id, name, slug, prefix, department_id, notification_email, is_active, org_id) VALUES
   (
     '20000000-0000-0000-0000-000000000001',
     'IT Support',
@@ -22,7 +27,8 @@ INSERT INTO teams (id, name, slug, prefix, department_id, notification_email, is
     'IT',
     '10000000-0000-0000-0000-000000000001',
     'it-support@citykart.org',
-    true
+    true,
+    '00000000-0000-0000-0000-000000000001'
   ),
   (
     '20000000-0000-0000-0000-000000000002',
@@ -31,7 +37,8 @@ INSERT INTO teams (id, name, slug, prefix, department_id, notification_email, is
     'HR',
     '10000000-0000-0000-0000-000000000002',
     'hr@citykart.org',
-    true
+    true,
+    '00000000-0000-0000-0000-000000000001'
   ),
   (
     '20000000-0000-0000-0000-000000000003',
@@ -40,7 +47,8 @@ INSERT INTO teams (id, name, slug, prefix, department_id, notification_email, is
     'FAC',
     '10000000-0000-0000-0000-000000000003',
     'facilities@citykart.org',
-    true
+    true,
+    '00000000-0000-0000-0000-000000000001'
   );
 
 -- ============================================================
@@ -73,25 +81,27 @@ UPDATE profiles SET role = 'platform_owner' WHERE id = '30000000-0000-0000-0000-
 -- ============================================================
 -- SERVICE CATEGORIES
 -- ============================================================
-INSERT INTO service_categories (id, name, slug, icon, description, sort_order, is_active) VALUES
-  ('40000000-0000-0000-0000-000000000001', 'Hardware',          'hardware',        '💻', 'Laptops, monitors, peripherals, and device repair.',             1, true),
-  ('40000000-0000-0000-0000-000000000002', 'Software & Access', 'software-access', '🔐', 'Software installation, system access, and license management.',  2, true),
-  ('40000000-0000-0000-0000-000000000003', 'People & HR',       'people-hr',       '👥', 'Onboarding, offboarding, benefits, and HR inquiries.',           3, true),
-  ('40000000-0000-0000-0000-000000000004', 'Facilities',        'facilities',      '🏢', 'Office supplies, building maintenance, and facility requests.',  4, true);
+INSERT INTO service_categories (id, name, slug, icon, description, sort_order, is_active, org_id) VALUES
+  ('40000000-0000-0000-0000-000000000001', 'Hardware',          'hardware',        '💻', 'Laptops, monitors, peripherals, and device repair.',             1, true, '00000000-0000-0000-0000-000000000001'),
+  ('40000000-0000-0000-0000-000000000002', 'Software & Access', 'software-access', '🔐', 'Software installation, system access, and license management.',  2, true, '00000000-0000-0000-0000-000000000001'),
+  ('40000000-0000-0000-0000-000000000003', 'People & HR',       'people-hr',       '👥', 'Onboarding, offboarding, benefits, and HR inquiries.',           3, true, '00000000-0000-0000-0000-000000000001'),
+  ('40000000-0000-0000-0000-000000000004', 'Facilities',        'facilities',      '🏢', 'Office supplies, building maintenance, and facility requests.',  4, true, '00000000-0000-0000-0000-000000000001');
 
 -- ============================================================
 -- APPROVAL WORKFLOWS
 -- ============================================================
-INSERT INTO approval_workflows (id, name, description) VALUES
+INSERT INTO approval_workflows (id, name, description, org_id) VALUES
   (
     '50000000-0000-0000-0000-000000000001',
     'Manager Approval',
-    'Single-step approval by any manager'
+    'Single-step approval by any manager',
+    '00000000-0000-0000-0000-000000000001'
   ),
   (
     '50000000-0000-0000-0000-000000000002',
     'HR Manager Approval',
-    'Single-step approval by any manager, used for HR requests'
+    'Single-step approval by any manager, used for HR requests',
+    '00000000-0000-0000-0000-000000000001'
   );
 
 INSERT INTO approval_workflow_steps (workflow_id, step_order, approver_type, approver_user_id) VALUES
@@ -101,11 +111,17 @@ INSERT INTO approval_workflow_steps (workflow_id, step_order, approver_type, app
 -- ============================================================
 -- SERVICES
 -- ============================================================
+-- Migration 20240101000109 dropped services.category_id entirely (category
+-- became a submission-time field on the sub-category, not the service) and
+-- also dropped sla_config (SLA now lives on service_sub_categories) —
+-- neither is in this list. org_id (NOT NULL as of migration 121, no
+-- insert-time default) is set directly here instead of relying only on the
+-- later bulk backfill.
 INSERT INTO services (
   id, name, slug, description, icon, keywords,
-  category_id, team_id,
-  form_fields, default_priority, sla_config, approval_workflow_id,
-  is_active, sort_order
+  team_id,
+  form_fields, default_priority, approval_workflow_id,
+  is_active, sort_order, org_id
 ) VALUES
 
 -- Hardware: Laptop Request
@@ -116,7 +132,6 @@ INSERT INTO services (
   'Request a new laptop or replacement for your work.',
   '💻',
   ARRAY['laptop', 'computer', 'hardware', 'equipment', 'macbook', 'windows'],
-  '40000000-0000-0000-0000-000000000001',
   '20000000-0000-0000-0000-000000000001',
   '[
     {"id":"reason","type":"select","label":"Reason for request","required":true,"order":1,
@@ -134,9 +149,8 @@ INSERT INTO services (
      "placeholder":"Any specific requirements or context..."}
   ]'::jsonb,
   'medium',
-  '{"low":{"response_hours":48,"resolution_hours":120},"medium":{"response_hours":24,"resolution_hours":72},"high":{"response_hours":8,"resolution_hours":24},"urgent":{"response_hours":2,"resolution_hours":8}}'::jsonb,
   '50000000-0000-0000-0000-000000000001',
-  true, 1
+  true, 1, '00000000-0000-0000-0000-000000000001'
 ),
 
 -- Hardware: Equipment Repair
@@ -147,7 +161,6 @@ INSERT INTO services (
   'Report a broken or malfunctioning device for repair.',
   '🔧',
   ARRAY['repair', 'broken', 'hardware', 'fix', 'monitor', 'keyboard', 'mouse'],
-  '40000000-0000-0000-0000-000000000001',
   '20000000-0000-0000-0000-000000000001',
   '[
     {"id":"device_type","type":"select","label":"Device type","required":true,"order":1,
@@ -163,9 +176,8 @@ INSERT INTO services (
      "placeholder":"e.g. AST-00142"}
   ]'::jsonb,
   'high',
-  '{"low":{"response_hours":24,"resolution_hours":72},"medium":{"response_hours":8,"resolution_hours":48},"high":{"response_hours":4,"resolution_hours":24},"urgent":{"response_hours":1,"resolution_hours":8}}'::jsonb,
   NULL,
-  true, 2
+  true, 2, '00000000-0000-0000-0000-000000000001'
 ),
 
 -- Software & Access: Software Installation
@@ -176,7 +188,6 @@ INSERT INTO services (
   'Request installation of software or tools on your device.',
   '📦',
   ARRAY['software', 'install', 'application', 'tool', 'license', 'app'],
-  '40000000-0000-0000-0000-000000000002',
   '20000000-0000-0000-0000-000000000001',
   '[
     {"id":"software_name","type":"text","label":"Software name","required":true,"order":1,
@@ -187,9 +198,8 @@ INSERT INTO services (
      "placeholder":"Explain if this is blocking your work"}
   ]'::jsonb,
   'medium',
-  '{"low":{"response_hours":48,"resolution_hours":120},"medium":{"response_hours":24,"resolution_hours":72},"high":{"response_hours":8,"resolution_hours":24},"urgent":{"response_hours":2,"resolution_hours":8}}'::jsonb,
   NULL,
-  true, 3
+  true, 3, '00000000-0000-0000-0000-000000000001'
 ),
 
 -- Software & Access: Access Request
@@ -200,7 +210,6 @@ INSERT INTO services (
   'Request access to systems, applications, or shared resources.',
   '🔑',
   ARRAY['access', 'permission', 'login', 'account', 'system', 'vpn', 'drive'],
-  '40000000-0000-0000-0000-000000000002',
   '20000000-0000-0000-0000-000000000001',
   '[
     {"id":"system_name","type":"text","label":"System or application","required":true,"order":1,
@@ -216,9 +225,8 @@ INSERT INTO services (
     {"id":"manager_approved","type":"checkbox","label":"My manager has verbally approved this request","required":true,"order":4}
   ]'::jsonb,
   'medium',
-  '{"low":{"response_hours":48,"resolution_hours":96},"medium":{"response_hours":24,"resolution_hours":48},"high":{"response_hours":4,"resolution_hours":24},"urgent":{"response_hours":2,"resolution_hours":8}}'::jsonb,
   '50000000-0000-0000-0000-000000000001',
-  true, 4
+  true, 4, '00000000-0000-0000-0000-000000000001'
 ),
 
 -- People & HR: New Employee Onboarding
@@ -229,7 +237,6 @@ INSERT INTO services (
   'Submit onboarding requests for new team members joining the company.',
   '🎉',
   ARRAY['onboarding', 'new hire', 'employee', 'setup', 'start', 'joining'],
-  '40000000-0000-0000-0000-000000000003',
   '20000000-0000-0000-0000-000000000002',
   '[
     {"id":"employee_name","type":"text","label":"Employee full name","required":true,"order":1},
@@ -248,9 +255,8 @@ INSERT INTO services (
      "placeholder":"Any special requirements or notes for this hire"}
   ]'::jsonb,
   'high',
-  '{"low":{"response_hours":48,"resolution_hours":240},"medium":{"response_hours":24,"resolution_hours":120},"high":{"response_hours":8,"resolution_hours":72},"urgent":{"response_hours":4,"resolution_hours":24}}'::jsonb,
   '50000000-0000-0000-0000-000000000002',
-  true, 5
+  true, 5, '00000000-0000-0000-0000-000000000001'
 ),
 
 -- People & HR: General HR Inquiry
@@ -261,7 +267,6 @@ INSERT INTO services (
   'Ask HR a question or request information about policies, benefits, or payroll.',
   '❓',
   ARRAY['hr', 'policy', 'payroll', 'benefits', 'leave', 'vacation', 'question'],
-  '40000000-0000-0000-0000-000000000003',
   '20000000-0000-0000-0000-000000000002',
   '[
     {"id":"topic","type":"select","label":"Topic","required":true,"order":1,
@@ -276,9 +281,8 @@ INSERT INTO services (
      "placeholder":"Please describe your inquiry in detail"}
   ]'::jsonb,
   'low',
-  '{"low":{"response_hours":48,"resolution_hours":120},"medium":{"response_hours":24,"resolution_hours":72},"high":{"response_hours":8,"resolution_hours":24},"urgent":{"response_hours":4,"resolution_hours":12}}'::jsonb,
   NULL,
-  true, 6
+  true, 6, '00000000-0000-0000-0000-000000000001'
 ),
 
 -- Facilities: Office Supplies
@@ -289,7 +293,6 @@ INSERT INTO services (
   'Request office supplies, stationery, or consumables.',
   '✏️',
   ARRAY['supplies', 'stationery', 'office', 'paper', 'pen', 'desk'],
-  '40000000-0000-0000-0000-000000000004',
   '20000000-0000-0000-0000-000000000003',
   '[
     {"id":"items","type":"textarea","label":"Items requested","required":true,"order":1,
@@ -298,9 +301,8 @@ INSERT INTO services (
      "placeholder":"e.g. Floor 3, Desk 14B"}
   ]'::jsonb,
   'low',
-  '{"low":{"response_hours":72,"resolution_hours":168},"medium":{"response_hours":48,"resolution_hours":96},"high":{"response_hours":24,"resolution_hours":48},"urgent":{"response_hours":8,"resolution_hours":24}}'::jsonb,
   NULL,
-  true, 7
+  true, 7, '00000000-0000-0000-0000-000000000001'
 ),
 
 -- Facilities: Maintenance Request
@@ -311,7 +313,6 @@ INSERT INTO services (
   'Report a facilities issue such as lighting, HVAC, plumbing, or cleaning.',
   '🔨',
   ARRAY['maintenance', 'repair', 'facilities', 'hvac', 'plumbing', 'cleaning', 'building'],
-  '40000000-0000-0000-0000-000000000004',
   '20000000-0000-0000-0000-000000000003',
   '[
     {"id":"issue_type","type":"select","label":"Issue type","required":true,"order":1,
@@ -330,9 +331,8 @@ INSERT INTO services (
     {"id":"safety_hazard","type":"checkbox","label":"This is a safety hazard","required":false,"order":4}
   ]'::jsonb,
   'medium',
-  '{"low":{"response_hours":72,"resolution_hours":168},"medium":{"response_hours":24,"resolution_hours":72},"high":{"response_hours":8,"resolution_hours":24},"urgent":{"response_hours":2,"resolution_hours":8}}'::jsonb,
   NULL,
-  true, 8
+  true, 8, '00000000-0000-0000-0000-000000000001'
 );
 
 -- ============================================================
@@ -361,14 +361,19 @@ INSERT INTO service_sub_categories (id, category_id, name, slug, description, ic
    'Building & Maintenance', 'building-maintenance', 'Lighting, HVAC, plumbing, cleaning, and safety issues.',   '🏗️', 2, true);
 
 -- ── Wire services to sub-categories ──────────────────────────────────────────
-UPDATE services SET sub_category_id = '70000000-0000-0000-0000-000000000001' WHERE id = '60000000-0000-0000-0000-000000000001'; -- Laptop Request → Computers & Laptops
-UPDATE services SET sub_category_id = '70000000-0000-0000-0000-000000000002' WHERE id = '60000000-0000-0000-0000-000000000002'; -- Equipment Repair → Peripherals & Repair
-UPDATE services SET sub_category_id = '70000000-0000-0000-0000-000000000003' WHERE id = '60000000-0000-0000-0000-000000000003'; -- Software Installation → Software Installation
-UPDATE services SET sub_category_id = '70000000-0000-0000-0000-000000000004' WHERE id = '60000000-0000-0000-0000-000000000004'; -- Access Request → Access & Permissions
-UPDATE services SET sub_category_id = '70000000-0000-0000-0000-000000000005' WHERE id = '60000000-0000-0000-0000-000000000005'; -- New Employee Onboarding → Onboarding
-UPDATE services SET sub_category_id = '70000000-0000-0000-0000-000000000006' WHERE id = '60000000-0000-0000-0000-000000000006'; -- HR General Inquiry → HR Support
-UPDATE services SET sub_category_id = '70000000-0000-0000-0000-000000000007' WHERE id = '60000000-0000-0000-0000-000000000007'; -- Office Supplies → Office Supplies
-UPDATE services SET sub_category_id = '70000000-0000-0000-0000-000000000008' WHERE id = '60000000-0000-0000-0000-000000000008'; -- Maintenance Request → Building & Maintenance
+-- Migration 20240101000109 replaced services.sub_category_id (a plain column)
+-- with the many-to-many service_sub_category_tags junction table; this seed
+-- previously still wrote to the removed column. Updated to insert into the
+-- junction table instead — one tag per service, matching the original intent.
+INSERT INTO service_sub_category_tags (service_id, sub_category_id) VALUES
+  ('60000000-0000-0000-0000-000000000001', '70000000-0000-0000-0000-000000000001'), -- Laptop Request → Computers & Laptops
+  ('60000000-0000-0000-0000-000000000002', '70000000-0000-0000-0000-000000000002'), -- Equipment Repair → Peripherals & Repair
+  ('60000000-0000-0000-0000-000000000003', '70000000-0000-0000-0000-000000000003'), -- Software Installation → Software Installation
+  ('60000000-0000-0000-0000-000000000004', '70000000-0000-0000-0000-000000000004'), -- Access Request → Access & Permissions
+  ('60000000-0000-0000-0000-000000000005', '70000000-0000-0000-0000-000000000005'), -- New Employee Onboarding → Onboarding
+  ('60000000-0000-0000-0000-000000000006', '70000000-0000-0000-0000-000000000006'), -- HR General Inquiry → HR Support
+  ('60000000-0000-0000-0000-000000000007', '70000000-0000-0000-0000-000000000007'), -- Office Supplies → Office Supplies
+  ('60000000-0000-0000-0000-000000000008', '70000000-0000-0000-0000-000000000008'); -- Maintenance Request → Building & Maintenance
 
 -- ============================================================
 -- KNOWLEDGE BASE — starter articles (one per seeded service)
