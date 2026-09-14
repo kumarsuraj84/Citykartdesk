@@ -1,0 +1,503 @@
+<title>Citykart Desk Rollout</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #f5f4ef;
+    --surface: #ffffff;
+    --ink: #1b2321;
+    --muted: #5c6b68;
+    --border: #dcd6c7;
+    --head-bg: #3d4f5c;
+    --head-ink: #ffffff;
+    --grid-line: #e4dfd0;
+    --today: #c0392b;
+
+    --completed: #8fd0a8;
+    --completed-ink: #1a5c34;
+    --inprogress: #f4c463;
+    --inprogress-ink: #7a5300;
+    --critical: #ef9a94;
+    --critical-ink: #7a1f16;
+    --notstarted: #c9c4b7;
+    --notstarted-ink: #5c584c;
+    --planned: #a9c6e8;
+    --planned-ink: #1f3f66;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12161a;
+      --surface: #181e23;
+      --ink: #e9ebe7;
+      --muted: #93a09c;
+      --border: #2b333a;
+      --head-bg: #24303a;
+      --head-ink: #eef2f4;
+      --grid-line: #232b31;
+      --today: #ff6b5e;
+
+      --completed: #2f6b46;
+      --completed-ink: #b9e9c9;
+      --inprogress: #7a5a15;
+      --inprogress-ink: #f5d98a;
+      --critical: #7a2a22;
+      --critical-ink: #ffb3ab;
+      --notstarted: #363b3b;
+      --notstarted-ink: #b7bcb6;
+      --planned: #274863;
+      --planned-ink: #b9d6f2;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12161a; --surface: #181e23; --ink: #e9ebe7; --muted: #93a09c; --border: #2b333a;
+    --head-bg: #24303a; --head-ink: #eef2f4; --grid-line: #232b31; --today: #ff6b5e;
+    --completed: #2f6b46; --completed-ink: #b9e9c9;
+    --inprogress: #7a5a15; --inprogress-ink: #f5d98a;
+    --critical: #7a2a22; --critical-ink: #ffb3ab;
+    --notstarted: #363b3b; --notstarted-ink: #b7bcb6;
+    --planned: #274863; --planned-ink: #b9d6f2;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 28px 20px 56px;
+  }
+  .num { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  .page { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+
+  header { display: flex; flex-direction: column; gap: 6px; }
+  .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  h1 { font-size: clamp(20px, 3vw, 26px); margin: 0; font-weight: 700; text-wrap: balance; }
+  .sub { color: var(--muted); font-size: 13.5px; max-width: 70ch; line-height: 1.5; }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); align-items: center; }
+  .legend .chip { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+
+  /* ---------- Gantt table ---------- */
+  .gantt-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow-x: auto;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  }
+  table.gantt { border-collapse: collapse; width: 100%; min-width: 1080px; }
+  table.gantt th, table.gantt td { border: 1px solid var(--border); padding: 0; }
+  table.gantt thead th {
+    background: var(--head-bg);
+    color: var(--head-ink);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    padding: 9px 10px;
+    white-space: nowrap;
+  }
+  th.col-phase { width: 258px; }
+  th.col-status { width: 92px; }
+  th.col-date { width: 78px; font-family: "IBM Plex Mono", monospace; }
+  th.col-notes { width: 300px; }
+
+  td.cell-phase, td.cell-status, td.cell-date, td.cell-notes {
+    padding: 8px 10px;
+    font-size: 12.5px;
+    vertical-align: middle;
+  }
+  td.cell-phase { font-weight: 600; }
+  td.cell-phase .sub-id { display: block; font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--muted); font-weight: 500; letter-spacing: 0.02em; margin-bottom: 1px; }
+  td.cell-date { font-family: "IBM Plex Mono", monospace; color: var(--muted); white-space: nowrap; }
+  td.cell-notes { color: var(--muted); line-height: 1.4; }
+  tr.milestone-row td.cell-phase { color: var(--critical-ink); }
+
+  .status-pill {
+    display: inline-block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .status-pill.completed { background: var(--completed); color: var(--completed-ink); }
+  .status-pill.inprogress { background: var(--inprogress); color: var(--inprogress-ink); }
+  .status-pill.critical { background: var(--critical); color: var(--critical-ink); }
+  .status-pill.notstarted { background: var(--notstarted); color: var(--notstarted-ink); }
+  .status-pill.planned { background: var(--planned); color: var(--planned-ink); }
+
+  /* ---------- Gantt chart cell ---------- */
+  td.gantt-cell {
+    position: relative;
+    min-width: 560px;
+    height: 42px;
+    background-image:
+      linear-gradient(to right, var(--grid-line) 1px, transparent 1px);
+    background-size: 10.526% 100%; /* 14-day gridlines across a 133-day track */
+    background-position: 0 0;
+  }
+  td.gantt-cell::before {
+    /* TODAY line — 14 Sep 2026, day 41 of 133 */
+    content: "";
+    position: absolute;
+    left: 30.8%;
+    top: 0; bottom: 0;
+    width: 2px;
+    background: var(--today);
+    z-index: 3;
+  }
+  .bar {
+    position: absolute;
+    top: 10px;
+    height: 22px;
+    border-radius: 4px;
+    min-width: 10px;
+    z-index: 2;
+  }
+  .bar.completed { background: var(--completed); }
+  .bar.inprogress { background: var(--inprogress); }
+  .bar.critical { background: var(--critical); box-shadow: 0 0 0 1px color-mix(in srgb, var(--critical-ink) 40%, transparent); }
+  .bar.planned {
+    background: linear-gradient(to right, var(--planned) 0%, var(--planned) 78%, transparent 100%);
+    opacity: 0.85;
+  }
+  .bar-label {
+    position: absolute;
+    top: 11px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--muted);
+  }
+
+  thead tr.scale th { background: var(--surface); color: var(--muted); padding: 0; height: 22px; position: relative; }
+  th.gantt-scale {
+    position: relative;
+    min-width: 560px;
+    background: var(--surface);
+  }
+  .scale-label {
+    position: absolute;
+    top: 4px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+    transform: translateX(-1px);
+  }
+  .scale-today {
+    position: absolute;
+    left: 30.8%;
+    top: 2px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--today);
+    white-space: nowrap;
+    transform: translateX(-50%);
+  }
+
+  tr.section-break td { background: var(--bg); height: 6px; padding: 0; border-left: none; border-right: none; }
+  tr.group-row td {
+    background: var(--bg);
+    color: var(--muted);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 7px 10px;
+    border-left: none;
+    border-right: none;
+  }
+
+  .footnote { font-size: 12px; color: var(--muted); line-height: 1.6; max-width: 90ch; }
+
+  /* ---------- Enhancements strip ---------- */
+  section.shipped { display: flex; flex-direction: column; gap: 10px; }
+  section.shipped h2 { font-size: 14px; margin: 0; font-weight: 700; }
+  .shipped-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 4px 24px; }
+  .shipped-grid ul { margin: 0; padding-left: 16px; font-size: 12.5px; line-height: 1.6; color: var(--ink); }
+  .shipped-grid li::marker { color: var(--muted); }
+
+  footer { border-top: 1px solid var(--border); padding-top: 12px; font-size: 11.5px; color: var(--muted); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+</style>
+
+<div class="page">
+
+  <header>
+    <div class="eyebrow">Project Timeline · Internal</div>
+    <h1>Citykart Desk — Build &amp; Rollout Plan</h1>
+    <p class="sub">Every phase since kickoff, current status, and the order in which Citykart Desk and its connected modules go live. Document date: <b>14&#8209;Sep&#8209;2026</b>.</p>
+    <div class="legend">
+      <span class="chip"><span class="swatch" style="background:var(--completed)"></span>Completed</span>
+      <span class="chip"><span class="swatch" style="background:var(--inprogress)"></span>In Progress</span>
+      <span class="chip"><span class="swatch" style="background:var(--critical)"></span>Milestone / Go&#8209;Live</span>
+      <span class="chip"><span class="swatch" style="background:var(--planned)"></span>Planned</span>
+      <span class="chip"><span class="swatch" style="background:var(--notstarted)"></span>Not Started</span>
+      <span class="chip"><span class="swatch" style="background:var(--today);width:3px;height:14px;border-radius:0"></span>Today</span>
+    </div>
+  </header>
+
+  <div class="gantt-wrap">
+    <table class="gantt">
+      <thead>
+        <tr>
+          <th class="col-phase">Phase / Module</th>
+          <th class="col-status">Status</th>
+          <th class="col-date">Start</th>
+          <th class="col-date">Target / End</th>
+          <th class="col-notes">Notes</th>
+          <th class="gantt-scale">
+            <span class="scale-label" style="left:0%">04-Aug</span>
+            <span class="scale-label" style="left:10.5%">18-Aug</span>
+            <span class="scale-label" style="left:21.1%">01-Sep</span>
+            <span class="scale-label" style="left:31.6%">15-Sep</span>
+            <span class="scale-label" style="left:42.1%">29-Sep</span>
+            <span class="scale-label" style="left:52.6%">13-Oct</span>
+            <span class="scale-label" style="left:63.2%">27-Oct</span>
+            <span class="scale-label" style="left:73.7%">10-Nov</span>
+            <span class="scale-label" style="left:84.2%">24-Nov</span>
+            <span class="scale-label" style="left:93%">08-Dec</span>
+            <span class="scale-today">TODAY</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+
+        <tr class="group-row"><td colspan="6">Build History — How Core Was Built</td></tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">CORE&nbsp;/&nbsp;01</span>Kickoff &amp; Rebrand</td>
+          <td class="cell-status"><span class="status-pill completed">Completed</span></td>
+          <td class="cell-date">06-Aug-2026</td>
+          <td class="cell-date">08-Aug-2026</td>
+          <td class="cell-notes">Single-tenant conversion from the base platform — the foundation Citykart Desk is built on</td>
+          <td class="gantt-cell"><div class="bar completed" style="left:1.5%;width:1.5%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">CORE&nbsp;/&nbsp;02</span>Core Platform Build</td>
+          <td class="cell-status"><span class="status-pill completed">Completed</span></td>
+          <td class="cell-date">08-Aug-2026</td>
+          <td class="cell-date">13-Aug-2026</td>
+          <td class="cell-notes">Ticket lifecycle, RBAC, Report Builder, Field SLA Matrix, Business Rules engine</td>
+          <td class="gantt-cell"><div class="bar completed" style="left:3.0%;width:3.8%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">CORE&nbsp;/&nbsp;03</span>Form Templates &amp; Service Catalog</td>
+          <td class="cell-status"><span class="status-pill completed">Completed</span></td>
+          <td class="cell-date">27-Aug-2026</td>
+          <td class="cell-date">27-Aug-2026</td>
+          <td class="cell-notes">Design a form once, tag it to any service — instead of rebuilding per department</td>
+          <td class="gantt-cell"><div class="bar completed" style="left:17.3%;width:1.2%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">CORE&nbsp;/&nbsp;04</span>Approvals &amp; Workflow Hardening</td>
+          <td class="cell-status"><span class="status-pill completed">Completed</span></td>
+          <td class="cell-date">01-Sep-2026</td>
+          <td class="cell-date">03-Sep-2026</td>
+          <td class="cell-notes">SLA pause on approval, ticket reopen flow, bulk import, one-service-per-category rule</td>
+          <td class="gantt-cell"><div class="bar completed" style="left:21.1%;width:1.5%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">CORE&nbsp;/&nbsp;05</span>Full System Audit</td>
+          <td class="cell-status"><span class="status-pill completed">Completed</span></td>
+          <td class="cell-date">09-Sep-2026</td>
+          <td class="cell-date">09-Sep-2026</td>
+          <td class="cell-notes">Security &amp; data-isolation review across every module, ahead of UAT</td>
+          <td class="gantt-cell"><div class="bar completed" style="left:27.1%;width:1.2%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">CORE&nbsp;/&nbsp;06</span>Core Desk — UAT Round</td>
+          <td class="cell-status"><span class="status-pill completed">Completed</span></td>
+          <td class="cell-date">10-Sep-2026</td>
+          <td class="cell-date">10-Sep-2026</td>
+          <td class="cell-notes">Functional, security &amp; UI/UX testing, plus remediation and re-test on every finding</td>
+          <td class="gantt-cell"><div class="bar completed" style="left:27.8%;width:1.2%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">MODULE&nbsp;/&nbsp;WA</span>WhatsApp Bot — Build &amp; Internal UAT</td>
+          <td class="cell-status"><span class="status-pill completed">Completed</span></td>
+          <td class="cell-date">10-Sep-2026</td>
+          <td class="cell-date">11-Sep-2026</td>
+          <td class="cell-notes">Conversational ticket logging over WhatsApp — built end-to-end, internally tested</td>
+          <td class="gantt-cell"><div class="bar completed" style="left:27.8%;width:1.3%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">CORE&nbsp;/&nbsp;07</span>OEM Routing, Notifications &amp; Final Fixes</td>
+          <td class="cell-status"><span class="status-pill completed">Completed</span></td>
+          <td class="cell-date">14-Sep-2026</td>
+          <td class="cell-date">14-Sep-2026</td>
+          <td class="cell-notes">Store→OEM auto-mail, notification rules, web push, full fix pass; environment reset fresh</td>
+          <td class="gantt-cell"><div class="bar completed" style="left:30.8%;width:1.2%"></div></td>
+        </tr>
+
+        <tr class="section-break"><td colspan="6"></td></tr>
+
+        <tr class="milestone-row">
+          <td class="cell-phase"><span class="sub-id">MILESTONE</span>CORE CITYKART DESK — GO-LIVE</td>
+          <td class="cell-status"><span class="status-pill critical">Go-Live</span></td>
+          <td class="cell-date">18-Sep-2026</td>
+          <td class="cell-date">28-Sep-2026</td>
+          <td class="cell-notes"><b>Hard date.</b> Code goes live 18-Sep; all departments logging real tickets by 28-Sep, ticket numbering restarts at 1</td>
+          <td class="gantt-cell"><div class="bar critical" style="left:33.8%;width:7.5%"></div></td>
+        </tr>
+
+        <tr class="section-break"><td colspan="6"></td></tr>
+
+        <tr class="group-row"><td colspan="6">ALL MODULES — CURRENT STATUS</td></tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">MOD&nbsp;01</span>Requests — Core Ticketing</td>
+          <td class="cell-status"><span class="status-pill completed">Completed</span></td>
+          <td class="cell-date">06-Aug-2026</td>
+          <td class="cell-date">28-Sep-2026</td>
+          <td class="cell-notes">Ticket lifecycle, categories, dynamic forms, store/requester linkage — <b>live 28-Sep</b></td>
+          <td class="gantt-cell"><div class="bar completed" style="left:1.5%;width:39.8%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">MOD&nbsp;02</span>Services — Catalog &amp; Form Templates</td>
+          <td class="cell-status"><span class="status-pill completed">Completed</span></td>
+          <td class="cell-date">27-Aug-2026</td>
+          <td class="cell-date">28-Sep-2026</td>
+          <td class="cell-notes">Service catalog, categories/sub-categories, reusable form templates — <b>live 28-Sep</b></td>
+          <td class="gantt-cell"><div class="bar completed" style="left:17.3%;width:24.1%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">MOD&nbsp;03</span>Approvals</td>
+          <td class="cell-status"><span class="status-pill completed">Completed</span></td>
+          <td class="cell-date">01-Sep-2026</td>
+          <td class="cell-date">28-Sep-2026</td>
+          <td class="cell-notes">Multi-step &amp; ad-hoc approval workflows, SLA pause during approval — <b>live 28-Sep</b></td>
+          <td class="gantt-cell"><div class="bar completed" style="left:21.1%;width:20.3%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">MOD&nbsp;04</span>Business Rules &amp; SLA Automation</td>
+          <td class="cell-status"><span class="status-pill completed">Completed</span></td>
+          <td class="cell-date">10-Aug-2026</td>
+          <td class="cell-date">28-Sep-2026</td>
+          <td class="cell-notes">Auto-assign, escalation, Field SLA Matrix, business-hours-aware deadlines — <b>live 28-Sep</b></td>
+          <td class="gantt-cell"><div class="bar completed" style="left:4.5%;width:36.9%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">MOD&nbsp;05</span>Analytics — Report Builder</td>
+          <td class="cell-status"><span class="status-pill completed">Completed</span></td>
+          <td class="cell-date">09-Aug-2026</td>
+          <td class="cell-date">28-Sep-2026</td>
+          <td class="cell-notes">Excel-style pivot &amp; table reports across every entity, xlsx export — <b>live 28-Sep</b></td>
+          <td class="gantt-cell"><div class="bar completed" style="left:3.8%;width:37.6%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">MOD&nbsp;06</span>Integrations — Notifications, Email &amp; OEM Mail</td>
+          <td class="cell-status"><span class="status-pill completed">Completed</span></td>
+          <td class="cell-date">14-Sep-2026</td>
+          <td class="cell-date">28-Sep-2026</td>
+          <td class="cell-notes">Per-event notification rules, web push, configurable sender email, OEM auto-routing — <b>live 28-Sep</b></td>
+          <td class="gantt-cell"><div class="bar completed" style="left:30.8%;width:10.5%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">MOD&nbsp;07</span>Admin &amp; Org Structure</td>
+          <td class="cell-status"><span class="status-pill completed">Completed</span></td>
+          <td class="cell-date">06-Aug-2026</td>
+          <td class="cell-date">28-Sep-2026</td>
+          <td class="cell-notes">Users, teams, roles, departments/locations, master data, audit logs — <b>live 28-Sep</b></td>
+          <td class="gantt-cell"><div class="bar completed" style="left:1.5%;width:39.8%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">MOD&nbsp;08</span>Intake — Email Channel</td>
+          <td class="cell-status"><span class="status-pill planned">Built · Pending Setup</span></td>
+          <td class="cell-date">14-Sep-2026</td>
+          <td class="cell-date">TBD</td>
+          <td class="cell-notes">Ticket creation from inbound email — code complete, needs a real mailbox connected (external)</td>
+          <td class="gantt-cell"><div class="bar completed" style="left:30.8%;width:1.2%"></div><div class="bar planned" style="left:32%;width:68%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">MOD&nbsp;09</span>Intake — WhatsApp Bot</td>
+          <td class="cell-status"><span class="status-pill planned">Built · Pending Setup</span></td>
+          <td class="cell-date">10-Sep-2026</td>
+          <td class="cell-date">TBD</td>
+          <td class="cell-notes">Log a ticket by chatting on WhatsApp — built &amp; internally UAT'd; external pilot needs a real Meta Business account + public hosting (both external)</td>
+          <td class="gantt-cell"><div class="bar completed" style="left:27.8%;width:1.3%"></div><div class="bar planned" style="left:42.1%;width:57.9%"></div><span class="bar-label" style="left:44%">pending external setup →</span></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">MOD&nbsp;10</span>Time Tracking — DeskTime</td>
+          <td class="cell-status"><span class="status-pill notstarted">Disconnected</span></td>
+          <td class="cell-date">08-Aug-2026</td>
+          <td class="cell-date">14-Sep-2026</td>
+          <td class="cell-notes">Built, then deliberately disconnected — unused integration, on hold with no active plan</td>
+          <td class="gantt-cell"><div class="bar notstarted" style="left:3.0%;width:27.8%"></div></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">MOD&nbsp;11</span>Projects</td>
+          <td class="cell-status"><span class="status-pill notstarted">Not Started</span></td>
+          <td class="cell-date">—</td>
+          <td class="cell-date">—</td>
+          <td class="cell-notes">Cross-functional project tracking with milestones — begins after core go-live</td>
+          <td class="gantt-cell"></td>
+        </tr>
+
+        <tr>
+          <td class="cell-phase"><span class="sub-id">MOD&nbsp;12</span>Tasks</td>
+          <td class="cell-status"><span class="status-pill notstarted">Not Started</span></td>
+          <td class="cell-date">—</td>
+          <td class="cell-date">—</td>
+          <td class="cell-notes">Team &amp; personal task tracking, independent of the ticket queue — begins after core go-live</td>
+          <td class="gantt-cell"></td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+
+  <p class="footnote">Dates for Projects and the Task module are intentionally blank — scope and timeline will be set once core Citykart Desk has been live for departments to give input. The WhatsApp Bot's end date is TBD pending an external prerequisite (a real Meta/WhatsApp Business account and a public hosting environment), neither of which exists yet.</p>
+
+  <section class="shipped">
+    <h2>What shipped in the final build pass (14 Sep 2026)</h2>
+    <div class="shipped-grid">
+      <ul>
+        <li>Store &amp; OEM master data, with automatic OEM email routing for AC/vendor tickets</li>
+        <li>Ticket reopen workflow — after resolution or after a rejected approval</li>
+      </ul>
+      <ul>
+        <li>Per-event notification rules (email / in-app / push) + web push notifications</li>
+        <li>Configurable sender email — no code change needed to update it</li>
+      </ul>
+      <ul>
+        <li>Report Builder: fixed blank descriptions and hidden custom-service fields</li>
+        <li>Category search, one-service-per-category rule, category CSV export</li>
+      </ul>
+      <ul>
+        <li>24-hour time everywhere in the app; unused Tags feature removed</li>
+        <li>Full audit pass on SLA timing, approval handling &amp; file-upload safety</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    <span>Citykart Desk — internal project timeline</span>
+    <span>Next milestone: <b style="color:var(--ink)">Go-live, 28 Sep 2026</b></span>
+  </footer>
+
+</div>
