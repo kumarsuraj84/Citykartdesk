@@ -16,7 +16,6 @@ export default async function AdminFormTemplatesPage() {
       <PageHeader
         title="Form Templates"
         description="Design a form once, then tag any service to it from Service Catalog — editing a template updates every service tagged to it."
-        breadcrumbs={[{ label: 'Admin' }, { label: 'Form Templates' }]}
       />
       <FormTemplatesAdminClient templates={templates} />
     </div>

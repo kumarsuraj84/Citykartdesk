@@ -1,7 +1,11 @@
 import { notify } from '@/lib/notifications'
 import { sendEmail } from '@/lib/email/send'
+import { escapeHtml } from '@/lib/email/escape'
 import { logActivity } from '@/lib/activity'
-import { STATUS_LABELS, RESOLVED_REOPEN_WINDOW_HOURS } from '@/lib/constants/requests'
+import { logger } from '@/lib/observability/logger'
+import { alertOperator } from '@/lib/observability/alert'
+import { STATUS_LABELS } from '@/lib/constants/requests'
+import { getResolvedReopenWindowHours } from '@/lib/settings/reopenWindow'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
 import { resolveServiceFormSections } from '@/lib/forms/sections'
 import type { SLAConfig, FormSection, FormField } from '@/types'
@@ -197,11 +201,13 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
 
   if (status === 'resolved') {
     update.resolved_at = nowIso
-    // Same 72h "not satisfied? reopen it" window updateRequestStatus() grants
-    // an interactively-resolved ticket — a rule-resolved one needs it too, or
+    // Same admin-configurable "not satisfied? reopen it" window
+    // updateRequestStatus() grants an interactively-resolved ticket (Request
+    // Configuration → General) — a rule-resolved one needs it too, or
     // autoCloseRequests()'s sweep (keyed off reopen_deadline_at) never picks
     // it up and it stays open forever.
-    update.reopen_deadline_at = new Date(now.getTime() + RESOLVED_REOPEN_WINDOW_HOURS * 3_600_000).toISOString()
+    const reopenWindowHours = await getResolvedReopenWindowHours()
+    update.reopen_deadline_at = new Date(now.getTime() + reopenWindowHours * 3_600_000).toISOString()
   }
   if (status === 'closed') update.closed_at = nowIso
   if (status === 'cancelled') {
@@ -336,6 +342,11 @@ async function runNotify(
   const body = request.title
 
   if (params.channels.includes('in_app')) {
+    // notify() itself never throws (see lib/notifications.ts), but this
+    // .catch stays as a belt-and-suspenders guard against an unexpected
+    // rejection — DESK-OBS-002: previously fully silent (`.catch(() => {})`)
+    // with no trace an admin could ever find; now at least structured-logged
+    // so a repeated in-app delivery failure is diagnosable.
     notify(
       [...recipients].map((recipientId) => ({
         recipientId,
@@ -346,19 +357,62 @@ async function runNotify(
         requestId: request.id,
         link: `/requests/${request.id}`,
       }))
-    ).catch(() => {})
+    ).catch((err) => {
+      logger.error({
+        event: 'business_rules.notify.in_app_failed',
+        message: 'In-app notify() rejected for a business-rule notify action',
+        route: 'lib/rules/actions.ts#runNotify',
+        requestId: request.id,
+        orgId: request.org_id ?? undefined,
+        errorCode: 'notify_in_app_failed',
+        context: { ruleId: ctx.ruleId, ruleName: ctx.ruleName, recipientCount: recipients.size },
+        error: err,
+      })
+    })
   }
 
   if (params.channels.includes('email')) {
     // Independent per-recipient — was one at a time, so a rule notifying
     // every manager+admin on an SLA breach took N sequential round trips
     // before executeActions could move to the rule's next action.
-    await Promise.all([...recipients].map(async (recipientId) => {
+    // D-05: title/body embed the (admin-authored, but not necessarily
+    // trusted-safe) rule name and the request's own title — escape for the
+    // HTML email specifically; the in-app notify() above renders as plain
+    // text through React, which is already safe.
+    const safeBody = escapeHtml(body)
+    const results = await Promise.all([...recipients].map(async (recipientId) => {
       const email = await getUserEmail(admin, recipientId)
-      if (email) {
-        await sendEmail({ to: email, subject: title, html: `<p>${body}</p><p><a href="/requests/${request.id}">View request</a></p>` })
-      }
+      if (!email) return { recipientId, skipped: true as const }
+      // DESK-OBS-002: sendEmail() never throws — it returns `{ error }` on
+      // failure — and this call site previously never read that result, so
+      // a Resend outage or a bad address silently dropped the notification
+      // with zero trace anywhere.
+      const { error } = await sendEmail({ to: email, subject: title, html: `<p>${safeBody}</p><p><a href="/requests/${request.id}">View request</a></p>` })
+      return { recipientId, skipped: false as const, error }
     }))
+
+    const failures = results.filter((r) => !r.skipped && r.error)
+    if (failures.length > 0) {
+      logger.error({
+        event: 'business_rules.notify.email_failed',
+        message: `${failures.length}/${results.length} business-rule notify emails failed to send`,
+        route: 'lib/rules/actions.ts#runNotify',
+        requestId: request.id,
+        orgId: request.org_id ?? undefined,
+        errorCode: 'email_send_failed',
+        context: { ruleId: ctx.ruleId, ruleName: ctx.ruleName, failedCount: failures.length, totalCount: results.length },
+      })
+      // Repeated/permanent failure (not a single flaky send) is what an
+      // operator actually needs paged for — deduped per-rule by alertOperator
+      // so a rule that fires often doesn't spam the same alert every tick.
+      await alertOperator({
+        key: `business_rule.email_failed.${ctx.ruleId}`,
+        severity: failures.length === results.length ? 'critical' : 'warning',
+        title: `Business rule "${ctx.ruleName}" failed to send ${failures.length} notification email(s)`,
+        detail: { ruleId: ctx.ruleId, requestId: request.id, failedCount: failures.length, totalCount: results.length },
+        orgId: request.org_id ?? undefined,
+      })
+    }
   }
 }
 
@@ -377,7 +431,16 @@ export async function executeActions(
       else if (action.type === 'set_team') await runSetTeam(admin, request, action.params.teamId, ctx)
       else if (action.type === 'notify') await runNotify(admin, request, action.params, ctx)
     } catch (e) {
-      console.error(`[business-rules] Action "${action.type}" failed for rule ${ctx.ruleId}`, e)
+      logger.error({
+        event: 'business_rules.action_failed',
+        message: `Action "${action.type}" failed for rule ${ctx.ruleId}`,
+        route: 'lib/rules/actions.ts#executeActions',
+        requestId: request.id,
+        orgId: request.org_id ?? undefined,
+        errorCode: `business_rule_action_${action.type}_failed`,
+        context: { ruleId: ctx.ruleId, ruleName: ctx.ruleName, actionType: action.type },
+        error: e,
+      })
     }
   }
 }

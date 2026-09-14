@@ -27,6 +27,9 @@ export function ApprovalPreviewDialog({ approval, viewerId, viewerRole, onClose 
 
   useEffect(() => {
     let cancelled = false
+    // Resets loading back to true when approval.id changes (a new preview
+    // opened while this one was still showing) — not just the mount case.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     getApprovalPreview(approval.id).then((res) => {
       if (cancelled) return

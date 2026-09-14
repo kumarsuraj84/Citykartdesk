@@ -39,10 +39,13 @@ export default async function InboxWorkspacePage({ params }: PageProps) {
   // only the fallback for not-yet-classified mail.
   if (message.review?.id) redirect(`/intake/review/${message.review.id}`)
 
-  // Generate signed URLs for attachments.
+  // Generate signed URLs for attachments. { download: ... } forces
+  // Content-Disposition: attachment — defense in depth beyond the
+  // upload-time allowlist/magic-byte check (see api/src/intake/store.ts),
+  // so an inbound attachment can never render inline in the browser.
   const signedAttachments = await Promise.all(
     attachments.map(async (a) => {
-      const { data } = await admin.storage.from('intake-attachments').createSignedUrl(a.storage_path, 300)
+      const { data } = await admin.storage.from('intake-attachments').createSignedUrl(a.storage_path, 300, { download: a.file_name })
       return { ...a, signedUrl: data?.signedUrl ?? null }
     })
   )

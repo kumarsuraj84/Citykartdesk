@@ -77,7 +77,7 @@ function SyncPanel({ lastSync, isAdmin }: { lastSync: DeskTimeSyncRun | null; is
 
       <p className="text-xs text-muted-foreground">
         {lastSync
-          ? `Last sync ${new Date(lastSync.ran_at).toLocaleString()} · ${lastSync.status}${
+          ? `Last sync ${new Date(lastSync.ran_at).toLocaleString('en-US', { hour12: false })} · ${lastSync.status}${
               lastSync.status === 'success' ? ` · ${lastSync.rows_upserted} rows, ${lastSync.matched_projects} matched` : ''
             }${lastSync.message ? ` · ${lastSync.message}` : ''}`
           : 'No sync has run yet.'}

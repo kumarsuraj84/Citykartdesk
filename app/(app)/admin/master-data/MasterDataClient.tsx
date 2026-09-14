@@ -2,16 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import { cn } from '@/lib/utils'
-import { createTag, updateTag, deleteTag, updateRequestPriority } from '@/lib/actions/admin/config'
-import { Trash2, Plus, ChevronUp, ChevronDown, ExternalLink, Check, X } from 'lucide-react'
-
-type Tag = {
-  id: string
-  name: string
-  color: string
-  is_active: boolean
-  created_at: string
-}
+import { updateRequestPriority } from '@/lib/actions/admin/config'
+import { ChevronUp, ChevronDown, ExternalLink, Check, X } from 'lucide-react'
 
 type RequestPriority = {
   id: string
@@ -23,10 +15,9 @@ type RequestPriority = {
   is_active: boolean
 }
 
-type Tab = 'tags' | 'priorities' | 'task-statuses' | 'task-priorities'
+type Tab = 'priorities' | 'task-statuses' | 'task-priorities'
 
 interface Props {
-  tags: Tag[]
   requestPriorities: RequestPriority[]
 }
 
@@ -41,161 +32,6 @@ function ColorSwatch({ color, onChange, onBlur }: { color: string; onChange: (c:
         className="h-7 w-7 cursor-pointer rounded border border-gray-200 p-0.5"
       />
       <span className="font-mono text-xs text-gray-500">{color}</span>
-    </div>
-  )
-}
-
-function TagsTab({ tags }: { tags: Tag[] }) {
-  const [items, setItems] = useState<Tag[]>(tags)
-  const [newName, setNewName] = useState('')
-  const [newColor, setNewColor] = useState('#6b7280')
-  const [error, setError] = useState('')
-  const [isPending, startTransition] = useTransition()
-
-  function handleAdd() {
-    if (!newName.trim()) return
-    setError('')
-    startTransition(async () => {
-      const res = await createTag({ name: newName.trim(), color: newColor })
-      if (res.error) { setError(res.error); return }
-      // Optimistic: add temp item, page will revalidate
-      setItems((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), name: newName.trim(), color: newColor, is_active: true, created_at: new Date().toISOString() },
-      ])
-      setNewName('')
-      setNewColor('#6b7280')
-    })
-  }
-
-  function handleColorChange(id: string, color: string) {
-    setItems((prev) => prev.map((t) => (t.id === id ? { ...t, color } : t)))
-  }
-
-  function handleToggleActive(tag: Tag) {
-    const next = !tag.is_active
-    setItems((prev) => prev.map((t) => (t.id === tag.id ? { ...t, is_active: next } : t)))
-    startTransition(async () => {
-      const res = await updateTag(tag.id, { is_active: next })
-      if (res.error) {
-        setItems((prev) => prev.map((t) => (t.id === tag.id ? { ...t, is_active: tag.is_active } : t)))
-      }
-    })
-  }
-
-  function handleColorBlur(tag: Tag, color: string) {
-    startTransition(async () => {
-      await updateTag(tag.id, { color })
-    })
-  }
-
-  function handleDelete(id: string) {
-    if (!confirm('Delete this tag? This cannot be undone.')) return
-    setItems((prev) => prev.filter((t) => t.id !== id))
-    startTransition(async () => {
-      const res = await deleteTag(id)
-      if (res.error) setError(res.error)
-    })
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Preview chips */}
-      <div className="flex flex-wrap gap-2 rounded-lg border border-gray-100 bg-gray-50 p-4">
-        {items.filter((t) => t.is_active).map((tag) => (
-          <span
-            key={tag.id}
-            className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium text-white"
-            style={{ backgroundColor: tag.color }}
-          >
-            {tag.name}
-          </span>
-        ))}
-        {items.filter((t) => t.is_active).length === 0 && (
-          <span className="text-sm text-gray-400">No active tags</span>
-        )}
-      </div>
-
-      {/* Table */}
-      <div className="overflow-hidden rounded-lg border border-gray-200">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
-            <tr>
-              <th className="px-4 py-3 text-left">Name</th>
-              <th className="px-4 py-3 text-left">Color</th>
-              <th className="px-4 py-3 text-center">Active</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {items.map((tag) => (
-              <tr key={tag.id} className={cn('bg-white transition-colors hover:bg-gray-50', !tag.is_active && 'opacity-50')}>
-                <td className="px-4 py-3 font-medium text-gray-800">{tag.name}</td>
-                <td className="px-4 py-3">
-                  <ColorSwatch
-                    color={tag.color}
-                    onChange={(c) => handleColorChange(tag.id, c)}
-                    onBlur={() => handleColorBlur(tag, tag.color)}
-                  />
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <button
-                    onClick={() => handleToggleActive(tag)}
-                    className={cn(
-                      'inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                      tag.is_active ? 'bg-blue-600' : 'bg-gray-200'
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'inline-block h-4 w-4 translate-x-1 rounded-full bg-white shadow transition-transform',
-                        tag.is_active && 'translate-x-6'
-                      )}
-                    />
-                  </button>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => handleDelete(tag.id)}
-                    className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500"
-                    title="Delete tag"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Add inline */}
-      <div className="flex items-end gap-3 rounded-lg border border-dashed border-gray-300 bg-white p-4">
-        <div className="flex-1">
-          <label className="mb-1 block text-xs font-medium text-gray-600">Tag Name</label>
-          <input
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-            placeholder="e.g. Network"
-            className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Color</label>
-          <ColorSwatch color={newColor} onChange={setNewColor} />
-        </div>
-        <button
-          onClick={handleAdd}
-          disabled={!newName.trim() || isPending}
-          className="flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          <Plus className="h-4 w-4" />
-          Add Tag
-        </button>
-      </div>
-      {error && <p className="text-sm text-red-500">{error}</p>}
     </div>
   )
 }
@@ -412,14 +248,13 @@ function ReferenceTab({ label, href }: { label: string; href: string }) {
 }
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'tags', label: 'Tags' },
   { id: 'priorities', label: 'Request Priorities' },
   { id: 'task-statuses', label: 'Task Statuses' },
   { id: 'task-priorities', label: 'Task Priorities' },
 ]
 
-export function MasterDataClient({ tags, requestPriorities }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>('tags')
+export function MasterDataClient({ requestPriorities }: Props) {
+  const [activeTab, setActiveTab] = useState<Tab>('priorities')
 
   return (
     <div className="space-y-6">
@@ -427,7 +262,7 @@ export function MasterDataClient({ tags, requestPriorities }: Props) {
       <div>
         <h1 className="text-xl font-bold tracking-tight text-foreground">Master Data</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Manage global reference data used across Citykart Desk — tags, priorities, and classification values.
+          Manage global reference data used across Citykart Desk — priorities and classification values.
         </p>
       </div>
 
@@ -452,7 +287,6 @@ export function MasterDataClient({ tags, requestPriorities }: Props) {
       </div>
 
       {/* Tab content */}
-      {activeTab === 'tags' && <TagsTab tags={tags} />}
       {activeTab === 'priorities' && <PrioritiesTab priorities={requestPriorities} />}
       {activeTab === 'task-statuses' && (
         <ReferenceTab label="Task Statuses" href="/admin/task-config" />

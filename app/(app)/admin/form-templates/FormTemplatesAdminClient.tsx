@@ -204,7 +204,7 @@ export default function FormTemplatesAdminClient({ templates }: { templates: For
                 </button>
                 <button
                   onClick={() => setDeleteTarget(t)}
-                  className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                  className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-destructive/70 hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
                 >
                   <Trash2 className="h-3 w-3" />
                   Delete

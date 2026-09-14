@@ -41,6 +41,7 @@ export async function sendNotificationEmail(opts: {
         })
         break
       case 'comment_added':
+      case 'internal_note_added':
         template = commentAddedEmail({
           recipientName: recipientName || '',
           requestTitle: data.requestTitle || data.title || '',
@@ -59,7 +60,10 @@ export async function sendNotificationEmail(opts: {
           dueDate: data.dueDate,
         })
         break
-      case 'approval_required':
+      // Every call site sends 'approval_requested' (see lib/actions/approvals.ts
+      // and requests.ts) — this case used to read 'approval_required' and so
+      // never matched, silently dropping every approval-request email.
+      case 'approval_requested':
         template = approvalRequiredEmail({
           approverName: recipientName || '',
           requestTitle: data.requestTitle || data.title || '',

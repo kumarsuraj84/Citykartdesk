@@ -48,6 +48,7 @@ const REQUEST_PRIORITY: FieldOption[] = Object.entries(PRIORITY_LABELS).map(([va
 const SOURCE_CHANNEL: FieldOption[] = [
   { value: 'portal', label: 'Portal' },
   { value: 'intake', label: 'Intake' },
+  { value: 'whatsapp', label: 'WhatsApp' },
 ]
 const TASK_STATUS: FieldOption[] = [
   { value: 'open', label: 'Open' },

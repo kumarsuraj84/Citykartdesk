@@ -36,3 +36,13 @@ export function formatRelativeTime(iso: string): string {
   if (days < 7) return `${days}d ago`
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
+
+/** Absolute "Jan 5, 2026, 3:45 PM" timestamp — pairs with formatRelativeTime()
+ *  wherever a reader might want the exact moment, not just "3h ago". */
+// 24-hour clock, no AM/PM — the standard for every time shown across the app.
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+}

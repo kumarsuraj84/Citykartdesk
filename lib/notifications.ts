@@ -7,6 +7,8 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { logger } from '@/lib/observability/logger'
+import { alertOperator } from '@/lib/observability/alert'
 import type { NotificationType } from '@/types'
 import type { Json } from '@/types/database'
 
@@ -40,62 +42,185 @@ export async function notify(inputs: NotifyInput | NotifyInput[]): Promise<void>
 
   const admin = createAdminClient()
 
-  // Check notification preferences — skip opted-out recipients
+  // Check notification preferences — skip opted-out recipients. This is the
+  // per-user blanket veto ("stop telling me about X at all"); the org-level
+  // per-channel rules below are a separate, admin-facing layer on top.
   const recipientIds = [...new Set(rows.map((r) => r.recipientId))]
 
-  const { data: optedOut } = await admin
-    .from('notification_preferences')
-    .select('user_id, event_type')
-    .in('user_id', recipientIds)
-    .eq('enabled', false)
+  const [{ data: optedOut }, { data: recipientProfiles }] = await Promise.all([
+    admin
+      .from('notification_preferences')
+      .select('user_id, event_type')
+      .in('user_id', recipientIds)
+      .eq('enabled', false),
+    admin.from('profiles').select('id, org_id').in('id', recipientIds),
+  ])
 
   const optedOutKeys = new Set(
     (optedOut ?? []).map((o) => `${o.user_id}:${o.event_type}`)
   )
+  const orgByUser = new Map(
+    (recipientProfiles ?? []).map((p) => [p.id, p.org_id as string | null])
+  )
 
-  const filtered = rows.filter(
+  const active = rows.filter(
     (r) => !optedOutKeys.has(`${r.recipientId}:${r.type}`)
   )
-  if (filtered.length === 0) return
+  if (active.length === 0) return
 
-  const notificationRows = filtered.map(
-    ({ recipientId, actorId, type, title, body, requestId, taskId, link, metadata }) => ({
-      user_id:    recipientId,
-      actor_id:   actorId,
-      type,
-      title,
-      body:       body       ?? null,
-      request_id: requestId  ?? null,
-      task_id:    taskId     ?? null,
-      link:       link       ?? null,
-      metadata:   (metadata  ?? {}) as Json,
-    })
+  // Org-level channel toggles (Request Configuration → Notification Rules).
+  // No row for a given (org, event_type) means every channel defaults ON —
+  // matches this app's always-on behavior from before this table existed,
+  // so introducing it doesn't silently go quiet on anyone.
+  const orgIds = [...new Set(
+    active.map((r) => orgByUser.get(r.recipientId)).filter((v): v is string => !!v)
+  )]
+  const { data: ruleRows } = orgIds.length > 0
+    ? await admin
+        .from('notification_rules')
+        .select('org_id, event_type, email, in_app, push')
+        .in('org_id', orgIds)
+    : { data: [] as { org_id: string; event_type: string; email: boolean; in_app: boolean; push: boolean }[] }
+  const ruleByKey = new Map(
+    (ruleRows ?? []).map((r) => [`${r.org_id}:${r.event_type}`, r])
   )
 
-  const { error } = await admin.from('notifications').insert(notificationRows)
-
-  if (error) {
-    console.error('[notify] Insert failed', error.message)
+  function channelsFor(r: NotifyInput) {
+    const orgId = orgByUser.get(r.recipientId)
+    const rule = orgId ? ruleByKey.get(`${orgId}:${r.type}`) : undefined
+    return {
+      inApp: rule?.in_app ?? true,
+      email: rule?.email ?? true,
+      push:  rule?.push  ?? true,
+    }
   }
 
-  ;(async () => { try {
-    const { createAdminClient } = await import('@/lib/supabase/admin')
-    const { sendNotificationEmail } = await import('@/lib/email/notify-email')
-    const adminClient = createAdminClient()
-    // Independent per-recipient — was one at a time (an N-recipient notify(),
-    // e.g. a Business Rule notifying every manager, took N sequential round
-    // trips). Each attempt is caught individually so one bad address can't
-    // stop the rest from sending, which the old sequential loop's single
-    // outer catch would have done (an earlier failure aborted every
-    // recipient still queued behind it).
-    await Promise.all(notificationRows.map(async (n) => {
-      try {
-        const { data: u } = await adminClient.auth.admin.getUserById(n.user_id)
-        if (!u?.user?.email) return
-        await sendNotificationEmail({ type: n.type, recipientEmail: u.user.email, recipientName: '', data: { ...(n.metadata as Record<string, string> ?? {}), title: n.title, body: n.body ?? '', link: n.link ?? '' } })
-      } catch { /* isolated per recipient */ }
-    }))
-  } catch {} })()
+  // In-app (the notifications bell)
+  const inAppTargets = active.filter((r) => channelsFor(r).inApp)
+  if (inAppTargets.length > 0) {
+    const notificationRows = inAppTargets.map(
+      ({ recipientId, actorId, type, title, body, requestId, taskId, link, metadata }) => ({
+        user_id:    recipientId,
+        actor_id:   actorId,
+        type,
+        title,
+        body:       body       ?? null,
+        request_id: requestId  ?? null,
+        task_id:    taskId     ?? null,
+        link:       link       ?? null,
+        metadata:   (metadata  ?? {}) as Json,
+      })
+    )
+    const { error } = await admin.from('notifications').insert(notificationRows)
+    if (error) {
+      // DESK-OBS-002: previously a bare console.error with no ids/context —
+      // a bulk in-app insert failure (e.g. a bad request_id/task_id FK on
+      // one row in the batch failing the whole insert) was effectively
+      // invisible outside a live terminal.
+      logger.error({
+        event: 'notifications.in_app_insert_failed',
+        message: 'Bulk in-app notification insert failed',
+        route: 'lib/notifications.ts#notify',
+        errorCode: 'notify_in_app_insert_failed',
+        context: { recipientCount: inAppTargets.length, types: [...new Set(inAppTargets.map((r) => r.type))] },
+        error,
+      })
+    }
+  }
+
+  // Email
+  const emailTargets = active.filter((r) => channelsFor(r).email)
+  if (emailTargets.length > 0) {
+    ;(async () => { try {
+      const { createAdminClient } = await import('@/lib/supabase/admin')
+      const { sendNotificationEmail } = await import('@/lib/email/notify-email')
+      const adminClient = createAdminClient()
+      // Independent per-recipient — an N-recipient notify() (e.g. a Business
+      // Rule notifying every manager) fans out in parallel instead of one at
+      // a time, and each attempt is caught individually so one bad address
+      // can't stop the rest from sending.
+      // DESK-OBS-002: every per-recipient failure used to be swallowed with
+      // no trace at all (`catch { /* isolated per recipient */ }`) — the
+      // isolation itself was correct (one bad recipient shouldn't block the
+      // rest), but "isolated" had come to also mean "unobservable." Each
+      // failure is now counted and structured-logged once as an aggregate,
+      // and an operator is alerted if every recipient in the batch failed
+      // (a single bad address isn't page-worthy; a 100% failure rate is).
+      let failedCount = 0
+      await Promise.all(emailTargets.map(async (r) => {
+        try {
+          const { data: u } = await adminClient.auth.admin.getUserById(r.recipientId)
+          if (!u?.user?.email) return
+          await sendNotificationEmail({
+            type: r.type,
+            recipientEmail: u.user.email,
+            recipientName: '',
+            data: { ...(r.metadata as Record<string, string> ?? {}), title: r.title, body: r.body ?? '', link: r.link ?? '' },
+          })
+        } catch {
+          failedCount++
+        }
+      }))
+      if (failedCount > 0) {
+        logger.error({
+          event: 'notifications.email_failed',
+          message: `${failedCount}/${emailTargets.length} notification emails failed to send`,
+          route: 'lib/notifications.ts#notify',
+          errorCode: 'notify_email_failed',
+          context: { failedCount, totalCount: emailTargets.length, types: [...new Set(emailTargets.map((r) => r.type))] },
+        })
+        if (failedCount === emailTargets.length) {
+          await alertOperator({
+            key: `notifications.email_total_failure.${emailTargets[0].type}`,
+            severity: 'critical',
+            title: `All ${failedCount} notification email(s) of type "${emailTargets[0].type}" failed to send`,
+            detail: { failedCount, type: emailTargets[0].type },
+          })
+        }
+      }
+    } catch (err) {
+      logger.error({
+        event: 'notifications.email_dispatch_crashed',
+        message: 'Notification email dispatch threw before per-recipient isolation could apply',
+        route: 'lib/notifications.ts#notify',
+        errorCode: 'notify_email_dispatch_crashed',
+        error: err,
+      })
+    } })()
+  }
+
+  // Push
+  const pushTargets = active.filter((r) => channelsFor(r).push)
+  if (pushTargets.length > 0) {
+    ;(async () => { try {
+      const { sendPushToUser } = await import('@/lib/push/send')
+      let failedCount = 0
+      await Promise.all(pushTargets.map(async (r) => {
+        try {
+          await sendPushToUser(r.recipientId, { title: r.title, body: r.body ?? '', link: r.link ?? '/notifications' })
+        } catch {
+          failedCount++
+        }
+      }))
+      if (failedCount > 0) {
+        logger.warn({
+          event: 'notifications.push_failed',
+          message: `${failedCount}/${pushTargets.length} push notifications failed to send`,
+          route: 'lib/notifications.ts#notify',
+          errorCode: 'notify_push_failed',
+          context: { failedCount, totalCount: pushTargets.length },
+        })
+      }
+    } catch (err) {
+      logger.warn({
+        event: 'notifications.push_dispatch_crashed',
+        message: 'Push notification dispatch threw before per-recipient isolation could apply',
+        route: 'lib/notifications.ts#notify',
+        errorCode: 'notify_push_dispatch_crashed',
+        error: err,
+      })
+    } })()
+  }
 }
 
 // ── getRequestAudience() ──────────────────────────────────────────────────────

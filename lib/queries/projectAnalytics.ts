@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { TASK_STATUS_GROUP, REQUEST_STATUS_GROUP } from '@/lib/constants/status-groups'
+import { computeProjectProgressPct } from '@/lib/projects/progress'
 import type { BacklogAging } from './analytics'
 import type { TaskStatus, RequestStatus, ProjectStatus } from '@/types'
 
@@ -269,15 +270,14 @@ export async function getProjectAnalytics(orgId: string): Promise<ProjectAnalyti
 
   const todayStr = now.toISOString().slice(0, 10)
 
-  function bucketProgress(projectId: string): number {
+  function bucketProgress(projectId: string, status: ProjectStatus): number {
     const tRows = tasksArr.filter((t) => t.project_id === projectId)
     const rRows = requestsArr.filter((r) => r.project_id === projectId)
     const total = tRows.length + rRows.length
-    if (total === 0) return 0
     const done =
       tRows.filter((t) => TASK_STATUS_GROUP[t.status] === 'done').length +
       rRows.filter((r) => REQUEST_STATUS_GROUP[r.status] === 'done').length
-    return Math.round((done / total) * 100)
+    return computeProjectProgressPct(status, { done, total })
   }
 
   const sevenDaysOutStr = sevenDaysOut.toISOString().slice(0, 10)
@@ -304,7 +304,7 @@ export async function getProjectAnalytics(orgId: string): Promise<ProjectAnalyti
       if (p.target_date < todayStr) row.overdue++
       else if (p.target_date <= sevenDaysOutStr) row.dueSoon++
     }
-    progressSum.value += bucketProgress(p.id)
+    progressSum.value += bucketProgress(p.id, p.status)
   }
 
   const ownerRows = new Map<string, { row: OwnerRollupRow; progressSum: { value: number } }>()

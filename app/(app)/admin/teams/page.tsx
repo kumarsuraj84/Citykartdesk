@@ -99,10 +99,6 @@ export default async function AdminTeamsPage() {
       <PageHeader
         title="Teams"
         description="Manage teams, their members, and associated services."
-        breadcrumbs={[
-          { label: 'Admin' },
-          { label: 'Teams' },
-        ]}
       />
       <TeamManagementClient initialTeams={teams} allUsers={allUsers} />
     </div>

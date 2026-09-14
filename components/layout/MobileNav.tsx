@@ -45,25 +45,49 @@ export function MobileNav({ profile, navVisibility, navCounts }: MobileNavProps)
   ]
 
   const visible = items.filter((i) => i.show)
-  // Mirrors Sidebar.tsx's Analytics section: Dashboards/DeskTime/Audit Logs
-  // stay manager/admin-only, but Report Builder is available to any role with
+
+  // DESK-UI-004: this bar used to render every visible item (up to 8, at
+  // min-w-[60px] each — ~544px minimum, wider than any phone) inside an
+  // `overflow-x-auto` row with zero scroll affordance. A bottom tab bar
+  // isn't a UI surface users expect to swipe — nothing signals there's more
+  // to the right — so items past what fit were, in effect, invisible/
+  // half-clipped. MAX_PRIMARY caps the bar to a count that provably fits at
+  // every tested width down to 320px (4 items × 60px = 240px, comfortably
+  // under a 320px screen's ~256px after the fixed 64px "More" button),
+  // instead of a width-dependent scroll. `items` is already ordered by
+  // priority per role (see the comment above), so capping it keeps the
+  // most relevant items primary and folds the rest into "More" — nothing is
+  // removed, just relocated, preserving role-specific items exactly as
+  // before within the Sidebar rendered inside the sheet.
+  const MAX_PRIMARY = 4
+  const primary = visible.slice(0, MAX_PRIMARY)
+  const overflowCount = visible.length - primary.length
+
+  // Mirrors Sidebar.tsx's Analytics section: Dashboards/Audit Logs stay
+  // manager/admin-only, but Report Builder is available to any role with
   // the Requests module enabled — so "More" must open for them too, or that
-  // link would be reachable on desktop but not on mobile.
-  const showMore = isManager || isAdmin || has('requests')
+  // link would be reachable on desktop but not on mobile. Also always shown
+  // whenever items overflow the primary bar, so nothing capped above becomes
+  // unreachable.
+  const showMore = overflowCount > 0 || isManager || isAdmin || has('requests')
 
   // When two items share a URL prefix (e.g. /requests and /requests/queue),
   // startsWith() alone would light up both — pick whichever visible item's
   // href most specifically matches the current path.
+  // Active-item detection still checks every visible item (not just the
+  // primary-bar subset) — an item relocated into "More" this render can
+  // still legitimately be the current page.
   const activeItem = visible
     .filter((i) => i.href === '/home' ? pathname === '/home' : pathname === i.href || pathname.startsWith(i.href + '/'))
     .sort((a, b) => b.href.length - a.href.length)[0]
 
   return (
     <div className="flex shrink-0 border-t border-border bg-card lg:hidden">
-      {/* Primary shortcuts — scrolls horizontally on its own if it doesn't fit,
-          but never pushes "More" (the full-nav escape hatch) off-screen. */}
-      <nav className="flex flex-1 overflow-x-auto min-w-0">
-        {visible.map((item) => {
+      {/* Primary shortcuts — capped to MAX_PRIMARY so every item is always
+          fully visible, never clipped or scrolled out of reach (see
+          MAX_PRIMARY's comment above). */}
+      <nav className="flex flex-1 min-w-0">
+        {primary.map((item) => {
           const Icon = item.icon
           const isActive = item === activeItem
 

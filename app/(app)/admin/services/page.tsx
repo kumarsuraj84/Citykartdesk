@@ -21,18 +21,29 @@ async function getProfiles(): Promise<Pick<Profile, 'id' | 'full_name'>[]> {
   return (data ?? []) as Pick<Profile, 'id' | 'full_name'>[]
 }
 
+async function getLocations(): Promise<{ id: string; name: string }[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('locations')
+    .select('id, name')
+    .eq('is_active', true)
+    .order('name')
+  return (data ?? []) as { id: string; name: string }[]
+}
+
 export default async function AdminServicesPage() {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
   if (profile.role !== 'admin' && profile.role !== 'platform_owner') redirect('/home')
 
-  const [services, categoryTree, teams, profiles, templates, slaPolicies] = await Promise.all([
+  const [services, categoryTree, teams, profiles, templates, slaPolicies, locations] = await Promise.all([
     getAllServicesForAdmin(),
     getCategoryTreeForAdmin(),
     getTeams(),
     getProfiles(),
     getActiveFormTemplatesForPicker(),
     getActiveSlaPoliciesForPicker(),
+    getLocations(),
   ])
 
   return (
@@ -40,9 +51,8 @@ export default async function AdminServicesPage() {
       <PageHeader
         title="Service Management"
         description="Create and manage services in the catalog. Tag categories/sub-categories the requester can pick, and a Form Template to give it an intake form."
-        breadcrumbs={[{ label: 'Admin' }, { label: 'Services' }]}
       />
-      <ServicesAdminClient services={services} categoryTree={categoryTree} teams={teams} profiles={profiles} templates={templates} slaPolicies={slaPolicies} />
+      <ServicesAdminClient services={services} categoryTree={categoryTree} teams={teams} profiles={profiles} templates={templates} slaPolicies={slaPolicies} locations={locations} />
     </div>
   )
 }

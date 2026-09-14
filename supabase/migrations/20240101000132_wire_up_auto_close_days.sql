@@ -1,0 +1,11 @@
+-- app_settings.auto_close_days used to be dead — the actual resolved-ticket
+-- reopen/auto-close window was a hardcoded 72h (RESOLVED_REOPEN_WINDOW_HOURS
+-- in lib/constants/requests.ts), unrelated to this setting or its two admin
+-- UI controls (Platform Settings and Request Configuration both had one).
+-- Now that lib/settings/reopenWindow.ts actually reads this value, force it
+-- to '3' (= 72h, the value every install has effectively been running on
+-- regardless of whatever this row said) so wiring it up doesn't silently
+-- change behavior for any existing org — it only becomes configurable from
+-- here on. The duplicate control in Platform Settings was removed; Request
+-- Configuration → General is the one place to change it now.
+UPDATE app_settings SET value = '3' WHERE key = 'auto_close_days';

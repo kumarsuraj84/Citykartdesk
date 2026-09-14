@@ -21,6 +21,14 @@ interface DynamicFormProps {
    *  own custom fields. Empty means this service has nothing tagged, so the
    *  picker is skipped entirely. */
   allowedSubCategories: AllowedSubCategory[]
+  /** The signed-in user's own store address (from the store master), for
+   *  display in any `store_address`-type field — null if they have no
+   *  store_id (HO/Warehouse). The server re-derives and enforces this
+   *  independently in createRequest(); this is only what's shown while
+   *  filling the form. Not re-fetched per "requesting on behalf of"
+   *  selection — the server's own value (based on whoever the final
+   *  requester is) is always what actually gets saved. */
+  currentUserStoreAddress?: string | null
 }
 
 type OrgMember = { id: string; full_name: string }
@@ -115,13 +123,20 @@ function RequesterOnBehalfPicker({ value, onChange }: { value: OrgMember | null;
   )
 }
 
-export type FieldValue = string | string[] | boolean | File[]
+export type FieldValue = string | string[] | boolean | File[] | undefined
 
 export function getDefaultValue(field: FormField): FieldValue {
   switch (field.type) {
     case 'multiselect':
     case 'file':        return []
-    case 'checkbox':    return false
+    // Stage 7.1 (F-02): undefined, not false — a mandatory checkbox must
+    // require an actual click before it satisfies validation. Returning
+    // `false` here made every untouched checkbox indistinguishable from an
+    // explicit "No" the instant isFieldValueEmpty() started treating `false`
+    // as a real answer. FieldRenderer coerces this to an unchecked box
+    // either way, so nothing changes visually.
+    case 'checkbox':
+    case 'toggle':       return undefined
     default:            return ''
   }
 }
@@ -220,7 +235,7 @@ export function SectionBlock({ section, values, errors, onChange, requesterConte
 
 // ── DynamicForm ───────────────────────────────────────────────────────────────
 
-export function DynamicForm({ service, canBookOnBehalf, allowedSubCategories }: DynamicFormProps) {
+export function DynamicForm({ service, canBookOnBehalf, allowedSubCategories, currentUserStoreAddress }: DynamicFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [serverError, setServerError] = useState<string | null>(null)
@@ -255,7 +270,9 @@ export function DynamicForm({ service, canBookOnBehalf, allowedSubCategories }: 
   const allFields: FormField[] = flattenSections(sections)
 
   const [values, setValues] = useState<Record<string, FieldValue>>(() =>
-    Object.fromEntries(allFields.map((f) => [f.id, getDefaultValue(f)]))
+    Object.fromEntries(allFields.map((f) =>
+      [f.id, f.type === 'store_address' ? (currentUserStoreAddress ?? '') : getDefaultValue(f)]
+    ))
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
 

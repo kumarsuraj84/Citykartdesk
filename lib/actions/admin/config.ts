@@ -24,7 +24,40 @@ export async function updateAppSetting(
     .upsert({ key, value }, { onConflict: 'key' })
 
   if (error) return { error: error.message }
+  // Shared by both the Request Configuration "General" tab (auto_close_days)
+  // and Platform Settings "Integrations" tab (email_from_name/address) —
+  // revalidate both rather than hardcoding just the first caller, or the
+  // other page's Router Cache keeps serving its pre-save value until it
+  // expires on its own.
   revalidatePath('/admin/request-config')
+  revalidatePath('/admin/settings')
+  return {}
+}
+
+/**
+ * Saves the sender display name + address together as one upsert batch,
+ * instead of two independent updateAppSetting() calls raced via
+ * Promise.all — that pattern could leave one of the two settings
+ * persisted and the other not (e.g. a transient DB blip on just one call),
+ * silently half-applying the change with no way to tell which half failed.
+ */
+export async function updateEmailFromSettings(name: string, address: string): Promise<{ error?: string }> {
+  const profile = await getCurrentProfile()
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+
+  const admin = createAdminClient() as unknown as AnyClient
+  const { error } = await admin
+    .from('app_settings')
+    .upsert(
+      [
+        { key: 'email_from_name', value: name },
+        { key: 'email_from_address', value: address },
+      ],
+      { onConflict: 'key' }
+    )
+
+  if (error) return { error: error.message }
+  revalidatePath('/admin/settings')
   return {}
 }
 
@@ -283,45 +316,6 @@ export async function toggleAlertRule(id: string, is_active: boolean): Promise<{
 }
 
 // MASTER_DATA_ROUTE: /admin/master-data
-
-// ── Tags ──────────────────────────────────────────────────────────────────────
-
-export async function createTag(data: { name: string; color: string }): Promise<{ error?: string }> {
-  const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
-  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
-
-  const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('tags').insert({ org_id: profile.org_id, name: data.name.trim(), color: data.color })
-  if (error) return { error: error.message }
-  revalidatePath('/admin/master-data')
-  return {}
-}
-
-export async function updateTag(
-  id: string,
-  data: Partial<{ name: string; color: string; is_active: boolean }>
-): Promise<{ error?: string }> {
-  const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
-
-  const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('tags').update(data).eq('id', id).eq('org_id', profile.org_id)
-  if (error) return { error: error.message }
-  revalidatePath('/admin/master-data')
-  return {}
-}
-
-export async function deleteTag(id: string): Promise<{ error?: string }> {
-  const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
-
-  const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('tags').delete().eq('id', id).eq('org_id', profile.org_id)
-  if (error) return { error: error.message }
-  revalidatePath('/admin/master-data')
-  return {}
-}
 
 // ── Request Priorities ────────────────────────────────────────────────────────
 

@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation'
-import { User, Shield, Users, Building2, Lock } from 'lucide-react'
+import { User, Shield, Users, Building2, Lock, BellRing } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
-import { EditableName, AvatarUpload, PasswordResetButton, ChangePasswordForm } from './ProfileClient'
+import { EditableName, AvatarUpload, PasswordResetButton, ChangePasswordForm, PushNotificationToggle } from './ProfileClient'
+import { hasPushSubscription } from '@/lib/actions/push'
 import { ROLE_LABELS } from '@/lib/constants/roles'
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -28,7 +29,10 @@ export default async function ProfilePage() {
   if (!profile) redirect('/login')
 
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const [{ data: { user } }, pushOn] = await Promise.all([
+    supabase.auth.getUser(),
+    hasPushSubscription(),
+  ])
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
@@ -100,6 +104,17 @@ export default async function ProfilePage() {
         <div className="divide-y divide-border px-5">
           <InfoRow label="Password" value={<ChangePasswordForm />} />
           <InfoRow label="Forgot it?" value={<PasswordResetButton />} />
+        </div>
+      </div>
+
+      {/* Notifications */}
+      <div className="rounded-2xl border border-border bg-card shadow-sm">
+        <div className="flex items-center gap-2 border-b border-border px-5 py-3.5">
+          <BellRing className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground">Notifications</h2>
+        </div>
+        <div className="divide-y divide-border px-5">
+          <InfoRow label="Push notifications on this device" value={<PushNotificationToggle initiallyOn={pushOn} />} />
         </div>
       </div>
 

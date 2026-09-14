@@ -670,9 +670,19 @@
 }
 
 /* ── Page layout ── */
+/* DESK-UI-002: this cap used to be 88rem (1408px) — comfortable for
+   text/form-centric pages, but on a 1920px display it left the two widest
+   data tables in the app (Agent Requests/Team Queue, Projects) using only
+   ~35% of the viewport width while still needing their own horizontal
+   scroll, since their natural column width (~1494px) exceeds even the old
+   cap. 100rem (1600px) meaningfully closes that gap for every page (not
+   just those two) without removing the cap outright — an uncapped page
+   would make long text lines on narrower/denser content pages
+   uncomfortably wide to read on an ultra-wide display, which the original
+   cap was there to prevent in the first place. */
 @utility page {
   padding: 1.25rem 1.5rem;
-  max-width: 88rem;
+  max-width: 100rem;
   margin: 0 auto;
 }
 

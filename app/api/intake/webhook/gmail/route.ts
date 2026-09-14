@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { secureCompare } from '@/lib/secure-compare'
 
-// POST /api/intake/webhook/gmail?token=<INTAKE_WORKER_SECRET>
+// POST /api/intake/webhook/gmail?token=<INTAKE_WEBHOOK_TOKEN>
 //
 // Receives Google Cloud Pub/Sub push notifications when Gmail delivers new mail
 // to a connected mailbox. Pub/Sub wraps the Gmail notification in:
@@ -12,13 +12,22 @@ import { secureCompare } from '@/lib/secure-compare'
 // We authenticate via the token query param that is appended to the push
 // subscription URL when it's created in Google Cloud Console.
 //
+// Uses a token dedicated to this public URL (INTAKE_WEBHOOK_TOKEN), not
+// INTAKE_WORKER_SECRET — that secret also grants full worker-admin access
+// (send email as the org, trigger reclassification, etc. — see
+// api/src/intake/routes.ts) and query strings routinely end up in
+// proxy/CDN access logs and Referer headers, so it shouldn't double as a
+// URL token. Falls back to INTAKE_WORKER_SECRET/CRON_SECRET if the
+// dedicated one isn't set yet, so existing deployments keep working until
+// they rotate to a separate value.
+//
 // Security: Always return 200 OK (even for bad requests) once the token is
 // verified. Pub/Sub interprets non-2xx as delivery failures and will retry,
 // which creates noise. We swallow bad/duplicate pushes silently.
 
 export async function POST(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token')
-  const secret = process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
+  const secret = process.env.INTAKE_WEBHOOK_TOKEN ?? process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
   if (!secret || !token || !secureCompare(token, secret)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }

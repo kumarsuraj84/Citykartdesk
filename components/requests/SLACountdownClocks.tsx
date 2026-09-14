@@ -49,6 +49,8 @@ function SingleClock({
   const [now, setNow] = useState<number | null>(null)
 
   useEffect(() => {
+    // client-only hydration fill-in — see the comment on `now`'s declaration above
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNow(Date.now())
     if (stoppedAt || isPaused || !dueAt) return
     const id = setInterval(() => setNow(Date.now()), 1000)
@@ -85,11 +87,21 @@ function SingleClock({
   const remaining = isPaused && pausedSinceMs != null ? dueMs - pausedSinceMs : dueMs - (now as number)
   const breached = remaining < 0
 
+  // DESK-UI-007: this live-ticking branch used to render a bare duration
+  // ("Resolution: 188h 12m 1s") with no word saying which direction it
+  // counts — confusing right next to the *other* clock once IT finishes and
+  // switches to the `stoppedAt` branch above, which has always said "met —
+  // Xh to spare" / "breached — Xh over". "remaining"/"overdue by" make the
+  // still-ticking clock read the same directional way as its own finished
+  // state, and the same way Response and Resolution read relative to each
+  // other regardless of which one is still live.
   return (
     <div className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 ${breached ? 'border-red-200 bg-red-50' : theme}`}>
       {isPaused ? <PauseCircle className="h-3.5 w-3.5 shrink-0" /> : <Timer className="h-3.5 w-3.5 shrink-0" />}
       <span className={`font-mono text-xs font-semibold tabular-nums ${breached ? 'text-red-700' : ''}`}>
-        {label}: {breached ? '-' : ''}{formatDuration(remaining)}
+        {breached
+          ? `${label} overdue by ${formatDuration(remaining)}`
+          : `${label}: ${formatDuration(remaining)} remaining`}
         {isPaused && <span className="ml-1 font-sans font-normal opacity-70">(paused)</span>}
       </span>
     </div>

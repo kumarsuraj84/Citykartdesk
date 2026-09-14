@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition, useMemo } from 'react'
-import { Plus, Pencil, Archive, Tag, Trash2, Copy, CheckSquare, MinusSquare, Square } from 'lucide-react'
+import { Plus, Pencil, Archive, Tag, Trash2, Copy, CheckSquare, MinusSquare, Square, Search } from 'lucide-react'
 import {
   createService,
   updateService,
@@ -26,6 +26,7 @@ type Props = {
   profiles: ProfileMini[]
   templates: { id: string; name: string }[]
   slaPolicies: { id: string; name: string }[]
+  locations: { id: string; name: string }[]
 }
 
 type ModalMode =
@@ -69,6 +70,7 @@ function ServiceModal({
   profiles,
   templates,
   slaPolicies,
+  locations,
   onClose,
 }: {
   mode: Exclude<ModalMode, null>
@@ -78,6 +80,7 @@ function ServiceModal({
   profiles: ProfileMini[]
   templates: { id: string; name: string }[]
   slaPolicies: { id: string; name: string }[]
+  locations: { id: string; name: string }[]
   onClose: () => void
 }) {
   const isEdit = mode.type === 'edit'
@@ -90,6 +93,7 @@ function ServiceModal({
   const [icon, setIcon] = useState(existing?.icon ?? '')
   const [iconImageUrl, setIconImageUrl] = useState<string | null>(existingAny?.icon_image_url ?? null)
   const [tagIds, setTagIds] = useState<string[]>(existing?.sub_category_tag_ids ?? [])
+  const [locationIds, setLocationIds] = useState<string[]>(existing?.location_tag_ids ?? [])
   const [teamId, setTeamId] = useState(existing?.team_id ?? '')
   const [templateId, setTemplateId] = useState(existing?.template_id ?? '')
   const [priority, setPriority] = useState<ServiceInput['default_priority']>(
@@ -102,11 +106,17 @@ function ServiceModal({
   const [version, setVersion] = useState(isDuplicate ? '1.0' : existingAny?.version ?? '1.0')
   const [visibility, setVisibility] = useState<ServiceVisibility>((existingAny?.visibility as ServiceVisibility) ?? 'all')
   const [slaPolicyId, setSlaPolicyId] = useState(existingAny?.sla_policy_id ?? '')
+  const [autoOemRouting, setAutoOemRouting] = useState((existingAny as { auto_oem_routing?: boolean } | null)?.auto_oem_routing ?? false)
+  const [catSearch, setCatSearch] = useState('')
   const [error, setError] = useState('')
   const [pending, startTransition] = useTransition()
 
   function toggleTag(subCategoryId: string) {
     setTagIds((prev) => prev.includes(subCategoryId) ? prev.filter((id) => id !== subCategoryId) : [...prev, subCategoryId])
+  }
+
+  function toggleLocation(locationId: string) {
+    setLocationIds((prev) => prev.includes(locationId) ? prev.filter((id) => id !== locationId) : [...prev, locationId])
   }
 
   // Which sub-category is already tagged to a DIFFERENT service — a
@@ -125,6 +135,26 @@ function ServiceModal({
     }
     return map
   }, [services, excludeServiceId])
+
+  // With some services carrying 70+ tagged categories (IT Support, HR
+  // Support), scrolling to find one by eye was slow — matches on either the
+  // category name or any of its sub-category names, keeping the category
+  // visible (so its checkbox/lock-badge context is never lost) but showing
+  // only the sub-categories that actually matched, unless the category name
+  // itself matched, which keeps the full list under it.
+  const filteredCategoryTree = useMemo(() => {
+    const q = catSearch.trim().toLowerCase()
+    if (!q) return categoryTree
+    return categoryTree
+      .map((cat) => {
+        const catMatches = cat.name.toLowerCase().includes(q)
+        const sub_categories = catMatches
+          ? cat.sub_categories
+          : cat.sub_categories.filter((sc) => sc.name.toLowerCase().includes(q))
+        return catMatches || sub_categories.length > 0 ? { ...cat, sub_categories } : null
+      })
+      .filter((c): c is ServiceCategoryWithSubCategories => c !== null)
+  }, [categoryTree, catSearch])
 
   function selectableIdsForCategory(cat: ServiceCategoryWithSubCategories): string[] {
     return cat.sub_categories
@@ -156,6 +186,7 @@ function ServiceModal({
       icon,
       icon_image_url: iconImageUrl,
       sub_category_tag_ids: tagIds,
+      location_tag_ids: locationIds,
       team_id: teamId,
       default_priority: priority,
       is_active: isActive,
@@ -166,6 +197,7 @@ function ServiceModal({
       visibility,
       sla_policy_id: slaPolicyId || null,
       template_id: templateId || null,
+      auto_oem_routing: autoOemRouting,
     }
 
     startTransition(async () => {
@@ -296,11 +328,25 @@ function ServiceModal({
             <p className="mb-2 text-[11px] text-muted-foreground">
               Which categories/sub-categories requesters can pick when raising a ticket for this service.
             </p>
+            {categoryTree.length > 0 && (
+              <div className="relative mb-2">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={catSearch}
+                  onChange={(e) => setCatSearch(e.target.value)}
+                  placeholder="Search categories…"
+                  className="w-full rounded-lg border border-border bg-background py-1.5 pl-8 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+              </div>
+            )}
             <div className="max-h-52 space-y-3 overflow-y-auto rounded-lg border border-border p-3">
               {categoryTree.length === 0 ? (
                 <p className="text-xs italic text-muted-foreground/60">No categories yet — manage them under Categories.</p>
+              ) : filteredCategoryTree.length === 0 ? (
+                <p className="text-xs italic text-muted-foreground/60">No categories match &quot;{catSearch}&quot;.</p>
               ) : (
-                categoryTree.map((cat) => {
+                filteredCategoryTree.map((cat) => {
                   const selectable = selectableIdsForCategory(cat)
                   const selectedCount = selectable.filter((id) => tagIds.includes(id)).length
                   const allSelected = selectable.length > 0 && selectedCount === selectable.length
@@ -395,6 +441,35 @@ function ServiceModal({
                     </div>
                   )
                 })
+              )}
+            </div>
+          </div>
+
+          {/* Visible to Locations — restricts which Requesters (by their own
+              profile.location_id) see this service in the catalog. Empty =
+              visible to everyone, same as every service today. Agents/
+              managers/admins always see every service regardless of this. */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Visible to Locations</label>
+            <p className="mb-2 text-[11px] text-muted-foreground">
+              Leave all unchecked to show this service to every Requester. Check one or more to restrict it — only
+              Requesters at a checked Location will see it in their Service Catalog. Agents/managers/admins always see it.
+            </p>
+            <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-lg border border-border p-3">
+              {locations.length === 0 ? (
+                <p className="text-xs italic text-muted-foreground/60">No locations yet — manage them under Admin → Org Structure.</p>
+              ) : (
+                locations.map((loc) => (
+                  <label key={loc.id} className="flex items-center gap-2 text-xs text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={locationIds.includes(loc.id)}
+                      onChange={() => toggleLocation(loc.id)}
+                      className="h-3.5 w-3.5 shrink-0 rounded border-border accent-primary"
+                    />
+                    <span className="flex-1 truncate">{loc.name}</span>
+                  </label>
+                ))
               )}
             </div>
           </div>
@@ -515,6 +590,25 @@ function ServiceModal({
               className="h-4 w-4 rounded border-border accent-primary"
             />
             <span className="text-sm text-foreground">Active (visible in catalog)</span>
+          </label>
+
+          {/* Auto OEM routing — for AC Issues-style services: on ticket
+              creation, if the requester's store has an OEM assigned, email
+              that OEM, post a system comment, and flip status straight to
+              In Progress. Unmapped stores raise a normal ticket, no automation. */}
+          <label className="flex cursor-pointer items-start gap-2">
+            <input
+              type="checkbox"
+              checked={autoOemRouting}
+              onChange={(e) => setAutoOemRouting(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+            />
+            <span className="text-sm text-foreground">
+              Auto-route to OEM
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                On ticket creation, email the requester&apos;s store&apos;s assigned OEM (via Org Structure → Stores), post a system comment, and set status to In Progress. Stores with no OEM mapped raise a normal ticket.
+              </span>
+            </span>
           </label>
 
           {error && (
@@ -644,7 +738,7 @@ function ServiceRow({
         )}
         <button
           onClick={() => onDelete(service)}
-          className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40"
+          className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-destructive/70 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40"
         >
           <Trash2 className="h-3 w-3" />
           Delete
@@ -656,7 +750,7 @@ function ServiceRow({
 
 // ── Main client component ─────────────────────────────────────────────────────
 
-export default function ServicesAdminClient({ services, categoryTree, teams, profiles, templates, slaPolicies }: Props) {
+export default function ServicesAdminClient({ services, categoryTree, teams, profiles, templates, slaPolicies, locations }: Props) {
   const [modal, setModal] = useState<ModalMode>(null)
   const [archiveTarget, setArchiveTarget] = useState<ServiceWithTags | null>(null)
   const [archivePending, startArchive] = useTransition()
@@ -737,6 +831,7 @@ export default function ServicesAdminClient({ services, categoryTree, teams, pro
           profiles={profiles}
           templates={templates}
           slaPolicies={slaPolicies}
+          locations={locations}
           onClose={() => setModal(null)}
         />
       )}

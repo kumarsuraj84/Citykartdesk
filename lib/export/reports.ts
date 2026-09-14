@@ -38,13 +38,19 @@ function labelPriority(v: string | null | undefined): string {
   return PRIORITY_LABELS[v] ?? v
 }
 
+// Date + time (24-hour, no AM/PM) — matches the rest of the app. Used for
+// every date column in an export (Created, Updated, Due, etc.), not just
+// "Created", since they all come through this one shared formatter.
 function fmtDate(v: string | null | undefined): string {
   if (!v) return ''
   try {
-    return new Date(v).toLocaleDateString('en-US', {
+    return new Date(v).toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
     })
   } catch {
     return v

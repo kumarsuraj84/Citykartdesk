@@ -70,7 +70,11 @@ export async function GET(req: NextRequest) {
   // Try to set up native API push notifications. If the required env vars are
   // missing the channel falls back to the existing IMAP polling path automatically.
   const baseUrl = process.env.OAUTH_REDIRECT_BASE_URL ?? origin
-  const workerSecret = process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET ?? ''
+  // Dedicated to this public URL/clientState — see the matching comment in
+  // app/api/intake/webhook/outlook/route.ts for why this is deliberately
+  // not INTAKE_WORKER_SECRET (that one grants full worker-admin access and
+  // shouldn't sit in a URL query string).
+  const workerSecret = process.env.INTAKE_WEBHOOK_TOKEN ?? process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET ?? ''
   let pushConfig: Record<string, unknown> = {}
 
   if (provider === 'google') {

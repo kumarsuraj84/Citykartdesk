@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { secureCompare } from '@/lib/secure-compare'
 
-// POST /api/intake/webhook/outlook?token=<INTAKE_WORKER_SECRET>
+// POST /api/intake/webhook/outlook?token=<INTAKE_WEBHOOK_TOKEN>
 // GET  /api/intake/webhook/outlook?validationToken=...   (Microsoft subscription validation)
 //
 // Receives Microsoft Graph change notifications when a new message arrives in a
@@ -12,8 +12,13 @@ import { secureCompare } from '@/lib/secure-compare'
 // Notification body:
 //   { value: [{ changeType, resource, resourceData: { id }, subscriptionId, clientState }] }
 //
-// clientState is the INTAKE_WORKER_SECRET we passed when creating the subscription,
-// so we can verify the push came from Microsoft (not a spoofed request).
+// clientState is the INTAKE_WEBHOOK_TOKEN we passed when creating the
+// subscription, so we can verify the push came from Microsoft (not a
+// spoofed request). Deliberately NOT the same value as INTAKE_WORKER_SECRET
+// (used only for the outbound x-intake-worker-secret header below) — that
+// secret grants full worker-admin access, and this one sits in a public URL
+// query string / gets echoed back by Microsoft, which routinely ends up in
+// proxy/CDN logs and Referer headers.
 
 export async function GET(req: NextRequest) {
   // Microsoft subscription validation handshake.
@@ -29,8 +34,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token')
-  const secret = process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
-  if (!secret || !token || !secureCompare(token, secret)) {
+  const webhookToken = process.env.INTAKE_WEBHOOK_TOKEN ?? process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
+  if (!webhookToken || !token || !secureCompare(token, webhookToken)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
@@ -68,8 +73,8 @@ export async function POST(req: NextRequest) {
     const messageId = notification.resourceData?.id
     if (!messageId) continue
 
-    // Verify clientState matches our secret.
-    if (!notification.clientState || !secureCompare(notification.clientState, secret)) continue
+    // Verify clientState matches our webhook token (not the worker secret).
+    if (!notification.clientState || !secureCompare(notification.clientState, webhookToken)) continue
 
     // Find the channel for this subscription.
     const { data: channel } = await admin

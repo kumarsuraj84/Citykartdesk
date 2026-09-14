@@ -13,6 +13,7 @@ import {
   getTaskDependencies,
 } from '@/lib/queries/tasks'
 import { getEnabledModules } from '@/lib/queries/profiles'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 import type { TaskStatus, TaskPriority, TaskType } from '@/types'
 import type { Json, Database } from '@/types/database'
 
@@ -109,6 +110,15 @@ export async function createTask(data: {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
 
+  // D-16: tasks are an agent-tier-and-above concept throughout this app —
+  // every other task mutation (assign, status change, delete, ...) already
+  // gates on isAgentOrAboveRole(), and the (separately non-enforced)
+  // Permission Matrix already displays task creation as agent+-only. This
+  // was the one mutation that never actually checked it.
+  if (!isAgentOrAboveRole(profile.role)) {
+    return { error: 'You do not have permission to create tasks.' }
+  }
+
   const enabledModules = await getEnabledModules()
   if (!enabledModules.includes('tasks')) return { error: 'The Tasks module is not enabled for your organisation.' }
 
@@ -136,7 +146,7 @@ export async function createTask(data: {
     .single()
 
   if (error || !task) {
-    return { error: error?.message ?? 'Failed to create task.' }
+    return { error: sanitizeError(error, { route: 'tasks.ts#createTask', fallback: 'Failed to create task.' }) }
   }
 
   await logTaskActivity({
@@ -182,7 +192,7 @@ export async function updateTaskStatus(
     updated_at: new Date().toISOString(),
     ...(completedAt !== undefined ? { completed_at: completedAt } : {}),
   }).eq('id', taskId)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'tasks.ts#updateTaskStatus', fallback: 'Failed to update task status.' }) }
 
   const action =
     newStatus === 'done' ? 'completed' :
@@ -281,33 +291,31 @@ export async function updateTaskField(
   // caller isn't the creator/assignee/team-member/manager-admin of — chaining
   // .select().maybeSingle() lets us tell "updated" from "no-op" apart and
   // return a real error instead of a false success.
-  let updateError: string | undefined
+  let updateError: { code?: string; message: string } | null = null
   let updatedRow: { id: string } | null = null
   if (field === 'title') {
     const { data, error } = await supabase.from('tasks').update({ title: value ?? '', updated_at: updatedAt }).eq('id', taskId).select('id').maybeSingle()
-    if (error) updateError = error.message
+    if (error) updateError = error
     updatedRow = data
   } else if (field === 'description') {
     const { data, error } = await supabase.from('tasks').update({ description: value, updated_at: updatedAt }).eq('id', taskId).select('id').maybeSingle()
-    if (error) updateError = error.message
+    if (error) updateError = error
     updatedRow = data
   } else if (field === 'priority') {
     const { data, error } = await supabase.from('tasks').update({ priority: value as TaskPriority, updated_at: updatedAt }).eq('id', taskId).select('id').maybeSingle()
-    if (error) updateError = error.message
+    if (error) updateError = error
     updatedRow = data
   } else if (field === 'due_date') {
     const { data, error } = await supabase.from('tasks').update({ due_date: value, updated_at: updatedAt }).eq('id', taskId).select('id').maybeSingle()
-    if (error) updateError = error.message
+    if (error) updateError = error
     updatedRow = data
   } else if (field === 'assignee_id') {
     const { data, error } = await supabase.from('tasks').update({ assignee_id: value, updated_at: updatedAt }).eq('id', taskId).select('id').maybeSingle()
-    if (error) updateError = error.message
+    if (error) updateError = error
     updatedRow = data
   }
 
-  const error = updateError ? { message: updateError } : null
-
-  if (error) return { error: error.message }
+  if (updateError) return { error: sanitizeError(updateError, { route: 'tasks.ts#updateTaskField', fallback: 'Failed to update task.' }) }
   if (!updatedRow) return { error: 'Task not found, or you do not have permission to edit it.' }
 
   if (field === 'assignee_id') {
@@ -365,7 +373,7 @@ export async function updateTaskSource(taskId: string, source: string | null): P
     .from('tasks')
     .update({ source_metadata: meta, updated_at: new Date().toISOString() } as never)
     .eq('id', taskId)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'tasks.ts#updateTaskSource', fallback: 'Failed to update task.' }) }
 
   revalidatePath('/tasks')
   return {}
@@ -383,7 +391,7 @@ export async function updateTaskTags(taskId: string, tags: string[]): Promise<Ac
     .eq('id', taskId)
     .select('id')
     .maybeSingle()
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'tasks.ts#updateTaskTags', fallback: 'Failed to update tags.' }) }
   if (!data) return { error: 'Task not found, or you do not have permission to edit it.' }
   revalidatePath('/tasks'); revalidatePath(`/tasks/${taskId}`)
   return {}
@@ -400,7 +408,7 @@ export async function updateTaskDates(taskId: string, startDate: string | null, 
     .eq('id', taskId)
     .select('id')
     .maybeSingle()
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'tasks.ts#updateTaskDates', fallback: 'Failed to update dates.' }) }
   if (!data) return { error: 'Task not found, or you do not have permission to edit it.' }
   revalidatePath('/tasks'); revalidatePath(`/tasks/${taskId}`)
   return {}
@@ -416,7 +424,7 @@ export async function addTaskAssignee(taskId: string, userId: string): Promise<A
   const { error } = await sb
     .from('task_assignees')
     .upsert({ task_id: taskId, user_id: userId, added_by: profile.id }, { onConflict: 'task_id,user_id' })
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'tasks.ts#addTaskAssignee', fallback: 'Failed to add assignee.' }) }
 
   // Keep the primary assignee_id populated when the task had none, so the
   // (untouched) task list still shows an assignee.
@@ -445,7 +453,7 @@ export async function removeTaskAssignee(taskId: string, userId: string): Promis
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as unknown as { from: (t: string) => any }
   const { error } = await sb.from('task_assignees').delete().eq('task_id', taskId).eq('user_id', userId)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'tasks.ts#removeTaskAssignee', fallback: 'Failed to remove assignee.' }) }
 
   // If we removed the primary assignee, promote another remaining one (or clear).
   const { data: task } = await supabase.from('tasks').select('assignee_id').eq('id', taskId).single()
@@ -475,7 +483,7 @@ export async function addTaskComment(taskId: string, body: string): Promise<Acti
     body: body.trim(),
   })
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'tasks.ts#addTaskComment', fallback: 'Failed to post comment.' }) }
 
   await logTaskActivity({
     taskId,
@@ -517,7 +525,7 @@ export async function createSubtask(
     .select('id')
     .single()
 
-  if (error || !task) return { error: error?.message ?? 'Failed to create subtask.' }
+  if (error || !task) return { error: sanitizeError(error, { route: 'tasks.ts#createSubtask', fallback: 'Failed to create subtask.' }) }
 
   revalidatePath('/tasks')
   revalidatePath(`/tasks/${parentTaskId}`)
@@ -599,7 +607,7 @@ export async function addTaskDependency(
 
   if (error) {
     if (error.code === '23505') return { error: 'This dependency already exists.' }
-    return { error: error.message }
+    return { error: sanitizeError(error, { route: 'tasks.ts#addTaskDependency', fallback: 'Failed to add dependency.' }) }
   }
 
   revalidatePath(`/tasks/${taskId}`)
@@ -613,7 +621,7 @@ export async function removeTaskDependency(dependencyId: string): Promise<Action
 
   const supabase = await createClient()
   const { data, error } = await supabase.from('task_dependencies').delete().eq('id', dependencyId).select('id').maybeSingle()
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'tasks.ts#removeTaskDependency', fallback: 'Failed to remove dependency.' }) }
   if (!data) return { error: 'Dependency not found, or you do not have permission to remove it.' }
 
   refresh()
@@ -637,7 +645,7 @@ export async function toggleSubtaskDone(subtaskId: string, done: boolean): Promi
     updated_at: new Date().toISOString(),
   }).eq('id', subtaskId).select('id').maybeSingle()
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'tasks.ts#toggleSubtaskDone', fallback: 'Failed to update subtask.' }) }
   if (!data) return { error: 'Task not found, or you do not have permission to edit it.' }
 
   revalidatePath('/tasks')
@@ -687,7 +695,7 @@ export async function createCustomField(data: {
     .select('id')
     .single()
 
-  if (error || !field) return { error: error?.message ?? 'Failed to create field.' }
+  if (error || !field) return { error: sanitizeError(error, { route: 'tasks.ts#createCustomField', fallback: 'Failed to create field.' }) }
   revalidatePath('/tasks')
   return { data: { id: field.id } }
 }
@@ -708,7 +716,7 @@ export async function updateCustomField(fieldId: string, data: {
   if (data.options !== undefined) update.options = data.options
 
   const { error } = await supabase.from('task_custom_fields').update(update).eq('id', fieldId)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'tasks.ts#updateCustomField', fallback: 'Failed to update field.' }) }
   revalidatePath('/tasks')
   return {}
 }
@@ -722,7 +730,7 @@ export async function deleteCustomField(fieldId: string): Promise<ActionResult> 
 
   const supabase = await createClient()
   const { error } = await supabase.from('task_custom_fields').delete().eq('id', fieldId)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'tasks.ts#deleteCustomField', fallback: 'Failed to delete field.' }) }
   revalidatePath('/tasks')
   return {}
 }
@@ -742,7 +750,7 @@ export async function setCustomFieldValue(
       { task_id: taskId, field_id: fieldId, value, updated_at: new Date().toISOString() },
       { onConflict: 'task_id,field_id' }
     )
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'tasks.ts#setCustomFieldValue', fallback: 'Failed to save value.' }) }
   return {}
 }
 
@@ -754,7 +762,11 @@ export async function deleteTask(taskId: string): Promise<ActionResult> {
 
   const supabase = await createClient()
 
-  // Only creator or manager/admin can delete
+  // Only creator or manager/admin/platform_owner can delete — matches the
+  // tasks_delete RLS policy's role list exactly (D-09: that policy already
+  // grants platform_owner; this app-level pre-check was the one place that
+  // omitted it, producing a false "not authorized" error before the RLS-
+  // backed delete was ever attempted).
   const { data: task } = await supabase
     .from('tasks')
     .select('created_by')
@@ -766,12 +778,13 @@ export async function deleteTask(taskId: string): Promise<ActionResult> {
   const canDelete =
     task.created_by === profile.id ||
     profile.role === 'manager' ||
-    profile.role === 'admin'
+    profile.role === 'admin' ||
+    profile.role === 'platform_owner'
 
   if (!canDelete) return { error: 'You do not have permission to delete this task.' }
 
   const { error } = await supabase.from('tasks').delete().eq('id', taskId)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'tasks.ts#deleteTask', fallback: 'Failed to delete task.' }) }
 
   revalidatePath('/tasks')
   return {}

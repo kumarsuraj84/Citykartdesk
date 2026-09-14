@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { applyCurrentlyBreachedFilter } from '@/lib/sla/breach'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -125,7 +126,10 @@ export async function getMonitoringStats(): Promise<MonitoringStats> {
     supabase.from('tasks').select('id', { count: 'exact', head: true }).not('status', 'in', `(${doneCancelled.join(',')})`),
     supabase.from('approvals').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('tasks').select('id', { count: 'exact', head: true }).lt('due_date', new Date().toISOString()).not('status', 'in', `(${doneCancelled.join(',')})`),
-    supabase.from('requests').select('id', { count: 'exact', head: true }).lt('resolution_due_at', new Date().toISOString()).not('status', 'in', `(${closedStatuses.join(',')})`),
+    // "Currently Breached" (D-01, lib/sla/breach.ts) — same formula as the
+    // Home Dashboard and Admin Analytics KPI card, not the Report Builder's
+    // broader "Ever Breached" (which also counts tickets resolved late).
+    applyCurrentlyBreachedFilter(supabase.from('requests').select('id', { count: 'exact', head: true })),
     supabase.from('requests').select('id', { count: 'exact', head: true }).is('assigned_to', null).not('status', 'in', `(${closedStatuses.join(',')})`),
     supabase.from('requests').select('id', { count: 'exact', head: true }).gte('created_at', todayIso),
     supabase.from('requests').select('id', { count: 'exact', head: true }).eq('status', 'resolved').gte('updated_at', todayIso),

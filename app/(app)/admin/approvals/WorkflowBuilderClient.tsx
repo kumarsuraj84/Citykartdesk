@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { toast } from 'sonner'
 import {
   Plus, Trash2, ChevronDown, ChevronRight, Edit2, Save,
-  ArrowUp, ArrowDown, GitMerge, Link2, Unlink,
+  ArrowUp, ArrowDown, GitMerge, Link2, Unlink, TriangleAlert,
 } from 'lucide-react'
 import {
   createWorkflow,
@@ -184,7 +184,8 @@ function StepRow({
           <button
             onClick={handleDelete}
             disabled={isPending}
-            className="rounded p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50 disabled:opacity-40"
+            className="rounded p-1 text-red-500/70 hover:text-red-500 hover:bg-red-50 disabled:opacity-40"
+            aria-label="Delete step"
           >
             <Trash2 className="h-3 w-3" />
           </button>
@@ -374,11 +375,25 @@ function WorkflowCard({
             {workflow.services.length} service{workflow.services.length !== 1 ? 's' : ''}
           </span>
         )}
+        {/* Product Decision D: a zero-step workflow bound to live services
+            never silently acts as a valid gate anymore — submitForApproval()
+            (lib/actions/requests.ts) now refuses to submit a request against
+            one — but a config problem an admin can't see is still a config
+            problem. This badge is the "admin sees obvious Configuration
+            incomplete" half of that fix. Zero steps with NO services bound
+            isn't flagged — that's just a workflow still being drafted. */}
+        {workflow.step_count === 0 && workflow.services.length > 0 && (
+          <span className="flex items-center gap-1 rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[10px] font-semibold text-red-600" title="This workflow is bound to services but has no approval steps — requests sent to it cannot currently be submitted for approval.">
+            <TriangleAlert className="h-3 w-3" />
+            Configuration incomplete
+          </span>
+        )}
         <button
           onClick={handleDelete}
           disabled={isPending}
           title={workflow.services.length > 0 ? 'Unbind from all services first' : 'Delete workflow'}
-          className="rounded-lg p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+          aria-label="Delete workflow"
+          className="rounded-lg p-1.5 text-red-500/70 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>

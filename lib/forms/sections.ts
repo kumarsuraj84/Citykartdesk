@@ -48,9 +48,11 @@ export function resolveFormSections(service: {
  * Untagged (legacy) services fall through to `resolveFormSections()`
  * unchanged, so nothing built before Form Templates existed has to migrate.
  *
- * Callers must select `template:form_templates(form_sections, form_fields)`
- * alongside the service row (see lib/queries/services.ts) — this function
- * does no I/O of its own.
+ * Callers must select `template:form_templates(form_sections)` alongside the
+ * service row (see lib/queries/services.ts) — this function does no I/O of
+ * its own. Note: form_templates has no form_fields column (only services'
+ * own legacy flat field list does) — requesting it on the embedded template
+ * makes PostgREST reject the whole query.
  */
 export function resolveServiceFormSections(service: {
   form_sections?: unknown
@@ -122,7 +124,7 @@ export type ServiceFormFieldRef = {
 export async function getServiceFormFieldsForOrg(admin: AnyClient, orgId: string): Promise<ServiceFormFieldRef[]> {
   const { data } = await admin
     .from('services')
-    .select('id, name, form_sections, form_fields, template:form_templates(form_sections, form_fields)')
+    .select('id, name, form_sections, form_fields, template:form_templates(form_sections)')
     .eq('org_id', orgId)
     .eq('is_active', true)
 

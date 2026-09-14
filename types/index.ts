@@ -175,6 +175,11 @@ export type FormFieldType =
   | 'phone'
   | 'file'
   | 'toggle'
+  // Always system-populated from the requester's own store master record
+  // (stores.address) — never requester-editable, regardless of
+  // requester_can_set. Empty for HO/Warehouse requesters (no store_id).
+  // See createRequest() in lib/actions/requests.ts and FieldRenderer.tsx.
+  | 'store_address'
 
 export type FormFieldOption = {
   value: string
@@ -222,6 +227,19 @@ export type FormField = {
    *  lib/forms/sections.ts's requesterCanSet()/isRequesterMandatory()/
    *  isTechnicianMandatory(). */
   requester_can_set?: boolean
+  /** Stage 7.1 — explicit, opt-in mapping of this field to a value the
+   *  conversational engine (WhatsApp today) already collects on its own:
+   *  `request_title` -> auto-filled from the engine's generated title,
+   *  `request_description` -> auto-filled from the requester's captured
+   *  description. Undefined/null (the default for every field, including
+   *  every field saved before this existed) means "an ordinary field" —
+   *  asked normally, never auto-filled. Deliberately NEVER inferred from
+   *  `label`/`type`/position (Stage 3.1's "no label-guessing" principle) —
+   *  a template author must set this explicitly, per field, per template.
+   *  Only consulted by the conversational engine
+   *  (lib/conversations/orchestrator.ts); the web form and Email Intake
+   *  ignore it entirely and keep asking/showing the field as today. */
+  semantic_role?: 'request_title' | 'request_description' | null
 }
 
 // ============================================================

@@ -36,9 +36,11 @@ export function AppSettingsClient({ autoCloseDays }: AppSettingsClientProps) {
       <div className="border-b border-border/50 px-4 py-3">
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
-            <p className="text-sm font-medium text-foreground">Auto-close after resolution (days)</p>
+            <p className="text-sm font-medium text-foreground">Reopen window after resolution (days)</p>
             <p className="text-xs text-muted-foreground">
-              Resolved requests are automatically closed after this many days with no activity.
+              How long a requester can still reopen a resolved request if they&apos;re not satisfied with it.
+              Once this window passes with no reopen, the request is automatically closed. Applies whether
+              the request was resolved by a technician or by a Business Rule.
             </p>
           </div>
           {editing ? (

@@ -1,11 +1,13 @@
 'use client'
 
+import Link from 'next/link'
 import { useState, useTransition } from 'react'
-import { Save, Check, AlertTriangle, Circle, Link2, Link2Off } from 'lucide-react'
-import { updateAppSetting, updateRetentionPolicy } from '@/lib/actions/admin/config'
-import { saveDeskTimeApiKey, disconnectDeskTime } from '@/lib/actions/admin/integrations'
+import { Save, Check, AlertTriangle, Circle, Mail, MessageSquare, ChevronDown, ExternalLink } from 'lucide-react'
+import { updateEmailFromSettings, updateRetentionPolicy } from '@/lib/actions/admin/config'
+import { EMAIL_REGEX } from '@/lib/validation/formFields'
+import type { WhatsAppChannelReadiness } from '@/lib/actions/intake/whatsapp-channel'
 
-type Tab = 'general' | 'retention' | 'integrations'
+type Tab = 'retention' | 'integrations'
 
 interface RetentionPolicy {
   id: string
@@ -16,17 +18,24 @@ interface RetentionPolicy {
   is_active: boolean
 }
 
+interface WhatsAppChannelSummary {
+  id: string
+  name: string
+  status: string
+  readiness: WhatsAppChannelReadiness | null
+}
+
 interface SettingsClientProps {
-  autoCloseDays: number
   retentionPolicies: RetentionPolicy[]
   integrationStatus: {
     resendKeySet: boolean
     resendKeyMasked: string | null
   }
-  deskTimeStatus: {
-    connected: boolean
-    connectedAt: string | null
+  emailFrom: {
+    name: string
+    address: string
   }
+  whatsappChannels: WhatsAppChannelSummary[]
 }
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -58,83 +67,6 @@ function NullableNumberInput({
       }}
       className="w-24 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
     />
-  )
-}
-
-function GeneralTab({ autoCloseDays }: { autoCloseDays: number }) {
-  const [value, setValue]             = useState(String(autoCloseDays))
-  const [editing, setEditing]         = useState(false)
-  const [saved, setSaved]             = useState(false)
-  const [error, setError]             = useState<string | null>(null)
-  const [isPending, startTransition]  = useTransition()
-
-  function handleSave() {
-    const parsed = parseInt(value, 10)
-    if (isNaN(parsed) || parsed < 1) { setError('Must be a positive integer.'); return }
-    setError(null)
-    startTransition(async () => {
-      const result = await updateAppSetting('auto_close_days', String(parsed))
-      if (result.error) { setError(result.error); return }
-      setEditing(false)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
-    })
-  }
-
-  return (
-    <div className="space-y-4 max-w-2xl">
-      <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-        <div className="border-b border-border/50 px-4 py-3">
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-0.5">
-              <p className="text-sm font-medium text-foreground">Auto-close after resolution (days)</p>
-              <p className="text-xs text-muted-foreground">
-                Resolved requests are automatically closed after this many days with no activity.
-              </p>
-            </div>
-            {editing ? (
-              <div className="flex items-center gap-2 shrink-0">
-                <input
-                  type="number"
-                  min="1"
-                  value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  className="w-20 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-                <button
-                  onClick={handleSave}
-                  disabled={isPending}
-                  className="btn-gradient disabled:opacity-40"
-                >
-                  <Save className="h-3.5 w-3.5" />
-                  {isPending ? 'Saving…' : 'Save'}
-                </button>
-                <button
-                  onClick={() => { setEditing(false); setValue(String(autoCloseDays)); setError(null) }}
-                  className="btn-soft"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 shrink-0">
-                {saved && <Check className="h-4 w-4 text-emerald-500" />}
-                <span className="text-sm font-semibold tabular-nums text-foreground">{value}d</span>
-                <button onClick={() => setEditing(true)} className="text-xs text-primary hover:underline">
-                  Edit
-                </button>
-              </div>
-            )}
-          </div>
-          {error && (
-            <div className="mt-2 flex items-center gap-2 text-xs text-red-600">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              {error}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -259,168 +191,311 @@ function RetentionTab({ policies }: { policies: RetentionPolicy[] }) {
   )
 }
 
-function DeskTimeCard({ status }: { status: SettingsClientProps['deskTimeStatus'] }) {
-  const [apiKey, setApiKey]           = useState('')
-  const [editing, setEditing]         = useState(false)
-  const [saved, setSaved]             = useState(false)
-  const [error, setError]             = useState<string | null>(null)
-  const [isPending, startTransition]  = useTransition()
+// The whole app's email story lives in one card: what address it sends as,
+// whether Resend can actually deliver it, and — since the two behave very
+// differently — a clear split between mail that goes out the instant an
+// event happens (notifications, OEM routing; no scheduler involved) and mail
+// that depends on a recurring job existing (due-soon/overdue alerts, the
+// daily digest, SLA-escalation rules). Merged from four previously separate
+// cards (sender address, Resend status, Business Rules Cron, Alert Cron) —
+// they were four facets of one "how does this app send email" question, not
+// four independent integrations.
+function EmailCard({
+  initial, resend,
+}: {
+  initial: SettingsClientProps['emailFrom']
+  resend: SettingsClientProps['integrationStatus']
+}) {
+  const [name, setName] = useState(initial.name)
+  const [address, setAddress] = useState(initial.address)
+  const [editing, setEditing] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [showGuide, setShowGuide] = useState(false)
+  const [isPending, startTransition] = useTransition()
+
+  const effective = address.trim() || 'noreply@citykart.org (default — not yet configured)'
 
   function handleSave() {
-    if (!apiKey.trim()) { setError('Enter a DeskTime API key.'); return }
+    const trimmedAddress = address.trim()
+    if (trimmedAddress && !EMAIL_REGEX.test(trimmedAddress)) {
+      setError('That doesn\'t look like a valid email address.')
+      return
+    }
     setError(null)
     startTransition(async () => {
-      const result = await saveDeskTimeApiKey(apiKey.trim())
+      const result = await updateEmailFromSettings(name.trim(), trimmedAddress)
       if (result.error) { setError(result.error); return }
-      setApiKey('')
       setEditing(false)
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
     })
   }
 
-  function handleDisconnect() {
-    setError(null)
-    startTransition(async () => {
-      const result = await disconnectDeskTime()
-      if (result.error) setError(result.error)
-    })
-  }
-
-  const connectedDate = status.connectedAt
-    ? new Date(status.connectedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    : null
-
   return (
-    <div className="rounded-xl border border-border bg-card px-4 py-4 shadow-sm space-y-3">
-      <div className="flex items-start gap-3">
-        {status.connected
-          ? <Link2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
-          : <Link2Off className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
-        <div className="flex-1 space-y-0.5">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-medium text-foreground">DeskTime</p>
-            {saved && <Check className="h-3.5 w-3.5 text-emerald-500" />}
+    <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm divide-y divide-border">
+      {/* Identity — the one address everything sends from */}
+      <div className="flex items-start gap-3 px-4 py-4">
+        <Mail className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="flex-1 min-w-0 space-y-3">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">Email Sending</p>
+              <p className="text-xs text-muted-foreground">
+                One address for everything this desk emails — ticket notifications, OEM routing, and escalation
+                alerts all send from this identity. Change it here anytime; no code change or redeploy needed.
+              </p>
+            </div>
+            {!editing && (
+              <div className="flex shrink-0 items-center gap-2">
+                {saved && (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+                    <Check className="h-3.5 w-3.5" /> Saved
+                  </span>
+                )}
+                <button onClick={() => setEditing(true)} className="btn-soft">Edit</button>
+              </div>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground">Pulls team time-tracking data into Projects reporting.</p>
-          {status.connected && connectedDate && (
-            <p className="text-xs text-muted-foreground/70 font-mono">Connected {connectedDate}</p>
-          )}
-        </div>
-      </div>
 
-      {editing ? (
-        <div className="flex items-center gap-2 pl-6">
-          <input
-            type="password"
-            autoFocus
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="DeskTime API key"
-            className="flex-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-          <button onClick={handleSave} disabled={isPending} className="btn-gradient disabled:opacity-40">
-            <Save className="h-3.5 w-3.5" />
-            {isPending ? 'Saving…' : 'Save'}
-          </button>
-          <button
-            onClick={() => { setEditing(false); setApiKey(''); setError(null) }}
-            className="btn-soft"
-          >
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <div className="pl-6 flex items-center gap-3">
-          <button onClick={() => setEditing(true)} className="text-xs text-primary hover:underline">
-            {status.connected ? 'Update key' : 'Connect DeskTime'}
-          </button>
-          {status.connected && (
-            <button
-              onClick={handleDisconnect}
-              disabled={isPending}
-              className="text-xs text-red-600 hover:underline disabled:opacity-40"
-            >
-              {isPending ? 'Disconnecting…' : 'Disconnect'}
-            </button>
-          )}
-        </div>
-      )}
-
-      {error && (
-        <div className="pl-6 flex items-center gap-2 text-xs text-red-600">
-          <AlertTriangle className="h-3.5 w-3.5" />
-          {error}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function IntegrationsTab({ status, deskTimeStatus }: {
-  status: SettingsClientProps['integrationStatus']
-  deskTimeStatus: SettingsClientProps['deskTimeStatus']
-}) {
-  const integrations = [
-    {
-      name: 'Email (Resend)',
-      description: 'Transactional email for notifications and reports.',
-      enabled: status.resendKeySet,
-      detail: status.resendKeySet && status.resendKeyMasked
-        ? `API key: ••••${status.resendKeyMasked}`
-        : 'RESEND_API_KEY not set — email delivery is disabled.',
-    },
-    {
-      name: 'Business Rules Cron',
-      description: 'Wire to /api/business-rules/run — see .claude/cron.md',
-      enabled: false,
-      detail: 'Schedule a cron job to POST /api/business-rules/run on your desired cadence.',
-    },
-    {
-      name: 'Alert Cron',
-      description: 'Wire to /api/alerts/run — see .claude/cron.md',
-      enabled: false,
-      detail: 'Schedule a cron job to POST /api/alerts/run on your desired cadence.',
-    },
-    {
-      name: 'Report Cron',
-      description: 'Wire to /api/reports/send — see .claude/cron.md',
-      enabled: false,
-      detail: 'Schedule a cron job to POST /api/reports/send on your desired cadence.',
-    },
-  ]
-
-  return (
-    <div className="space-y-4 max-w-2xl">
-      <p className="text-sm text-muted-foreground">
-        Most integration status is derived from environment variables and cannot be edited here — DeskTime is the exception, connected below.
-      </p>
-      <DeskTimeCard status={deskTimeStatus} />
-      <div className="space-y-3">
-        {integrations.map((intg) => (
-          <div key={intg.name} className="rounded-xl border border-border bg-card px-4 py-4 shadow-sm">
-            <div className="flex items-start gap-3">
-              <Circle
-                className={`mt-0.5 h-3 w-3 shrink-0 fill-current ${intg.enabled ? 'text-emerald-500' : 'text-red-400'}`}
-              />
-              <div className="space-y-0.5">
-                <p className="text-sm font-medium text-foreground">{intg.name}</p>
-                <p className="text-xs text-muted-foreground">{intg.description}</p>
-                <p className="text-xs text-muted-foreground/70 font-mono">{intg.detail}</p>
+          {editing ? (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] text-muted-foreground">Display name</span>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Citykart Desk"
+                    className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] text-muted-foreground">Email address</span>
+                  <input
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="servicedesk@citykart.org"
+                    className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </label>
+              </div>
+              {error && <p className="text-xs text-red-600">{error}</p>}
+              <div className="flex gap-2">
+                <button onClick={handleSave} disabled={isPending} className="btn-gradient disabled:opacity-40">
+                  <Save className="h-3.5 w-3.5" />
+                  {isPending ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  onClick={() => { setEditing(false); setName(initial.name); setAddress(initial.address); setError(null) }}
+                  className="btn-soft"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
-          </div>
-        ))}
+          ) : (
+            <p className="text-sm font-mono text-foreground">
+              {name.trim() || 'Citykart Desk'} &lt;{effective}&gt;
+            </p>
+          )}
+
+          <button
+            onClick={() => setShowGuide((v) => !v)}
+            className="flex items-center gap-1 text-xs font-medium text-primary"
+          >
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showGuide ? 'rotate-180' : ''}`} />
+            How do I set this up?
+          </button>
+
+          {showGuide && (
+            <ol className="space-y-2 rounded-lg bg-muted/40 px-4 py-3 text-xs text-muted-foreground list-decimal list-inside">
+              <li>
+                Create the mailbox in Google Workspace (e.g. <span className="font-mono">servicedesk@citykart.org</span>) —
+                this is where replies land, and where anyone who emails that address directly reaches a real inbox.
+              </li>
+              <li>
+                Separately, verify the <span className="font-mono">citykart.org</span> domain with Resend (the email
+                provider this app uses to actually send): Resend dashboard → Domains → Add Domain, then add the SPF
+                and DKIM records it gives you wherever your domain&apos;s DNS is managed. This step doesn&apos;t
+                touch your Workspace mailbox or its MX records — the two coexist fine.
+              </li>
+              <li>Type the same address into the field above and hit Save — takes effect on the very next email sent, for every channel.</li>
+              <li>
+                If email isn&apos;t sending at all yet (see Delivery below), that&apos;s a separate one-time step:
+                a platform admin needs to set <span className="font-mono">RESEND_API_KEY</span> in the hosting
+                environment — ask me for help with that part when you&apos;re ready.
+              </li>
+            </ol>
+          )}
+        </div>
+      </div>
+
+      {/* Delivery — can mail actually leave the system at all */}
+      <div className="flex items-start gap-3 px-4 py-3.5">
+        <Circle
+          className={`mt-1 h-2.5 w-2.5 shrink-0 fill-current ${resend.resendKeySet ? 'text-emerald-500' : 'text-red-400'}`}
+        />
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium text-foreground">Delivery via Resend</p>
+          <p className="text-xs text-muted-foreground/80 font-mono">
+            {resend.resendKeySet && resend.resendKeyMasked
+              ? `Connected — API key ••••${resend.resendKeyMasked}`
+              : 'RESEND_API_KEY not set — nothing below can actually send until this is configured.'}
+          </p>
+        </div>
+      </div>
+
+      {/* Where this address is used — instant vs. needs-a-scheduler */}
+      <div className="px-4 py-3.5 space-y-2.5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Where this address is used</p>
+        <div className="flex items-start gap-2.5">
+          <Circle
+            className={`mt-1 h-2.5 w-2.5 shrink-0 fill-current ${resend.resendKeySet ? 'text-emerald-500' : 'text-red-400'}`}
+          />
+          <p className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Ticket notifications & OEM routing</span> — sent the
+            instant an event happens (assignment, comments, status changes, OEM auto-routing) per your{' '}
+            Notification Rules. No schedule required — this works as soon as Delivery above is connected.
+          </p>
+        </div>
+        <div className="flex items-start gap-2.5">
+          <Circle className="mt-1 h-2.5 w-2.5 shrink-0 fill-current text-red-400" />
+          <p className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Due-soon/overdue alerts, daily digest & SLA escalation</span> —
+            time-based, so something must call <span className="font-mono">/api/alerts/run</span> and{' '}
+            <span className="font-mono">/api/business-rules/run</span> on a recurring schedule (see{' '}
+            <span className="font-mono">.claude/cron.md</span>). Not scheduled in this environment yet.
+          </p>
+        </div>
       </div>
     </div>
   )
 }
 
-export function SettingsClient({ autoCloseDays, retentionPolicies, integrationStatus, deskTimeStatus }: SettingsClientProps) {
-  const [tab, setTab] = useState<Tab>('general')
+// One-glance CONFIGURED-vs-VERIFIED status, reusing Stage 6's own
+// readiness diagnostic (getWhatsAppChannelReadiness) rather than
+// re-deriving it. Credential entry/editing and the full Test Connection
+// flow stay on the dedicated Admin > Intake > Channels page — this card
+// exists so that page's status is visible from one stable, non-module-
+// gated location, not to duplicate its management UI.
+function WhatsAppCard({ channel }: { channel: WhatsAppChannelSummary }) {
+  const r = channel.readiness
+
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm divide-y divide-border">
+      <div className="flex items-start gap-3 px-4 py-4">
+        <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">{channel.name}</p>
+              <p className="text-xs text-muted-foreground">
+                WhatsApp intake — requesters can start a ticket by messaging this number. Managed from Admin &gt; Intake &gt; Channels.
+              </p>
+            </div>
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+              channel.status === 'active' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-border bg-muted text-muted-foreground'
+            }`}>
+              {channel.status}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {r ? (
+        <>
+          <div className="flex items-start gap-3 px-4 py-3.5">
+            <Circle className={`mt-1 h-2.5 w-2.5 shrink-0 fill-current ${r.credentialsConfigured && r.phoneNumberIdConfigured ? 'text-emerald-500' : 'text-red-400'}`} />
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium text-foreground">Configured</p>
+              <p className="text-xs text-muted-foreground/80">
+                Phone Number ID {r.phoneNumberIdConfigured ? 'set' : 'missing'} · WABA ID {r.wabaIdConfigured ? 'set' : 'not set'} · Credentials {r.credentialsConfigured ? 'stored in Vault' : 'not entered yet'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 px-4 py-3.5">
+            <Circle className={`mt-1 h-2.5 w-2.5 shrink-0 fill-current ${r.metaConnectionVerified ? 'text-emerald-500' : 'text-red-400'}`} />
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium text-foreground">Meta connection verified</p>
+              <p className="text-xs text-muted-foreground/80 font-mono">
+                {r.metaConnectionVerified
+                  ? `Verified ${r.metaConnectionLastTestedAt ? new Date(r.metaConnectionLastTestedAt).toLocaleString() : ''}${r.metaDisplayPhoneNumber ? ` — ${r.metaDisplayPhoneNumber}` : ''}`
+                  : r.metaConnectionLastTestedAt
+                    ? `Last attempt failed (${new Date(r.metaConnectionLastTestedAt).toLocaleString()}): ${r.metaConnectionLastError ?? 'unknown error'}`
+                    : 'Never tested — credentials being present does not mean Meta has accepted them.'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 px-4 py-3.5">
+            <Circle className={`mt-1 h-2.5 w-2.5 shrink-0 fill-current ${
+              r.webhookHealth === 'ok' ? 'text-emerald-500' : r.webhookHealth === 'errors_detected' ? 'text-red-400' : 'text-amber-400'
+            }`} />
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium text-foreground">Webhook health</p>
+              <p className="text-xs text-muted-foreground/80">{r.webhookHealthDetail ?? '—'}</p>
+            </div>
+          </div>
+          <div className="px-4 py-3 text-xs text-muted-foreground">
+            {r.requesterMobileCoverage.activeWithMobile} of {r.requesterMobileCoverage.activeUsers} active users have a mobile number on file — the rest can&apos;t use WhatsApp yet.
+          </div>
+        </>
+      ) : (
+        <div className="px-4 py-3 text-xs text-muted-foreground">
+          Detailed status is only visible to admins/platform owners.
+        </div>
+      )}
+
+      <div className="px-4 py-3">
+        <Link href="/intake/channels" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+          Manage credentials & test connection <ExternalLink className="h-3 w-3" />
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+function IntegrationsTab({ status, emailFrom, whatsappChannels }: {
+  status: SettingsClientProps['integrationStatus']
+  emailFrom: SettingsClientProps['emailFrom']
+  whatsappChannels: SettingsClientProps['whatsappChannels']
+}) {
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Every email this desk sends — notifications, OEM routing, and escalation alerts alike — goes out from one
+          configured identity below.
+        </p>
+        <EmailCard initial={emailFrom} resend={status} />
+      </div>
+
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          WhatsApp channels requesters can message to open a ticket. Configured vs. verified is shown separately —
+          entering credentials doesn&apos;t mean Meta has accepted them yet.
+        </p>
+        {whatsappChannels.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-6 text-center">
+            <p className="text-sm text-muted-foreground">No WhatsApp channel configured yet.</p>
+            <Link href="/intake/channels" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              Set one up in Intake &gt; Channels <ExternalLink className="h-3 w-3" />
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {whatsappChannels.map((ch) => <WhatsAppCard key={ch.id} channel={ch} />)}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export function SettingsClient({ retentionPolicies, integrationStatus, emailFrom, whatsappChannels }: SettingsClientProps) {
+  const [tab, setTab] = useState<Tab>('retention')
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'general',      label: 'General' },
     { key: 'retention',    label: 'Retention' },
     { key: 'integrations', label: 'Integrations' },
   ]
@@ -443,9 +518,8 @@ export function SettingsClient({ autoCloseDays, retentionPolicies, integrationSt
         ))}
       </div>
 
-      {tab === 'general'      && <GeneralTab autoCloseDays={autoCloseDays} />}
       {tab === 'retention'    && <RetentionTab policies={retentionPolicies} />}
-      {tab === 'integrations' && <IntegrationsTab status={integrationStatus} deskTimeStatus={deskTimeStatus} />}
+      {tab === 'integrations' && <IntegrationsTab status={integrationStatus} emailFrom={emailFrom} whatsappChannels={whatsappChannels} />}
     </div>
   )
 }

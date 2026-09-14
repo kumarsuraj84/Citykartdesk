@@ -109,6 +109,8 @@ export function InboxWorkspace({
             thread={detail.thread}
             services={detail.services}
             teams={detail.teams}
+            subCategoriesByService={detail.subCategoriesByService}
+            entities={detail.entities}
             profileId={profileId}
             isAdmin={isAdmin}
           />

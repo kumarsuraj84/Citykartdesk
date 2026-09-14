@@ -2,6 +2,7 @@ import type { ParsedMail, AddressObject } from 'mailparser'
 import { supabase } from '../lib/supabase.js'
 import { log } from '../lib/log.js'
 import { normalizeBody, computeDedupHash } from './normalize.js'
+import { validateInboundAttachment } from './attachmentValidate.js'
 
 function addressList(a: AddressObject | AddressObject[] | undefined): string[] {
   if (!a) return []
@@ -169,6 +170,18 @@ async function storeAttachments(orgId: string, messageId: string, parsed: Parsed
       log.warn(`skipping oversized attachment ${fileName} (${size} bytes)`)
       continue
     }
+    // The attacker fully controls a MIME attachment's declared content-type
+    // — without checking it against the actual bytes, a part declaring e.g.
+    // image/svg+xml or text/html with an embedded <script> would be stored
+    // and served back verbatim, executing when a reviewer opens the signed
+    // URL. Same allowlist + magic-byte check the app's own user-upload path
+    // already applies (lib/attachments/validate.ts).
+    const check = validateInboundAttachment(att.content, att.contentType)
+    if (!check.valid) {
+      log.warn(`rejected attachment ${fileName}: ${check.reason}`)
+      continue
+    }
+
     const storagePath = `${orgId}/${messageId}/${fileName}`
 
     const { error: upErr } = await supabase.storage

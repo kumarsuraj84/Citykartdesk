@@ -3,11 +3,15 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
-import { Plus, Mail, Globe, MessageSquare, Trash2, Play, Pause, Radio, Plug, CheckCircle2, RefreshCw, History, Pencil } from 'lucide-react'
+import { Plus, Mail, Globe, MessageSquare, Trash2, Play, Pause, Radio, Plug, CheckCircle2, RefreshCw, History, Pencil, Gauge } from 'lucide-react'
 import {
   createChannel, updateChannel, setChannelStatus, deleteChannel, connectChannel, testChannel, pollNow, resyncChannel,
   getChannelConnectionInfo,
 } from '@/lib/actions/intake/channels'
+import {
+  createWhatsAppChannel, saveWhatsAppCredentials, setWhatsAppChannelActive, getWhatsAppChannelInfo, testWhatsAppConnection,
+  getWhatsAppChannelReadiness, type WhatsAppChannelReadiness,
+} from '@/lib/actions/intake/whatsapp-channel'
 import type { IntakeChannel } from '@/lib/queries/intake'
 
 // Common mailbox folders per provider — Gmail labels are exposed as IMAP folders
@@ -117,6 +121,7 @@ export function ChannelsClient({
   const [showForm, setShowForm] = useState(false)
   const [connectingId, setConnectingId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [readinessId, setReadinessId] = useState<string | null>(null)
 
   // Surface the OAuth callback outcome (?oauth=...) as a toast, then clean the URL.
   useEffect(() => {
@@ -150,24 +155,29 @@ export function ChannelsClient({
     const d = new Date(); d.setDate(d.getDate() - 30)
     return d.toISOString().split('T')[0]
   })
+  const [waPhoneNumberId, setWaPhoneNumberId] = useState('')
+  const [waWabaId, setWaWabaId] = useState('')
 
   function resetForm() {
     setName(''); setType('email'); setProvider('imap'); setTeamId('')
     const d = new Date(); d.setDate(d.getDate() - 30)
     setSyncFromDate(d.toISOString().split('T')[0])
+    setWaPhoneNumberId(''); setWaWabaId('')
     setShowForm(false)
   }
 
   function handleCreate() {
     if (!name.trim()) { toast.error('Channel name is required.'); return }
     startTransition(async () => {
-      const res = await createChannel({
-        name,
-        type,
-        provider: type === 'email' ? provider : null,
-        default_team_id: teamId || null,
-        config: type === 'email' && syncFromDate ? { sync_from_date: syncFromDate } : {},
-      })
+      const res = type === 'whatsapp'
+        ? await createWhatsAppChannel({ name, phoneNumberId: waPhoneNumberId, wabaId: waWabaId || undefined })
+        : await createChannel({
+            name,
+            type,
+            provider: type === 'email' ? provider : null,
+            default_team_id: teamId || null,
+            config: type === 'email' && syncFromDate ? { sync_from_date: syncFromDate } : {},
+          })
       if (res.error) { toast.error(res.error); return }
       toast.success('Channel created — paused until credentials are connected.')
       resetForm()
@@ -180,7 +190,9 @@ export function ChannelsClient({
     // channel can be silenced instead of being re-polled into the same error).
     const next = ch.status === 'paused' ? 'active' : 'paused'
     startTransition(async () => {
-      const res = await setChannelStatus(ch.id, next)
+      const res = ch.type === 'whatsapp'
+        ? await setWhatsAppChannelActive(ch.id, next === 'active')
+        : await setChannelStatus(ch.id, next)
       if (res.error) { toast.error(res.error); return }
       toast.success(next === 'active' ? 'Channel activated.' : 'Channel paused.')
       router.refresh()
@@ -205,8 +217,8 @@ export function ChannelsClient({
 
   function handleTest(ch: IntakeChannel) {
     startTransition(async () => {
-      const res = await testChannel(ch.id)
-      if (res.ok) toast.success('Connection successful.')
+      const res = ch.type === 'whatsapp' ? await testWhatsAppConnection(ch.id) : await testChannel(ch.id)
+      if (res.ok) toast.success(ch.type === 'whatsapp' && 'displayPhoneNumber' in res && res.displayPhoneNumber ? `Connected — ${res.displayPhoneNumber}` : 'Connection successful.')
       else toast.error(res.error ?? 'Connection failed.')
     })
   }
@@ -309,6 +321,20 @@ export function ChannelsClient({
                 {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
+            {type === 'whatsapp' && (
+              <>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-foreground">Meta phone number id</label>
+                  <input value={waPhoneNumberId} onChange={(e) => setWaPhoneNumberId(e.target.value)} placeholder="e.g. 109876543212345"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-foreground">WhatsApp Business Account id (optional)</label>
+                  <input value={waWabaId} onChange={(e) => setWaWabaId(e.target.value)} placeholder="e.g. 987654321098765"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+                </div>
+              </>
+            )}
             {type === 'email' && (
               <div className="sm:col-span-2">
                 <label className="mb-1 block text-xs font-medium text-foreground">
@@ -389,7 +415,7 @@ export function ChannelsClient({
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
-                {ch.type === 'email' && (
+                {(ch.type === 'email' || ch.type === 'whatsapp') && (
                   <>
                     <button
                       onClick={() => { setConnectingId(connectingId === ch.id ? null : ch.id); setEditingId(null) }}
@@ -407,15 +433,27 @@ export function ChannelsClient({
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" />
                     </button>
-                    <button
-                      onClick={() => handleResync(ch)}
-                      disabled={isPending}
-                      title="Resync — re-pull the whole mailbox"
-                      className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
-                    >
-                      <History className="h-3.5 w-3.5" />
-                    </button>
                   </>
+                )}
+                {ch.type === 'whatsapp' && (
+                  <button
+                    onClick={() => { setReadinessId(readinessId === ch.id ? null : ch.id); setEditingId(null); setConnectingId(null) }}
+                    disabled={isPending}
+                    title="Readiness — configured vs. verified status"
+                    className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
+                  >
+                    <Gauge className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                {ch.type === 'email' && (
+                  <button
+                    onClick={() => handleResync(ch)}
+                    disabled={isPending}
+                    title="Resync — re-pull the whole mailbox"
+                    className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
+                  >
+                    <History className="h-3.5 w-3.5" />
+                  </button>
                 )}
                 <button
                   onClick={() => handleToggle(ch)}
@@ -457,7 +495,22 @@ export function ChannelsClient({
                 />
               )}
               {connectingId === ch.id && (
-                ch.provider === 'gmail' || ch.provider === 'm365' ? (
+                ch.type === 'whatsapp' ? (
+                  <WhatsAppConnectForm
+                    channel={ch}
+                    isPending={isPending}
+                    onCancel={() => setConnectingId(null)}
+                    onSubmit={(creds) => {
+                      startTransition(async () => {
+                        const res = await saveWhatsAppCredentials(ch.id, creds)
+                        if (res.error) { toast.error(res.error); return }
+                        toast.success('Credentials saved to Vault. Use Test to verify, then Activate.')
+                        setConnectingId(null)
+                        router.refresh()
+                      })
+                    }}
+                  />
+                ) : ch.provider === 'gmail' || ch.provider === 'm365' ? (
                   <OAuthConnect channel={ch} onCancel={() => setConnectingId(null)} />
                 ) : (
                   <ConnectForm
@@ -475,6 +528,9 @@ export function ChannelsClient({
                     }}
                   />
                 )
+              )}
+              {readinessId === ch.id && ch.type === 'whatsapp' && (
+                <WhatsAppReadinessPanel channelId={ch.id} onClose={() => setReadinessId(null)} />
               )}
               </div>
             )
@@ -707,6 +763,188 @@ function OAuthConnect({ channel, onCancel }: { channel: IntakeChannel; onCancel:
           {connectedEmail ? `Reconnect with ${label}` : `Connect with ${label}`}
         </a>
       </div>
+    </div>
+  )
+}
+
+function WhatsAppConnectForm({
+  channel, isPending, onCancel, onSubmit,
+}: {
+  channel: IntakeChannel
+  isPending: boolean
+  onCancel: () => void
+  onSubmit: (creds: { accessToken?: string; appSecret?: string; verifyToken?: string }) => void
+}) {
+  const [accessToken, setAccessToken] = useState('')
+  const [appSecret, setAppSecret] = useState('')
+  const [verifyToken, setVerifyToken] = useState('')
+  const [configured, setConfigured] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    getWhatsAppChannelInfo(channel.id).then((info) => {
+      if (!active) return
+      if (!info.error) setConfigured(Boolean(info.credentialConfigured))
+      setLoading(false)
+    })
+    return () => { active = false }
+  }, [channel.id])
+
+  // Registered once in Meta Business Manager (App > WhatsApp > Configuration)
+  // against this exact route, alongside the verify token entered below —
+  // shown here purely for operator convenience, never guessed at or auto-registered.
+  const webhookUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/intake/webhook/whatsapp` : '/api/intake/webhook/whatsapp'
+
+  return (
+    <div className="mt-2 rounded-lg border border-border bg-muted/20 p-3 space-y-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {configured ? 'Edit WhatsApp credentials' : 'WhatsApp credentials'} — encrypted in Supabase Vault
+        {loading && <span className="ml-2 font-normal normal-case text-muted-foreground/60">loading…</span>}
+      </p>
+      <div className="rounded-lg border border-dashed border-border bg-background px-3 py-2">
+        <p className="text-[11px] font-medium text-muted-foreground">Webhook callback URL (register this in Meta Business Manager)</p>
+        <p className="select-all break-all text-xs text-foreground">{webhookUrl}</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <input value={accessToken} onChange={(e) => setAccessToken(e.target.value)} type="password" autoComplete="new-password"
+          placeholder={configured ? 'Access token — leave blank to keep current' : 'System user access token'}
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm sm:col-span-2" />
+        <input value={appSecret} onChange={(e) => setAppSecret(e.target.value)} type="password" autoComplete="new-password"
+          placeholder={configured ? 'App secret — leave blank to keep current' : 'App secret'}
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+        <input value={verifyToken} onChange={(e) => setVerifyToken(e.target.value)} type="password" autoComplete="new-password"
+          placeholder={configured ? 'Verify token — leave blank to keep current' : 'Webhook verify token (you choose this)'}
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+      </div>
+      <div className="flex justify-end gap-2">
+        <button onClick={onCancel} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted">
+          Cancel
+        </button>
+        <button
+          onClick={() => onSubmit({ accessToken: accessToken || undefined, appSecret: appSecret || undefined, verifyToken: verifyToken || undefined })}
+          disabled={isPending || loading}
+          className="rounded-lg bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-indigo-500/30 transition hover:brightness-110 disabled:opacity-50"
+        >
+          {isPending ? 'Saving…' : configured ? 'Save changes' : 'Save credentials'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ReadinessBadge({ ok, yesLabel, noLabel }: { ok: boolean; yesLabel: string; noLabel: string }) {
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+      ok ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-amber-300 bg-amber-50 text-amber-700'
+    }`}>
+      {ok ? yesLabel : noLabel}
+    </span>
+  )
+}
+
+function ReadinessRow({ label, ok, yesLabel = 'YES', noLabel = 'NO' }: { label: string; ok: boolean; yesLabel?: string; noLabel?: string }) {
+  return (
+    <div className="flex items-center justify-between border-b border-border/60 py-1.5 last:border-0">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <ReadinessBadge ok={ok} yesLabel={yesLabel} noLabel={noLabel} />
+    </div>
+  )
+}
+
+/** Stage 6 Part 1 / Part 21 — admin-safe readiness diagnostic. Deliberately
+ *  separates "configured" (a value is present) from "verified" (Meta has
+ *  actually accepted it) so this panel can never show a false green state
+ *  just because credentials were entered. */
+function WhatsAppReadinessPanel({ channelId, onClose }: { channelId: string; onClose: () => void }) {
+  const [readiness, setReadiness] = useState<WhatsAppChannelReadiness | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    getWhatsAppChannelReadiness(channelId).then((res) => {
+      if (!active) return
+      if (res.error) { setError(res.error); setLoading(false); return }
+      setReadiness(res.readiness ?? null)
+      setLoading(false)
+    })
+    return () => { active = false }
+  }, [channelId])
+
+  return (
+    <div className="mt-2 rounded-lg border border-border bg-muted/20 p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Readiness — configured vs. verified
+        </p>
+        <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground">Close</button>
+      </div>
+
+      {loading && <p className="text-xs text-muted-foreground">Loading…</p>}
+      {error && <p className="text-xs text-rose-600">{error}</p>}
+
+      {readiness && (
+        <>
+          <div>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80">Configured</p>
+            <ReadinessRow label="Channel configured" ok={readiness.channelConfigured} />
+            <ReadinessRow label="Channel active" ok={readiness.channelActive} />
+            <ReadinessRow label="Phone Number ID" ok={readiness.phoneNumberIdConfigured} />
+            <ReadinessRow label="WABA ID" ok={readiness.wabaIdConfigured} />
+            <ReadinessRow label="Credentials (token/secret) configured" ok={readiness.credentialsConfigured} />
+          </div>
+
+          <div>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80">Verified</p>
+            <ReadinessRow label="Meta connection verified (Test Connection)" ok={readiness.metaConnectionVerified} />
+            {readiness.metaConnectionLastTestedAt && (
+              <p className="pb-1 text-[10px] text-muted-foreground">
+                Last tested {new Date(readiness.metaConnectionLastTestedAt).toLocaleString()}
+                {readiness.metaDisplayPhoneNumber ? ` · ${readiness.metaDisplayPhoneNumber}` : ''}
+                {readiness.metaVerifiedName ? ` · ${readiness.metaVerifiedName}` : ''}
+              </p>
+            )}
+            {readiness.metaConnectionLastError && (
+              <p className="pb-1 text-[10px] text-rose-600">Last error: {readiness.metaConnectionLastError}</p>
+            )}
+            {!readiness.metaConnectionLastTestedAt && (
+              <p className="pb-1 text-[10px] text-muted-foreground">Never tested — credentials being present does not mean Meta has accepted them. Use &quot;Test connection&quot;.</p>
+            )}
+            <div className="flex items-center justify-between border-b border-border/60 py-1.5 last:border-0">
+              <span className="text-xs text-muted-foreground">Webhook health</span>
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                readiness.webhookHealth === 'ok' ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                  : readiness.webhookHealth === 'errors_detected' ? 'border-rose-300 bg-rose-50 text-rose-700'
+                  : 'border-border bg-muted text-muted-foreground'
+              }`}>
+                {readiness.webhookHealth === 'ok' ? 'OK' : readiness.webhookHealth === 'errors_detected' ? 'ERRORS DETECTED' : 'UNKNOWN'}
+              </span>
+            </div>
+            {readiness.webhookHealthDetail && (
+              <p className="pt-1 text-[10px] text-muted-foreground">{readiness.webhookHealthDetail}</p>
+            )}
+          </div>
+
+          {readiness.webhookCallbackUrl && (
+            <div className="rounded-lg border border-dashed border-border bg-background px-3 py-2">
+              <p className="text-[11px] font-medium text-muted-foreground">Webhook callback URL</p>
+              <p className="select-all break-all text-xs text-foreground">{readiness.webhookCallbackUrl}</p>
+            </div>
+          )}
+
+          <div>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80">Requester mobile coverage (informational)</p>
+            <p className="text-xs text-muted-foreground">
+              {readiness.requesterMobileCoverage.activeWithMobile} of {readiness.requesterMobileCoverage.activeUsers} active users have a mobile number on file
+              {readiness.requesterMobileCoverage.activeUsers > 0
+                ? ` (${Math.round((readiness.requesterMobileCoverage.activeWithMobile / readiness.requesterMobileCoverage.activeUsers) * 100)}%)`
+                : ''}
+              . {readiness.requesterMobileCoverage.activeWithoutMobile} without one cannot use WhatsApp today.
+            </p>
+          </div>
+        </>
+      )}
     </div>
   )
 }

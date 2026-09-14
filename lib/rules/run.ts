@@ -64,8 +64,19 @@ async function fetchRequest(admin: AnyClient, requestId: string): Promise<RawReq
   return (data as RawRequest) ?? null
 }
 
-function sourceChannelOf(sourceMetadata: unknown): string {
+export function sourceChannelOf(sourceMetadata: unknown): string {
   const createdVia = (sourceMetadata as { created_via?: string } | null)?.created_via
+  // Stage 7.1 (Part 4): WhatsApp-created requests already carry
+  // created_via='whatsapp' (set by createRequestCore() via
+  // lib/conversations/orchestrator.ts's mapChannelToSource()) — this was
+  // simply never recognized here, so every WhatsApp ticket fell into the
+  // 'portal' bucket alongside real web submissions. No active Business Rule
+  // currently filters on source_channel (verified directly against the
+  // live business_rules table before this change), so this is purely
+  // additive: it only enables a rule to be configured to distinguish the
+  // channel later — it changes nothing about priority/SLA/assignment/
+  // routing on its own.
+  if (createdVia === 'whatsapp') return 'whatsapp'
   return createdVia === 'intake' ? 'intake' : 'portal'
 }
 

@@ -22,12 +22,15 @@ type AlertRule = {
   is_active: boolean
 }
 
+// sla_warning/sla_breached are deliberately absent — they're valid
+// alert_rules.alert_type values at the DB level, but app/api/alerts/run's
+// cron processor has no handling branch for either, so a rule using them
+// would silently never fire. Omitted here rather than offering a control
+// that's a no-op.
 const ALERT_TYPE_LABELS: Record<string, string> = {
   due_soon: 'Due Soon',
   overdue: 'Overdue',
   unassigned: 'Unassigned',
-  sla_warning: 'SLA Warning',
-  sla_breached: 'SLA Breached',
   daily_digest: 'Daily Digest',
 }
 
@@ -35,8 +38,6 @@ const ALERT_TYPE_COLORS: Record<string, string> = {
   due_soon: 'bg-warning/10 text-warning border-warning/20',
   overdue: 'bg-destructive/10 text-destructive border-destructive/20',
   unassigned: 'bg-warning/10 text-warning border-warning/20',
-  sla_warning: 'bg-info/10 text-info border-info/20',
-  sla_breached: 'bg-destructive/10 text-destructive border-destructive/20',
   daily_digest: 'bg-primary/10 text-primary border-primary/20',
 }
 

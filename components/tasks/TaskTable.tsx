@@ -11,6 +11,7 @@ import { CustomFieldCell } from './CustomFieldCell'
 import { CustomColumnManager, EditFieldModal } from './CustomColumnManager'
 import type { TaskWithDetails, CustomField, CustomFieldValue } from '@/types'
 import type { TaskStatus } from '@/types'
+import { TASK_PRIORITY_LABELS } from '@/lib/constants/tasks'
 
 const STATUS_ORDER: TaskStatus[] = ['in_progress', 'open', 'done', 'cancelled']
 
@@ -21,12 +22,16 @@ const STATUS_META: Record<TaskStatus, { label: string; bg: string; text: string;
   cancelled:   { label: 'Cancelled',   bg: 'bg-slate-300',   text: 'text-slate-600', dot: 'bg-slate-400' },
 }
 
+// DESK-UI-003: labels below come from the shared TASK_PRIORITY_LABELS map
+// for the three real enum values (low/medium/high) — 'urgent'/'none' are
+// leftover fallback entries the DB enum doesn't have, kept as-is since
+// removing them is outside this fix's scope.
 const PRIORITY_META: Record<string, { label: string; color: string; dot: string }> = {
-  urgent: { label: 'Urgent', color: 'text-red-500',            dot: 'bg-red-500' },
-  high:   { label: 'High',   color: 'text-orange-500',         dot: 'bg-orange-500' },
-  medium: { label: 'Medium', color: 'text-yellow-500',         dot: 'bg-yellow-400' },
-  low:    { label: 'Low',    color: 'text-blue-400',           dot: 'bg-blue-400' },
-  none:   { label: 'None',   color: 'text-muted-foreground/50', dot: 'bg-muted-foreground/30' },
+  urgent: { label: 'Urgent',                 color: 'text-red-500',            dot: 'bg-red-500' },
+  high:   { label: TASK_PRIORITY_LABELS.high,   color: 'text-orange-500',      dot: 'bg-orange-500' },
+  medium: { label: TASK_PRIORITY_LABELS.medium, color: 'text-yellow-500',      dot: 'bg-yellow-400' },
+  low:    { label: TASK_PRIORITY_LABELS.low,    color: 'text-blue-400',        dot: 'bg-blue-400' },
+  none:   { label: 'None',                   color: 'text-muted-foreground/50', dot: 'bg-muted-foreground/30' },
 }
 
 function formatDate(iso: string | null): string {

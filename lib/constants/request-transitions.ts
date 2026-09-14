@@ -27,8 +27,9 @@ import type { RequestStatus } from '@/types'
  * StatusRow) skip that message entirely.
  *
  * closed has no outgoing transitions at all — only a *resolved* ticket can
- * be reopened; once auto-closed (72h after resolving with no reopen) it's
- * permanent, for both agents and requesters.
+ * be reopened; once auto-closed (admin-configurable days after resolving
+ * with no reopen — Request Configuration → General) it's permanent, for
+ * both agents and requesters.
  */
 
 /** Transitions an agent/manager may trigger via the status panel. */

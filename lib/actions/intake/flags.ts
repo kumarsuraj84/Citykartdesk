@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -15,6 +16,8 @@ export async function starReview(
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !INTAKE_ROLES.includes(profile.role)) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
 
   const supabase: AnyClient = createAdminClient()
   const { error } = await supabase
@@ -35,6 +38,8 @@ export async function escalateReview(
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !INTAKE_ROLES.includes(profile.role)) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
 
   const supabase: AnyClient = createAdminClient()
   const { error } = await supabase

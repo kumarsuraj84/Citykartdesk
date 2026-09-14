@@ -200,7 +200,7 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
               </button>
               <button
                 onClick={() => setConfirmingDelete(true)}
-                className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40"
+                className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-destructive/70 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40"
               >
                 <Trash2 className="h-3 w-3" />
                 Delete

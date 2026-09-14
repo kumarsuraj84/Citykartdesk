@@ -63,6 +63,30 @@ export interface UserOption {
   full_name: string
 }
 
+export interface OemRow {
+  id: string
+  name: string
+  emails: string[]
+  email_subject_template: string | null
+  email_body_template: string | null
+  is_active: boolean
+  created_at: string
+}
+
+export interface StoreRow {
+  id: string
+  code: string
+  name: string
+  address: string | null
+  city: string | null
+  state: string | null
+  pincode: string | null
+  oem_id: string | null
+  oem_name?: string | null
+  is_active: boolean
+  created_at: string
+}
+
 export default async function OrgStructurePage() {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
@@ -71,7 +95,7 @@ export default async function OrgStructurePage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = (await createClient()) as any
 
-  const [deptResult, locResult, ccResult, funcResult, desigResult, usersResult, allProfilesResult, requestsResult] = await Promise.all([
+  const [deptResult, locResult, ccResult, funcResult, desigResult, usersResult, allProfilesResult, requestsResult, oemResult, storeResult] = await Promise.all([
     supabase
       .from('departments')
       .select('id, name, code, parent_id, head_user_id, is_active, created_at, head:profiles!departments_head_user_id_fkey(full_name)')
@@ -106,6 +130,14 @@ export default async function OrgStructurePage() {
       .from('requests')
       .select('id, requester_id, status, created_at, resolved_at')
       .eq('org_id', profile.org_id ?? ''),
+    supabase
+      .from('oems')
+      .select('id, name, emails, email_subject_template, email_body_template, is_active, created_at')
+      .order('name'),
+    supabase
+      .from('stores')
+      .select('id, code, name, address, city, state, pincode, oem_id, is_active, created_at, oem:oems(name)')
+      .order('code'),
   ])
 
   type DeptQueryRow = {
@@ -183,12 +215,32 @@ export default async function OrgStructurePage() {
   const jobFunctions: JobFunctionRow[] = funcResult.data ?? []
   const designations: DesignationRow[] = desigResult.data ?? []
 
+  const oems: OemRow[] = oemResult.data ?? []
+
+  type StoreQueryRow = {
+    id: string; code: string; name: string; address: string | null; city: string | null
+    state: string | null; pincode: string | null; oem_id: string | null
+    is_active: boolean; created_at: string; oem: { name: string } | null
+  }
+  const stores: StoreRow[] = ((storeResult.data ?? []) as StoreQueryRow[]).map((s) => ({
+    id: s.id,
+    code: s.code,
+    name: s.name,
+    address: s.address,
+    city: s.city,
+    state: s.state,
+    pincode: s.pincode,
+    oem_id: s.oem_id,
+    oem_name: s.oem?.name ?? null,
+    is_active: s.is_active,
+    created_at: s.created_at,
+  }))
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Organization Structure"
         description="Manage departments, locations, cost centers, functions, and designations."
-        breadcrumbs={[{ label: 'Admin' }, { label: 'Org Structure' }]}
       />
       <OrgStructureClient
         departments={departments}
@@ -197,6 +249,8 @@ export default async function OrgStructurePage() {
         jobFunctions={jobFunctions}
         designations={designations}
         allUsers={allUsers}
+        oems={oems}
+        stores={stores}
       />
     </div>
   )

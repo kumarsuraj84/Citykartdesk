@@ -3,6 +3,7 @@
 import { ShieldCheck, AlertTriangle, TrendingUp, Clock } from 'lucide-react'
 import { SlaGauge, HorizBar } from '@/components/analytics/Charts'
 import type { AnalyticsData } from '@/lib/queries/analytics'
+import { fmtHours } from '@/lib/utils/fmt'
 
 function KpiTile({ label, value, sub, accent }: {
   label: string
@@ -42,11 +43,18 @@ export function SLADashboard({ data }: SLADashboardProps) {
     .sort((a, b) => (b.slaRate ?? 0) - (a.slaRate ?? 0))
     .map((t) => ({ label: t.teamName, value: t.slaRate ?? 0 }))
 
+  // Compliance is "of resolved tickets in this priority, how many met their
+  // due date" — matching the org-wide slaComplianceRate and per-team slaRate
+  // calculations upstream (both divide by resolved count, not total count
+  // including still-open tickets). Dividing by `p.count` here previously
+  // diluted the rate with unresolved tickets that haven't had a chance to
+  // breach or meet SLA yet, producing an artificially low, non-percentage-
+  // shaped number (e.g. "17" instead of a sensible "%").
   const prioritySlaData = data.byPriority
-    .filter((p) => p.count > 0)
+    .filter((p) => p.resolved > 0)
     .map((p) => ({
       label: p.priority.charAt(0).toUpperCase() + p.priority.slice(1),
-      value: p.count > 0 ? Math.round((p.slaCompliant / p.count) * 100) : 0,
+      value: Math.round((p.slaCompliant / p.resolved) * 100),
     }))
 
   return (
@@ -93,8 +101,17 @@ export function SLADashboard({ data }: SLADashboardProps) {
               <SlaGauge label="First Response SLA Compliance" value={data.frtComplianceRate} />
             </div>
           </div>
+          {/* DESK design-QA copy fix: this used to read "{N} tickets
+              currently breached resolution SLA" directly under the two
+              compliance gauges above, which invited reading it as sharing
+              their denominator — it doesn't. The gauges are % of
+              already-resolved/responded tickets in the period; this is a
+              live count of currently-OPEN tickets past their deadline
+              right now. Explicit "open ticket(s)" + separating clause
+              keeps the two populations from reading as one. */}
           <p className="text-center text-xs text-muted-foreground">
-            {data.slaBreachedNow} tickets currently breached resolution SLA
+            {data.slaBreachedNow} open ticket{data.slaBreachedNow === 1 ? '' : 's'} currently past the resolution deadline
+            <span className="block text-muted-foreground/70">(separate from the compliance rates above, which cover already-resolved tickets)</span>
           </p>
         </div>
 
@@ -105,7 +122,7 @@ export function SLADashboard({ data }: SLADashboardProps) {
             <h2 className="text-sm font-semibold">SLA Compliance by Priority</h2>
           </div>
           {prioritySlaData.length > 0 ? (
-            <HorizBar data={prioritySlaData} color="var(--primary)" />
+            <HorizBar data={prioritySlaData} color="var(--primary)" valueLabel={(v) => `${v}%`} />
           ) : (
             <p className="text-xs text-muted-foreground text-center py-4">No resolved tickets in this period</p>
           )}
@@ -119,7 +136,7 @@ export function SLADashboard({ data }: SLADashboardProps) {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">SLA Compliance by Team</h2>
           </div>
-          <HorizBar data={teamSlaData} color="var(--success)" />
+          <HorizBar data={teamSlaData} color="var(--success)" valueLabel={(v) => `${v}%`} />
         </div>
       )}
 
@@ -134,11 +151,7 @@ export function SLADashboard({ data }: SLADashboardProps) {
             <div key={p.priority} className="flex items-center justify-between py-2.5">
               <span className="text-xs capitalize text-foreground">{p.priority}</span>
               <span className="text-xs font-semibold tabular-nums text-muted-foreground">
-                {p.avgTatHours !== null
-                  ? p.avgTatHours >= 24
-                    ? `${(p.avgTatHours / 24).toFixed(1)}d`
-                    : `${p.avgTatHours.toFixed(1)}h`
-                  : '—'}
+                {fmtHours(p.avgTatHours)}
               </span>
             </div>
           ))}

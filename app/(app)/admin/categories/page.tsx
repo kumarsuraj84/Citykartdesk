@@ -16,7 +16,6 @@ export default async function AdminCategoriesPage() {
       <PageHeader
         title="Category Management"
         description="Manage service categories and their sub-categories. Click Edit to rename inline, or Manage to configure sub-categories."
-        breadcrumbs={[{ label: 'Admin' }, { label: 'Categories' }]}
       />
       <CategoriesAdminClient categories={categories} />
     </div>

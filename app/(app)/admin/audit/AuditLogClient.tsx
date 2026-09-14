@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, ChevronDown } from 'lucide-react'
+import { Download, ChevronDown, Copy, Check } from 'lucide-react'
 import type { AuditEntry } from '@/lib/queries/admin'
 import type { Profile } from '@/types'
 
@@ -28,10 +28,98 @@ function EntityBadge({ type }: { type: AuditEntry['entity_type'] }) {
   )
 }
 
-function metadataSummary(meta: Record<string, unknown>): string {
-  const str = JSON.stringify(meta)
-  if (str.length <= 80) return str
-  return str.slice(0, 77) + '...'
+// DESK-UI-012 — audit entries cover dozens of distinct `action` strings
+// (action is a free-form string set at each of the many logActivity/
+// logTaskActivity call sites across the app, not a fixed enum), so a
+// per-action-type summary map isn't practical to build and keep complete.
+// Instead this recognizes a handful of common metadata *shapes* that
+// recur across most actions (a from/to transition, a lone reason, a lone
+// step number) and otherwise falls back to a readable "Key: value" list —
+// still a real improvement over a raw JSON blob for anyone scanning the
+// table, without needing to know every action type in advance. Full
+// fidelity is preserved regardless: AuditDetailsCell below always keeps
+// the exact raw JSON one click away.
+function humanizeKey(key: string): string {
+  const spaced = key.replace(/_/g, ' ')
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+}
+
+function humanizeValue(v: unknown): string {
+  if (v === null || v === undefined || v === '') return '—'
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No'
+  if (typeof v === 'object') return JSON.stringify(v)
+  return String(v)
+}
+
+export function metadataSummary(meta: Record<string, unknown>): string {
+  const keys = Object.keys(meta)
+  if (keys.length === 0) return '—'
+
+  if ('from' in meta && 'to' in meta) {
+    return `Changed from "${humanizeValue(meta.from)}" to "${humanizeValue(meta.to)}"`
+  }
+  if (keys.length === 1 && 'reason' in meta) {
+    return `Reason: ${humanizeValue(meta.reason)}`
+  }
+  if (keys.length === 1 && 'step' in meta) {
+    return `Step ${humanizeValue(meta.step)}`
+  }
+
+  const parts = keys.slice(0, 4).map((k) => `${humanizeKey(k)}: ${humanizeValue(meta[k])}`)
+  const summary = parts.join(' · ') + (keys.length > 4 ? ' · …' : '')
+  return summary.length > 110 ? summary.slice(0, 107) + '…' : summary
+}
+
+/** Concise human-readable summary by default, with the exact raw JSON one
+ *  click away (expand + copy) — so nothing about the audit trail's
+ *  fidelity is lost, only its default presentation. */
+function AuditDetailsCell({ metadata }: { metadata: Record<string, unknown> }) {
+  const [expanded, setExpanded] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const hasMetadata = Object.keys(metadata).length > 0
+  const raw = JSON.stringify(metadata, null, 2)
+
+  async function copyRaw() {
+    try {
+      await navigator.clipboard.writeText(raw)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* clipboard access denied — no-op, the raw JSON is still visible to select/copy manually */
+    }
+  }
+
+  return (
+    <div className="max-w-xs">
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs text-gray-600 truncate">{metadataSummary(metadata)}</span>
+        {hasMetadata && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="shrink-0 text-[11px] font-medium text-blue-600 hover:text-blue-700 hover:underline"
+          >
+            {expanded ? 'Hide' : 'View details'}
+          </button>
+        )}
+      </div>
+      {expanded && (
+        <div className="relative mt-1.5 rounded-md border border-gray-200 bg-gray-50">
+          <button
+            type="button"
+            onClick={copyRaw}
+            title="Copy raw payload"
+            className="absolute right-1.5 top-1.5 rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
+          >
+            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+          </button>
+          <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all p-2 pr-7 font-mono text-[11px] text-gray-700">
+            {raw}
+          </pre>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function formatDate(iso: string): string {
@@ -41,6 +129,7 @@ function formatDate(iso: string): string {
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
   })
 }
 
@@ -251,8 +340,8 @@ export function AuditLogClient({ initialEntries, profiles }: AuditLogClientProps
                   <td className="whitespace-nowrap px-4 py-2 text-sm text-gray-700">
                     {entry.actor_name}
                   </td>
-                  <td className="px-4 py-2 text-xs text-gray-500 font-mono max-w-xs truncate">
-                    {metadataSummary(entry.metadata)}
+                  <td className="px-4 py-2 text-xs text-gray-500">
+                    <AuditDetailsCell metadata={entry.metadata} />
                   </td>
                 </tr>
               ))

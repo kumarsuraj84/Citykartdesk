@@ -1,9 +1,10 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
-import { Pencil, Check, X, Camera, KeyRound, Lock } from 'lucide-react'
+import { useEffect, useRef, useState, useTransition } from 'react'
+import { Pencil, Check, X, Camera, KeyRound, Lock, Bell, BellOff } from 'lucide-react'
 import { updateProfile, uploadAvatar, sendPasswordResetEmail } from '@/lib/actions/profile'
 import { changeOwnPassword } from '@/lib/actions/auth'
+import { isPushSupported, enablePushOnThisDevice, disablePushOnThisDevice } from '@/lib/push/client'
 
 export function EditableName({ initialName }: { initialName: string }) {
   const [editing, setEditing] = useState(false)
@@ -199,6 +200,99 @@ export function PasswordResetButton() {
       {status === 'error' && error && (
         <p className="text-xs text-red-600">{error}</p>
       )}
+    </div>
+  )
+}
+
+// ── Push notifications ──────────────────────────────────────────────────────
+
+type PushState = 'unsupported' | 'unconfigured' | 'checking' | 'off' | 'on' | 'blocked'
+
+export function PushNotificationToggle({ initiallyOn }: { initiallyOn: boolean }) {
+  const [state, setState] = useState<PushState>('checking')
+  const [error, setError] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+  const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+
+  useEffect(() => {
+    const detected: PushState = !isPushSupported()
+      ? 'unsupported'
+      : !vapidKey
+        ? 'unconfigured'
+        : Notification.permission === 'denied'
+          ? 'blocked'
+          : initiallyOn ? 'on' : 'off'
+    // client-only feature/permission detection — must run after mount, Notification isn't available during SSR
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setState(detected)
+  }, [initiallyOn, vapidKey])
+
+  function handleEnable() {
+    setError(null)
+    startTransition(async () => {
+      try {
+        const { ok, permission } = await enablePushOnThisDevice(vapidKey!)
+        if (!ok) {
+          setState(permission === 'denied' ? 'blocked' : 'off')
+          if (permission === 'granted') setError('Could not save this device — please try again.')
+          return
+        }
+        setState('on')
+      } catch {
+        setError('Could not enable push notifications on this device.')
+      }
+    })
+  }
+
+  function handleDisable() {
+    setError(null)
+    startTransition(async () => {
+      try {
+        await disablePushOnThisDevice()
+        setState('off')
+      } catch {
+        setError('Could not disable push notifications on this device.')
+      }
+    })
+  }
+
+  if (state === 'unsupported') {
+    return <span className="text-sm text-muted-foreground">Not supported in this browser</span>
+  }
+  if (state === 'unconfigured') {
+    return <span className="text-sm text-muted-foreground">Not set up yet</span>
+  }
+  if (state === 'checking') {
+    return <span className="text-sm text-muted-foreground">Checking…</span>
+  }
+  if (state === 'blocked') {
+    return <span className="text-sm text-muted-foreground">Blocked — enable in your browser&apos;s site settings</span>
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      {state === 'on' ? (
+        <button
+          type="button"
+          onClick={handleDisable}
+          disabled={isPending}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground shadow-sm hover:bg-muted disabled:opacity-50 transition-colors"
+        >
+          <BellOff className="h-3.5 w-3.5 text-muted-foreground" />
+          {isPending ? 'Turning off…' : 'Turn off'}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={handleEnable}
+          disabled={isPending}
+          className="btn-gradient text-white disabled:opacity-60 inline-flex items-center gap-1.5"
+        >
+          <Bell className="h-3.5 w-3.5" />
+          {isPending ? 'Enabling…' : 'Enable on this device'}
+        </button>
+      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   )
 }

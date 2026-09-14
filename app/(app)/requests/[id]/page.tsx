@@ -29,7 +29,7 @@ import { RequestActionBar } from '@/components/requests/RequestActionBar'
 import { ApprovalRejectedReopenBanner } from '@/components/requests/ApprovalRejectedReopenBanner'
 import { getActiveTimer } from '@/lib/actions/requests'
 import { filterFieldsForRequester, filterFlatFieldsForRequester } from '@/lib/forms/sections'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelativeTime, formatDateTime } from '@/lib/utils'
 import { STATUS_LABELS, TERMINAL_STATUSES } from '@/lib/constants/requests'
 import type {
   RequestStatus,
@@ -159,11 +159,16 @@ function CommentBubble({
           {initial}
         </div>
         <div className="min-w-0 flex-1">
-          {/* Row 1: author name */}
-          <span className="text-sm font-semibold text-foreground">
-            {comment.author.full_name}
-          </span>
-          {/* Row 2: badge + timestamp */}
+          {/* Row 1: author name + absolute timestamp */}
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-sm font-semibold text-foreground">
+              {comment.author.full_name}
+            </span>
+            <span className="shrink-0 text-[11px] text-muted-foreground/70">
+              {formatDateTime(comment.created_at)}
+            </span>
+          </div>
+          {/* Row 2: badge + relative timestamp */}
           <div className="mt-0.5 flex flex-wrap items-center gap-2">
             {comment.is_internal ? (
               <span className="flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
@@ -210,13 +215,16 @@ function ApprovalEventCard({ item }: { item: RequestActivityWithActor }) {
     const m = item.metadata as { approver_names?: string[] } | null
     const names = m?.approver_names?.length ? m.approver_names.join(', ') : 'the approver'
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-2.5 text-xs text-amber-800">
-        <Clock className="h-3.5 w-3.5 shrink-0" />
-        <span>
+      <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-2.5 text-xs text-amber-800">
+        <Clock className="mt-px h-3.5 w-3.5 shrink-0" />
+        <span className="flex-1">
           <span className="font-semibold">{actor}</span> sent this request for approval to{' '}
           <span className="font-semibold">{names}</span>
         </span>
-        <span className="ml-auto shrink-0 text-[10px] text-amber-700/70">{formatRelativeTime(item.created_at)}</span>
+        <span className="ml-auto flex shrink-0 flex-col items-end text-[10px] text-amber-700/70">
+          <span>{formatRelativeTime(item.created_at)}</span>
+          <span className="text-amber-700/50">{formatDateTime(item.created_at)}</span>
+        </span>
       </div>
     )
   }
@@ -236,7 +244,10 @@ function ApprovalEventCard({ item }: { item: RequestActivityWithActor }) {
         </span>
         {m?.comment && <p className="mt-0.5 text-[11px] opacity-90">{m.comment}</p>}
       </div>
-      <span className="ml-auto shrink-0 text-[10px] opacity-70">{formatRelativeTime(item.created_at)}</span>
+      <span className="ml-auto flex shrink-0 flex-col items-end text-[10px] opacity-70">
+        <span>{formatRelativeTime(item.created_at)}</span>
+        <span className="opacity-70">{formatDateTime(item.created_at)}</span>
+      </span>
     </div>
   )
 }
@@ -291,6 +302,7 @@ function HistoryRow({ item }: { item: RequestActivityWithActor }) {
           {new Date(item.created_at).toLocaleTimeString('en-US', {
             hour: '2-digit',
             minute: '2-digit',
+            hour12: false,
           })}
         </p>
       </div>
@@ -554,33 +566,20 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
         <div className="rounded-lg border border-border grid grid-cols-2 divide-x divide-border overflow-hidden">
           <TicketCell
             label="Created"
-            value={new Date(request.created_at).toLocaleString('en-US', {
-              month: 'short', day: 'numeric', year: 'numeric',
-              hour: '2-digit', minute: '2-digit',
-            })}
+            value={formatDateTime(request.created_at)}
           />
           <TicketCell label="Last Updated" value={formatRelativeTime(request.updated_at)} />
           <TicketCell
             label="Responded Time"
             className="border-t border-border"
-            value={
-              request.responded_at
-                ? new Date(request.responded_at).toLocaleString('en-US', {
-                    month: 'short', day: 'numeric', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit',
-                  })
-                : 'Not yet responded'
-            }
+            value={request.responded_at ? formatDateTime(request.responded_at) : 'Not yet responded'}
           />
           <TicketCell
             label="Completed Time"
             className="border-t border-border"
             value={
               request.resolved_at ?? request.closed_at
-                ? new Date((request.resolved_at ?? request.closed_at)!).toLocaleString('en-US', {
-                    month: 'short', day: 'numeric', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit',
-                  })
+                ? formatDateTime((request.resolved_at ?? request.closed_at)!)
                 : 'Not yet completed'
             }
           />
@@ -601,10 +600,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
             <TicketCell
               label="Response Due"
               className="border-t border-border"
-              value={new Date(request.response_due_at).toLocaleString('en-US', {
-                month: 'short', day: 'numeric', year: 'numeric',
-                hour: '2-digit', minute: '2-digit',
-              })}
+              value={formatDateTime(request.response_due_at)}
             />
           )}
         </div>

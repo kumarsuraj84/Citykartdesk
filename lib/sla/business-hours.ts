@@ -1,5 +1,7 @@
 import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
+import { logger } from '@/lib/observability/logger'
+import { alertOperator } from '@/lib/observability/alert'
 
 type DaySchedule = { start_time: string; end_time: string; is_active: boolean }
 type Holiday = { date: string; is_recurring: boolean }
@@ -33,7 +35,13 @@ const getSLACalendar = cache(async (): Promise<{
 function isHoliday(date: Date, holidays: Holiday[]): boolean {
   const month = date.getMonth() + 1
   const day = date.getDate()
-  const fullDate = date.toISOString().slice(0, 10)
+  // Local calendar date, not toISOString()'s UTC one — every other date op
+  // in this file (getHours/getMinutes/setHours, the recurring check just
+  // below) is local-time, so a UTC string here could disagree with them by
+  // a day whenever the process runs with a non-zero UTC offset (this app
+  // deploys with TZ=Asia/Kolkata), honoring a non-recurring holiday a day
+  // early or late relative to the recurring-holiday check in the same walk.
+  const fullDate = `${date.getFullYear()}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   return holidays.some((h) => {
     if (h.is_recurring) {
       const [, hMonth, hDay] = h.date.split('-').map(Number)
@@ -55,11 +63,21 @@ function timeToMinutes(t: string): number {
  * Walks the calendar day-by-day (O(days), not minute-by-minute), consuming each day's
  * available business window until the budget runs out, then lands on the exact minute
  * within the final day.
+ *
+ * Returns `null` if the configured calendar has no usable business-hour window at all
+ * (every business_hours row inactive, no rows configured, or every row's start/end times
+ * describe a zero/negative-width window) — see the loop's fallback below. Callers already
+ * treat a null due-at as "no SLA deadline" (see lib/sla/resolve.ts, which nulls out
+ * responseDueAt/resolutionDueAt when there's no applicable SLA tier at all), so this is a
+ * real, already-supported business state — unlike the previous behavior, which walked the
+ * calendar for the full 5-year safety bound and returned that far-future date as if it
+ * were a legitimate deadline, turning a configuration failure into a plausible-looking but
+ * completely wrong SLA.
  */
 export async function computeSLADeadline(
   startAt: Date,
   slaDurationMinutes: number
-): Promise<Date> {
+): Promise<Date | null> {
   const { scheduleMap, holidays } = await getSLACalendar()
 
   let remaining = slaDurationMinutes
@@ -94,8 +112,25 @@ export async function computeSLADeadline(
     cursor.setHours(0, 0, 0, 0)
   }
 
-  // Fallback: no business capacity found within the bound (e.g. all days inactive).
-  return cursor
+  // No business capacity found anywhere within the bound — every configured
+  // day is inactive, no business_hours rows exist at all, or every row's
+  // window is zero/negative width. This is a configuration problem, not a
+  // valid SLA outcome, so it's surfaced (logged + an operator alert) and
+  // returned as "no deadline" rather than silently becoming "now + ~5 years."
+  logger.error({
+    event: 'sla.business_hours.no_usable_window',
+    message: 'SLA deadline could not be computed — the business-hours calendar has no usable window (all inactive, no rows configured, or every window is zero/negative width)',
+    route: 'lib/sla/business-hours.ts#computeSLADeadline',
+    errorCode: 'sla_business_hours_misconfigured',
+    context: { scheduleRowCount: scheduleMap.size, slaDurationMinutes },
+  })
+  await alertOperator({
+    key: 'sla.business_hours.no_usable_window',
+    severity: 'critical',
+    title: 'SLA deadlines cannot be computed — business-hours calendar has no usable window',
+    detail: { scheduleRowCount: scheduleMap.size },
+  })
+  return null
 }
 
 /**

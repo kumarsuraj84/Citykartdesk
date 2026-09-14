@@ -4,6 +4,9 @@ import { revalidatePath } from 'next/cache'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canReview, logIntakeAudit } from './_shared'
+import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
+import { createRequestCore } from '@/lib/requests/create-request-core'
+import { collectFields, buildFormData } from '@/lib/intake/autofill'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -27,9 +30,25 @@ interface Decision {
 }
 
 export type WorkPayload =
-  | { type: 'request';  title: string; description: string; service_id: string; team_id: string }
+  | {
+      type: 'request'; title: string; description: string; service_id: string; team_id: string
+      /** Selected from the service's own tagged Sub-Categories (see
+       *  getTaggedSubCategoriesForService()) — re-validated server-side
+       *  against that exact set by createRequestCore(), never trusted as-is. */
+      sub_category_id?: string
+      /** Reviewer-supplied values for whichever requester-mandatory fields
+       *  the entity autofill (buildFormData()) couldn't fill — merged on top
+       *  of the autofilled values, then re-validated server-side by
+       *  createRequestCore() via validateRequesterFormCompletion() exactly
+       *  like every other channel. */
+      additional_form_data?: Record<string, unknown>
+    }
   | { type: 'task';     title: string; description: string; team_id: string }
-  | { type: 'approval'; title: string; description: string; service_id: string; team_id: string }
+  | {
+      type: 'approval'; title: string; description: string; service_id: string; team_id: string
+      sub_category_id?: string
+      additional_form_data?: Record<string, unknown>
+    }
   | { type: 'informational' }
   | { type: 'ignore' }
 
@@ -67,64 +86,11 @@ function buildSourceMetadata(review: {
   }
 }
 
-// F3: pre-fill a service's form fields from entities the classifier extracted
-// (intake_classifications.entities) plus the email subject/body. Conservative —
-// only fills text/textarea/date/number/email where the label is a clear match;
-// selects/radios/checkboxes are left for the reviewer (can't infer reliably).
-type SvcField = { id: string; type: string; label?: string; order?: number }
-
-function collectFields(svc: {
-  form_fields?: unknown
-  form_sections?: unknown
-  // A tagged Form Template is the live source of truth — see
-  // resolveServiceFormSections() in lib/forms/sections.ts. Checked first here
-  // too so intake auto-fill matches whatever the requester actually sees.
-  template?: { form_sections?: unknown } | null
-}): SvcField[] {
-  const source = svc.template ?? svc
-  const sections = Array.isArray(source.form_sections) ? (source.form_sections as { order?: number; fields?: SvcField[] }[]) : null
-  if (sections?.length) {
-    return [...sections]
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      .flatMap((s) => [...(s.fields ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)))
-  }
-  return Array.isArray(svc.form_fields) ? (svc.form_fields as SvcField[]) : []
-}
-
-function buildFormData(
-  fields: SvcField[],
-  entities: { refs?: string[]; amounts?: string[]; dates?: string[]; emails?: string[] },
-  subject: string,
-  body: string,
-): Record<string, unknown> {
-  const fd: Record<string, unknown> = {}
-  const refs = entities.refs ?? []
-  let refIdx = 0
-  for (const f of fields) {
-    const label = (f.label ?? '').toLowerCase()
-    let v: string | undefined
-    switch (f.type) {
-      case 'textarea':
-        if (/detail|descri|note|summary|message|reason|issue|comment/.test(label)) v = body
-        break
-      case 'text':
-        if (/subject|title/.test(label)) v = subject
-        else if (/invoice|order|\bref|account|ticket|number|\bid\b|\bpo\b/.test(label) && refs[refIdx]) v = refs[refIdx++]
-        break
-      case 'date':
-        if (entities.dates?.[0]) v = entities.dates[0]
-        break
-      case 'number':
-        if (/amount|cost|price|total|sum|value/.test(label) && entities.amounts?.[0]) v = entities.amounts[0].replace(/[^\d.]/g, '')
-        break
-      case 'email':
-        if (entities.emails?.[0]) v = entities.emails[0]
-        break
-    }
-    if (v !== undefined && v !== '') fd[f.id] = v
-  }
-  return fd
-}
+// F3 entity-autofill (collectFields/buildFormData) now lives in
+// lib/intake/autofill.ts — a plain module (not inside this 'use server'
+// file) so the Review UI can import and run the exact same pure functions
+// client-side for a live "what's still missing" preview, instead of
+// duplicating this logic.
 
 // ── Main action ───────────────────────────────────────────────────────────────
 
@@ -137,6 +103,8 @@ export async function approveAndCreate(
 ): Promise<WorkResult> {
   const profile = await getCurrentProfile()
   if (!profile || !canReview(profile.role)) return { ok: false, error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { ok: false, error: moduleError }
 
   const admin = createAdminClient() as unknown as AnyClient
 
@@ -203,7 +171,10 @@ export async function approveAndCreate(
 
   if (payload.type === 'request' || payload.type === 'approval') {
     // Verify service and team exist in this org. Pull the form schema so we can
-    // snapshot it and pre-fill form_data (F3).
+    // pre-fill form_data (F3) — createRequestCore() re-resolves the service
+    // itself for the actual snapshot/SLA/title/priority derivation below, so
+    // this fetch exists only to feed buildFormData(), a purely intake-specific
+    // pre-processing step the core knows nothing about.
     const [{ data: svc }, { data: team }, { data: cls }] = await Promise.all([
       admin.from('services').select('id, name, team_id, form_fields, form_sections, template:form_templates(form_sections)').eq('id', payload.service_id).maybeSingle(),
       admin.from('teams').select('id').eq('id', payload.team_id).maybeSingle(),
@@ -212,39 +183,81 @@ export async function approveAndCreate(
     if (!svc) return { ok: false, error: 'Selected service not found.' }
     if (!team) return { ok: false, error: 'Selected team not found.' }
 
-    const requestPriority = mapPriorityToRequest(decision.final_priority)
-    const status = payload.type === 'approval' ? 'pending_approval' : 'open'
-
-    // Autofill the service's fields from extracted entities + the email text.
+    // Autofill the service's fields from extracted entities + the email text,
+    // then layer the reviewer's own answers for whatever the autofill
+    // couldn't reliably infer (select/radio/multiselect/checkbox/phone/toggle,
+    // or a text field with an unrecognized label) on top — see WorkPayload's
+    // additional_form_data doc comment. Reviewer-supplied values win.
     const entities = (cls?.entities ?? {}) as Parameters<typeof buildFormData>[1]
     const resolvedFields = collectFields(svc)
-    const formData = buildFormData(resolvedFields, entities, payload.title, payload.description || '')
+    const autoFilledFormData = buildFormData(resolvedFields, entities, payload.title, payload.description || '')
+    const formData = { ...autoFilledFormData, ...(payload.additional_form_data ?? {}) }
 
-    const { data: req, error: reqErr } = await admin
-      .from('requests')
-      .insert({
-        request_no:             '',
-        title:                  payload.title,
-        description:            payload.description || null,
-        service_id:             payload.service_id,
-        team_id:                payload.team_id,
-        requester_id:           profile.id,
-        org_id:                 review.org_id,
-        priority:               requestPriority,
-        status,
-        form_data:              formData,
-        form_schema_snapshot:   svc.form_fields ?? [],
-        // Template's sections if tagged (the live source the requester
-        // actually saw), else the service's own — same precedence as
-        // createRequest()'s resolveServiceFormSections().
-        form_sections_snapshot: svc.template?.form_sections ?? svc.form_sections ?? [],
-        intake_message_id:      review.message_id,
-        source_metadata:        sourceMetadata,
-      })
-      .select('id, request_no')
-      .single()
+    // Shared ticket-creation core (lib/requests/create-request-core.ts) — the
+    // same path lib/actions/requests.ts#createRequest() uses for the portal.
+    // This is a deliberate behavior change from the previous direct insert,
+    // requested explicitly by the Stage 1 brief ("Tickets created from Email
+    // Intake should also correctly receive SLA / priority / Business Rules /
+    // assignment / activity / normal notifications / normal validation."):
+    //   - requests.response_due_at/resolution_due_at are now actually set
+    //     (previously always null for every intake-created ticket — see
+    //     lib/sla/resolve.ts's own doc comment on this exact gap).
+    //   - runRulesForTrigger('created', ...) now fires (previously never
+    //     called for this path), so Business Rules auto-assignment/priority/
+    //     status/notify now applies to intake-created tickets too.
+    //   - the shared mandatory-field completion gate
+    //     (validateRequesterFormCompletion) now applies: a service whose
+    //     required select/radio/multiselect/toggle/phone/checkbox field isn't
+    //     populated by buildFormData()'s conservative text/date/number/email-
+    //     only autofill, or a service with tagged Sub-Categories, will
+    //     surface a clear "<Field> is required."/"Category is required."
+    //     error here instead of silently creating an incomplete ticket the
+    //     way the old direct insert did. Stage 1.1 gave the Review UI a way
+    //     to resolve this before conversion — see additional_form_data/
+    //     sub_category_id above and getServiceRequesterForm() below — so this
+    //     is reachable only if the reviewer submits without addressing what
+    //     the UI already showed them as missing, or via a direct call to this
+    //     action bypassing the UI.
+    //
+    // subCategoryId is passed straight through and NOT pre-validated here —
+    // createRequestCore() re-validates it against this exact service's
+    // tagged Sub-Category set (service_sub_category_tags), which is itself
+    // implicitly org-scoped (a sub-category can only ever be tagged to one
+    // service, in one org — see the discovery/security review notes on this
+    // exclusivity constraint), so a cross-org or otherwise-invalid id is
+    // rejected there, not trusted from the reviewer's submission.
+    const coreResult = await createRequestCore({
+      client: admin,
+      orgId: review.org_id,
+      requesterId: profile.id,
+      actingUserId: profile.id,
+      serviceId: payload.service_id,
+      subCategoryId: payload.sub_category_id ?? null,
+      formData,
+      description: payload.description || null,
+      source: 'email_intake',
+      intakeMessageId: review.message_id,
+      sourceMetadata,
+      useAdminForWrites: true,
+      // Email Intake lets a reviewer route to a different team than the
+      // service's own default — a real, pre-existing capability of this one
+      // channel (see WorkPayload's team_id), preserved unchanged.
+      teamIdOverride: payload.team_id,
+      // decision.final_priority is the reviewer's confirmed-or-overridden
+      // classification (see approveAndCreate()'s own wasOverridden check
+      // just above), not a raw, unreviewed value straight from the original
+      // message — trusted the same way createRequestCore()'s own doc comment
+      // on priorityOverride describes. Preserves this channel's pre-existing
+      // priority behavior exactly; without this, routing through the shared
+      // core would silently discard the reviewer's priority decision in
+      // favor of the service's bare default.
+      priorityOverride: mapPriorityToRequest(decision.final_priority),
+    })
 
-    if (reqErr || !req) return { ok: false, error: reqErr?.message ?? 'Failed to create request.' }
+    if (coreResult.error || !coreResult.requestId || !coreResult.requestNo) {
+      return { ok: false, error: coreResult.error ?? 'Failed to create request.' }
+    }
+    const req = { id: coreResult.requestId, request_no: coreResult.requestNo }
 
     let approvalId: string | null = null
 
@@ -258,7 +271,7 @@ export async function approveAndCreate(
 
       const workflowId =
         (svcWithWf as { approval_workflow_id?: string | null } | null)?.approval_workflow_id ??
-        (await admin.from('approval_workflows').select('id').limit(1).maybeSingle()).data?.id ??
+        (await admin.from('approval_workflows').select('id').eq('org_id', review.org_id).limit(1).maybeSingle()).data?.id ??
         null
 
       if (workflowId) {
@@ -268,6 +281,16 @@ export async function approveAndCreate(
           .select('id')
           .single()
         approvalId = appr?.id ?? null
+        // createRequestCore() always creates the ticket 'open' (matching the
+        // portal's own createRequest(), which never auto-enters approval
+        // either — see its doc comment). The 'approval' payload type's extra
+        // "start life already pending_approval" behavior is specific to this
+        // one channel, so it's applied here as a follow-up, exactly the way
+        // the portal's own submitForApproval() is already a separate step
+        // from creation, not folded into the shared core.
+        if (approvalId) {
+          await admin.from('requests').update({ status: 'pending_approval' }).eq('id', req.id)
+        }
       }
     }
 
@@ -372,6 +395,8 @@ export async function convertToWork(
 ): Promise<WorkResult> {
   const profile = await getCurrentProfile()
   if (!profile || !canReview(profile.role)) return { ok: false, error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { ok: false, error: moduleError }
 
   const admin = createAdminClient() as unknown as AnyClient
 
@@ -443,6 +468,8 @@ export async function reclassifyReview(
 ): Promise<{ ok: boolean; message?: string; error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !canReview(profile.role)) return { ok: false, error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { ok: false, error: moduleError }
 
   const admin = createAdminClient() as unknown as AnyClient
 

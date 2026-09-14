@@ -7,11 +7,13 @@ import {
   createCostCenter, updateCostCenter, deleteCostCenter,
   createJobFunction, updateJobFunction, deleteJobFunction,
   createDesignation, updateDesignation, deleteDesignation,
+  createStore, updateStore, deleteStore, importStores,
 } from '@/lib/actions/admin/org'
+import { createOem, updateOem, deleteOem } from '@/lib/actions/admin/oems'
 import { ImportModal } from '@/components/ui/ImportModal'
-import type { DepartmentRow, LocationRow, CostCenterRow, JobFunctionRow, DesignationRow, UserOption } from './page'
+import type { DepartmentRow, LocationRow, CostCenterRow, JobFunctionRow, DesignationRow, UserOption, OemRow, StoreRow } from './page'
 
-type Tab = 'departments' | 'locations' | 'cost_centers' | 'job_functions' | 'designations'
+type Tab = 'departments' | 'locations' | 'cost_centers' | 'job_functions' | 'designations' | 'oems' | 'stores'
 
 const TIMEZONES = [
   'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
@@ -342,7 +344,7 @@ function DepartmentsTab({ departments, allUsers }: DeptTabProps) {
                       <button onClick={() => setConfirmDelete(null)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Cancel</button>
                     </>
                   ) : (
-                    <button onClick={() => setConfirmDelete(d.id)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40 hover:border-red-200 hover:text-red-600">Delete</button>
+                    <button onClick={() => setConfirmDelete(d.id)} className="rounded border border-border px-2 py-1 text-xs text-red-600/70 hover:bg-red-50 hover:border-red-200 hover:text-red-600">Delete</button>
                   )}
                 </div>
               </div>
@@ -480,7 +482,7 @@ function LocationsTab({ locations }: { locations: LocationRow[] }) {
                       <button onClick={() => setConfirmDelete(null)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Cancel</button>
                     </>
                   ) : (
-                    <button onClick={() => setConfirmDelete(l.id)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40 hover:border-red-200 hover:text-red-600">Delete</button>
+                    <button onClick={() => setConfirmDelete(l.id)} className="rounded border border-border px-2 py-1 text-xs text-red-600/70 hover:bg-red-50 hover:border-red-200 hover:text-red-600">Delete</button>
                   )}
                 </div>
               </div>
@@ -588,7 +590,7 @@ function CostCentersTab({ costCenters, departments }: { costCenters: CostCenterR
                       <button onClick={() => setConfirmDelete(null)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Cancel</button>
                     </>
                   ) : (
-                    <button onClick={() => setConfirmDelete(c.id)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40 hover:border-red-200 hover:text-red-600">Delete</button>
+                    <button onClick={() => setConfirmDelete(c.id)} className="rounded border border-border px-2 py-1 text-xs text-red-600/70 hover:bg-red-50 hover:border-red-200 hover:text-red-600">Delete</button>
                   )}
                 </div>
               </div>
@@ -734,7 +736,377 @@ function SimpleMasterTab({ rows, noun, actions }: {
                       <button onClick={() => setConfirmDelete(null)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Cancel</button>
                     </>
                   ) : (
-                    <button onClick={() => setConfirmDelete(r.id)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40 hover:border-red-200 hover:text-red-600">Delete</button>
+                    <button onClick={() => setConfirmDelete(r.id)} className="rounded border border-border px-2 py-1 text-xs text-red-600/70 hover:bg-red-50 hover:border-red-200 hover:text-red-600">Delete</button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── OEMs Tab ──────────────────────────────────────────────────────────────────
+// OEM = the vendor an AC Issues ticket gets auto-emailed to once the
+// requester's store (see StoresTab below) is assigned to them and the
+// service has auto_oem_routing enabled — see runOemAutoRouting() in
+// lib/actions/requests.ts.
+
+function FormTextarea({ label, value, onChange, placeholder, rows = 3, hint }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string; rows?: number; hint?: string
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+      />
+      {hint && <span className="text-[11px] text-muted-foreground/70">{hint}</span>}
+    </label>
+  )
+}
+
+const OEM_TEMPLATE_PLACEHOLDERS =
+  '{{ticket_no}}, {{subject}}, {{description}}, {{requester_name}}, {{requester_email}}, {{requester_phone}}, {{store_address}}'
+
+interface OemFormValues { name: string; emails: string; email_subject_template: string; email_body_template: string; is_active: boolean }
+
+function OemForm({ f, setF, onSubmit, onCancel, submitLabel, pending }: {
+  f: OemFormValues; setF: (v: OemFormValues) => void; onSubmit: (e: React.FormEvent) => void; onCancel: () => void; submitLabel: string
+  pending: boolean
+}) {
+  return (
+    <form onSubmit={onSubmit} className="space-y-3">
+      <FormInput label="OEM Name" value={f.name} onChange={v => setF({ ...f, name: v })} required placeholder="e.g. Voltas AC Service" />
+      <FormTextarea
+        label="Notification Emails"
+        value={f.emails}
+        onChange={v => setF({ ...f, emails: v })}
+        placeholder={'one address per line, e.g.\nservice@voltas.com\nescalation@voltas.com'}
+        hint="One email per line (or comma-separated). All of these get CC'd every time a ticket routes to this OEM."
+      />
+      <FormInput label="Email Subject Template" value={f.email_subject_template} onChange={v => setF({ ...f, email_subject_template: v })} placeholder={`New AC Issue — {{ticket_no}}`} />
+      <FormTextarea
+        label="Email Body Template"
+        value={f.email_body_template}
+        onChange={v => setF({ ...f, email_body_template: v })}
+        rows={5}
+        placeholder={'A new AC issue ticket has been raised.\n\nTicket: {{ticket_no}}\nSubject: {{subject}}\nDescription: {{description}}\n\nRequester: {{requester_name}} ({{requester_email}}, {{requester_phone}})\nStore Address: {{store_address}}'}
+        hint={`Available placeholders: ${OEM_TEMPLATE_PLACEHOLDERS}`}
+      />
+      <div className="flex items-center gap-2">
+        <input type="checkbox" checked={f.is_active} onChange={e => setF({ ...f, is_active: e.target.checked })} className="rounded" />
+        <span className="text-xs text-muted-foreground">Active</span>
+      </div>
+      <div className="flex gap-2">
+        <button type="submit" disabled={pending} className="rounded-lg bg-foreground px-4 py-1.5 text-xs font-semibold text-background hover:opacity-90 disabled:opacity-50">{submitLabel}</button>
+        <button type="button" onClick={onCancel} className="rounded-lg border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/40">Cancel</button>
+      </div>
+    </form>
+  )
+}
+
+function parseEmails(raw: string): string[] {
+  return raw.split(/[\n,]/).map(e => e.trim()).filter(Boolean)
+}
+
+function OemsTab({ oems }: { oems: OemRow[] }) {
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const [editId, setEditId] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [showAdd, setShowAdd] = useState(false)
+
+  const blank: OemFormValues = { name: '', emails: '', email_subject_template: '', email_body_template: '', is_active: true }
+  const [addF, setAddF] = useState(blank)
+  const [editF, setEditF] = useState(blank)
+
+  function startEdit(o: OemRow) {
+    setEditId(o.id)
+    setEditF({
+      name: o.name,
+      emails: o.emails.join('\n'),
+      email_subject_template: o.email_subject_template ?? '',
+      email_body_template: o.email_body_template ?? '',
+      is_active: o.is_active,
+    })
+  }
+
+  function handleAdd(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    startTransition(async () => {
+      const res = await createOem({
+        name: addF.name,
+        emails: parseEmails(addF.emails),
+        email_subject_template: addF.email_subject_template || null,
+        email_body_template: addF.email_body_template || null,
+        is_active: addF.is_active,
+      })
+      if (res.error) { setError(res.error); return }
+      setAddF(blank); setShowAdd(false)
+    })
+  }
+
+  function handleEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editId) return
+    setError(null)
+    startTransition(async () => {
+      const res = await updateOem(editId, {
+        name: editF.name,
+        emails: parseEmails(editF.emails),
+        email_subject_template: editF.email_subject_template || null,
+        email_body_template: editF.email_body_template || null,
+        is_active: editF.is_active,
+      })
+      if (res.error) { setError(res.error); return }
+      setEditId(null)
+    })
+  }
+
+  function handleDelete(id: string) {
+    setError(null)
+    startTransition(async () => {
+      const res = await deleteOem(id)
+      if (res.error) { setError(res.error); return }
+      setConfirmDelete(null)
+    })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <button onClick={() => setShowAdd(v => !v)} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors">
+          + Add OEM
+        </button>
+      </div>
+
+      {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+
+      {showAdd && (
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
+          <p className="text-sm font-semibold text-foreground">New OEM</p>
+          <OemForm f={addF} setF={setAddF} onSubmit={handleAdd} onCancel={() => setShowAdd(false)} submitLabel="Create" pending={pending} />
+        </div>
+      )}
+
+      <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+        <div className="grid grid-cols-[1fr_1.4fr_80px_120px] gap-x-4 border-b border-border bg-muted/30 px-4 py-2.5">
+          {['Name', 'Emails', 'Active', 'Actions'].map(h => (
+            <span key={h} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
+          ))}
+        </div>
+
+        {oems.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">No OEMs yet.</div>
+        ) : oems.map(o => (
+          <div key={o.id}>
+            {editId === o.id ? (
+              <div className="px-4 py-3 border-b border-border/50 bg-muted/20 space-y-3">
+                <OemForm f={editF} setF={setEditF} onSubmit={handleEdit} onCancel={() => setEditId(null)} submitLabel="Save" pending={pending} />
+              </div>
+            ) : (
+              <div className="grid grid-cols-[1fr_1.4fr_80px_120px] items-center gap-x-4 border-b border-border/50 last:border-0 px-4 py-3">
+                <TableCell>{o.name}</TableCell>
+                <TableCell className="text-muted-foreground text-xs truncate">{o.emails.length > 0 ? o.emails.join(', ') : '—'}</TableCell>
+                <div><ActiveBadge active={o.is_active} /></div>
+                <div className="flex gap-1.5">
+                  <button onClick={() => startEdit(o)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Edit</button>
+                  {confirmDelete === o.id ? (
+                    <>
+                      <button onClick={() => handleDelete(o.id)} disabled={pending} className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Confirm</button>
+                      <button onClick={() => setConfirmDelete(null)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Cancel</button>
+                    </>
+                  ) : (
+                    <button onClick={() => setConfirmDelete(o.id)} className="rounded border border-border px-2 py-1 text-xs text-red-600/70 hover:bg-red-50 hover:border-red-200 hover:text-red-600">Delete</button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Stores Tab (Store Master) ────────────────────────────────────────────────
+// One row per physical store — its address is what auto-fills the
+// `store_address` field on AC Issues-style tickets, and its OEM assignment is
+// what decides where the auto-routing email goes. Distinct from the
+// Locations tab above (HO/Stores/Warehouse — a coarse visibility category).
+
+interface StoreFormValues { code: string; name: string; address: string; city: string; state: string; pincode: string; oem_id: string; is_active: boolean }
+
+function StoreForm({ f, setF, onSubmit, onCancel, submitLabel, pending, oemOptions }: {
+  f: StoreFormValues; setF: (v: StoreFormValues) => void; onSubmit: (e: React.FormEvent) => void; onCancel: () => void; submitLabel: string
+  pending: boolean; oemOptions: { value: string; label: string }[]
+}) {
+  return (
+    <form onSubmit={onSubmit} className="space-y-3">
+      <div className="grid grid-cols-3 gap-3">
+        <FormInput label="Store Code" value={f.code} onChange={v => setF({ ...f, code: v })} required placeholder="e.g. ALC" />
+        <FormInput label="Store Name" value={f.name} onChange={v => setF({ ...f, name: v })} required placeholder="e.g. Alwar City" />
+        <FormSelect label="OEM (for AC issue routing)" value={f.oem_id} onChange={v => setF({ ...f, oem_id: v })} options={oemOptions} placeholder="Not mapped" />
+      </div>
+      <FormInput label="Address" value={f.address} onChange={v => setF({ ...f, address: v })} placeholder="Full store address — auto-fills requester tickets" />
+      <div className="grid grid-cols-3 gap-3">
+        <FormInput label="City" value={f.city} onChange={v => setF({ ...f, city: v })} placeholder="e.g. Alwar" />
+        <FormInput label="State" value={f.state} onChange={v => setF({ ...f, state: v })} placeholder="e.g. Rajasthan" />
+        <FormInput label="Pincode" value={f.pincode} onChange={v => setF({ ...f, pincode: v })} placeholder="e.g. 301001" />
+      </div>
+      <div className="flex items-center gap-2">
+        <input type="checkbox" checked={f.is_active} onChange={e => setF({ ...f, is_active: e.target.checked })} className="rounded" />
+        <span className="text-xs text-muted-foreground">Active</span>
+      </div>
+      <div className="flex gap-2">
+        <button type="submit" disabled={pending} className="rounded-lg bg-foreground px-4 py-1.5 text-xs font-semibold text-background hover:opacity-90 disabled:opacity-50">{submitLabel}</button>
+        <button type="button" onClick={onCancel} className="rounded-lg border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/40">Cancel</button>
+      </div>
+    </form>
+  )
+}
+
+function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const [editId, setEditId] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [showAdd, setShowAdd] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+
+  const blank: StoreFormValues = { code: '', name: '', address: '', city: '', state: '', pincode: '', oem_id: '', is_active: true }
+  const [addF, setAddF] = useState(blank)
+  const [editF, setEditF] = useState(blank)
+
+  const oemOptions = oems.map(o => ({ value: o.id, label: o.name }))
+
+  function startEdit(s: StoreRow) {
+    setEditId(s.id)
+    setEditF({
+      code: s.code, name: s.name, address: s.address ?? '', city: s.city ?? '',
+      state: s.state ?? '', pincode: s.pincode ?? '', oem_id: s.oem_id ?? '', is_active: s.is_active,
+    })
+  }
+
+  function handleAdd(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    startTransition(async () => {
+      const res = await createStore({
+        code: addF.code, name: addF.name, address: addF.address, city: addF.city,
+        state: addF.state, pincode: addF.pincode, oem_id: addF.oem_id || null, is_active: addF.is_active,
+      })
+      if (res.error) { setError(res.error); return }
+      setAddF(blank); setShowAdd(false)
+    })
+  }
+
+  function handleEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editId) return
+    setError(null)
+    startTransition(async () => {
+      const res = await updateStore(editId, {
+        code: editF.code, name: editF.name, address: editF.address, city: editF.city,
+        state: editF.state, pincode: editF.pincode, oem_id: editF.oem_id || null, is_active: editF.is_active,
+      })
+      if (res.error) { setError(res.error); return }
+      setEditId(null)
+    })
+  }
+
+  function handleDelete(id: string) {
+    setError(null)
+    startTransition(async () => {
+      const res = await deleteStore(id)
+      if (res.error) { setError(res.error); return }
+      setConfirmDelete(null)
+    })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end gap-2">
+        <button onClick={() => setShowImport(true)} className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted/40 transition-colors">
+          Import
+        </button>
+        <button onClick={() => setShowAdd(v => !v)} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors">
+          + Add Store
+        </button>
+      </div>
+
+      {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+
+      {showImport && (
+        <ImportModal
+          title="Stores"
+          sampleFilename="stores-sample.csv"
+          sampleColumns={[
+            { key: 'code', label: 'code' },
+            { key: 'name', label: 'name' },
+            { key: 'address', label: 'address' },
+            { key: 'city', label: 'city' },
+            { key: 'state', label: 'state' },
+            { key: 'pincode', label: 'pincode' },
+            { key: 'oem', label: 'oem' },
+            { key: 'active', label: 'active' },
+          ]}
+          sampleRows={[
+            { code: 'ALC', name: 'Alwar City', address: 'Main Road, Alwar', city: 'Alwar', state: 'Rajasthan', pincode: '301001', oem: 'Voltas AC Service', active: 'true' },
+            { code: 'JPR', name: 'Jaipur Central', address: 'MI Road, Jaipur', city: 'Jaipur', state: 'Rajasthan', pincode: '302001', oem: '', active: 'true' },
+          ]}
+          onImport={(rows) => importStores(rows as never)}
+          onClose={() => setShowImport(false)}
+          onDone={() => {}}
+        />
+      )}
+
+      {showAdd && (
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
+          <p className="text-sm font-semibold text-foreground">New Store</p>
+          <StoreForm f={addF} setF={setAddF} onSubmit={handleAdd} onCancel={() => setShowAdd(false)} submitLabel="Create" pending={pending} oemOptions={oemOptions} />
+        </div>
+      )}
+
+      <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+        <div className="grid grid-cols-[80px_1fr_1.4fr_140px_80px_120px] gap-x-4 border-b border-border bg-muted/30 px-4 py-2.5">
+          {['Code', 'Name', 'Address', 'OEM', 'Active', 'Actions'].map(h => (
+            <span key={h} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
+          ))}
+        </div>
+
+        {stores.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">No stores yet.</div>
+        ) : stores.map(s => (
+          <div key={s.id}>
+            {editId === s.id ? (
+              <div className="px-4 py-3 border-b border-border/50 bg-muted/20 space-y-3">
+                <StoreForm f={editF} setF={setEditF} onSubmit={handleEdit} onCancel={() => setEditId(null)} submitLabel="Save" pending={pending} oemOptions={oemOptions} />
+              </div>
+            ) : (
+              <div className="grid grid-cols-[80px_1fr_1.4fr_140px_80px_120px] items-center gap-x-4 border-b border-border/50 last:border-0 px-4 py-3">
+                <TableCell className="font-mono text-xs">{s.code}</TableCell>
+                <TableCell>{s.name}</TableCell>
+                <TableCell className="text-muted-foreground text-xs truncate">{s.address ?? '—'}</TableCell>
+                <TableCell className="text-muted-foreground text-xs">{s.oem_name ?? <span className="italic">Unmapped</span>}</TableCell>
+                <div><ActiveBadge active={s.is_active} /></div>
+                <div className="flex gap-1.5">
+                  <button onClick={() => startEdit(s)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Edit</button>
+                  {confirmDelete === s.id ? (
+                    <>
+                      <button onClick={() => handleDelete(s.id)} disabled={pending} className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Confirm</button>
+                      <button onClick={() => setConfirmDelete(null)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Cancel</button>
+                    </>
+                  ) : (
+                    <button onClick={() => setConfirmDelete(s.id)} className="rounded border border-border px-2 py-1 text-xs text-red-600/70 hover:bg-red-50 hover:border-red-200 hover:text-red-600">Delete</button>
                   )}
                 </div>
               </div>
@@ -755,9 +1127,11 @@ interface Props {
   jobFunctions: JobFunctionRow[]
   designations: DesignationRow[]
   allUsers: UserOption[]
+  oems: OemRow[]
+  stores: StoreRow[]
 }
 
-export function OrgStructureClient({ departments, locations, costCenters, jobFunctions, designations, allUsers }: Props) {
+export function OrgStructureClient({ departments, locations, costCenters, jobFunctions, designations, allUsers, oems, stores }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('departments')
 
   const tabs: { id: Tab; label: string; count: number }[] = [
@@ -766,6 +1140,8 @@ export function OrgStructureClient({ departments, locations, costCenters, jobFun
     { id: 'cost_centers', label: 'Cost Centers', count: costCenters.length },
     { id: 'job_functions', label: 'Functions', count: jobFunctions.length },
     { id: 'designations', label: 'Designations', count: designations.length },
+    { id: 'stores', label: 'Stores', count: stores.length },
+    { id: 'oems', label: 'OEMs', count: oems.length },
   ]
 
   return (
@@ -810,6 +1186,8 @@ export function OrgStructureClient({ departments, locations, costCenters, jobFun
           actions={{ create: createDesignation, update: updateDesignation, remove: deleteDesignation }}
         />
       )}
+      {activeTab === 'stores' && <StoresTab stores={stores} oems={oems} />}
+      {activeTab === 'oems' && <OemsTab oems={oems} />}
     </div>
   )
 }

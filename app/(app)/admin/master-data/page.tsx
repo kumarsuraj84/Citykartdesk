@@ -14,18 +14,12 @@ export default async function MasterDataPage() {
   if (!['admin', 'manager', 'platform_owner'].includes(profile.role)) redirect('/home')
 
   const admin = createAdminClient() as unknown as AnyClient
-  const orgId = profile.org_id ?? ''
 
-  const [tagsRes, prioritiesRes] = await Promise.all([
-    // tags are org-scoped; request_priorities are global reference data
-    admin.from('tags').select('*').eq('org_id', orgId).order('name'),
-    admin.from('request_priorities').select('*').order('display_order'),
-  ])
+  const { data: priorities } = await admin.from('request_priorities').select('*').order('display_order')
 
   return (
     <MasterDataClient
-      tags={tagsRes.data ?? []}
-      requestPriorities={prioritiesRes.data ?? []}
+      requestPriorities={priorities ?? []}
     />
   )
 }

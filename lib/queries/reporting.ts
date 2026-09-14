@@ -3,6 +3,7 @@ import { getEntityFields, RECORD_COUNT_FIELD, type EntityKey, type ReportField }
 import type { ReportViewerScope } from '@/lib/reporting/access'
 import { getServiceFormFieldsForOrg, type ServiceFormFieldRef } from '@/lib/forms/sections'
 import { flattenLeafOptions } from '@/lib/forms/options'
+import { isEverBreached, isEverResponseBreached } from '@/lib/sla/breach'
 import type { Database } from '@/types/database'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -146,7 +147,7 @@ async function fetchRequestRows(
     .select(`
       id, request_no, title, description, status, priority, created_at, updated_at,
       responded_at, resolved_at, closed_at, resolution_due_at, response_due_at, source_metadata, form_data,
-      reopen_count,
+      reopen_count, service_id,
       service:services(name, template:form_templates(name)),
       category:service_categories(name), sub_category:service_sub_categories(name),
       team:teams(name), project:projects(name),
@@ -166,7 +167,7 @@ async function fetchRequestRows(
     created_at: string; updated_at: string; responded_at: string | null; resolved_at: string | null; closed_at: string | null
     resolution_due_at: string | null; response_due_at: string | null; source_metadata: unknown
     form_data: Record<string, unknown> | null
-    reopen_count: number
+    reopen_count: number; service_id: string | null
     service: { name: string; template: { name: string } | null } | null
     category: { name: string } | null; sub_category: { name: string } | null
     team: { name: string } | null; project: { name: string } | null
@@ -187,15 +188,36 @@ async function fetchRequestRows(
     getApprovalSummaryByRequestId(admin, requestIds),
   ])
 
+  // The web/portal channel never writes requests.description — the requester's
+  // free-text answer lives in form_data instead, under whichever field the
+  // service's form defines as its first `textarea` (mirrors the same
+  // "first textarea = description" convention createRequest() uses when it
+  // captures descriptionField in lib/requests/create-request-core.ts). Email
+  // Intake is the one channel that does populate requests.description
+  // directly, so that value wins when both exist.
+  const textareaFieldByService = new Map<string, string>()
+  for (const f of formFields) {
+    if (f.type === 'textarea' && !textareaFieldByService.has(f.serviceId)) {
+      textareaFieldByService.set(f.serviceId, f.id)
+    }
+  }
+
   const now = nowIso()
   const rows = pageRows.map((r) => {
     const closedLike = r.resolved_at ?? r.closed_at
-    const isSlaBreached = !!r.resolution_due_at && (closedLike ? closedLike > r.resolution_due_at : now > r.resolution_due_at)
-    const isResponseSlaBreached = !!r.response_due_at && (r.responded_at ? r.responded_at > r.response_due_at : now > r.response_due_at)
+    const descriptionFieldId = r.service_id ? textareaFieldByService.get(r.service_id) : undefined
+    const formDescription = descriptionFieldId ? r.form_data?.[descriptionFieldId] : undefined
+    const description = r.description || (typeof formDescription === 'string' ? formDescription : '')
+    // "Ever Breached" (D-01, lib/sla/breach.ts) — deliberately different from
+    // the live "Currently Breached" count used by Home/Monitoring/the Admin
+    // Analytics KPI card: a resolved-late ticket stays breached here even
+    // after it closes, which is the correct question for a report/export.
+    const isSlaBreached = isEverBreached(r)
+    const isResponseSlaBreached = isEverResponseBreached(r)
     const row: ReportRow = {
       request_no: r.request_no,
       title: r.title,
-      description: r.description ?? '',
+      description,
       status: r.status,
       priority: r.priority,
       service_name: r.service?.name ?? '',

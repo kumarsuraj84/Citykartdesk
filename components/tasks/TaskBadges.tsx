@@ -1,4 +1,5 @@
 import type { TaskStatus, TaskPriority } from '@/types'
+import { TASK_PRIORITY_LABELS } from '@/lib/constants/tasks'
 
 export function TaskStatusBadge({ status }: { status: TaskStatus }) {
   const classes: Record<TaskStatus, string> = {
@@ -26,14 +27,9 @@ export function TaskPriorityBadge({ priority }: { priority: TaskPriority }) {
     medium: 'bg-amber-100 text-amber-600',
     low:    'bg-slate-100 text-slate-500',
   }
-  const labels: Record<TaskPriority, string> = {
-    high:   'High',
-    medium: 'Medium',
-    low:    'Low',
-  }
   return (
     <span className={`chip-3d text-xs font-medium ${classes[priority]}`}>
-      {labels[priority]}
+      {TASK_PRIORITY_LABELS[priority]}
     </span>
   )
 }

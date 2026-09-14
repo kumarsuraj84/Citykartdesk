@@ -9,6 +9,7 @@ import { getApprovalForRequest, type ApprovalWithDetails } from '@/lib/queries/a
 import { logActivity } from '@/lib/activity'
 import { notify } from '@/lib/notifications'
 import { rateLimit } from '@/lib/rate-limit'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 import type { RequestPriority, RequestStatus } from '@/types'
 
 type ActionResult = { error?: string }
@@ -21,6 +22,7 @@ export async function searchUsersForDelegation(
   const { data } = await supabase
     .from('profiles')
     .select('id, full_name')
+    .eq('is_active', true)
     .ilike('full_name', `%${safe}%`)
     .order('full_name')
     .limit(10)
@@ -175,7 +177,7 @@ export async function sendAdHocApproval(
     .insert({ name: `Ad-hoc: ${req.title}`, org_id: req.org_id })
     .select('id')
     .single()
-  if (wfErr || !workflow) return { error: wfErr?.message ?? 'Failed to create approval workflow.' }
+  if (wfErr || !workflow) return { error: sanitizeError(wfErr, { route: 'approvals.ts#sendAdHocApproval', fallback: 'Failed to create approval workflow.' }) }
 
   // Create one step per approver (step_order 1..N)
   const stepRows = approverIds.map((uid, i) => ({
@@ -185,7 +187,7 @@ export async function sendAdHocApproval(
     approver_user_id: uid,
   }))
   const { error: stepErr } = await admin.from('approval_workflow_steps').insert(stepRows)
-  if (stepErr) return { error: stepErr.message }
+  if (stepErr) return { error: sanitizeError(stepErr, { route: 'approvals.ts#sendAdHocApproval', fallback: 'Failed to create approval steps.' }) }
 
   // current_step = 0 means parallel — everyone acts simultaneously
   const { data: approval, error: approvalErr } = await admin
@@ -193,7 +195,7 @@ export async function sendAdHocApproval(
     .insert({ request_id: requestId, workflow_id: workflow.id, status: 'pending', current_step: 0 })
     .select('id')
     .single()
-  if (approvalErr || !approval) return { error: approvalErr?.message ?? 'Failed to create approval.' }
+  if (approvalErr || !approval) return { error: sanitizeError(approvalErr, { route: 'approvals.ts#sendAdHocApproval', fallback: 'Failed to create approval.' }) }
 
   // Put request on hold — SLA pauses the same way "Waiting on User" does.
   // If it was already paused (e.g. sent while waiting on the user), keep the
@@ -211,7 +213,7 @@ export async function sendAdHocApproval(
       waiting_since: req.waiting_since ?? new Date().toISOString(),
     })
     .eq('id', requestId)
-  if (stErr) return { error: stErr.message }
+  if (stErr) return { error: sanitizeError(stErr, { route: 'approvals.ts#sendAdHocApproval', fallback: 'Failed to update request status.' }) }
 
   await logActivity({
     requestId,
@@ -321,7 +323,7 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
     decision: 'approved',
     comment: comment?.trim() || null,
   })
-  if (decisionError) return { error: decisionError.message }
+  if (decisionError) return { error: sanitizeError(decisionError, { route: 'approvals.ts#approveApproval', fallback: 'Failed to record decision.' }) }
 
   // This is now decided for the acting approver — their notification is done.
   await archiveApprovalNotifications(approval.request_id, { onlyUserId: profile.id })
@@ -351,7 +353,7 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
       .eq('status', 'pending')
       .select('id')
       .maybeSingle()
-    if (approvalUpdateError) return { error: approvalUpdateError.message }
+    if (approvalUpdateError) return { error: sanitizeError(approvalUpdateError, { route: 'approvals.ts#approveApproval', fallback: 'Failed to update approval.' }) }
     if (!approvalUpdated) {
       revalidatePath(`/requests/${approval.request_id}`)
       revalidatePath('/approvals')
@@ -406,7 +408,7 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
       .from('requests')
       .update(updatePayload)
       .eq('id', approval.request_id)
-    if (requestUpdateError) return { error: requestUpdateError.message }
+    if (requestUpdateError) return { error: sanitizeError(requestUpdateError, { route: 'approvals.ts#approveApproval', fallback: 'Failed to update request.' }) }
 
     await logActivity({
       requestId: approval.request_id,
@@ -442,7 +444,7 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
         .from('approvals')
         .update({ current_step: nextStep!.step_order })
         .eq('id', approvalId)
-      if (advanceError) return { error: advanceError.message }
+      if (advanceError) return { error: sanitizeError(advanceError, { route: 'approvals.ts#approveApproval', fallback: 'Failed to advance to next approval step.' }) }
 
       if (nextStep?.approver_type === 'specific_user' && nextStep.approver_user_id && nextStep.approver_user_id !== profile.id) {
         notify({
@@ -535,12 +537,25 @@ export async function delegateApproval(
 
   if (!canDelegate) return { error: 'You are not the designated approver for this step.' }
 
+  // Same gate sendAdHocApproval() applies to its initial approver list — an
+  // inactive or cross-org target would still get RLS-granted approve/reject
+  // access via is_request_approver(), which checks nothing but this row.
+  const { data: req } = await admin.from('requests').select('org_id').eq('id', approval.request_id).single()
+  const { data: newApprover } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('id', newApproverId)
+    .eq('is_active', true)
+    .eq('org_id', req?.org_id ?? '')
+    .maybeSingle()
+  if (!newApprover) return { error: 'Selected user was not found in your organisation.' }
+
   const { error: updateError } = await admin
     .from('approval_workflow_steps')
     .update({ approver_user_id: newApproverId, approver_type: 'specific_user' })
     .eq('id', currentStep.id)
 
-  if (updateError) return { error: updateError.message }
+  if (updateError) return { error: sanitizeError(updateError, { route: 'approvals.ts#delegateApproval', fallback: 'Failed to delegate approval.' }) }
 
   // The outgoing approver is no longer the one who needs to act — clear
   // their now-stale "approval required" notification (mirrors approve/
@@ -587,7 +602,7 @@ export async function rejectApproval(approvalId: string, comment?: string): Prom
     decision: 'rejected',
     comment: comment?.trim() || null,
   })
-  if (decisionError) return { error: decisionError.message }
+  if (decisionError) return { error: sanitizeError(decisionError, { route: 'approvals.ts#rejectApproval', fallback: 'Failed to record decision.' }) }
 
   // Guarded the same way approveApproval's final step is: two approvers
   // (or an approve/reject race) hitting this at the same instant should only
@@ -599,7 +614,7 @@ export async function rejectApproval(approvalId: string, comment?: string): Prom
     .eq('status', 'pending')
     .select('id')
     .maybeSingle()
-  if (approvalUpdateError) return { error: approvalUpdateError.message }
+  if (approvalUpdateError) return { error: sanitizeError(approvalUpdateError, { route: 'approvals.ts#rejectApproval', fallback: 'Failed to update approval.' }) }
   if (!approvalRejected) {
     revalidatePath(`/requests/${approval.request_id}`)
     revalidatePath('/approvals')
@@ -650,7 +665,7 @@ export async function rejectApproval(approvalId: string, comment?: string): Prom
     .from('requests')
     .update(cancelPayload)
     .eq('id', approval.request_id)
-  if (requestUpdateError) return { error: requestUpdateError.message }
+  if (requestUpdateError) return { error: sanitizeError(requestUpdateError, { route: 'approvals.ts#rejectApproval', fallback: 'Failed to update request.' }) }
 
   await logActivity({
     requestId: approval.request_id,

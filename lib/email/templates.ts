@@ -1,3 +1,5 @@
+import { escapeEmailFields } from './escape'
+
 function layout(body: string): string {
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#ffffff;font-family:sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:32px;">
@@ -19,12 +21,13 @@ export function requestCreatedEmail(d: {
   requestUrl: string
   serviceName: string
 }): { subject: string; html: string; text: string } {
+  const e = escapeEmailFields(d, ['requestUrl'])
   const subject = `Request created: ${d.requestTitle}`
   const html = layout(`
-    <p>Hi ${d.requesterName},</p>
-    <p>Your request <strong>${d.requestTitle}</strong> has been submitted successfully via the <strong>${d.serviceName}</strong> service.</p>
+    <p>Hi ${e.requesterName},</p>
+    <p>Your request <strong>${e.requestTitle}</strong> has been submitted successfully via the <strong>${e.serviceName}</strong> service.</p>
     <p>You will be notified as it progresses.</p>
-    ${btn(d.requestUrl, 'View Request')}
+    ${btn(e.requestUrl, 'View Request')}
   `)
   const text = `Hi ${d.requesterName},\n\nYour request "${d.requestTitle}" has been submitted via ${d.serviceName}.\n\nView it here: ${d.requestUrl}`
   return { subject, html, text }
@@ -37,11 +40,12 @@ export function requestStatusChangedEmail(d: {
   oldStatus: string
   newStatus: string
 }): { subject: string; html: string; text: string } {
+  const e = escapeEmailFields(d, ['requestUrl'])
   const subject = `Request updated: ${d.requestTitle}`
   const html = layout(`
-    <p>Hi ${d.recipientName},</p>
-    <p>The status of request <strong>${d.requestTitle}</strong> has changed from <strong>${d.oldStatus}</strong> to <strong>${d.newStatus}</strong>.</p>
-    ${btn(d.requestUrl, 'View Request')}
+    <p>Hi ${e.recipientName},</p>
+    <p>The status of request <strong>${e.requestTitle}</strong> has changed from <strong>${e.oldStatus}</strong> to <strong>${e.newStatus}</strong>.</p>
+    ${btn(e.requestUrl, 'View Request')}
   `)
   const text = `Hi ${d.recipientName},\n\nRequest "${d.requestTitle}" status changed from ${d.oldStatus} to ${d.newStatus}.\n\nView it here: ${d.requestUrl}`
   return { subject, html, text }
@@ -54,12 +58,13 @@ export function commentAddedEmail(d: {
   commenterName: string
   commentBody: string
 }): { subject: string; html: string; text: string } {
+  const e = escapeEmailFields(d, ['requestUrl'])
   const subject = `New comment on: ${d.requestTitle}`
   const html = layout(`
-    <p>Hi ${d.recipientName},</p>
-    <p><strong>${d.commenterName}</strong> left a comment on request <strong>${d.requestTitle}</strong>:</p>
-    <blockquote style="border-left:3px solid #e5e7eb;margin:16px 0;padding:8px 16px;color:#6B7280;">${d.commentBody}</blockquote>
-    ${btn(d.requestUrl, 'View Comment')}
+    <p>Hi ${e.recipientName},</p>
+    <p><strong>${e.commenterName}</strong> left a comment on request <strong>${e.requestTitle}</strong>:</p>
+    <blockquote style="border-left:3px solid #e5e7eb;margin:16px 0;padding:8px 16px;color:#6B7280;">${e.commentBody}</blockquote>
+    ${btn(e.requestUrl, 'View Comment')}
   `)
   const text = `Hi ${d.recipientName},\n\n${d.commenterName} commented on "${d.requestTitle}":\n\n${d.commentBody}\n\nView it here: ${d.requestUrl}`
   return { subject, html, text }
@@ -72,13 +77,14 @@ export function taskAssignedEmail(d: {
   assignerName: string
   dueDate?: string
 }): { subject: string; html: string; text: string } {
+  const e = escapeEmailFields(d, ['taskUrl'])
   const subject = `Task assigned: ${d.taskTitle}`
-  const dueLine = d.dueDate ? `<p>Due: <strong>${d.dueDate}</strong></p>` : ''
+  const dueLine = e.dueDate ? `<p>Due: <strong>${e.dueDate}</strong></p>` : ''
   const html = layout(`
-    <p>Hi ${d.recipientName},</p>
-    <p><strong>${d.assignerName}</strong> assigned you a task: <strong>${d.taskTitle}</strong>.</p>
+    <p>Hi ${e.recipientName},</p>
+    <p><strong>${e.assignerName}</strong> assigned you a task: <strong>${e.taskTitle}</strong>.</p>
     ${dueLine}
-    ${btn(d.taskUrl, 'View Task')}
+    ${btn(e.taskUrl, 'View Task')}
   `)
   const text = `Hi ${d.recipientName},\n\n${d.assignerName} assigned you task "${d.taskTitle}"${d.dueDate ? ` (due ${d.dueDate})` : ''}.\n\nView it here: ${d.taskUrl}`
   return { subject, html, text }
@@ -90,11 +96,12 @@ export function approvalRequiredEmail(d: {
   requestUrl: string
   requesterName: string
 }): { subject: string; html: string; text: string } {
+  const e = escapeEmailFields(d, ['requestUrl'])
   const subject = `Approval required: ${d.requestTitle}`
   const html = layout(`
-    <p>Hi ${d.approverName},</p>
-    <p><strong>${d.requesterName}</strong> has submitted a request that requires your approval: <strong>${d.requestTitle}</strong>.</p>
-    ${btn(d.requestUrl, 'Review & Approve')}
+    <p>Hi ${e.approverName},</p>
+    <p><strong>${e.requesterName}</strong> has submitted a request that requires your approval: <strong>${e.requestTitle}</strong>.</p>
+    ${btn(e.requestUrl, 'Review & Approve')}
   `)
   const text = `Hi ${d.approverName},\n\n${d.requesterName} submitted "${d.requestTitle}" and it needs your approval.\n\nReview it here: ${d.requestUrl}`
   return { subject, html, text }
@@ -106,11 +113,12 @@ export function requestAssignedEmail(d: {
   requestUrl: string
   assignerName: string
 }): { subject: string; html: string; text: string } {
+  const e = escapeEmailFields(d, ['requestUrl'])
   const subject = `Request assigned to you: ${d.requestTitle}`
   const html = layout(`
-    <p>Hi ${d.recipientName},</p>
-    <p><strong>${d.assignerName}</strong> assigned you to a request: <strong>${d.requestTitle}</strong>.</p>
-    ${btn(d.requestUrl, 'View Request')}
+    <p>Hi ${e.recipientName},</p>
+    <p><strong>${e.assignerName}</strong> assigned you to a request: <strong>${e.requestTitle}</strong>.</p>
+    ${btn(e.requestUrl, 'View Request')}
   `)
   const text = `Hi ${d.recipientName},\n\n${d.assignerName} assigned you to "${d.requestTitle}".\n\nView it here: ${d.requestUrl}`
   return { subject, html, text }
@@ -123,19 +131,20 @@ export function approvalDecisionEmail(d: {
   decision: 'approved' | 'rejected'
   reason?: string
 }): { subject: string; html: string; text: string } {
+  const e = escapeEmailFields(d, ['requestUrl'])
   const approved = d.decision === 'approved'
   const subject = approved
     ? `Your request was approved: ${d.requestTitle}`
     : `Your request was not approved: ${d.requestTitle}`
   const decisionLine = approved
-    ? `<p>Great news — your request <strong>${d.requestTitle}</strong> has been <strong style="color:#16a34a;">approved</strong>.</p>`
-    : `<p>Unfortunately, your request <strong>${d.requestTitle}</strong> was <strong style="color:#dc2626;">not approved</strong>.</p>`
-  const reasonLine = d.reason ? `<p>Reason: ${d.reason}</p>` : ''
+    ? `<p>Great news — your request <strong>${e.requestTitle}</strong> has been <strong style="color:#16a34a;">approved</strong>.</p>`
+    : `<p>Unfortunately, your request <strong>${e.requestTitle}</strong> was <strong style="color:#dc2626;">not approved</strong>.</p>`
+  const reasonLine = e.reason ? `<p>Reason: ${e.reason}</p>` : ''
   const html = layout(`
-    <p>Hi ${d.recipientName},</p>
+    <p>Hi ${e.recipientName},</p>
     ${decisionLine}
     ${reasonLine}
-    ${btn(d.requestUrl, 'View Request')}
+    ${btn(e.requestUrl, 'View Request')}
   `)
   const textDecision = approved ? 'approved' : 'not approved'
   const textReason = d.reason ? `\n\nReason: ${d.reason}` : ''
@@ -150,13 +159,14 @@ export function slaBreachEmail(d: {
   slaDeadline: string
   tier: string
 }): { subject: string; html: string; text: string } {
+  const e = escapeEmailFields(d, ['requestUrl'])
   const subject = `SLA alert: ${d.requestTitle}`
   const html = layout(`
-    <p>Hi ${d.recipientName},</p>
-    <p>The <strong>${d.tier}</strong> SLA for request <strong>${d.requestTitle}</strong> is at risk.</p>
-    <p>Deadline: <strong>${d.slaDeadline}</strong></p>
+    <p>Hi ${e.recipientName},</p>
+    <p>The <strong>${e.tier}</strong> SLA for request <strong>${e.requestTitle}</strong> is at risk.</p>
+    <p>Deadline: <strong>${e.slaDeadline}</strong></p>
     <p>Please take action to avoid a breach.</p>
-    ${btn(d.requestUrl, 'View Request')}
+    ${btn(e.requestUrl, 'View Request')}
   `)
   const text = `Hi ${d.recipientName},\n\nSLA alert for "${d.requestTitle}" (${d.tier} tier). Deadline: ${d.slaDeadline}.\n\nView it here: ${d.requestUrl}`
   return { subject, html, text }

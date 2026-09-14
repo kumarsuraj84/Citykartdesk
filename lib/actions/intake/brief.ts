@@ -1,5 +1,7 @@
 'use server'
 
+import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
+
 const DEFAULT_BASE_URL = 'https://api.groq.com/openai/v1'
 const DEFAULT_MODEL    = 'llama-3.3-70b-versatile'
 const MAX_BODY_CHARS   = 2000
@@ -18,6 +20,14 @@ export async function generateEmailBrief(
   bodyText: string | null,
   fromAddress: string | null,
 ): Promise<{ brief: string | null; error?: string }> {
+  // NOTE: unlike every other intake action, this one has no getCurrentProfile()
+  // auth check at all — out of scope for the module-gate fix this pass is
+  // making (see CITYKART-DESK-CONSOLIDATED-REMEDIATION-REPORT-2026-09-10.md,
+  // "Intake Module Guard" section), flagged there as a separate follow-up
+  // rather than fixed here to stay within this pass's assigned scope.
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { brief: null, error: moduleError }
+
   const apiKey = process.env.INTAKE_LLM_API_KEY
   if (!apiKey) return { brief: null, error: 'not_configured' }
 

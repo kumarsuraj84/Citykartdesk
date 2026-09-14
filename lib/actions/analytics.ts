@@ -1,9 +1,11 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getCurrentProfile } from '@/lib/queries/profiles'
+import { authorizeReportAccess } from '@/lib/reporting/access'
 import { resolvePeriodParam, type PeriodParam } from '@/lib/queries/analytics'
+import { applyCurrentlyBreachedFilter } from '@/lib/sla/breach'
 import type { Database } from '@/types/database'
+import type { ProfileWithTeams } from '@/types'
 
 type RequestStatus = Database['public']['Enums']['request_status']
 type RequestPriority = Database['public']['Enums']['request_priority']
@@ -57,13 +59,20 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
   data: DrawerRequest[]
   error?: string
 }> {
-  const profile = await getCurrentProfile()
-  if (!profile) return { data: [], error: 'Not authenticated.' }
-  if (!profile.org_id) return { data: [], error: 'Your account is not linked to an organisation.' }
+  // D-03: this action queries via the RLS-bypassing admin client (needed to
+  // join assignee/team/service display names in one round trip), so it must
+  // do its own role/team/ownership scoping in application code — RLS is not
+  // in the loop at all here. authorizeReportAccess() is the same scope
+  // resolver already used by the report builder (lib/queries/reporting.ts)
+  // for this exact entity; reusing it keeps "who can see which requests"
+  // defined in exactly one place instead of a second, divergent copy.
+  const access = await authorizeReportAccess('requests')
+  if ('error' in access) return { data: [], error: access.error }
+  const { profile, scope } = access
 
   // Route to task query if module = tasks
   if (filter._module === 'tasks') {
-    const res = await getFilteredTasks(filter, profile.org_id)
+    const res = await getFilteredTasks(filter, profile)
     // Return as DrawerRequest shape so DrawerRequest component works for both
     return {
       data: res.data.map((t) => ({
@@ -85,6 +94,11 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
     }
   }
 
+  // { kind: 'team' } with no teams means "on no team" — an empty .in()
+  // filter would otherwise match every row instead of none (mirrors the
+  // same guard in lib/queries/reporting.ts's fetchReportData()).
+  if (scope.kind === 'team' && scope.teamIds.length === 0) return { data: [] }
+
   try {
     const admin = createAdminClient()
     const now   = new Date().toISOString()
@@ -98,7 +112,14 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
         team:teams(name),
         service:services(name)
       `)
-      .eq('org_id', profile.org_id)
+      .eq('org_id', profile.org_id!)
+
+    // Caller-supplied filters narrow further, but can never widen past the
+    // viewer's own resolved scope — a user/agent passing someone else's
+    // teamId/assignedTo must not be able to see outside their own data.
+    if (scope.kind === 'own')        q = q.eq('requester_id', scope.userId)
+    else if (scope.kind === 'agent') q = q.or(`assigned_to.eq.${scope.userId},requester_id.eq.${scope.userId}`)
+    else if (scope.kind === 'team')  q = q.in('team_id', scope.teamIds)
 
     if (filter.status?.length)   q = q.in('status', filter.status as RequestStatus[])
     if (filter.priority)         q = q.eq('priority', filter.priority as RequestPriority)
@@ -106,8 +127,9 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
     if (filter.assignedTo)       q = q.eq('assigned_to', filter.assignedTo)
 
     if (filter.slaBreached) {
-      q = q.not('resolution_due_at', 'is', null).lt('resolution_due_at', now)
-           .not('status', 'in', '("resolved","closed","cancelled")')
+      // "Currently Breached" (D-01, lib/sla/breach.ts) — same formula as
+      // Home Dashboard/Monitoring/the Admin Analytics KPI card.
+      q = applyCurrentlyBreachedFilter(q.not('resolution_due_at', 'is', null), now)
     }
     if (filter.frtBreached) {
       q = q.is('responded_at', null)
@@ -170,10 +192,42 @@ type DrawerTask = {
   team_name: string | null
 }
 
-async function getFilteredTasks(filter: DrawerFilter, orgId: string): Promise<{
+// D-03: there is no shared report-viewer scope for 'tasks' (reporting/access.ts
+// deliberately treats every non-'requests' entity as admin/manager/
+// platform_owner-only — too broad a block for this drawer, which agents use
+// from their own team-tasks/my-tasks dashboard tiles). Instead this mirrors
+// the actual tasks_select RLS policy (the ground-truth access rule already
+// enforced at the database level for every other task read in the app):
+//   created_by = self OR assignee_id = self
+//   OR (task_type = 'team' AND team_id IN <the viewer's teams>)
+//   OR role IN (manager, admin, platform_owner)  -- org-wide, no team limit
+// 'user' has no clause at all in tasks_select — tasks are an agent-tier-and-
+// above concept in this app (see isAgentOrAboveRole() in lib/actions/tasks.ts).
+type TaskViewerScope =
+  | { kind: 'all' }
+  | { kind: 'agent'; userId: string; teamIds: string[] }
+  | { kind: 'none' }
+
+function resolveTaskAccess(profile: ProfileWithTeams): TaskViewerScope {
+  switch (profile.role) {
+    case 'admin':
+    case 'platform_owner':
+    case 'manager':
+      return { kind: 'all' }
+    case 'agent':
+      return { kind: 'agent', userId: profile.id, teamIds: profile.team_members.map((tm) => tm.team_id) }
+    default:
+      return { kind: 'none' }
+  }
+}
+
+async function getFilteredTasks(filter: DrawerFilter, profile: ProfileWithTeams): Promise<{
   data: DrawerTask[]
   error?: string
 }> {
+  const scope = resolveTaskAccess(profile)
+  if (scope.kind === 'none') return { data: [], error: "You don't have access to this report." }
+
   try {
     const admin = createAdminClient()
     const now   = new Date().toISOString()
@@ -187,7 +241,15 @@ async function getFilteredTasks(filter: DrawerFilter, orgId: string): Promise<{
         assignee:profiles!tasks_assignee_id_fkey(full_name),
         team:teams(name)
       `)
-      .eq('org_id', orgId)
+      .eq('org_id', profile.org_id!)
+
+    // Caller-supplied filters (teamId/assignedTo/...) narrow further below,
+    // but can never widen past this — an agent passing another team's id
+    // must not be able to see outside their own assigned/created/team tasks.
+    if (scope.kind === 'agent') {
+      const teamClause = scope.teamIds.length > 0 ? `,and(task_type.eq.team,team_id.in.(${scope.teamIds.join(',')}))` : ''
+      q = q.or(`assignee_id.eq.${scope.userId},created_by.eq.${scope.userId}${teamClause}`)
+    }
 
     if (filter.status?.length)   q = q.in('status', filter.status as TaskStatus[])
     if (filter.priority)         q = q.eq('priority', filter.priority as TaskPriority)

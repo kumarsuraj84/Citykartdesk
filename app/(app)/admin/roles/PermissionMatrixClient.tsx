@@ -1,9 +1,21 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Check, Minus, Plus, X, ChevronDown, Trash2 } from 'lucide-react'
+import { Check, Minus, Plus, X, ChevronDown, Trash2, AlertTriangle } from 'lucide-react'
 import { savePermissionOverrides, createCustomRole, deleteCustomRole } from '@/lib/actions/admin/permissions'
 import { ROLE_LABELS } from '@/lib/constants/roles'
+
+// D-02: this screen writes real rows to permission_overrides/custom_roles,
+// but nothing in the app reads either table to make an authorization
+// decision — every real permission check is a hard-coded role comparison
+// elsewhere in the codebase (confirmed by runtime UAT: toggling a
+// permission off here has zero effect on what the toggled role can
+// actually do). Whether to wire this up for real or remove it is an open
+// business decision (BD-01, docs/SYSTEM-AUDIT-2026-09-09.md §25.9/Q1) with
+// no recorded resolution. Until that decision is made, editing is disabled
+// and the screen is clearly labelled as not enforced, so an admin can't be
+// misled into thinking a toggle here changed anything.
+const PERMISSION_MATRIX_ENFORCED = false
 
 type Perm = boolean | 'partial'
 
@@ -163,7 +175,12 @@ function NewRoleModal({ onClose, onCreated }: {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export function PermissionMatrixClient({ matrix, overrides, customRoles: initialCustom, canEdit }: Props) {
+export function PermissionMatrixClient({ matrix, overrides, customRoles: initialCustom, canEdit: canEditProp }: Props) {
+  // D-02: editing is disabled entirely until PERMISSION_MATRIX_ENFORCED is
+  // flipped on (see the comment on that constant above) — canEditProp (the
+  // caller's role check) still exists for when that day comes, but is
+  // deliberately not consulted for interactivity right now.
+  const canEdit = canEditProp && PERMISSION_MATRIX_ENFORCED
   const [pending, startTransition] = useTransition()
   const [dirty, setDirty]          = useState(false)
   const [saved, setSaved]          = useState(false)
@@ -258,10 +275,24 @@ export function PermissionMatrixClient({ matrix, overrides, customRoles: initial
 
   return (
     <div className="space-y-4">
+      {!PERMISSION_MATRIX_ENFORCED && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <div className="text-xs leading-relaxed">
+            <p className="font-semibold">Not enforced — Coming soon</p>
+            <p className="mt-0.5 text-amber-700">
+              This matrix shows each role&apos;s default access. Access is actually controlled by fixed role checks
+              elsewhere in the app — changes made here do not currently affect what anyone can do, so editing is
+              disabled for now.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Top bar */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {canEdit ? 'Click any cell to toggle access. Save when done.' : 'Permissions are enforced via RLS and server-side role checks.'}
+          {canEdit ? 'Click any cell to toggle access. Save when done.' : 'Read-only — access is controlled by fixed role checks elsewhere in the app, not by this matrix.'}
         </p>
         {canEdit && (
           <div className="flex items-center gap-2">

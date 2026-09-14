@@ -122,7 +122,7 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             sub="Resolution SLA"
             accent={data.slaComplianceRate !== null && data.slaComplianceRate < 80 ? 'var(--destructive)' : 'var(--success)'}
             onClick={() => setDrawer({
-              title: 'SLA Breached (Open)',
+              title: 'Currently Breached (Open)',
               description: 'Open requests that have exceeded their SLA deadline',
               slaBreached: true,
             })}
@@ -130,7 +130,11 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
           <KpiCard
             label="Avg Resolution"
             value={fmtHours(data.avgResolutionHours)}
-            sub="TAT (resolved)"
+            sub={
+              data.dataAnomalies.negativeResolutionDurationCount > 0
+                ? `TAT (resolved) · ${data.dataAnomalies.negativeResolutionDurationCount} excluded (data anomaly)`
+                : 'TAT (resolved)'
+            }
             accent="var(--primary)"
             onClick={() => setDrawer({
               title: `Resolution TAT — ${periodLabel}`,
@@ -141,13 +145,13 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             })}
           />
           <KpiCard
-            label="SLA Breached"
+            label="Currently Breached"
             value={data.slaBreachedNow}
             sub="Open + overdue"
             accent="var(--destructive)"
             danger
             onClick={() => setDrawer({
-              title: 'SLA Breached Requests',
+              title: 'Currently Breached Requests',
               description: 'Open tickets past their SLA deadline — needs immediate action',
               slaBreached: true,
             })}
@@ -213,7 +217,7 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Section title="SLA Performance" icon={ShieldCheck}>
             <ClickableRow onClick={() => setDrawer({
-              title: 'SLA Breached (Resolution)',
+              title: 'Currently Breached (Resolution)',
               description: 'Open requests that have exceeded their SLA resolution deadline',
               slaBreached: true,
             })}>
@@ -392,13 +396,13 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
               </ClickableRow>
               <ClickableRow
                 onClick={() => setDrawer({
-                  title: 'SLA Breached Requests',
+                  title: 'Currently Breached Requests',
                   description: 'Open requests past their SLA deadline',
                   slaBreached: true,
                 })}
                 className="py-2"
               >
-                <p className="text-[11px] text-muted-foreground">SLA Breached</p>
+                <p className="text-[11px] text-muted-foreground">Currently Breached</p>
                 <p className={`font-bold text-lg ${data.slaBreachedNow > 0 ? 'text-red-600' : ''}`}>{data.slaBreachedNow}</p>
               </ClickableRow>
               <ClickableRow

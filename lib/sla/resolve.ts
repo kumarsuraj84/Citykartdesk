@@ -112,14 +112,21 @@ export async function resolveSlaDeadlines(
   const safeHours = (h: number | null): number | null =>
     h != null && Number.isFinite(Number(h)) ? Math.max(0, Number(h)) : null
 
-  const responseDueAt =
+  // computeSLADeadline returns null when the business-hours calendar has no
+  // usable window at all (misconfiguration, already logged/alerted at its
+  // own source) — that folds into the same "no SLA deadline" null this
+  // function already returns when there's no applicable SLA tier, rather
+  // than needing a separate error path here.
+  const responseDeadline =
     safeHours(responseHours) != null
-      ? (await computeSLADeadline(from, Math.round(safeHours(responseHours)! * 60))).toISOString()
+      ? await computeSLADeadline(from, Math.round(safeHours(responseHours)! * 60))
       : null
-  const resolutionDueAt =
+  const resolutionDeadline =
     safeHours(resolutionHours) != null
-      ? (await computeSLADeadline(from, Math.round(safeHours(resolutionHours)! * 60))).toISOString()
+      ? await computeSLADeadline(from, Math.round(safeHours(resolutionHours)! * 60))
       : null
+  const responseDueAt = responseDeadline?.toISOString() ?? null
+  const resolutionDueAt = resolutionDeadline?.toISOString() ?? null
 
   return { responseDueAt, resolutionDueAt }
 }

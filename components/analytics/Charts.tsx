@@ -241,10 +241,15 @@ export function HorizBar({
   data,
   color = 'var(--primary)',
   showValue = true,
+  valueLabel,
 }: {
   data: Array<{ label: string; value: number; color?: string; onClick?: () => void }>
   color?: string
   showValue?: boolean
+  /** Formats the trailing value label (e.g. `(v) => `${v}%``). Defaults to
+   *  the raw number — most HorizBar usages are plain counts, so this stays
+   *  opt-in rather than assuming every caller's `value` is a percentage. */
+  valueLabel?: (v: number) => string
 }) {
   const max = Math.max(...data.map((d) => d.value), 1)
   if (!data.length) return <div className="py-4 text-xs text-muted-foreground text-center">No data</div>
@@ -264,8 +269,8 @@ export function HorizBar({
             />
           </div>
           {showValue && (
-            <span className="w-8 text-xs font-semibold text-foreground tabular-nums text-right shrink-0">
-              {d.value}
+            <span className="w-10 text-xs font-semibold text-foreground tabular-nums text-right shrink-0">
+              {valueLabel ? valueLabel(d.value) : d.value}
             </span>
           )}
         </div>
@@ -275,6 +280,29 @@ export function HorizBar({
 }
 
 // ── Line / Area Chart ──────────────────────────────────────────────────────────
+
+/** DESK-UI-005 — picks which data-point indices get an X-axis label, roughly
+ *  every 7th point, WITHOUT unconditionally forcing the final index in too.
+ *  The previous version always force-included the last index
+ *  (`i % step === 0 || i === data.length - 1`) — whenever `data.length`
+ *  wasn't a clean multiple of `step`, that put two labels within a
+ *  fraction of a step of each other at the right edge, confirmed live as
+ *  "09-0"/"09-08" rendering on top of each other. The last index is only
+ *  added when it isn't already within half a step of the last
+ *  step-selected one, which removes that collision at any render width
+ *  while still anchoring the right edge with a label whenever there's
+ *  genuinely room for one. Exported standalone (no SVG/DOM dependency) so
+ *  it's unit-testable without rendering the chart. */
+export function selectXAxisLabelIndices(length: number): number[] {
+  if (length === 0) return []
+  const step = Math.max(1, Math.floor(length / 7))
+  const stepIndices = Array.from({ length }, (_, i) => i).filter((i) => i % step === 0)
+  const lastIdx = length - 1
+  const lastStepIndex = stepIndices[stepIndices.length - 1]
+  if (lastStepIndex === lastIdx) return stepIndices
+  const nearLastAlreadyIncluded = lastIdx - lastStepIndex < step / 2
+  return nearLastAlreadyIncluded ? stepIndices : [...stepIndices, lastIdx]
+}
 
 export function LineAreaChart({
   data,
@@ -315,11 +343,8 @@ export function LineAreaChart({
     return `M ${pts} L ${lastX},${bottom} L ${firstX},${bottom} Z`
   }
 
-  // X-axis labels — sample to avoid overlap
-  const step = Math.max(1, Math.floor(data.length / 7))
-  const xLabels = data
-    .map((d, i) => ({ i, label: String(d.date ?? '').slice(5) })) // MM-DD
-    .filter((_, i) => i % step === 0 || i === data.length - 1)
+  // X-axis labels — sample to avoid overlap (see selectXAxisLabelIndices).
+  const xLabels = selectXAxisLabelIndices(data.length).map((i) => ({ i, label: String(data[i]?.date ?? '').slice(5) })) // MM-DD
 
   // Y-axis gridlines
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map((pct) => ({

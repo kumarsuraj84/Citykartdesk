@@ -15,6 +15,7 @@ export type UserWithTeams = Profile & {
 
 export type Department  = { id: string; name: string; code: string | null }
 export type Location    = { id: string; name: string; city: string | null; country: string | null }
+export type Store       = { id: string; code: string; name: string }
 export type CostCenter  = { id: string; name: string; code: string | null }
 export type JobFunction = { id: string; name: string; code: string | null }
 export type Designation = { id: string; name: string; code: string | null }
@@ -29,7 +30,7 @@ export default async function UsersPage() {
   const admin = createAdminClient() as unknown as AnyClient
   const orgId = profile.org_id ?? ''
 
-  const [profilesResult, authResult, deptsResult, locsResult, ccResult, funcResult, desigResult, teamsResult] = await Promise.all([
+  const [profilesResult, authResult, deptsResult, locsResult, storesResult, ccResult, funcResult, desigResult, teamsResult] = await Promise.all([
     admin
       .from('profiles')
       .select(`*, team_members (team_id, is_lead, joined_at, team:teams (*))`)
@@ -38,6 +39,7 @@ export default async function UsersPage() {
     admin.auth.admin.listUsers({ perPage: 1000 }),
     admin.from('departments').select('id, name, code').eq('org_id', orgId).eq('is_active', true).order('name'),
     admin.from('locations').select('id, name, city, country').eq('org_id', orgId).eq('is_active', true).order('name'),
+    admin.from('stores').select('id, code, name').eq('org_id', orgId).eq('is_active', true).order('code'),
     admin.from('cost_centers').select('id, name, code').eq('org_id', orgId).eq('is_active', true).order('name'),
     admin.from('job_functions').select('id, name, code').eq('org_id', orgId).eq('is_active', true).order('name'),
     admin.from('designations').select('id, name, code').eq('org_id', orgId).eq('is_active', true).order('name'),
@@ -78,6 +80,7 @@ export default async function UsersPage() {
         isAdmin={profile.role === 'admin' || profile.role === 'platform_owner'}
         departments={deptsResult.data ?? []}
         locations={locsResult.data ?? []}
+        stores={storesResult.data ?? []}
         costCenters={ccResult.data ?? []}
         jobFunctions={funcResult.data ?? []}
         designations={desigResult.data ?? []}

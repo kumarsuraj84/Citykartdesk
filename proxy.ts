@@ -13,13 +13,24 @@ export async function proxy(request: NextRequest) {
   if (isPublicAsset) return NextResponse.next({ request })
 
   // ── Fast path: cron/webhook/health API routes authenticate themselves ──────
-  // These are called by Railway's cron-tick.mjs, Google Pub/Sub, and Microsoft
-  // Graph — none of which carry a Supabase session cookie, so the default
-  // "no session → redirect to /login" rule below would otherwise intercept
-  // them before their own x-cron-secret / worker-secret / webhook-token check
-  // ever runs. Deliberately an exact-match allowlist, not a `/api/*` prefix —
-  // every other API route (e.g. /api/admin/audit, /api/intake/oauth/*) must
-  // stay under normal session gating.
+  // These are called by Railway's cron-tick.mjs, Google Pub/Sub, Microsoft
+  // Graph, and Meta's WhatsApp Cloud API — none of which carry a Supabase
+  // session cookie, so the default "no session → redirect to /login" rule
+  // below would otherwise intercept them before their own x-cron-secret /
+  // worker-secret / webhook-token / X-Hub-Signature-256 check ever runs.
+  // Deliberately an exact-match allowlist, not a `/api/*` prefix — every
+  // other API route (e.g. /api/admin/audit, /api/intake/oauth/*) must stay
+  // under normal session gating.
+  //
+  // Stage 8.1 finding: /api/intake/webhook/whatsapp was missing from this
+  // list — every real call from Meta (the GET verification handshake and
+  // the POST inbound-message delivery alike) was being 307-redirected to
+  // /login instead of ever reaching the route handler, since Meta never
+  // sends a session cookie. Reproduced directly against the local dev
+  // server (`curl -i http://localhost:3210/api/intake/webhook/whatsapp`
+  // returned `307` to `/login?next=...`, not the route's own 403). This
+  // would have silently failed Part 7's real webhook verification in any
+  // real deployment, independent of every other external prerequisite.
   const PUBLIC_API_ROUTES = new Set([
     '/api/health',
     '/api/alerts/run',
@@ -28,6 +39,7 @@ export async function proxy(request: NextRequest) {
     '/api/intake/cron/classify',
     '/api/intake/webhook/gmail',
     '/api/intake/webhook/outlook',
+    '/api/intake/webhook/whatsapp',
   ])
   if (PUBLIC_API_ROUTES.has(pathname)) return NextResponse.next({ request })
 

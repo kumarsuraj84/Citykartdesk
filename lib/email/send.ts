@@ -1,4 +1,4 @@
-import { EMAIL_FROM, RESEND_API_KEY, EMAIL_ENABLED } from './config'
+import { getEmailFrom, RESEND_API_KEY, EMAIL_ENABLED } from './config'
 
 export interface EmailPayload {
   to: string
@@ -15,6 +15,7 @@ export async function sendEmail(p: EmailPayload): Promise<{ error?: string }> {
   }
 
   try {
+    const from = await getEmailFrom()
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -22,7 +23,7 @@ export async function sendEmail(p: EmailPayload): Promise<{ error?: string }> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: EMAIL_FROM,
+        from,
         to: p.to,
         subject: p.subject,
         html: p.html,

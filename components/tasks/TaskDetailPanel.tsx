@@ -17,6 +17,7 @@ import { formatRelativeTime } from '@/lib/utils'
 import type { TaskDependency } from '@/lib/queries/tasks'
 import type { TaskWithDetails, TaskCommentWithAuthor, TaskActivityWithActor } from '@/types'
 import type { TaskStatus, TaskPriority } from '@/types'
+import { TASK_PRIORITY_LABELS } from '@/lib/constants/tasks'
 
 type ProfileMini = { id: string; full_name: string }
 
@@ -45,10 +46,15 @@ const STATUS_CONFIG: Record<TaskStatus, { label: string; Icon: React.ElementType
   cancelled:   { label: 'Cancelled',   Icon: XCircle,       cls: 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-500',       iconCls: 'text-slate-400' },
 }
 
+// DESK-UI-003: this used to say 'Normal' for 'medium' — the one place among
+// four task-priority-rendering components that disagreed, so the same
+// task's priority read as "Medium" in the list but "Normal" here. Label now
+// comes from the shared TASK_PRIORITY_LABELS map; flagCls (icon color)
+// stays local since only the label text was the reported inconsistency.
 const PRIORITY_CONFIG: Record<TaskPriority, { label: string; flagCls: string }> = {
-  high:   { label: 'High',   flagCls: 'text-red-500'   },
-  medium: { label: 'Normal', flagCls: 'text-blue-500'  },
-  low:    { label: 'Low',    flagCls: 'text-slate-400' },
+  high:   { label: TASK_PRIORITY_LABELS.high,   flagCls: 'text-red-500'   },
+  medium: { label: TASK_PRIORITY_LABELS.medium, flagCls: 'text-blue-500'  },
+  low:    { label: TASK_PRIORITY_LABELS.low,    flagCls: 'text-slate-400' },
 }
 
 // ── Avatar ────────────────────────────────────────────────────────────────────

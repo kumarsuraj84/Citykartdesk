@@ -151,6 +151,13 @@ export type ServiceInput = {
   // sibling picker in DynamicForm). A service is no longer nested under a
   // single category/sub-category; this replaces that structural placement.
   sub_category_tag_ids?: string[]
+  // Locations (HO/Stores/Warehouse/etc.) this service is visible to for the
+  // Requester role — empty/omitted means visible to every location (today's
+  // behavior for every existing service). Agents/managers/admins always see
+  // every service in the catalog regardless of this tagging; only affects
+  // what a plain Requester's own /services browse shows them. See
+  // getServices() in lib/queries/services.ts.
+  location_tag_ids?: string[]
   team_id: string
   default_priority?: 'low' | 'medium' | 'high' | 'urgent'
   is_active?: boolean
@@ -169,6 +176,10 @@ export type ServiceInput = {
   // (see lib/forms/sections.ts's resolveServiceFormSections()). Once tagged, the
   // service's own form is never read: the template is the live source of truth.
   template_id?: string | null
+  // When true, a ticket raised on this service auto-emails the requester's
+  // store's assigned OEM (if any), posts a system comment, and flips status
+  // straight to in_progress — see runOemAutoRouting() in lib/actions/requests.ts.
+  auto_oem_routing?: boolean
 }
 
 function slugify(name: string): string {
@@ -218,6 +229,7 @@ export async function createService(
     visibility: data.visibility ?? 'all',
     sla_policy_id: data.sla_policy_id || null,
     template_id: data.template_id || null,
+    auto_oem_routing: data.auto_oem_routing ?? false,
   }
 
   const { data: row, error } = await supabase
@@ -241,6 +253,16 @@ export async function createService(
         ? await describeTagConflict(supabase, data.sub_category_tag_ids, row.id)
         : tagError.message
       return { error: `Service created, but tagging categories failed: ${message}` }
+    }
+  }
+
+  if (data.location_tag_ids && data.location_tag_ids.length > 0) {
+    const { error: locError } = await supabase
+      .from('service_location_tags')
+      .insert(data.location_tag_ids.map((location_id) => ({ service_id: row.id, location_id })))
+    if (locError) {
+      console.error('[createService] location tag', locError.message)
+      return { error: `Service created, but tagging locations failed: ${locError.message}` }
     }
   }
 
@@ -280,6 +302,7 @@ export async function updateService(
     ...(data.visibility !== undefined ? { visibility: data.visibility } : {}),
     ...(data.sla_policy_id !== undefined ? { sla_policy_id: data.sla_policy_id || null } : {}),
     ...(data.template_id !== undefined ? { template_id: data.template_id || null } : {}),
+    ...(data.auto_oem_routing !== undefined ? { auto_oem_routing: data.auto_oem_routing } : {}),
   }
 
   const { error } = await supabase
@@ -308,6 +331,17 @@ export async function updateService(
         ? await describeTagConflict(supabase, data.sub_category_tag_ids, id)
         : tagError.message
       return { error: `Retagging categories failed, your previous tags are unchanged: ${message}` }
+    }
+  }
+
+  if (data.location_tag_ids !== undefined) {
+    const { error: locError } = await supabase.rpc('retag_service_locations', {
+      p_service_id: id,
+      p_location_ids: data.location_tag_ids,
+    })
+    if (locError) {
+      console.error('[updateService] retag locations', locError.message)
+      return { error: `Retagging locations failed, your previous tags are unchanged: ${locError.message}` }
     }
   }
 

@@ -4,6 +4,8 @@ import { verifyCronSecret } from '@/lib/cron-auth'
 import { computeElapsedBusinessMinutes } from '@/lib/sla/business-hours'
 import { matchesConditions, type RuleCondition, type RuleConditionsLogic, type RuleEvaluationRequest } from '@/lib/rules/evaluate'
 import { executeActions, type RuleAction, type ActionRequest } from '@/lib/rules/actions'
+import { logger } from '@/lib/observability/logger'
+import { alertOperator } from '@/lib/observability/alert'
 import type { SLAConfig, FormSection, FormField } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,19 +48,53 @@ export async function GET(req: NextRequest) {
     .contains('trigger', ['schedule'])
     .eq('is_active', true)
 
-  for (const rule of (rules ?? []) as BusinessRuleRow[]) {
+  // DESK-OBS-001 — same cron-health semantics as app/api/alerts/run: per-rule
+  // isolation already existed (one rule's exception doesn't stop the loop),
+  // but the response never distinguished "every rule failed" from "nothing
+  // fired tonight." succeeded/failed/failures[] make that machine-detectable.
+  const allRules = (rules ?? []) as BusinessRuleRow[]
+  let succeeded = 0
+  const failures: Array<{ ruleId: string; scheduleCheck: string; code: string }> = []
+
+  for (const rule of allRules) {
     try {
       if (rule.schedule_check === 'sla_pct_elapsed') {
         fired += await runSlaPctElapsed(admin, rule, now)
       } else if (rule.schedule_check === 'unassigned_minutes') {
         fired += await runUnassignedMinutes(admin, rule, now)
       }
+      succeeded++
     } catch (e) {
-      console.error(`[business-rules/run] Rule ${rule.id} (${rule.schedule_check}) failed`, e)
+      const code = `business_rule_${rule.schedule_check}_failed`
+      failures.push({ ruleId: rule.id, scheduleCheck: rule.schedule_check, code })
+      logger.error({
+        event: 'cron.business_rules.rule_failed',
+        message: `Rule ${rule.id} (${rule.schedule_check}) failed`,
+        route: 'app/api/business-rules/run',
+        orgId: rule.org_id,
+        errorCode: code,
+        context: { ruleId: rule.id, scheduleCheck: rule.schedule_check },
+        error: e,
+      })
     }
   }
 
-  return NextResponse.json({ ok: true, fired })
+  const processed = allRules.length
+  const failed = failures.length
+
+  if (processed > 0 && failed === processed) {
+    await alertOperator({
+      key: 'cron.business_rules.total_failure',
+      severity: 'critical',
+      title: `Business-rules cron: all ${failed} scheduled rule(s) failed`,
+      detail: { processed, failed, failures },
+    })
+  }
+
+  return NextResponse.json(
+    { ok: failed < processed || processed === 0, fired, processed, succeeded, failed, failures },
+    { status: processed > 0 && failed === processed ? 502 : 200 }
+  )
 }
 
 async function alreadyFired(admin: AnyClient, ruleId: string, requestId: string): Promise<boolean> {

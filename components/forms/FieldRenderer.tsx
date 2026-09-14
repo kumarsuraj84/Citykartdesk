@@ -6,7 +6,7 @@ import type { FormField } from '@/types'
 
 interface FieldRendererProps {
   field: FormField
-  value: string | string[] | boolean | File[]
+  value: string | string[] | boolean | File[] | undefined
   onChange: (value: string | string[] | boolean | File[]) => void
   error?: string
   /** Visible but not editable — used when a requester can view a field but
@@ -145,7 +145,7 @@ export function FieldRenderer({ field, value, onChange, error, disabled }: Field
             <input
               type="checkbox"
               id={field.id}
-              checked={value as boolean}
+              checked={Boolean(value)}
               onChange={(e) => onChange(e.target.checked)}
               className="h-3.5 w-3.5 rounded accent-primary shrink-0"
               disabled={disabled}
@@ -194,6 +194,18 @@ export function FieldRenderer({ field, value, onChange, error, disabled }: Field
             onChange={onChange}
             disabled={disabled}
           />
+        )
+
+      case 'store_address':
+        // Always inert — this is filled in by the system from the
+        // requester's store master record, never typed by anyone, so it
+        // ignores the `disabled` prop entirely (it's never NOT disabled).
+        return (value as string) ? (
+          <div className={inputCls + ' cursor-default select-text'}>{value as string}</div>
+        ) : (
+          <div className={inputCls + ' cursor-default italic text-muted-foreground/60'}>
+            Not applicable for your location
+          </div>
         )
 
       default:

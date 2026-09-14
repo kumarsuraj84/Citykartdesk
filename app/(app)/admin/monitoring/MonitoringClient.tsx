@@ -165,7 +165,7 @@ export function MonitoringClient({ stats, recentActivity }: MonitoringClientProp
               href="/requests?assigned=none"
             />
             <MetricCard
-              label="SLA Breached"
+              label="Currently Breached"
               value={stats.sla_breached}
               icon={AlertTriangle}
               color="red"
@@ -267,6 +267,7 @@ export function MonitoringClient({ stats, recentActivity }: MonitoringClientProp
                           day: 'numeric',
                           hour: '2-digit',
                           minute: '2-digit',
+                          hour12: false,
                         })}
                       </td>
                       <td className="px-4 py-3 font-medium whitespace-nowrap">{row.actor_name}</td>

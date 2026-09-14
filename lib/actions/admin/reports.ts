@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { exportRequestsCSV, exportTasksCSV, exportApprovalsCSV, type ExportFilters } from '@/lib/export/reports'
 import { sendEmail } from '@/lib/email/send'
+import { escapeHtml } from '@/lib/email/escape'
 import type { Database, Json } from '@/types/database'
 
 type ScheduledReportRow = Database['public']['Tables']['scheduled_reports']['Row']
@@ -164,7 +165,7 @@ export async function sendScheduledReport(id: string): Promise<{ error?: string 
     const { error: emailErr } = await sendEmail({
       to,
       subject: `Citykart Desk Report: ${report.name}`,
-      html: `<p>Please find attached the scheduled report <strong>${report.name}</strong> (${report.frequency}).</p>`,
+      html: `<p>Please find attached the scheduled report <strong>${escapeHtml(report.name)}</strong> (${report.frequency}).</p>`,
       text: `Scheduled report: ${report.name} (${report.frequency}). See attached CSV.`,
       attachments: [attachment],
     })

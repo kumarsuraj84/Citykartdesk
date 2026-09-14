@@ -7,13 +7,16 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logActivity } from '@/lib/activity'
 import { notify, getRequestAudience, parseMentions } from '@/lib/notifications'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
-import { RESOLVED_REOPEN_WINDOW_HOURS } from '@/lib/constants/requests'
+import { getResolvedReopenWindowHours } from '@/lib/settings/reopenWindow'
 import { getEnabledModules } from '@/lib/queries/profiles'
 import { validateFieldValue, isFieldValueEmpty } from '@/lib/validation/formFields'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
-import { resolveServiceFormSections, filterFlatFieldsForRequester, isTechnicianMandatory, requesterCanSet } from '@/lib/forms/sections'
+import { resolveServiceFormSections, isTechnicianMandatory, requesterCanSet } from '@/lib/forms/sections'
 import { toCSV } from '@/lib/export/csv'
 import { mapWithConcurrency } from '@/lib/async/concurrency'
+import { createRequestCore } from '@/lib/requests/create-request-core'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { logger } from '@/lib/observability/logger'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus } from '@/types'
 import type { Database, Json } from '@/types/database'
 
@@ -45,6 +48,14 @@ function withPauseCredit(
 }
 
 // ── Create request ────────────────────────────────────────────────────────────
+// The actual business logic (service/template resolution, mandatory-field
+// validation, title/priority/SLA derivation, insert, Business Rules,
+// activity, OEM auto-routing, notifications) lives in createRequestCore()
+// (lib/requests/create-request-core.ts) — shared with Email Intake, and
+// eventually WhatsApp, so every channel gets identical governed behavior.
+// This function is the thin, web-specific adapter: authenticate the browser
+// session, resolve "book on behalf of", parse the submitted FormData, then
+// hand off to the core.
 
 type CreateRequestResult =
   | { requestId: string; error?: never }
@@ -52,7 +63,6 @@ type CreateRequestResult =
 
 export async function createRequest(formData: FormData): Promise<CreateRequestResult> {
   const supabase = await createClient()
-  const admin = createAdminClient()
 
   const {
     data: { user },
@@ -70,9 +80,9 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
   // regardless: honor the override only for agents/managers, and only once the
   // target profile is confirmed to exist in the same org.
   let requesterId = user.id
+  const actingProfile = await getCurrentProfile()
   const requesterOverride = (formData.get('requester_id') as string | null) || null
   if (requesterOverride && requesterOverride !== user.id) {
-    const actingProfile = await getCurrentProfile()
     const isAgentOrManager =
       !!actingProfile &&
       (actingProfile.role === 'agent' ||
@@ -94,6 +104,7 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
   }
 
   const projectId = (formData.get('project_id') as string | null) || null
+  const submittedSubCategoryId = (formData.get('sub_category_id') as string | null) || null
 
   const rawFormData = formData.get('form_data') as string | null
   let parsedFormData: Record<string, unknown> = {}
@@ -105,221 +116,50 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
     }
   }
 
-  const { data: service, error: serviceError } = await supabase
-    .from('services')
-    .select('*, team:teams (*), template:form_templates (form_sections), sla_policy:sla_policies (config)')
-    .eq('id', serviceId)
-    .eq('is_active', true)
+  // org_id for the insert — looked up by requesterId (not the acting user) so
+  // a "book on behalf of" submission resolves to the actual requester's own
+  // org (already validated to match the acting user's org above; for a
+  // self-submission requesterId === user.id, so this is just the caller's
+  // own org either way).
+  const { data: requesterProfile } = await supabase
+    .from('profiles')
+    .select('org_id')
+    .eq('id', requesterId)
     .single()
-
-  if (serviceError || !service) return { error: 'Service not found.' }
-
-  // ── Category / Sub-category — a built-in field on every submission now
-  // (not inherited from the service). Only sub_category_id is submitted; the
-  // category is derived server-side from it so the two can never disagree.
-  // Validated against this service's tagged set — defense-in-depth beyond
-  // the client-side picker only offering tagged options.
-  const submittedSubCategoryId = (formData.get('sub_category_id') as string | null) || null
-  const { data: taggedSubCats } = await supabase
-    .from('service_sub_category_tags')
-    .select('sub_category:service_sub_categories(id, category_id, sla_priority)')
-    .eq('service_id', serviceId)
-  const taggedList = (taggedSubCats ?? [])
-    .map((t) => t.sub_category as { id: string; category_id: string; sla_priority: RequestPriority | null } | null)
-    .filter((s): s is { id: string; category_id: string; sla_priority: RequestPriority | null } => !!s)
-
-  if (taggedList.length > 0 && !submittedSubCategoryId) return { error: 'Category is required.' }
-
-  const matchedSubCat = submittedSubCategoryId ? taggedList.find((s) => s.id === submittedSubCategoryId) : undefined
-  if (submittedSubCategoryId && !matchedSubCat) return { error: 'Selected category is not valid for this service.' }
-
-  const categoryId = matchedSubCat?.category_id ?? null
-  const subCategoryId = matchedSubCat?.id ?? null
-
-  // ── Resolve the form: template (if tagged) is the live source of truth,
-  // otherwise the service's own sections/legacy flat fields — see
-  // resolveServiceFormSections() in lib/forms/sections.ts.
-  const sections = resolveServiceFormSections(service)
-
-  // All fields in submission order (for SLA resolution, which is intentionally
-  // unfiltered — no technician field has a value yet at creation time either way)
-  const allFields: FormField[] = [...sections]
-    .sort((a, b) => a.order - b.order)
-    .flatMap((s) => [...s.fields].sort((a, b) => a.order - b.order))
-
-  // Requester-visible subset — the requester never sees or submits a value for
-  // a technician-only field, so validation and title extraction must only
-  // consider what they could actually see, or a technician-mandatory field
-  // would wrongly block every submission.
-  const requesterFields = filterFlatFieldsForRequester(allFields)
-
-  // ── Server-side validation ─────────────────────────────────────────────────
-  // Source of truth — the client's DynamicForm runs the same check for instant
-  // feedback, but this is what actually gates the insert below.
-  //
-  // `file`-type fields are skipped here: request_attachments.request_id is a
-  // NOT NULL FK, so file values can only be uploaded *after* this request row
-  // exists — DynamicForm never puts them in form_data at all, uploading them
-  // in a follow-up step once it has a real requestId. Required-ness for file
-  // fields is therefore enforced client-side only (DynamicForm's validate()).
-  for (const field of requesterFields) {
-    if (field.type === 'file') continue
-    const err = validateFieldValue(field, parsedFormData[field.id], 'requester')
-    if (err) return { error: err }
-  }
-
-  // ── Request title ──────────────────────────────────────────────────────────
-  // Priority: text → textarea → select value → radio value → multiselect (joined) → service name
-  const titleField =
-    requesterFields.find((f) => f.type === 'text') ??
-    requesterFields.find((f) => f.type === 'textarea') ??
-    requesterFields.find((f) => (f.type === 'select' || f.type === 'radio') && parsedFormData[f.id]) ??
-    requesterFields.find((f) => f.type === 'multiselect' && Array.isArray(parsedFormData[f.id]) && (parsedFormData[f.id] as string[]).length > 0)
-
-  let titleValue: string | undefined
-  if (titleField) {
-    if (titleField.type === 'multiselect') {
-      const vals = parsedFormData[titleField.id] as string[]
-      // Resolve option labels for human-readable title
-      const labels = vals.map((v) => titleField.options?.find((o) => o.value === v)?.label ?? v)
-      titleValue = labels.join(', ')
-    } else if (titleField.type === 'select' || titleField.type === 'radio') {
-      const raw = String(parsedFormData[titleField.id] ?? '')
-      titleValue = titleField.options?.find((o) => o.value === raw)?.label ?? raw
-    } else {
-      titleValue = String(parsedFormData[titleField.id] ?? '').trim()
-    }
-  }
-
-  const title = titleValue ? `${service.name}: ${titleValue}` : service.name
-
-  // Priority is auto-set from the picked sub-category's assigned SLA tier when
-  // it has one (Service Desk → Categories → Sub-Category "SLA Priority"),
-  // falling back to the service's own default when it doesn't — same
-  // "not mandatory" rule the SOP describes.
-  const priority = (matchedSubCat?.sla_priority ?? service.default_priority) as RequestPriority
-  const now = new Date()
-  const { data: requesterProfile } = await supabase.from('profiles').select('org_id').eq('id', user.id).single()
   const orgId = requesterProfile?.org_id
+  if (!orgId) return { error: 'Requester profile not found.' }
 
-  // SLA resolution, most specific layer wins field-by-field:
-  //   1. field_sla_overrides — a specific dropdown/radio value selected on this
-  //      submission (e.g. "Screen Repair" under Laptop Repair), configured via the
-  //      Field SLA Matrix (Request Configuration → Field SLA Matrix).
-  //   2. sla_policies.config[priority] — the SLA Policy this service is mapped to
-  //      (Service Desk → SLA Policies), looked up for the priority above.
-  // No org-wide default beneath that (the old "SLA Targets" screen was removed) — a
-  // service/field with no explicit override gets no SLA deadline. Both deadlines are
-  // business-hours-aware (skip nights/weekends/holidays) from the moment they're first
-  // computed, so there's no separate flat estimate + later recompute step.
-  const servicePolicy = service.sla_policy as unknown as { config: SLAConfig } | null
-  const { responseDueAt, resolutionDueAt } = await resolveSlaDeadlines(supabase, {
+  const result = await createRequestCore({
+    client: supabase,
+    orgId,
+    requesterId,
+    actingUserId: user.id,
     serviceId,
-    priority,
-    servicePolicyConfig: servicePolicy?.config ?? null,
-    allFields,
+    subCategoryId: submittedSubCategoryId,
     formData: parsedFormData,
-    from: now,
+    projectId,
+    source: 'web',
+    // "Book on behalf of" needs the admin client for the insert —
+    // requests_insert's RLS (requester_id = auth.uid()) would otherwise
+    // reject any requester_id other than the acting agent's own id (same
+    // pattern as duplicateRequest).
+    useAdminForWrites: requesterId !== user.id,
+    // Location-scoped visibility only applies to a plain Requester — see
+    // createRequestCore()'s own doc comment. Agent-tier actors (including
+    // one raising this "on behalf of" a Requester elsewhere) are exempt,
+    // matching getServices()'s filterServicesByLocation().
+    actingUserRoleForLocationCheck: actingProfile?.role ?? null,
+    actingUserLocationId: actingProfile?.location_id ?? null,
   })
 
-  // Booking on behalf of someone else needs the admin client — requests_insert's
-  // RLS (requester_id = auth.uid()) would otherwise reject any requester_id other
-  // than the acting agent's own id (same pattern as duplicateRequest).
-  const insertClient = requesterId === user.id ? supabase : admin
-  const { data: request, error: insertError } = await insertClient
-    .from('requests')
-    .insert({
-      request_no: '',
-      service_id: serviceId,
-      category_id: categoryId,
-      sub_category_id: subCategoryId,
-      team_id: service.team_id,
-      requester_id: requesterId,
-      org_id: orgId,
-      title,
-      priority,
-      form_data: parsedFormData as Json,
-      // Legacy flat snapshot (always present for backward compat) — always
-      // read off the service's own column, never the template: templates
-      // never have a legacy flat form_fields shape, only sections.
-      form_schema_snapshot: service.form_fields as Json,
-      // Section snapshot — the resolved form actually shown to the requester
-      // (template's sections if tagged, else the service's own). Freezing
-      // this here is what keeps an already-submitted request immune to a
-      // later template edit; only requests submitted after the edit see it.
-      form_sections_snapshot: sections as Json,
-      response_due_at: responseDueAt,
-      resolution_due_at: resolutionDueAt,
-      project_id: projectId,
-    })
-    .select('id, request_no')
-    .single()
-
-  if (insertError || !request) {
-    return { error: insertError?.message ?? 'Failed to create request.' }
-  }
-
-  // Business Rules: "created" trigger — assign/set priority/set status/notify
-  // per whatever rules match this request. Supersedes the old routing-rules-only
-  // auto-assign (see lib/rules/run.ts and Request Configuration → Business Rules).
-  try {
-    const { runRulesForTrigger } = await import('@/lib/rules/run')
-    await runRulesForTrigger('created', request.id)
-  } catch (e) {
-    console.error('[createRequest] Business rules (created) failed', e)
-  }
-
-  // Activity log — creation must be recorded; surface failure to caller
-  const activityResult = await logActivity({
-    requestId: request.id,
-    actorId: user.id,
-    action: 'created',
-  })
-  if (activityResult.error) {
-    // Request was created; log the failure but do not roll back
-    console.error('[createRequest] Activity log failed for request', request.id)
-  }
-
-  // Booked on behalf of someone else — let them know a request now exists for them.
-  if (requesterId !== user.id) {
-    notify({
-      recipientId: requesterId,
-      actorId: user.id,
-      type: 'request_created',
-      title: `A request was raised on your behalf: ${title}`,
-      body: 'An agent submitted this request for you.',
-      requestId: request.id,
-      link: `/requests/${request.id}`,
-    }).catch(() => {})
-  }
-
-  // Notify team members about the new request
-  {
-    const { data: teamMembers } = await admin
-      .from('team_members')
-      .select('user_id')
-      .eq('team_id', service.team_id)
-    for (const member of teamMembers ?? []) {
-      if (member.user_id !== user.id && member.user_id !== requesterId) {
-        notify({
-          recipientId: member.user_id,
-          actorId: user.id,
-          type: 'request_created',
-          title: `New request: ${title}`,
-          body: 'A new request has been submitted that needs attention.',
-          requestId: request.id,
-          link: `/requests/${request.id}`,
-        }).catch(() => {})
-      }
-    }
-  }
-
-  // Approvals are initiated manually by the solver via "Send for Approval" — not auto-created here.
+  if (result.error) return { error: result.error }
+  if (!result.requestId) return { error: 'Failed to create request.' }
+  const requestId = result.requestId
 
   revalidatePath('/requests')
   revalidatePath('/home')
 
-  return { requestId: request.id }
+  return { requestId }
 }
 
 // ── Update request status ─────────────────────────────────────────────────────
@@ -383,9 +223,10 @@ export async function updateRequestStatus(
   const isResolvedReopenByRequester =
     isRequester && !agentInitiated && currentStatus === 'resolved' && newStatus === 'open'
   // A technician reopening their own resolved ticket counts as a reopen too
-  // (badge + reportable reopen_count) — just without the requester's 72h
-  // window/deadline check, since they're not bound by the "did you notice in
-  // time" clock the same way.
+  // (badge + reportable reopen_count) — just without the requester's
+  // admin-configurable reopen-window deadline check (see
+  // getResolvedReopenWindowHours), since they're not bound by the "did you
+  // notice in time" clock the same way.
   const isResolvedReopenByAgent =
     agentInitiated && currentStatus === 'resolved' && newStatus === 'open'
   const isResolvedReopen = isResolvedReopenByRequester || isResolvedReopenByAgent
@@ -409,10 +250,11 @@ export async function updateRequestStatus(
   // Resolved → Open by the requester ("I'm not satisfied") is time-boxed —
   // an agent reopening their own resolved work (isResolvedReopenByAgent,
   // guarded separately below) always requires the same remark but isn't
-  // bound by this 72h deadline.
+  // bound by this admin-configurable deadline (Request Configuration → General).
   if (isResolvedReopenByRequester) {
+    const reopenWindowHours = await getResolvedReopenWindowHours()
     const deadline = request.resolved_at
-      ? new Date(new Date(request.resolved_at).getTime() + RESOLVED_REOPEN_WINDOW_HOURS * 3_600_000)
+      ? new Date(new Date(request.resolved_at).getTime() + reopenWindowHours * 3_600_000)
       : null
     if (!deadline || deadline < new Date()) {
       return { error: 'The reopen window for this request has expired.' }
@@ -469,8 +311,15 @@ export async function updateRequestStatus(
       ? snapshotSections.flatMap((s) => s.fields)
       : snapshotLegacy
     const formDataForCheck = (request.form_data ?? {}) as Record<string, unknown>
+    // store_address is exempt the same way validateFieldValue() exempts it at
+    // creation time — it's always system-populated (empty is correct for an
+    // HO/Warehouse requester with no store_id) and rendered permanently inert
+    // for every audience, so nobody could ever fill it in. Without this
+    // exemption, marking it required+technician-only on a service would
+    // permanently block every status transition on every ticket from that
+    // service.
     const missing = snapshotFields.filter(
-      (f) => isTechnicianMandatory(f) && isFieldValueEmpty(formDataForCheck[f.id])
+      (f) => f.type !== 'store_address' && isTechnicianMandatory(f) && isFieldValueEmpty(formDataForCheck[f.id], f.type)
     )
     if (missing.length > 0) {
       return {
@@ -498,12 +347,13 @@ export async function updateRequestStatus(
     updatePayload.reopen_deadline_at = null
   }
 
-  // Resolving a ticket opens a 72-hour "not satisfied? reopen it" window for
-  // the requester — reuses the same reopen_deadline_at column the
-  // approval-rejection path uses, so autoCloseRequests() only needs one
-  // sweep for both cases.
+  // Resolving a ticket opens a "not satisfied? reopen it" window for the
+  // requester (admin-configurable — Request Configuration → General) —
+  // reuses the same reopen_deadline_at column the approval-rejection path
+  // uses, so autoCloseRequests() only needs one sweep for both cases.
   if (newStatus === 'resolved') {
-    updatePayload.reopen_deadline_at = new Date(now.getTime() + RESOLVED_REOPEN_WINDOW_HOURS * 3_600_000).toISOString()
+    const reopenWindowHours = await getResolvedReopenWindowHours()
+    updatePayload.reopen_deadline_at = new Date(now.getTime() + reopenWindowHours * 3_600_000).toISOString()
   }
 
   // Successfully reopening (either path) clears the reopen state and counts
@@ -548,15 +398,29 @@ export async function updateRequestStatus(
   // this function's initial read and this write (e.g. two agents resolving
   // vs. cancelling the same ticket at once) — matches the pattern already
   // used in approveApproval/rejectApproval for the same class of race.
-  const { data: updatedRow, error: updateError } = await supabase
+  //
+  // requests_update's RLS policy only grants UPDATE to team members/managers —
+  // a plain requester reopening their own resolved ticket (isResolvedReopenByRequester)
+  // has no clause there at all (DESK-UAT-001: every such attempt hit zero RLS-visible
+  // rows and surfaced as a false "changed by someone else" conflict). That one
+  // transition is routed through the admin client instead, scoped by requester_id
+  // the same way addComment()'s waiting_user auto-transition already does further
+  // down — every other transition (agent reopen, approval-rejection reopen, all
+  // normal status changes) is untouched and still goes through the RLS client.
+  // The .eq('status', currentStatus) race guard applies unchanged either way, so a
+  // genuine concurrent write still zero-matches and is still reported as a conflict.
+  const statusUpdateClient = isResolvedReopenByRequester ? createAdminClient() : supabase
+  let statusUpdateQuery = statusUpdateClient
     .from('requests')
     .update(updatePayload)
     .eq('id', requestId)
     .eq('status', currentStatus)
-    .select('id')
-    .maybeSingle()
+  if (isResolvedReopenByRequester) {
+    statusUpdateQuery = statusUpdateQuery.eq('requester_id', profile.id)
+  }
+  const { data: updatedRow, error: updateError } = await statusUpdateQuery.select('id').maybeSingle()
 
-  if (updateError) return { error: updateError.message }
+  if (updateError) return { error: sanitizeError(updateError, { route: 'requests.ts#updateRequestStatus', fallback: 'Failed to update status.' }) }
   if (!updatedRow) {
     return { error: 'This request was just changed by someone else — please refresh and try again.' }
   }
@@ -657,8 +521,14 @@ export async function updateRequestStatus(
       // A reopen starts a brand-new SLA clock from now — any pause credit
       // accumulated against the OLD (pre-reopen) clock no longer means
       // anything and must not leak into the new one.
+      //
+      // Reuses statusUpdateClient (admin, scoped above, for the requester
+      // reopen case) rather than the plain RLS client: by the time this runs
+      // the row's status is already 'open', not 'resolved', so the same RLS
+      // gap that blocked the primary update would block this follow-up write
+      // too. requestId/ownership were already established by the update above.
       if (resolutionDueAt) {
-        await supabase
+        await statusUpdateClient
           .from('requests')
           .update({
             resolution_due_at: resolutionDueAt,
@@ -670,7 +540,7 @@ export async function updateRequestStatus(
           .eq('id', requestId)
       } else {
         // No applicable SLA config found — still clear the timestamps
-        await supabase
+        await statusUpdateClient
           .from('requests')
           .update({ resolved_at: null, closed_at: null, waiting_since: null, paused_ms_total: 0 })
           .eq('id', requestId)
@@ -712,6 +582,13 @@ export async function updateRequestStatus(
     })
   }
 
+  // D-06: when the requester and assignee are the same person, the two
+  // notify() blocks below would otherwise both target them for the same
+  // reopen event, producing two notification rows for one thing that
+  // happened once. Tracks who's already been notified in this call so the
+  // second block skips a recipient the first one already covered.
+  const notifiedUserIds = new Set<string>()
+
   // Notify requester on meaningful status changes (not self-transitions)
   if (request.requester_id !== profile.id) {
     const notifyStatuses: Record<string, { type: import('@/lib/notifications').NotifyInput['type']; title: string; body: string }> = {
@@ -724,6 +601,7 @@ export async function updateRequestStatus(
     }
     const notifyConfig = notifyStatuses[newStatus]
     if (notifyConfig) {
+      notifiedUserIds.add(request.requester_id)
       notify({
         recipientId: request.requester_id,
         actorId: profile.id,
@@ -735,8 +613,14 @@ export async function updateRequestStatus(
   }
 
   // Notify assignee when request is reopened (open, or back-to-assigned via
-  // the approval-rejection reopen path)
-  if ((newStatus === 'open' || isApprovalRejectionReopen) && request.assigned_to && request.assigned_to !== profile.id) {
+  // the approval-rejection reopen path) — unless they were already notified
+  // above as the requester (D-06).
+  if (
+    (newStatus === 'open' || isApprovalRejectionReopen) &&
+    request.assigned_to &&
+    request.assigned_to !== profile.id &&
+    !notifiedUserIds.has(request.assigned_to)
+  ) {
     notify({
       recipientId: request.assigned_to,
       actorId: profile.id,
@@ -848,7 +732,7 @@ export async function assignRequest(
     : updateQuery.eq('assigned_to', request.assigned_to)
   const { data: updatedRow, error: updateError } = await updateQuery.select('id').maybeSingle()
 
-  if (updateError) return { error: updateError.message }
+  if (updateError) return { error: sanitizeError(updateError, { route: 'requests.ts#assignRequest', fallback: 'Failed to assign request.' }) }
   if (!updatedRow) {
     return { error: 'This request was just assigned by someone else — please refresh and try again.' }
   }
@@ -979,7 +863,7 @@ export async function bulkExportRequests(requestIds: string[]): Promise<{ csv?: 
     `)
     .in('id', requestIds)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'requests.ts#bulkExportRequests', fallback: 'Failed to export requests.' }) }
 
   type Row = {
     request_no: string; title: string; status: string; priority: string
@@ -1142,7 +1026,7 @@ export async function addCollaborator(
 
   if (insertError) {
     if (insertError.code === '23505') return { error: 'Already a collaborator.' }
-    return { error: insertError.message }
+    return { error: sanitizeError(insertError, { route: 'requests.ts#addCollaborator', fallback: 'Failed to add collaborator.' }) }
   }
 
   await logActivity({
@@ -1212,7 +1096,7 @@ export async function removeCollaborator(
     .delete()
     .eq('id', collaboratorRecordId)
 
-  if (deleteError) return { error: deleteError.message }
+  if (deleteError) return { error: sanitizeError(deleteError, { route: 'requests.ts#removeCollaborator', fallback: 'Failed to remove collaborator.' }) }
 
   await logActivity({
     requestId,
@@ -1295,7 +1179,7 @@ export async function addComment(
     .select('id')
     .single()
 
-  if (insertError || !insertedComment) return { error: insertError?.message ?? 'Failed to post comment.' }
+  if (insertError || !insertedComment) return { error: sanitizeError(insertError, { route: 'requests.ts#addComment', fallback: 'Failed to post comment.' }) }
 
   const commentActivity = await logActivity({
     requestId,
@@ -1534,7 +1418,7 @@ export async function changePriority(
     })
     .eq('id', requestId)
 
-  if (updateError) return { error: updateError.message }
+  if (updateError) return { error: sanitizeError(updateError, { route: 'requests.ts#changePriority', fallback: 'Failed to change priority.' }) }
 
   const activityResult = await logActivity({
     requestId,
@@ -1669,7 +1553,7 @@ export async function reclassifyRequest(
     })
     .eq('id', requestId)
 
-  if (updateError) return { error: updateError.message }
+  if (updateError) return { error: sanitizeError(updateError, { route: 'requests.ts#reclassifyRequest', fallback: 'Failed to reclassify request.' }) }
 
   const activityResult = await logActivity({
     requestId,
@@ -1802,7 +1686,7 @@ export async function updateRequestCategory(
     })
     .eq('id', requestId)
 
-  if (updateError) return { error: updateError.message }
+  if (updateError) return { error: sanitizeError(updateError, { route: 'requests.ts#updateRequestCategory', fallback: 'Failed to update category.' }) }
 
   const activityResult = await logActivity({
     requestId,
@@ -1932,7 +1816,7 @@ export async function updateRequestFormData(
     p_patch: patch as Json,
   })
 
-  if (updateError) return { error: updateError.message }
+  if (updateError) return { error: sanitizeError(updateError, { route: 'requests.ts#updateRequestFormData', fallback: 'Failed to update request.' }) }
 
   const activityResult = await logActivity({
     requestId,
@@ -1966,9 +1850,11 @@ export async function autoCloseRequests(): Promise<{ closed: number }> {
   const admin = createAdminClient()
 
   // Finalizes both reopenable-terminal-state cases once their window lapses:
-  // resolved (72h to reopen if unsatisfied) and cancelled-via-approval-
-  // rejection (48h to reopen). reopen_deadline_at is the single column both
-  // paths set (see updateRequestStatus/rejectApproval), so one sweep covers
+  // resolved (admin-configurable reopen window if unsatisfied — Request
+  // Configuration → General, see getResolvedReopenWindowHours) and
+  // cancelled-via-approval-rejection (fixed 48h to reopen).
+  // reopen_deadline_at is the single column both paths set (see
+  // updateRequestStatus/rejectApproval), so one sweep covers
   // both — this supersedes the old app_settings.auto_close_days-driven sweep,
   // which only ever covered resolved tickets on a much longer, admin-set
   // day-based timer.
@@ -2060,7 +1946,7 @@ export async function duplicateRequest(requestId: string): Promise<{ id?: string
     .select('id')
     .single()
 
-  if (error || !newReq) return { error: error?.message ?? 'Failed to duplicate.' }
+  if (error || !newReq) return { error: sanitizeError(error, { route: 'requests.ts#duplicateRequest', fallback: 'Failed to duplicate.' }) }
 
   await logActivity({ requestId: newReq.id, actorId: profile.id, action: 'created', metadata: { duplicated_from: requestId } }).catch(() => {})
 
@@ -2108,9 +1994,17 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
 
   if (existing) return { error: 'An approval is already in progress for this request.' }
 
-  let usedWorkflowId = workflowId
-
-  if (!workflowId) {
+  // Declared as `string` (not inferred from `workflowId: string | null`) and
+  // assigned exactly once per branch below — TypeScript can't narrow a `let`
+  // reassigned inside a conditional back to non-null once the block ends
+  // (the reassignment in the `if` branch and the untouched-but-truthy value
+  // in the implicit `else` aren't connected for CFA purposes), so leaving
+  // this as `let usedWorkflowId = workflowId` left every later read of it
+  // typed `string | null` even though it's always populated by this point.
+  let usedWorkflowId: string
+  if (workflowId) {
+    usedWorkflowId = workflowId
+  } else {
     // No workflow on service — look for any default workflow
     const { data: defaultWorkflow } = await supabase
       .from('approval_workflows')
@@ -2119,18 +2013,50 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
       .maybeSingle()
     if (!defaultWorkflow) return { error: 'No approval workflow is configured. Ask an admin to set one up.' }
     usedWorkflowId = defaultWorkflow.id
+  }
 
+  // Product Decision D — a workflow with zero configured steps must never
+  // silently act as a valid approval gate. Before this check, submitForApproval()
+  // would insert the `approvals` row and flip the request to pending_approval
+  // regardless of whether the resolved workflow had any steps at all — for a
+  // stepless workflow (e.g. the "Manager Approval" flow bound to live
+  // services with no steps ever added), the request then parked in
+  // pending_approval permanently: no approver was ever notified, no error
+  // was ever shown to the submitter, and resolveApprovalContext() (the
+  // approve/reject entry point) would forever report "Approval workflow has
+  // no steps," so the ticket could never be un-stuck by normal means.
+  // Failing here — before the request's state changes at all — means the
+  // submitter gets a clear, actionable error instead of a silently stuck
+  // ticket, and preserves the workflow/service-binding records untouched
+  // (per Decision D: "do not delete it, do not silently infer a manager step").
+  const { count: stepCount } = await admin
+    .from('approval_workflow_steps')
+    .select('id', { count: 'exact', head: true })
+    .eq('workflow_id', usedWorkflowId)
+  if (!stepCount || stepCount === 0) {
+    logger.error({
+      event: 'approvals.workflow_configuration_incomplete',
+      message: 'submitForApproval() blocked: resolved workflow has zero steps',
+      route: 'requests.ts#submitForApproval',
+      requestId,
+      errorCode: 'approval_workflow_no_steps',
+      context: { workflowId: usedWorkflowId },
+    })
+    return { error: 'This request’s approval workflow is not fully configured (no approval steps set up). Contact an admin to complete its setup before submitting for approval.' }
+  }
+
+  if (!workflowId) {
     const { error: wfErr } = await admin
       .from('approvals')
-      .insert({ request_id: requestId, workflow_id: defaultWorkflow.id, status: 'pending' })
+      .insert({ request_id: requestId, workflow_id: usedWorkflowId, status: 'pending' })
     // 23505 = the approvals_one_pending_per_request unique index rejected a
     // second concurrent submission that slipped past the check above.
-    if (wfErr) return { error: wfErr.code === '23505' ? 'An approval is already in progress for this request.' : wfErr.message }
+    if (wfErr) return { error: wfErr.code === '23505' ? 'An approval is already in progress for this request.' : sanitizeError(wfErr, { route: 'requests.ts#submitForApproval', fallback: 'Failed to submit for approval.' }) }
   } else {
     const { error: wfErr } = await admin
       .from('approvals')
       .insert({ request_id: requestId, workflow_id: workflowId, status: 'pending' })
-    if (wfErr) return { error: wfErr.code === '23505' ? 'An approval is already in progress for this request.' : wfErr.message }
+    if (wfErr) return { error: wfErr.code === '23505' ? 'An approval is already in progress for this request.' : sanitizeError(wfErr, { route: 'requests.ts#submitForApproval', fallback: 'Failed to submit for approval.' }) }
   }
 
   // Put the request on hold — SLA pauses the same way sendAdHocApproval()
@@ -2148,7 +2074,7 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
       waiting_since: req.waiting_since ?? new Date().toISOString(),
     })
     .eq('id', requestId)
-  if (stErr) return { error: stErr.message }
+  if (stErr) return { error: sanitizeError(stErr, { route: 'requests.ts#submitForApproval', fallback: 'Failed to submit for approval.' }) }
 
   await logActivity({
     requestId,
@@ -2299,7 +2225,7 @@ export async function addRelatedRequest(
 
   if (error) {
     if (error.code === '23505') return { error: 'These requests are already linked.' }
-    return { error: error.message }
+    return { error: sanitizeError(error, { route: 'requests.ts#addRelatedRequest', fallback: 'Failed to link request.' }) }
   }
 
   revalidatePath(`/requests/${requestId}`)
@@ -2327,7 +2253,7 @@ export async function removeRelatedRequest(linkId: string): Promise<ActionResult
     .delete()
     .eq('id', linkId)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'requests.ts#removeRelatedRequest', fallback: 'Failed to remove link.' }) }
   return {}
 }
 
@@ -2355,7 +2281,7 @@ export async function submitCsatRating(
     .eq('requester_id', profile.id)
     .is('submitted_at', null)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'requests.ts#submitCsatRating', fallback: 'Failed to submit rating.' }) }
   return {}
 }
 
@@ -2380,7 +2306,7 @@ export async function updateRequestSource(requestId: string, source: string | nu
     .from('requests')
     .update({ source_metadata: meta as Json, updated_at: new Date().toISOString() } as RequestUpdate)
     .eq('id', requestId)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'requests.ts#updateRequestSource', fallback: 'Failed to update source.' }) }
 
   revalidatePath('/requests')
   return {}

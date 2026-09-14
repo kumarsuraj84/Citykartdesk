@@ -420,7 +420,7 @@ function ActionRow({
             ))}
           </select>
           <p className="text-[11px] text-muted-foreground">
-            Moves the ticket to this Team without changing its Service — for splitting one Service's tickets across several sub-teams by Category (e.g. via a Sub Category condition above), so only that sub-team sees it in their Team Queue.
+            Moves the ticket to this Team without changing its Service — for splitting one Service&apos;s tickets across several sub-teams by Category (e.g. via a Sub Category condition above), so only that sub-team sees it in their Team Queue.
           </p>
         </div>
       )}
@@ -779,7 +779,7 @@ function RuleCard({ rule, onEdit, onDelete }: { rule: BusinessRuleRow; onEdit: (
         <button onClick={onEdit} className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Edit rule">
           <Pencil className="h-4 w-4" />
         </button>
-        <button onClick={onDelete} className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors" title="Delete rule">
+        <button onClick={onDelete} className="rounded-lg border border-border p-1.5 text-red-600/70 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors" title="Delete rule" aria-label="Delete rule">
           <Trash2 className="h-4 w-4" />
         </button>
       </div>

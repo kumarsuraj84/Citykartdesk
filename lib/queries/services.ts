@@ -54,6 +54,39 @@ const SERVICE_CARD_SELECT = `
   team:teams (id, name)
 `
 
+// ── Location-scoped visibility ────────────────────────────────────────────────
+// A service tagged to one or more Locations (service_location_tags) is only
+// shown to a plain Requester whose own profile.location_id matches one of
+// those tags; a service with NO location tags stays visible to everyone —
+// today's behavior for every pre-existing service. Agents/managers/admins
+// always see every service regardless of their own location, so staff can
+// still raise or help with any request "on behalf of" someone at a
+// different location. Filtered in application code (not the SQL query)
+// since it's a small join table and Supabase's query builder can't express
+// "no tags OR tagged to me" as a single filter without a raw view/RPC.
+async function filterServicesByLocation<T extends { id: string }>(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  services: T[]
+): Promise<T[]> {
+  if (services.length === 0) return services
+  const profile = await getCurrentProfile()
+  if (!profile || profile.role !== 'user') return services
+
+  const { data: tags } = await supabase
+    .from('service_location_tags')
+    .select('service_id, location_id')
+    .in('service_id', services.map((s) => s.id))
+
+  const restricted = new Set<string>()
+  const allowedForMe = new Set<string>()
+  for (const t of (tags ?? []) as { service_id: string; location_id: string }[]) {
+    restricted.add(t.service_id)
+    if (profile.location_id && t.location_id === profile.location_id) allowedForMe.add(t.service_id)
+  }
+
+  return services.filter((s) => !restricted.has(s.id) || allowedForMe.has(s.id))
+}
+
 // ── Public catalog queries ─────────────────────────────────────────────────────
 
 export async function getServiceCategories(): Promise<ServiceCategory[]> {
@@ -107,7 +140,7 @@ export async function searchServices(query: string): Promise<ServiceWithRelation
   }
 
   const { data } = await q
-  return (data ?? []) as ServiceWithRelations[]
+  return filterServicesByLocation(supabase, (data ?? []) as ServiceWithRelations[])
 }
 
 /** Flat, active-and-visible service list for the /services catalog root — the
@@ -129,7 +162,7 @@ export async function getServices(): Promise<ServiceWithRelations[]> {
   }
 
   const { data } = await query
-  return (data ?? []) as ServiceWithRelations[]
+  return filterServicesByLocation(supabase, (data ?? []) as ServiceWithRelations[])
 }
 
 export type ServiceSubCategoryFilterOption = { id: string; name: string; category_name: string }
@@ -185,24 +218,34 @@ export async function getServiceBySlug(slug: string): Promise<ServiceWithRelatio
     .eq('slug', slug)
     .eq('is_active', true)
     .single()
-  return data as ServiceWithRelations | null
+  if (!data) return null
+
+  // Same location-scoped visibility as getServices() — a Requester
+  // navigating straight to a restricted service's URL (bookmark, shared
+  // link) shouldn't reach a service the catalog wouldn't show them either.
+  const visible = await filterServicesByLocation(supabase, [data as ServiceWithRelations])
+  return visible[0] ?? null
 }
 
 // ── Admin-only queries ─────────────────────────────────────────────────────────
 
-export type ServiceWithTags = ServiceWithRelations & { sub_category_tag_ids: string[] }
+export type ServiceWithTags = ServiceWithRelations & { sub_category_tag_ids: string[]; location_tag_ids: string[] }
 
-/** Admin Service Catalog list — each service plus which sub-categories it's
- *  tagged to, so the edit modal's "Tag Categories" checklist can pre-check
- *  the right ones. */
+/** Admin Service Catalog list — each service plus which sub-categories and
+ *  which Locations it's tagged to, so the edit modal's "Tag Categories" and
+ *  "Visible to Locations" checklists can pre-check the right ones. */
 export async function getAllServicesForAdmin(): Promise<ServiceWithTags[]> {
   const supabase = await createClient()
   const { data } = await supabase
     .from('services')
-    .select(`${SERVICE_SELECT}, tags:service_sub_category_tags(sub_category_id)`)
+    .select(`${SERVICE_SELECT}, tags:service_sub_category_tags(sub_category_id), location_tags:service_location_tags(location_id)`)
     .order('sort_order')
-  return ((data ?? []) as unknown as (ServiceWithRelations & { tags: { sub_category_id: string }[] })[])
-    .map(({ tags, ...s }) => ({ ...s, sub_category_tag_ids: tags.map((t) => t.sub_category_id) }))
+  return ((data ?? []) as unknown as (ServiceWithRelations & { tags: { sub_category_id: string }[]; location_tags: { location_id: string }[] })[])
+    .map(({ tags, location_tags, ...s }) => ({
+      ...s,
+      sub_category_tag_ids: tags.map((t) => t.sub_category_id),
+      location_tag_ids: location_tags.map((t) => t.location_id),
+    }))
 }
 
 /** Category → sub-category tree (no services nested — they're tagged, not

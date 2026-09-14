@@ -39,6 +39,10 @@ const FIELD_LIBRARY: { type: FormFieldType; label: string; hint: string; icon: s
   { type: 'phone',       label: 'Phone',        hint: 'Validated',    icon: '☎'  },
   { type: 'file',        label: 'File upload',  hint: 'Attachments',  icon: '⇪'  },
   { type: 'toggle',      label: 'Yes / No',     hint: 'Boolean',      icon: '◐'  },
+  // Never requester-editable — always system-filled from the requester's own
+  // store master record at submission time (empty for HO/Warehouse requesters
+  // with no store_id). See createRequest() in lib/actions/requests.ts.
+  { type: 'store_address', label: 'Store Address', hint: 'Auto-filled', icon: '⌂' },
 ]
 
 function getLibEntry(type: FormFieldType) {
@@ -66,6 +70,7 @@ function newField(type: FormFieldType): FormField {
     toggle:      'Yes or no?',
     checkbox:    'Untitled checkbox',
     radio:       'Untitled radio',
+    store_address: 'Store Address',
   }
   const needsOptions = type === 'select' || type === 'multiselect'
   return {
@@ -498,6 +503,11 @@ function PreviewField({ field, audience }: { field: FormField; audience: Preview
           <MultiSelectTree tree={filterActiveOptions(field.options)} />
         </div>
       )}
+      {field.type === 'store_address' && (
+        <div className={`${base} cursor-default italic text-muted-foreground`}>
+          Auto-filled from the requester&apos;s store master record
+        </div>
+      )}
       {field.help_text && (
         <span className="mt-1 block text-[11px] text-muted-foreground">{field.help_text}</span>
       )}
@@ -924,6 +934,12 @@ export function SectionBuilder({
                 />
               </Labeled>
 
+              {selectedField.type === 'store_address' ? (
+                <p className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+                  Always system-filled from the requester&apos;s own store record — never required, never
+                  editable by anyone, so there&apos;s nothing to configure here.
+                </p>
+              ) : (
               <label className="mt-3 flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2">
                 <span className="text-sm font-medium text-foreground">Required field</span>
                 <div
@@ -952,6 +968,7 @@ export function SectionBuilder({
                   />
                 </div>
               </label>
+              )}
 
               <label className="mt-3 flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2">
                 <span className="text-sm font-medium text-foreground">Requester can View</span>
@@ -992,6 +1009,8 @@ export function SectionBuilder({
                 field, filled in after the ticket is received.
               </p>
 
+              {selectedField.type !== 'store_address' && (
+                <>
               <label className="mt-3 flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2">
                 <span className="text-sm font-medium text-foreground">Requester can Set</span>
                 <div
@@ -1034,6 +1053,8 @@ export function SectionBuilder({
                   Required, but hidden or read-only for the requester — this makes it mandatory
                   for the technician instead, enforced before they can change the ticket&apos;s status.
                 </p>
+              )}
+                </>
               )}
 
               {(selectedField.type === 'select' || selectedField.type === 'multiselect') && (

@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, UserPlus, ChevronDown, Pencil, KeyRound, Send } from 'lucide-react'
+import { X, UserPlus, ChevronDown, Pencil, KeyRound, Send, MessageCircle } from 'lucide-react'
 import {
   updateUserRole,
   toggleUserActive,
@@ -12,10 +12,11 @@ import {
   adminSendPasswordReset,
   adminSetPassword,
 } from '@/lib/actions/admin/users'
-import type { UserWithTeams, Department, Location, CostCenter, JobFunction, Designation, ProfileMini, TeamOption } from './page'
+import type { UserWithTeams, Department, Location, Store, CostCenter, JobFunction, Designation, ProfileMini, TeamOption } from './page'
 import type { UserRole } from '@/types'
 import { ROLE_LABELS, ROLE_BADGE_STYLES } from '@/lib/constants/roles'
 import { BulkImportUsersDialog } from '@/components/admin/BulkImportUsersDialog'
+import { normalizeMobileNumber } from '@/lib/users/mobile'
 
 // Every role the DB/RLS actually recognizes (user_role enum) — the role select
 // previously hardcoded just ['admin','manager','user'], silently omitting
@@ -149,6 +150,7 @@ interface EditDrawerProps {
   user: UserWithTeams & { email: string | null }
   departments: Department[]
   locations: Location[]
+  stores: Store[]
   costCenters: CostCenter[]
   jobFunctions: JobFunction[]
   designations: Designation[]
@@ -159,7 +161,7 @@ interface EditDrawerProps {
   onClose: () => void
 }
 
-function EditDrawer({ user, departments, locations, costCenters, jobFunctions, designations, profiles, teams, isAdmin, currentUserId, onClose }: EditDrawerProps) {
+function EditDrawer({ user, departments, locations, stores, costCenters, jobFunctions, designations, profiles, teams, isAdmin, currentUserId, onClose }: EditDrawerProps) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -169,12 +171,15 @@ function EditDrawer({ user, departments, locations, costCenters, jobFunctions, d
     email: string | null
     department_id?: string | null
     location_id?: string | null
+    store_id?: string | null
     cost_center_id?: string | null
     function_id?: string | null
     designation_id?: string | null
     employee_id?: string | null
     job_title?: string | null
     manager_id?: string | null
+    mobile_number?: string | null
+    whatsapp_enabled?: boolean
   }
 
   const initialTeamIds = user.team_members.map(tm => tm.team_id)
@@ -185,12 +190,15 @@ function EditDrawer({ user, departments, locations, costCenters, jobFunctions, d
     employee_id:   orgUser.employee_id ?? '',
     department_id: orgUser.department_id ?? '',
     location_id:   orgUser.location_id ?? '',
+    store_id:      orgUser.store_id ?? '',
     cost_center_id:orgUser.cost_center_id ?? '',
     function_id:   orgUser.function_id ?? '',
     designation_id:orgUser.designation_id ?? '',
     manager_id:    orgUser.manager_id ?? '',
     role:          user.role as UserRole,
+    mobile_number: orgUser.mobile_number ?? '',
   })
+  const [whatsappEnabled, setWhatsappEnabled] = useState(orgUser.whatsapp_enabled ?? true)
   const [selectedTeams, setSelectedTeams] = useState<string[]>(initialTeamIds)
 
   const isSelf = user.id === currentUserId
@@ -207,6 +215,10 @@ function EditDrawer({ user, departments, locations, costCenters, jobFunctions, d
 
   function handleSave() {
     setError(null)
+    if (form.mobile_number.trim() && !normalizeMobileNumber(form.mobile_number).ok) {
+      setError('Enter a valid 10-digit Indian mobile number, or leave it blank.')
+      return
+    }
     startTransition(async () => {
       const [r1, r2, r3] = await Promise.all([
         updateUserProfile(user.id, {
@@ -215,10 +227,15 @@ function EditDrawer({ user, departments, locations, costCenters, jobFunctions, d
           employee_id:   form.employee_id || null,
           department_id: form.department_id || null,
           location_id:   form.location_id || null,
+          store_id:      form.store_id || null,
           cost_center_id:form.cost_center_id || null,
           function_id:   form.function_id || null,
           designation_id:form.designation_id || null,
           manager_id:    form.manager_id || null,
+          // Empty string clears the number entirely (mobile_number → NULL) —
+          // see updateUserProfile()'s own doc comment on this field.
+          mobile_number: form.mobile_number || null,
+          whatsapp_enabled: whatsappEnabled,
         }),
         isAdmin && !isSelf && form.role !== user.role
           ? updateUserRole(user.id, form.role)
@@ -270,6 +287,37 @@ function EditDrawer({ user, departments, locations, costCenters, jobFunctions, d
             <Field label="Job Title">
               <input value={form.job_title} onChange={e => set('job_title', e.target.value)} className="input-field" placeholder="e.g. IT Support Engineer" />
             </Field>
+          </section>
+
+          {/* WhatsApp identity (Stage 2) */}
+          <section className="space-y-3">
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">WhatsApp</h3>
+            <Field label="Mobile Number">
+              <input
+                value={form.mobile_number}
+                onChange={e => set('mobile_number', e.target.value)}
+                className="input-field"
+                placeholder="9876543210"
+                inputMode="numeric"
+              />
+              {form.mobile_number.trim() && !normalizeMobileNumber(form.mobile_number).ok && (
+                <p className="mt-1 text-[11px] text-red-600">
+                  {(normalizeMobileNumber(form.mobile_number) as { ok: false; error: string }).error}
+                </p>
+              )}
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                10-digit Indian mobile number. Leave blank to remove WhatsApp identity for this user.
+              </p>
+            </Field>
+            <label className="flex items-center gap-2 text-xs text-foreground">
+              <input
+                type="checkbox"
+                checked={whatsappEnabled}
+                onChange={e => { setWhatsappEnabled(e.target.checked); setSuccess(false) }}
+                className="h-3.5 w-3.5"
+              />
+              WhatsApp ticketing enabled
+            </label>
           </section>
 
           {/* Role */}
@@ -324,6 +372,9 @@ function EditDrawer({ user, departments, locations, costCenters, jobFunctions, d
               </Field>
               <Field label="Location">
                 <SelectField value={form.location_id} onChange={v => set('location_id', v)} options={locations.map(l => ({ value: l.id, label: [l.name, l.city].filter(Boolean).join(', ') }))} placeholder="No location" />
+              </Field>
+              <Field label="Store">
+                <SelectField value={form.store_id} onChange={v => set('store_id', v)} options={stores.map(s => ({ value: s.id, label: `${s.code} — ${s.name}` }))} placeholder="No store" />
               </Field>
               <Field label="Cost Center">
                 <SelectField value={form.cost_center_id} onChange={v => set('cost_center_id', v)} options={costCenters.map(c => ({ value: c.id, label: c.name }))} placeholder="No cost center" />
@@ -393,12 +444,14 @@ function ToggleActiveButton({ user }: { user: UserWithTeams }) {
 
 interface InviteModalProps {
   departments: Department[]
+  locations: Location[]
+  stores: Store[]
   profiles: ProfileMini[]
   teams: TeamOption[]
   onClose: () => void
 }
 
-function InviteModal({ departments, profiles, teams, onClose }: InviteModalProps) {
+function InviteModal({ departments, locations, stores, profiles, teams, onClose }: InviteModalProps) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -408,9 +461,13 @@ function InviteModal({ departments, profiles, teams, onClose }: InviteModalProps
     role: 'user' as UserRole,
     job_title: '',
     department_id: '',
+    location_id: '',
+    store_id: '',
     manager_id: '',
     team_id: '',
+    mobile_number: '',
   })
+  const [whatsappEnabled, setWhatsappEnabled] = useState(true)
 
   function set(key: keyof typeof form, value: string) {
     setForm(f => ({ ...f, [key]: value }))
@@ -418,6 +475,10 @@ function InviteModal({ departments, profiles, teams, onClose }: InviteModalProps
 
   function handleInvite() {
     setError(null)
+    if (form.mobile_number.trim() && !normalizeMobileNumber(form.mobile_number).ok) {
+      setError('Enter a valid 10-digit Indian mobile number, or leave it blank.')
+      return
+    }
     startTransition(async () => {
       const result = await inviteUser({
         email: form.email,
@@ -425,8 +486,12 @@ function InviteModal({ departments, profiles, teams, onClose }: InviteModalProps
         role: form.role,
         job_title: form.job_title || null,
         department_id: form.department_id || null,
+        location_id: form.location_id || null,
+        store_id: form.store_id || null,
         manager_id: form.manager_id || null,
         team_id: form.team_id || null,
+        mobile_number: form.mobile_number || null,
+        whatsapp_enabled: whatsappEnabled,
       })
       if (result.error) { setError(result.error); return }
       router.refresh()
@@ -484,12 +549,51 @@ function InviteModal({ departments, profiles, teams, onClose }: InviteModalProps
               placeholder="e.g. Support Engineer"
             />
           </Field>
+          <Field label="Mobile Number">
+            <input
+              value={form.mobile_number}
+              onChange={e => set('mobile_number', e.target.value)}
+              className="input-field"
+              placeholder="9876543210"
+              inputMode="numeric"
+            />
+            {form.mobile_number.trim() && !normalizeMobileNumber(form.mobile_number).ok && (
+              <p className="mt-1 text-[11px] text-red-600">
+                {(normalizeMobileNumber(form.mobile_number) as { ok: false; error: string }).error}
+              </p>
+            )}
+          </Field>
+          <label className="flex items-center gap-2 text-xs text-foreground">
+            <input
+              type="checkbox"
+              checked={whatsappEnabled}
+              onChange={e => setWhatsappEnabled(e.target.checked)}
+              className="h-3.5 w-3.5"
+            />
+            WhatsApp ticketing enabled
+          </label>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Department">
               <SelectField
                 value={form.department_id}
                 onChange={v => set('department_id', v)}
                 options={departments.map(d => ({ value: d.id, label: d.name }))}
+                placeholder="None"
+              />
+            </Field>
+            <Field label="Location">
+              <SelectField
+                value={form.location_id}
+                onChange={v => set('location_id', v)}
+                options={locations.map(l => ({ value: l.id, label: l.name }))}
+                placeholder="None"
+              />
+            </Field>
+            <Field label="Store">
+              <SelectField
+                value={form.store_id}
+                onChange={v => set('store_id', v)}
+                options={stores.map(s => ({ value: s.id, label: `${s.code} — ${s.name}` }))}
                 placeholder="None"
               />
             </Field>
@@ -585,9 +689,12 @@ function UserRow({ user, profiles, departments, onEdit, currentUserId, isAdmin }
     manager_id?: string | null
     job_title?: string | null
     employee_id?: string | null
+    mobile_number?: string | null
+    whatsapp_enabled?: boolean
   }
   const deptName = departments.find(d => d.id === orgUser.department_id)?.name
   const managerName = profiles.find(p => p.id === orgUser.manager_id)?.full_name
+  const whatsappReady = !!orgUser.mobile_number && orgUser.whatsapp_enabled !== false
 
   return (
     <div className="grid grid-cols-[auto_1fr_140px_120px_100px_100px] items-center gap-x-3 border-b border-[#EEF2F8] last:border-0 px-4 py-2.5 hover:bg-[#FAFBFF] transition-colors group">
@@ -609,6 +716,11 @@ function UserRow({ user, profiles, departments, onEdit, currentUserId, isAdmin }
           {orgUser.job_title && <span className="text-[10px] text-muted-foreground/70">· {orgUser.job_title}</span>}
           {deptName && <span className="text-[10px] text-violet-600/80 bg-violet-50 border border-violet-100 rounded px-1.5 py-0.5">{deptName}</span>}
           {managerName && <span className="text-[10px] text-blue-600/80 bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">↑ {managerName}</span>}
+          {whatsappReady && (
+            <span title={`WhatsApp: ${orgUser.mobile_number}`} className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600/80 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5">
+              <MessageCircle className="h-2.5 w-2.5" /> WhatsApp
+            </span>
+          )}
         </div>
       </div>
 
@@ -654,6 +766,7 @@ interface Props {
   isAdmin: boolean
   departments: Department[]
   locations: Location[]
+  stores: Store[]
   costCenters: CostCenter[]
   jobFunctions: JobFunction[]
   designations: Designation[]
@@ -661,7 +774,7 @@ interface Props {
   teams: TeamOption[]
 }
 
-export function UserManagementClient({ initialUsers, currentUserId, isAdmin, departments, locations, costCenters, jobFunctions, designations, profiles, teams }: Props) {
+export function UserManagementClient({ initialUsers, currentUserId, isAdmin, departments, locations, stores, costCenters, jobFunctions, designations, profiles, teams }: Props) {
   const [search, setSearch] = useState('')
   const [editUser, setEditUser] = useState<UserWithTeams | null>(null)
   const [showInvite, setShowInvite] = useState(false)
@@ -744,6 +857,7 @@ export function UserManagementClient({ initialUsers, currentUserId, isAdmin, dep
           user={editUser}
           departments={departments}
           locations={locations}
+          stores={stores}
           costCenters={costCenters}
           jobFunctions={jobFunctions}
           designations={designations}
@@ -759,6 +873,8 @@ export function UserManagementClient({ initialUsers, currentUserId, isAdmin, dep
       {showInvite && (
         <InviteModal
           departments={departments}
+          locations={locations}
+          stores={stores}
           profiles={profiles}
           teams={teams}
           onClose={() => setShowInvite(false)}

@@ -16,7 +16,6 @@ export default async function AdminSlaPoliciesPage() {
       <PageHeader
         title="SLA Policies"
         description="Create a named response/resolution table once, then map it onto any Service in Service Catalog — every service mapped to it shares the same targets."
-        breadcrumbs={[{ label: 'Admin' }, { label: 'SLA Policies' }]}
       />
       <SlaPoliciesAdminClient policies={policies} />
     </div>

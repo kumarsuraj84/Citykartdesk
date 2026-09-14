@@ -8,18 +8,22 @@ import { AppSettingsClient } from './AppSettingsClient'
 import { BusinessHoursClient } from './BusinessHoursClient'
 import { HolidayCalendarClient } from './HolidayCalendarClient'
 import { AlertRulesClient } from './AlertRulesClient'
+import { NotificationRulesClient } from './NotificationRulesClient'
+import { getNotificationRules } from '@/lib/actions/admin/notificationRules'
+import { PUSH_ENABLED } from '@/lib/push/send'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { STATUS_LABELS } from '@/lib/constants/requests'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
 import type { RequestStatus } from '@/types'
 
-type Tab = 'field-sla' | 'lifecycle' | 'business-hours' | 'alerts' | 'general'
+type Tab = 'field-sla' | 'lifecycle' | 'business-hours' | 'alerts' | 'notifications' | 'general'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'field-sla',      label: 'Field SLA Matrix' },
   { id: 'lifecycle',      label: 'Lifecycle'       },
   { id: 'business-hours', label: 'Business Hours'  },
   { id: 'alerts',         label: 'Alert Rules'     },
+  { id: 'notifications',  label: 'Notification Rules' },
   { id: 'general',        label: 'General'         },
 ]
 
@@ -51,10 +55,16 @@ export default async function RequestConfigPage({
     ? await supabase.from('alert_rules').select('*').order('created_at')
     : { data: null }
 
-  const { data: autoCloseRow } = tab === 'general'
+  const notificationRules = tab === 'notifications' ? await getNotificationRules() : null
+
+  // Also needed on the Notification Rules tab — its "Auto-closed after no
+  // reply" row hint shows the live window instead of a number that would
+  // otherwise go stale the moment someone edits it on the General tab.
+  const { data: autoCloseRow } = tab === 'general' || tab === 'notifications'
     ? await supabase.from('app_settings').select('value').eq('key', 'auto_close_days').single()
     : { data: null }
-  const autoCloseDays = parseInt((autoCloseRow as { value?: string } | null)?.value ?? '7', 10)
+  // '3' matches getResolvedReopenWindowHours()'s own fallback (lib/settings/reopenWindow.ts) — keep in sync.
+  const autoCloseDays = parseInt((autoCloseRow as { value?: string } | null)?.value ?? '3', 10)
 
   const statuses = Object.keys(STATUS_LABELS) as RequestStatus[]
 
@@ -142,6 +152,15 @@ export default async function RequestConfigPage({
               const agentNext     = AGENT_TRANSITIONS[status] ?? []
               const requesterNext = REQUESTER_TRANSITIONS[status] ?? []
               const isTerminal    = agentNext.length === 0 && requesterNext.length === 0
+              // DESK design-QA copy fix: pending_approval has zero manual
+              // agent/requester transitions in the matrix above (identical
+              // to true dead-ends like closed/cancelled), so it was
+              // labeled "Terminal" too — but unlike those, it isn't the end
+              // of the request's lifecycle: it exits automatically via the
+              // approval-decision code path (lib/actions/approvals.ts),
+              // not a manual status change. "System-managed" says that
+              // correctly without touching the transition matrix itself.
+              const isSystemManaged = status === 'pending_approval'
               return (
                 <div
                   key={status}
@@ -167,7 +186,11 @@ export default async function RequestConfigPage({
                     ))}
                   </div>
                   <div>
-                    {isTerminal && (
+                    {isSystemManaged ? (
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600 border border-blue-100">
+                        System-managed
+                      </span>
+                    ) : isTerminal && (
                       <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600 border border-red-100">
                         Terminal
                       </span>
@@ -214,6 +237,23 @@ export default async function RequestConfigPage({
             </p>
           </div>
           <AlertRulesClient initialRules={alertRules ?? []} />
+        </div>
+      )}
+
+      {/* ── Notification Rules ── */}
+      {tab === 'notifications' && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Notification Rules</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Choose which channels each event sends on — Email, in-Portal (the notifications bell), and
+              Push (a browser/device alert). Nothing configured here yet means every channel is on, so
+              turning things off is the only effect this screen has on today&apos;s behavior. Due/overdue/digest
+              alerts and Business Rule notifications have their own channel picker on the Alert Rules and
+              Business Rules screens instead of appearing here too.
+            </p>
+          </div>
+          <NotificationRulesClient initialRules={notificationRules ?? []} pushConfigured={PUSH_ENABLED} reopenWindowDays={autoCloseDays} />
         </div>
       )}
 

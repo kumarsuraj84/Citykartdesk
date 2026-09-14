@@ -8,7 +8,7 @@ import {
   BarChart3, Activity, Settings, Monitor, BookOpenText,
   Users, Tag, GitBranch, Building2, Database, Workflow,
   LogOut, BookOpen, KeyRound, ChevronDown, Sparkles, Filter,
-  PanelLeftClose, PanelLeftOpen, Timer, Table2, Zap, Headset, FileText, Clock,
+  PanelLeftClose, PanelLeftOpen, Table2, Zap, Headset, FileText, Clock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/actions/auth'
@@ -66,15 +66,14 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
     {
       key: 'analytics',
       label: 'Analytics',
-      // Dashboards/DeskTime/Audit Logs stay manager/admin-only; Report Builder
-      // is scoped per-role by the data layer instead (Requester → own tickets,
+      // Dashboards/Audit Logs stay manager/admin-only; Report Builder is scoped
+      // per-role by the data layer instead (Requester → own tickets,
       // Technician → own+assigned, Manager → team, Admin/Owner → everything),
       // so it's available to every role that has the Requests module enabled.
       show: isManager || isAdmin || has('requests'),
       items: [
         ...(isManager || isAdmin ? [{ label: 'Dashboards', href: '/admin/reports', icon: BarChart3 }] : []),
-        ...(has('requests') ? [{ label: 'Report Builder', href: '/admin/reports/pivot', icon: Table2 }] : []),
-        ...(isManager || isAdmin ? [{ label: 'DeskTime',   href: '/admin/desktime',  icon: Timer     }] : []),
+        ...(has('requests') ? [{ label: 'Report Builder', href: '/reports/pivot', icon: Table2 }] : []),
         ...(isManager || isAdmin ? [{ label: 'Audit Logs', href: '/admin/audit',    icon: Activity  }] : []),
       ],
     },
@@ -138,7 +137,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
             { label: 'Business Rules',  href: '/admin/business-rules',  icon: Zap        },
             ...(has('approvals') ? [{ label: 'Approval Flows', href: '/admin/approvals',      icon: ShieldCheck }] : []),
             ...(has('requests')  ? [{ label: 'Request Config', href: '/admin/request-config', icon: Workflow    }] : []),
-            ...(has('tasks')     ? [{ label: 'Task Templates', href: '/admin/task-config',    icon: ListTodo    }] : []),
+            ...(has('tasks')     ? [{ label: 'Task Configuration', href: '/admin/task-config',    icon: ListTodo    }] : []),
           ],
         }] : []),
         {
@@ -163,7 +162,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
       show: isAdmin,
       items: [
         { label: 'Monitoring', href: '/admin/monitoring', icon: Monitor      },
-        { label: 'Jobs',       href: '/admin/runbooks',   icon: BookOpenText },
+        { label: 'Runbooks',   href: '/admin/runbooks',   icon: BookOpenText },
       ],
     },
   ].filter(s => s.show !== false)

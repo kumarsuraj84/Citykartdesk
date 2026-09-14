@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -30,6 +31,8 @@ async function logIntakeAudit(entry: {
 export async function claimReview(reviewId: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !canReview(profile.role)) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
 
   const supabase = (await createClient()) as unknown as AnyClient
   const { error } = await supabase
@@ -49,6 +52,8 @@ export async function claimReview(reviewId: string): Promise<{ error?: string }>
 export async function assignReviewer(reviewId: string, userId: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !canReview(profile.role)) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
 
   const supabase = (await createClient()) as unknown as AnyClient
   const { error } = await supabase
@@ -78,6 +83,8 @@ export interface ReviewDecision {
 export async function approveReview(reviewId: string, decision: ReviewDecision): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !canReview(profile.role)) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
 
   const supabase = (await createClient()) as unknown as AnyClient
 
@@ -129,6 +136,8 @@ export async function approveReview(reviewId: string, decision: ReviewDecision):
 export async function rejectReview(reviewId: string, notes?: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !canReview(profile.role)) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
 
   const supabase = (await createClient()) as unknown as AnyClient
   const { data: review, error } = await supabase

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
@@ -15,7 +15,11 @@ import { starReview, escalateReview } from '@/lib/actions/intake/flags'
 import type { IntakeReviewDetail } from '@/lib/queries/intake'
 import { EmailBody } from '../../_components/EmailBody'
 import { AiBrief } from '@/components/intake/AiBrief'
+import { RequesterFieldsPanel } from '../../_components/RequesterFieldsPanel'
 import { formatRelativeTime } from '@/lib/utils'
+import { resolveServiceFormSections } from '@/lib/forms/sections'
+import { collectFields, buildFormData, type IntakeAutofillEntities } from '@/lib/intake/autofill'
+import { validateRequesterFormCompletion } from '@/lib/requests/validate-requester-form-completion'
 
 type WorkType = 'request' | 'task' | 'approval' | 'informational' | 'ignore'
 type Priority = 'low' | 'medium' | 'high' | 'urgent'
@@ -75,14 +79,22 @@ function avatarColor(seed: string): string {
   return AVATARS[Math.abs(h) % AVATARS.length]
 }
 
+type IntakeService = {
+  id: string; name: string; team_id: string | null
+  form_fields: unknown; form_sections: unknown
+  template: { form_sections: unknown } | null
+}
+
 export function ReviewClient({
-  review, attachments, thread, services, teams, isAdmin,
+  review, attachments, thread, services, teams, subCategoriesByService, entities, isAdmin,
 }: {
   review: IntakeReviewDetail
   attachments: Attachment[]
   thread: ThreadItem[]
-  services: { id: string; name: string; team_id: string | null }[]
+  services: IntakeService[]
   teams: { id: string; name: string }[]
+  subCategoriesByService: Record<string, { id: string; name: string }[]>
+  entities: IntakeAutofillEntities
   profileId: string
   isAdmin: boolean
 }) {
@@ -215,9 +227,42 @@ export function ReviewClient({
   // Pre-fill from the engine's catalog match (F2); reviewer can still override.
   const [workServiceId, setWorkServiceId] = useState<string>(review.suggested_service_id ?? services[0]?.id ?? '')
   const [workTeamId, setWorkTeamId] = useState<string>(review.suggested_team_id ?? defaultTeamId ?? teams[0]?.id ?? '')
+  // Sub-category (only relevant when the selected service has tagged ones —
+  // see subCategoriesByService) and reviewer-supplied answers for whichever
+  // requester-mandatory fields the entity autofill couldn't resolve.
+  const [workSubCategoryId, setWorkSubCategoryId] = useState<string>('')
+  const [reviewerFieldValues, setReviewerFieldValues] = useState<Record<string, unknown>>({})
 
   const isTerminal = ['approved', 'rejected', 'converted'].includes(review.state)
   const isConverted = review.state === 'converted'
+
+  // ── Requester form / mandatory-field completion preview ───────────────────
+  // Mirrors exactly what createRequestCore() will do server-side: resolve the
+  // service's real form (template-wins), auto-fill it the same way
+  // approveAndCreate() does (lib/intake/autofill.ts), layer the reviewer's
+  // own answers on top, then run the identical gate
+  // (validateRequesterFormCompletion()) the web path and the core both use —
+  // so "what's still missing" here can never drift from what the server will
+  // actually enforce on submit.
+  const selectedService = useMemo(
+    () => services.find((s) => s.id === workServiceId) ?? null,
+    [services, workServiceId]
+  )
+  const taggedSubCategories = subCategoriesByService[workServiceId] ?? []
+  const requiresSubCategory = taggedSubCategories.length > 0
+
+  const requesterCompletion = useMemo(() => {
+    if (!selectedService || (type !== 'request' && type !== 'approval')) return null
+    const autoFilled = buildFormData(collectFields(selectedService), entities, workTitle, workDescription)
+    const mergedFormData = { ...autoFilled, ...reviewerFieldValues }
+    return validateRequesterFormCompletion({ service: selectedService, formData: mergedFormData })
+  }, [selectedService, type, entities, workTitle, workDescription, reviewerFieldValues])
+
+  const requesterIssues = requesterCompletion
+    ? [...requesterCompletion.missingFields, ...requesterCompletion.invalidFields]
+    : []
+  const subCategoryMissing = requiresSubCategory && !workSubCategoryId
+  const requesterFormReady = !!requesterCompletion?.valid && !subCategoryMissing
 
   const msg = review.message
   const suggestedDiffers =
@@ -240,8 +285,18 @@ export function ReviewClient({
     if (type === 'ignore')        return { type: 'ignore' }
     if (type === 'informational') return { type: 'informational' }
     if (type === 'task')   return { type: 'task',     title: workTitle, description: workDescription, team_id: workTeamId }
-    if (type === 'approval') return { type: 'approval', title: workTitle, description: workDescription, service_id: workServiceId, team_id: workTeamId }
-    return { type: 'request', title: workTitle, description: workDescription, service_id: workServiceId, team_id: workTeamId }
+    if (type === 'approval') {
+      return {
+        type: 'approval', title: workTitle, description: workDescription, service_id: workServiceId, team_id: workTeamId,
+        sub_category_id: workSubCategoryId || undefined,
+        additional_form_data: reviewerFieldValues,
+      }
+    }
+    return {
+      type: 'request', title: workTitle, description: workDescription, service_id: workServiceId, team_id: workTeamId,
+      sub_category_id: workSubCategoryId || undefined,
+      additional_form_data: reviewerFieldValues,
+    }
   }
 
   function handleApproveAndCreate() {
@@ -251,6 +306,23 @@ export function ReviewClient({
       if (!workTitle.trim()) { toast.error('Title is required.'); return }
       if ((p.type === 'request' || p.type === 'approval') && !workServiceId) { toast.error('Select a service.'); return }
       if (!workTeamId) { toast.error('Select a team.'); return }
+      // Client-side preview of the exact same gate createRequestCore() will
+      // run server-side (see requesterCompletion above) — catches it here
+      // with field-level detail instead of a single generic error after a
+      // round trip. The server call below remains the authoritative check
+      // (e.g. if the service's form changed between page load and submit).
+      if (p.type === 'request' || p.type === 'approval') {
+        if (subCategoryMissing) { toast.error('Select a category.'); return }
+        if (requesterCompletion && !requesterCompletion.valid) {
+          const firstIssue = requesterCompletion.missingFields[0] ?? requesterCompletion.invalidFields[0]
+          toast.error(
+            requesterCompletion.missingFields[0]
+              ? `${firstIssue.label} is required.`
+              : (requesterCompletion.invalidFields[0]?.message ?? 'Please complete the required request details.')
+          )
+          return
+        }
+      }
     }
 
     startTransition(async () => {
@@ -617,16 +689,43 @@ export function ReviewClient({
                   setWorkServiceId(id)
                   const t = services.find((s) => s.id === id)?.team_id
                   if (t) setWorkTeamId(t)
+                  // A different service has a different (possibly empty)
+                  // tagged Sub-Category set and a different requester form —
+                  // stale selections/answers from the previous service could
+                  // otherwise silently carry over as if they still applied.
+                  setWorkSubCategoryId('')
+                  setReviewerFieldValues({})
                 }} className={selCls}>
                   {services.length === 0 ? <option value="">No active services</option> : services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </Field>
+            )}
+            {(type === 'request' || type === 'approval') && requiresSubCategory && (
+              <Field label="Sub-category">
+                <select value={workSubCategoryId} onChange={(e) => setWorkSubCategoryId(e.target.value)} className={selCls}>
+                  <option value="">Select…</option>
+                  {taggedSubCategories.map((sc) => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
+                </select>
+              </Field>
+            )}
+            {(type === 'request' || type === 'approval') && selectedService && requesterCompletion && (
+              <RequesterFieldsPanel
+                fields={resolveServiceFormSections(selectedService).flatMap((s) => s.fields)}
+                issues={requesterIssues}
+                values={reviewerFieldValues}
+                onChange={(fieldId, value) => setReviewerFieldValues((prev) => ({ ...prev, [fieldId]: value }))}
+              />
             )}
             <Field label="Team">
               <select value={workTeamId} onChange={(e) => setWorkTeamId(e.target.value)} className={selCls}>
                 {teams.length === 0 ? <option value="">No teams</option> : teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </Field>
+            {(type === 'request' || type === 'approval') && !requesterFormReady && (
+              <p className="text-[11px] font-medium text-amber-700">
+                {subCategoryMissing ? 'Select a category to continue.' : 'Complete the required request details above to continue.'}
+              </p>
+            )}
             {type === 'approval' && (
               <p className="text-[11px] text-muted-foreground">Creates a request in <span className="font-semibold">pending approval</span> and triggers the service&apos;s approval workflow.</p>
             )}
@@ -646,7 +745,7 @@ export function ReviewClient({
           <div className="space-y-2">
             <button
               onClick={handleApproveAndCreate}
-              disabled={isPending}
+              disabled={isPending || ((type === 'request' || type === 'approval') && !requesterFormReady)}
               className={`flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-semibold shadow-md transition hover:brightness-110 active:scale-[0.99] disabled:opacity-50 ${
                 isNoWork
                   ? 'bg-muted text-muted-foreground shadow-none hover:bg-muted/80'

@@ -459,12 +459,12 @@ async function DashboardBody({
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {isAgent ? (<>
                     <KpiCard label="My Queue"     value={myQueue.length}      sublabel="Assigned to me"    accent="#1B2559" href="/requests?assigned=me" />
-                    <KpiCard label="SLA Breached" value={slaBreachedCount}    sublabel="Overdue resolution" accent="#EF4444" href="/requests?sla=breached" danger />
+                    <KpiCard label="Currently Breached" value={slaBreachedCount}    sublabel="Overdue resolution" accent="#EF4444" href="/requests?sla=breached" danger />
                     <KpiCard label="Needs Reply"  value={needsAttentionCount} sublabel="Waiting on user"   accent="#F97316" href="/requests?status=waiting_user" />
                     <KpiCard label="Resolved"     value={resolvedCount}       sublabel="All time"          accent="#10B981" href="/requests?status=resolved" />
                   </>) : isManager ? (<>
                     <KpiCard label="Team Open"        value={teamRequestsOpen}        sublabel="Active tickets"    accent="#1B2559" href="/requests" />
-                    <KpiCard label="SLA Breached"     value={teamRequestsSlaBreached} sublabel="Overdue resolution" accent="#EF4444" href="/requests?sla=breached" danger />
+                    <KpiCard label="Currently Breached"     value={teamRequestsSlaBreached} sublabel="Overdue resolution" accent="#EF4444" href="/requests?sla=breached" danger />
                     <KpiCard label="Pending Approval" value={pendingApprovalCount}    sublabel="Awaiting review"   accent="#8B5CF6" href="/approvals" />
                     <KpiCard label="My Open"          value={myOpenCount}             sublabel="My requests"       accent="#10B981" href="/requests?requester=me" />
                   </>) : (<>

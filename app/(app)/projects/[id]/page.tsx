@@ -22,6 +22,7 @@ import { ProjectDetailTabs } from '@/components/projects/ProjectDetailTabs'
 import { TasksClient } from '@/app/(app)/tasks/TasksClient'
 import { NewTaskPanel } from '@/components/tasks/NewTaskPanel'
 import { formatRelativeTime } from '@/lib/utils'
+import { computeProjectProgressPct } from '@/lib/projects/progress'
 import type { ProjectProgress } from '@/types'
 
 interface PageProps {
@@ -124,7 +125,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             updates={updates}
             currentUserId={profile.id}
             isManager={isManager}
-            currentProgressPct={progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0}
+            currentProgressPct={computeProjectProgressPct(project.status, progress)}
           />
         }
         activity={

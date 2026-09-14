@@ -443,8 +443,9 @@ export function PivotBuilder() {
 
           <DragOverlay>
             {activeDragField && (
-              <div className="flex items-center gap-1.5 rounded-md border border-primary bg-card px-2 py-1.5 text-xs font-medium text-foreground shadow-lg">
-                <GripVertical className="h-3.5 w-3.5 text-muted-foreground" /> {activeDragField.label}
+              <div className="flex items-start gap-1.5 rounded-md border border-primary bg-card px-2 py-1.5 text-xs font-medium text-foreground shadow-lg max-w-[240px]">
+                <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                <span className="break-words leading-snug">{activeDragField.label}</span>
               </div>
             )}
           </DragOverlay>
@@ -476,9 +477,14 @@ function FieldChip({ field, mode, onAdd }: { field: ReportField; mode: Mode; onA
       style={style}
       className={`group flex items-center gap-1 rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-xs text-foreground hover:border-border transition-colors ${isDragging ? 'opacity-40' : ''}`}
     >
-      <span {...listeners} {...attributes} className="flex items-center gap-1.5 flex-1 min-w-0 cursor-grab active:cursor-grabbing">
-        <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        <span className="truncate">{field.label}</span>
+      <span
+        {...listeners}
+        {...attributes}
+        title={field.label}
+        className="flex items-start gap-1.5 flex-1 min-w-0 cursor-grab active:cursor-grabbing"
+      >
+        <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+        <span className="break-words leading-snug">{field.label}</span>
       </span>
       <DropdownMenu>
         <DropdownMenuTrigger className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-muted transition-all">

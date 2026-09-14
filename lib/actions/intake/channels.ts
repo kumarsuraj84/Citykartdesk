@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -48,6 +49,8 @@ export async function createChannel(input: {
 }): Promise<{ error?: string; id?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
   if (!canManageChannels(profile.role)) return { error: 'You do not have permission to manage channels.' }
 
   const name = input.name.trim()
@@ -93,6 +96,8 @@ export async function updateChannel(
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
   if (!canManageChannels(profile.role)) return { error: 'You do not have permission to manage channels.' }
 
   const supabase = (await createClient()) as unknown as AnyClient
@@ -125,6 +130,8 @@ export async function setChannelStatus(
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
   if (!canManageChannels(profile.role)) return { error: 'You do not have permission to manage channels.' }
 
   const supabase = (await createClient()) as unknown as AnyClient
@@ -149,6 +156,8 @@ export async function setChannelStatus(
 export async function deleteChannel(id: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
   if (!canManageChannels(profile.role)) return { error: 'You do not have permission to manage channels.' }
 
   const supabase = (await createClient()) as unknown as AnyClient
@@ -188,6 +197,8 @@ export async function connectChannel(
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
   if (!canManageChannels(profile.role)) return { error: 'You do not have permission to manage channels.' }
 
   if (!creds.host?.trim() || !creds.user?.trim() || !creds.port) {
@@ -284,6 +295,8 @@ export async function getChannelConnectionInfo(channelId: string): Promise<{
 }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
   if (!canManageChannels(profile.role)) return { error: 'You do not have permission to manage channels.' }
 
   const rls = (await createClient()) as unknown as AnyClient
@@ -343,6 +356,8 @@ export async function getChannelConnectionInfo(channelId: string): Promise<{
 export async function resyncChannel(channelId: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
   if (!canManageChannels(profile.role)) return { error: 'You do not have permission to manage channels.' }
 
   const supabase = (await createClient()) as unknown as AnyClient
@@ -383,6 +398,8 @@ export async function pollNow(): Promise<{
 }> {
   const profile = await getCurrentProfile()
   if (!profile) return { ok: false, error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { ok: false, error: moduleError }
   if (!canManageChannels(profile.role)) return { ok: false, error: 'You do not have permission to manage channels.' }
 
   const rawUrl = process.env.INTAKE_WORKER_URL
@@ -412,6 +429,8 @@ export async function pollNow(): Promise<{
 export async function testChannel(channelId: string): Promise<{ ok: boolean; error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { ok: false, error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { ok: false, error: moduleError }
   if (!canManageChannels(profile.role)) return { ok: false, error: 'You do not have permission to manage channels.' }
 
   const rawUrl = process.env.INTAKE_WORKER_URL

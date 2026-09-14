@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { isCurrentlyBreached } from '@/lib/sla/breach'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -41,6 +42,33 @@ export function resolvePeriodParam(p: PeriodParam): { start: Date; end: Date; la
 
 function hours(a: string, b: string): number {
   return (new Date(b).getTime() - new Date(a).getTime()) / (1000 * 3600)
+}
+
+/** Turnaround-time hours for a set of resolved-ish rows, excluding any row
+ *  whose duration is not a valid business state (resolved_at earlier than
+ *  created_at, or a non-finite timestamp). A negative/NaN duration can only
+ *  come from bad data — clock skew, a backdated import, or a malformed
+ *  fixture — never from a real request lifecycle, since every write path
+ *  sets resolved_at to "now" at the moment of transition (lib/actions/requests.ts).
+ *  Excluding these rows (rather than clamping them to 0, which would quietly
+ *  understate TAT and mask the anomaly) keeps every avg/median/group figure
+ *  built from this one guarded source. `anomalies` lets the caller surface a
+ *  diagnosable count instead of a silently wrong number. */
+export function computeTatHours(
+  rows: Array<{ created_at: string; resolved_at?: string | null }>
+): { values: number[]; anomalies: number } {
+  const values: number[] = []
+  let anomalies = 0
+  for (const r of rows) {
+    if (!r.resolved_at) continue
+    const h = hours(r.created_at, r.resolved_at)
+    if (!Number.isFinite(h) || h < 0) {
+      anomalies++
+      continue
+    }
+    values.push(h)
+  }
+  return { values, anomalies }
 }
 
 function median(arr: number[]): number | null {
@@ -107,6 +135,10 @@ export type AnalyticsData = {
   avgResolutionHours: number | null
   medianResolutionHours: number | null
   avgFirstResponseHours: number | null
+  // Data-quality guard (see computeTatHours) — count of resolved requests
+  // excluded from every TAT figure above because resolved_at was earlier
+  // than created_at (impossible business state, always a data anomaly).
+  dataAnomalies: { negativeResolutionDurationCount: number }
   // Distributions
   byStatus: Array<{ status: string; count: number }>
   byPriority: PriorityRow[]
@@ -262,9 +294,11 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
     ? Math.round((frtCompliant.length / respondedWithSla.length) * 100)
     : null
 
-  const slaBreachedNow = open.filter(
-    (r) => r.resolution_due_at && new Date(r.resolution_due_at) < now
-  ).length
+  // "Currently Breached" (D-01, lib/sla/breach.ts) — open is already
+  // pre-filtered to exclude resolved/closed/cancelled (query above), so
+  // isCurrentlyBreached's own status check is redundant here but keeps this
+  // call site correct on its own even if that upstream filter ever changes.
+  const slaBreachedNow = open.filter((r) => isCurrentlyBreached(r, now)).length
 
   const frtBreachedNow = open.filter(
     (r) => !r.responded_at && r.response_due_at && new Date(r.response_due_at) < now
@@ -272,16 +306,14 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
 
   // ── TAT ───────────────────────────────────────────────────────────────────
 
-  const tatHours = resolved
-    .filter((r) => r.resolved_at)
-    .map((r) => hours(r.created_at, r.resolved_at!))
+  const { values: resolutionTatHours, anomalies: negativeResolutionDurationCount } = computeTatHours(resolved)
 
   const frtHours = reqs
     .filter((r) => r.responded_at)
     .map((r) => hours(r.created_at, r.responded_at!))
 
-  const avgResolutionHours = avg(tatHours)
-  const medianResolutionHours = median(tatHours)
+  const avgResolutionHours = avg(resolutionTatHours)
+  const medianResolutionHours = median(resolutionTatHours)
   const avgFirstResponseHours = avg(frtHours)
 
   // ── By status ─────────────────────────────────────────────────────────────
@@ -302,7 +334,7 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
     const groupSlaOk = groupResolved.filter(
       (r) => r.resolution_due_at && new Date(r.resolved_at!) <= new Date(r.resolution_due_at!)
     )
-    const groupTat = groupResolved.map((r) => hours(r.created_at, r.resolved_at!))
+    const { values: groupTat } = computeTatHours(groupResolved)
     return {
       priority,
       count: group.length,
@@ -321,7 +353,7 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
     const groupSlaOk = groupResolved.filter(
       (r) => r.resolution_due_at && new Date(r.resolved_at!) <= new Date(r.resolution_due_at!)
     )
-    const groupTat = groupResolved.map((r) => hours(r.created_at, r.resolved_at!))
+    const { values: groupTat } = computeTatHours(groupResolved)
     const openNow = open.filter((r) => r.team_id === teamId).length
     return {
       teamId,
@@ -344,7 +376,7 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
   const agentLeaderboard: AgentRow[] = agentIds
     .map((agentId) => {
       const groupResolved = resolved.filter((r) => r.assigned_to === agentId && r.resolved_at)
-      const groupTat = groupResolved.map((r) => hours(r.created_at, r.resolved_at!))
+      const { values: groupTat } = computeTatHours(groupResolved)
       const openNow = open.filter((r) => r.assigned_to === agentId).length
       return {
         agentId,
@@ -450,6 +482,7 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
     avgResolutionHours,
     medianResolutionHours,
     avgFirstResponseHours,
+    dataAnomalies: { negativeResolutionDurationCount },
     byStatus,
     byPriority,
     byTeam,

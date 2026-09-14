@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 export async function signInWithPassword(formData: FormData) {
   const supabase = await createClient()
@@ -18,7 +19,7 @@ export async function signInWithPassword(formData: FormData) {
   const { error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
-    return { error: error.message }
+    return { error: sanitizeError(error, { route: 'auth.ts#signInWithPassword', fallback: 'Invalid login credentials.' }) }
   }
 
   redirect('/home')
@@ -43,7 +44,7 @@ export async function forgotPassword(formData: FormData) {
   })
 
   if (error) {
-    return { error: error.message }
+    return { error: sanitizeError(error, { route: 'auth.ts#forgotPassword', fallback: 'Could not send the reset email. Please try again.' }) }
   }
 
   return { success: true }
@@ -62,7 +63,7 @@ export async function resetPassword(formData: FormData) {
   const { error } = await supabase.auth.updateUser({ password })
 
   if (error) {
-    return { error: error.message }
+    return { error: sanitizeError(error, { route: 'auth.ts#resetPassword', fallback: 'Could not update your password. Please try again.' }) }
   }
 
   // Covers both an invite/recovery link AND the forced-reset redirect from
@@ -100,7 +101,7 @@ export async function changeOwnPassword(formData: FormData): Promise<{ error?: s
   if (verifyError) return { error: 'Current password is incorrect.' }
 
   const { error } = await supabase.auth.updateUser({ password: newPassword })
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'auth.ts#changeOwnPassword', fallback: 'Could not update your password. Please try again.' }) }
 
   return { success: true }
 }

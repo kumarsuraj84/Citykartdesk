@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { ChevronDown, Archive, Calendar, User, Link2 } from 'lucide-react'
 import { updateProject, archiveProject } from '@/lib/actions/projects'
+import { computeProjectProgressPct } from '@/lib/projects/progress'
 import { ProjectStatusBadge, PROJECT_STATUS_LABELS } from './ProjectStatusBadge'
 import { PROJECT_PRIORITY_STYLES, PROJECT_PRIORITY_ORDER as PRIORITY_ORDER } from './ProjectPriorityBadge'
 import { ProjectMembers } from './ProjectMembers'
@@ -102,7 +103,7 @@ export function ProjectHeader({
     })
   }
 
-  const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
+  const pct = computeProjectProgressPct(status, progress)
 
   return (
     <div className={`space-y-2.5 rounded-lg border border-[#E8E8F0] bg-white p-3.5 dark:border-border dark:bg-card ${isSaving ? 'opacity-60' : ''}`}>

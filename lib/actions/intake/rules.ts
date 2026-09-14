@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -82,6 +83,8 @@ export async function createIntakeRule(input: RuleInput): Promise<{ error?: stri
   if (!profile) return { error: 'Unauthorized.' }
   if (!canManageRules(profile.role)) return { error: 'You do not have permission to manage intake rules.' }
   if (!profile.org_id) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
 
   const invalid = validate(input)
   if (invalid) return { error: invalid }
@@ -104,6 +107,8 @@ export async function updateIntakeRule(id: string, input: RuleInput): Promise<{ 
   if (!profile) return { error: 'Unauthorized.' }
   if (!canManageRules(profile.role)) return { error: 'You do not have permission to manage intake rules.' }
   if (!profile.org_id) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
 
   const invalid = validate(input)
   if (invalid) return { error: invalid }
@@ -127,6 +132,8 @@ export async function setIntakeRuleEnabled(id: string, enabled: boolean): Promis
   if (!profile) return { error: 'Unauthorized.' }
   if (!canManageRules(profile.role)) return { error: 'You do not have permission to manage intake rules.' }
   if (!profile.org_id) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin
@@ -144,6 +151,8 @@ export async function deleteIntakeRule(id: string): Promise<{ error?: string }> 
   if (!profile) return { error: 'Unauthorized.' }
   if (!canManageRules(profile.role)) return { error: 'You do not have permission to manage intake rules.' }
   if (!profile.org_id) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('intake_rules').delete().eq('id', id).eq('org_id', profile.org_id)

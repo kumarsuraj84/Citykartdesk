@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ChevronRight, Clock, Users, ShieldCheck } from 'lucide-react'
 import { getServiceBySlug, getAllowedSubCategoriesForService } from '@/lib/queries/services'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { createClient } from '@/lib/supabase/server'
 import { DynamicForm } from '@/components/forms/DynamicForm'
 import { CategoryIcon } from '@/components/admin/CategoryIcon'
 
@@ -17,6 +18,16 @@ export default async function ServiceDetailPage({ params }: PageProps) {
   if (!service) notFound()
 
   const allowedSubCategories = await getAllowedSubCategoriesForService(service.id)
+
+  // For any `store_address`-type field on this service's template — shown
+  // read-only, re-derived and enforced independently server-side in
+  // createRequest() regardless of what (if anything) reaches the client.
+  let currentUserStoreAddress: string | null = null
+  if (profile?.store_id) {
+    const supabase = await createClient()
+    const { data: store } = await supabase.from('stores').select('address').eq('id', profile.store_id).maybeSingle()
+    currentUserStoreAddress = store?.address ?? null
+  }
 
   // "Book on behalf of" — only agents/managers can raise a request for someone
   // else; a plain requester submitting for themselves never sees this option.
@@ -85,7 +96,7 @@ export default async function ServiceDetailPage({ params }: PageProps) {
 
         {/* Form body */}
         <div className="px-6 py-6">
-          <DynamicForm service={service} canBookOnBehalf={canBookOnBehalf} allowedSubCategories={allowedSubCategories} />
+          <DynamicForm service={service} canBookOnBehalf={canBookOnBehalf} allowedSubCategories={allowedSubCategories} currentUserStoreAddress={currentUserStoreAddress} />
         </div>
       </div>
     </div>

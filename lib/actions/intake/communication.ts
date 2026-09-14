@@ -5,6 +5,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { canReview, logIntakeAudit } from './_shared'
+import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -17,6 +18,8 @@ export async function markMessageRead(
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
 
   const supabase = (await createClient()) as unknown as AnyClient
   // RLS silently returns zero rows (not an error) when the caller can't see this
@@ -38,6 +41,8 @@ export async function archiveMessage(
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
 
   const supabase = (await createClient()) as unknown as AnyClient
   const { data, error } = await supabase
@@ -59,6 +64,8 @@ export async function addNote(
 ): Promise<{ id?: string; error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
   if (!body.trim()) return { error: 'Note body cannot be empty.' }
 
   const supabase = (await createClient()) as unknown as AnyClient
@@ -79,6 +86,8 @@ export async function addNote(
 export async function deleteNote(noteId: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !canReview(profile.role)) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
 
   const admin = createAdminClient() as unknown as AnyClient
   // Scope to the caller's org (admin client bypasses RLS) — a note only carries
@@ -114,6 +123,8 @@ export interface SendPayload {
 export async function closeWithoutWork(messageId: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !canReview(profile.role)) return { error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { error: moduleError }
 
   const admin = createAdminClient() as unknown as AnyClient
 
@@ -158,6 +169,8 @@ export async function sendFromMessage(
 ): Promise<{ ok: boolean; error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !canReview(profile.role)) return { ok: false, error: 'Unauthorized.' }
+  const moduleError = await requireModuleEnabled('intake')
+  if (moduleError) return { ok: false, error: moduleError }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { data: msg } = await admin

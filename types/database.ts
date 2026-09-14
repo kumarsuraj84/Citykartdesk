@@ -541,6 +541,113 @@ export type Database = {
           },
         ]
       }
+      conversation_attachments: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          external_media_id: string | null
+          field_id: string
+          file_name: string | null
+          id: string
+          last_error: string | null
+          mime_type: string | null
+          size: number | null
+          staged_mime_type: string | null
+          staged_size: number | null
+          status: Database["public"]["Enums"]["conversation_attachment_status"]
+          storage_path: string | null
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          external_media_id?: string | null
+          field_id: string
+          file_name?: string | null
+          id?: string
+          last_error?: string | null
+          mime_type?: string | null
+          size?: number | null
+          staged_mime_type?: string | null
+          staged_size?: number | null
+          status?: Database["public"]["Enums"]["conversation_attachment_status"]
+          storage_path?: string | null
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          external_media_id?: string | null
+          field_id?: string
+          file_name?: string | null
+          id?: string
+          last_error?: string | null
+          mime_type?: string | null
+          size?: number | null
+          staged_mime_type?: string | null
+          staged_size?: number | null
+          status?: Database["public"]["Enums"]["conversation_attachment_status"]
+          storage_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_attachments_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "request_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversation_events: {
+        Row: {
+          channel_type: Database["public"]["Enums"]["intake_channel_type"]
+          conversation_id: string | null
+          created_at: string
+          external_message_id: string
+          id: string
+          org_id: string
+          result: Json | null
+          status: Database["public"]["Enums"]["conversation_event_status"]
+          updated_at: string
+        }
+        Insert: {
+          channel_type: Database["public"]["Enums"]["intake_channel_type"]
+          conversation_id?: string | null
+          created_at?: string
+          external_message_id: string
+          id?: string
+          org_id: string
+          result?: Json | null
+          status?: Database["public"]["Enums"]["conversation_event_status"]
+          updated_at?: string
+        }
+        Update: {
+          channel_type?: Database["public"]["Enums"]["intake_channel_type"]
+          conversation_id?: string | null
+          created_at?: string
+          external_message_id?: string
+          id?: string
+          org_id?: string
+          result?: Json | null
+          status?: Database["public"]["Enums"]["conversation_event_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_events_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "request_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cost_centers: {
         Row: {
           code: string | null
@@ -2355,6 +2462,186 @@ export type Database = {
           },
         ]
       }
+      oems: {
+        Row: {
+          id: string
+          org_id: string
+          name: string
+          emails: string[]
+          email_subject_template: string | null
+          email_body_template: string | null
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          name: string
+          emails?: string[]
+          email_subject_template?: string | null
+          email_body_template?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          name?: string
+          emails?: string[]
+          email_subject_template?: string | null
+          email_body_template?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oems_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stores: {
+        Row: {
+          id: string
+          org_id: string
+          code: string
+          name: string
+          address: string | null
+          city: string | null
+          state: string | null
+          pincode: string | null
+          oem_id: string | null
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          code: string
+          name: string
+          address?: string | null
+          city?: string | null
+          state?: string | null
+          pincode?: string | null
+          oem_id?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          code?: string
+          name?: string
+          address?: string | null
+          city?: string | null
+          state?: string | null
+          pincode?: string | null
+          oem_id?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stores_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stores_oem_id_fkey"
+            columns: ["oem_id"]
+            isOneToOne: false
+            referencedRelation: "oems"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_rules: {
+        Row: {
+          org_id: string
+          event_type: string
+          email: boolean
+          in_app: boolean
+          push: boolean
+          updated_at: string
+        }
+        Insert: {
+          org_id: string
+          event_type: string
+          email?: boolean
+          in_app?: boolean
+          push?: boolean
+          updated_at?: string
+        }
+        Update: {
+          org_id?: string
+          event_type?: string
+          email?: boolean
+          in_app?: boolean
+          push?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_rules_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_subscriptions: {
+        Row: {
+          id: string
+          user_id: string
+          org_id: string | null
+          endpoint: string
+          p256dh: string
+          auth: string
+          user_agent: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          org_id?: string | null
+          endpoint: string
+          p256dh: string
+          auth: string
+          user_agent?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          org_id?: string | null
+          endpoint?: string
+          p256dh?: string
+          auth?: string
+          user_agent?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       milestones: {
         Row: {
           created_at: string
@@ -2782,11 +3069,14 @@ export type Database = {
           is_active: boolean
           job_title: string | null
           location_id: string | null
+          store_id: string | null
           manager_id: string | null
+          mobile_number: string | null
           must_reset_password: boolean
           org_id: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
+          whatsapp_enabled: boolean
         }
         Insert: {
           avatar_url?: string | null
@@ -2801,11 +3091,14 @@ export type Database = {
           is_active?: boolean
           job_title?: string | null
           location_id?: string | null
+          store_id?: string | null
           manager_id?: string | null
+          mobile_number?: string | null
           must_reset_password?: boolean
           org_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
+          whatsapp_enabled?: boolean
         }
         Update: {
           avatar_url?: string | null
@@ -2820,11 +3113,14 @@ export type Database = {
           is_active?: boolean
           job_title?: string | null
           location_id?: string | null
+          store_id?: string | null
           manager_id?: string | null
+          mobile_number?: string | null
           must_reset_password?: boolean
           org_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
+          whatsapp_enabled?: boolean
         }
         Relationships: [
           {
@@ -2860,6 +3156,13 @@ export type Database = {
             columns: ["location_id"]
             isOneToOne: false
             referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
             referencedColumns: ["id"]
           },
           {
@@ -3390,6 +3693,133 @@ export type Database = {
           },
         ]
       }
+      request_conversations: {
+        Row: {
+          answers: Json
+          cancelled_at: string | null
+          category_id: string | null
+          channel_identity: string
+          channel_type: Database["public"]["Enums"]["intake_channel_type"]
+          completed_at: string | null
+          created_at: string
+          current_field_id: string | null
+          description: string | null
+          expired_at: string | null
+          expires_at: string
+          id: string
+          issue_search_text: string | null
+          last_activity_at: string
+          last_error: string | null
+          org_id: string
+          request_id: string | null
+          requester_id: string
+          search_result_ids: string[] | null
+          service_id: string | null
+          state: Database["public"]["Enums"]["conversation_state"]
+          sub_category_id: string | null
+          title: string | null
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          answers?: Json
+          cancelled_at?: string | null
+          category_id?: string | null
+          channel_identity: string
+          channel_type: Database["public"]["Enums"]["intake_channel_type"]
+          completed_at?: string | null
+          created_at?: string
+          current_field_id?: string | null
+          description?: string | null
+          expired_at?: string | null
+          expires_at: string
+          id?: string
+          issue_search_text?: string | null
+          last_activity_at?: string
+          last_error?: string | null
+          org_id: string
+          request_id?: string | null
+          requester_id: string
+          search_result_ids?: string[] | null
+          service_id?: string | null
+          state?: Database["public"]["Enums"]["conversation_state"]
+          sub_category_id?: string | null
+          title?: string | null
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          answers?: Json
+          cancelled_at?: string | null
+          category_id?: string | null
+          channel_identity?: string
+          channel_type?: Database["public"]["Enums"]["intake_channel_type"]
+          completed_at?: string | null
+          created_at?: string
+          current_field_id?: string | null
+          description?: string | null
+          expired_at?: string | null
+          expires_at?: string
+          id?: string
+          issue_search_text?: string | null
+          last_activity_at?: string
+          last_error?: string | null
+          org_id?: string
+          request_id?: string | null
+          requester_id?: string
+          search_result_ids?: string[] | null
+          service_id?: string | null
+          state?: Database["public"]["Enums"]["conversation_state"]
+          sub_category_id?: string | null
+          title?: string | null
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_conversations_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "service_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_conversations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_conversations_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: true
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_conversations_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_conversations_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_conversations_sub_category_id_fkey"
+            columns: ["sub_category_id"]
+            isOneToOne: false
+            referencedRelation: "service_sub_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       request_priorities: {
         Row: {
           color: string
@@ -3885,9 +4315,40 @@ export type Database = {
           },
         ]
       }
+      service_location_tags: {
+        Row: {
+          service_id: string
+          location_id: string
+        }
+        Insert: {
+          service_id: string
+          location_id: string
+        }
+        Update: {
+          service_id?: string
+          location_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_location_tags_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_location_tags_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       services: {
         Row: {
           approval_workflow_id: string | null
+          auto_oem_routing: boolean
           backup_owner_id: string | null
           created_at: string
           default_priority: Database["public"]["Enums"]["request_priority"]
@@ -3916,6 +4377,7 @@ export type Database = {
         }
         Insert: {
           approval_workflow_id?: string | null
+          auto_oem_routing?: boolean
           backup_owner_id?: string | null
           created_at?: string
           default_priority?: Database["public"]["Enums"]["request_priority"]
@@ -3944,6 +4406,7 @@ export type Database = {
         }
         Update: {
           approval_workflow_id?: string | null
+          auto_oem_routing?: boolean
           backup_owner_id?: string | null
           created_at?: string
           default_priority?: Database["public"]["Enums"]["request_priority"]
@@ -4136,41 +4599,6 @@ export type Database = {
           },
           {
             foreignKeyName: "sla_policies_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tags: {
-        Row: {
-          color: string
-          created_at: string | null
-          id: string
-          is_active: boolean
-          name: string
-          org_id: string | null
-        }
-        Insert: {
-          color?: string
-          created_at?: string | null
-          id?: string
-          is_active?: boolean
-          name: string
-          org_id?: string | null
-        }
-        Update: {
-          color?: string
-          created_at?: string | null
-          id?: string
-          is_active?: boolean
-          name?: string
-          org_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tags_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -4910,6 +5338,32 @@ export type Database = {
         Returns: boolean
       }
       can_view_project: { Args: { p_project_id: string }; Returns: boolean }
+      commit_conversation_transition: {
+        Args: {
+          p_answers: Json
+          p_cancelled_at: string | null
+          p_category_id: string | null
+          p_completed_at: string | null
+          p_conversation_id: string
+          p_current_field_id: string | null
+          p_description: string | null
+          p_event_id: string | null
+          p_event_result: Json | null
+          p_expected_version: number
+          p_expired_at: string | null
+          p_expires_at: string
+          p_issue_search_text: string | null
+          p_last_activity_at: string
+          p_last_error: string | null
+          p_request_id: string | null
+          p_search_result_ids: string[] | null
+          p_service_id: string | null
+          p_state: Database["public"]["Enums"]["conversation_state"]
+          p_sub_category_id: string | null
+          p_title: string | null
+        }
+        Returns: Database["public"]["Tables"]["request_conversations"]["Row"]
+      }
       current_org_id: { Args: never; Returns: string }
       current_user_role: {
         Args: never
@@ -4962,6 +5416,10 @@ export type Database = {
         Args: { p_service_id: string; p_sub_category_ids: string[] }
         Returns: undefined
       }
+      retag_service_locations: {
+        Args: { p_service_id: string; p_location_ids: string[] }
+        Returns: undefined
+      }
       seed_default_sla_config: {
         Args: { p_org_id: string }
         Returns: undefined
@@ -5007,6 +5465,21 @@ export type Database = {
       approval_decision_type: "approved" | "rejected"
       approval_status: "pending" | "approved" | "rejected" | "cancelled"
       approver_type: "specific_user" | "any_manager"
+      conversation_attachment_status: "received_reference" | "persisted" | "failed" | "staged" | "linked"
+      conversation_event_status: "processing" | "completed" | "failed"
+      conversation_state:
+        | "identified"
+        | "awaiting_service"
+        | "awaiting_issue_search"
+        | "awaiting_subcategory"
+        | "awaiting_description"
+        | "collecting_fields"
+        | "awaiting_file"
+        | "review"
+        | "submitting"
+        | "completed"
+        | "cancelled"
+        | "expired"
       custom_field_type:
         | "text"
         | "number"
@@ -5273,6 +5746,22 @@ export const Constants = {
       approval_decision_type: ["approved", "rejected"],
       approval_status: ["pending", "approved", "rejected", "cancelled"],
       approver_type: ["specific_user", "any_manager"],
+      conversation_attachment_status: ["received_reference", "persisted", "failed", "staged", "linked"],
+      conversation_event_status: ["processing", "completed", "failed"],
+      conversation_state: [
+        "identified",
+        "awaiting_service",
+        "awaiting_issue_search",
+        "awaiting_subcategory",
+        "awaiting_description",
+        "collecting_fields",
+        "awaiting_file",
+        "review",
+        "submitting",
+        "completed",
+        "cancelled",
+        "expired",
+      ],
       custom_field_type: [
         "text",
         "number",

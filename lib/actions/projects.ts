@@ -5,10 +5,31 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { getEnabledModules } from '@/lib/queries/profiles'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 import type { ProjectStatus, ProjectPriority } from '@/types'
 import type { Json } from '@/types/database'
 
 type ActionResult = { error?: string }
+
+// D-04: project_members_insert/delete and milestones_insert/update's RLS
+// WITH CHECK/USING clauses are role-only (agent-tier and above) — they never
+// check whether the caller has anything to do with THIS specific project, so
+// any agent+ in the org could add/remove members or create/update a
+// milestone on a project belonging to a completely different team. Neither
+// did the app-level code above them (all four just checked "authenticated").
+// can_view_project() already encodes the correct project-scoped predicate
+// (owner/functional-owner/creator/project_member/project's-team, or
+// manager/admin/platform_owner) and is already the SELECT-side RLS check for
+// these same tables — reusing it here (via RPC, so it runs as the caller,
+// not the admin client) adds the missing project-scoping without inventing a
+// new authorization model or touching RLS.
+async function canAccessProject(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  projectId: string
+): Promise<boolean> {
+  const { data } = await supabase.rpc('can_view_project', { p_project_id: projectId })
+  return data === true
+}
 
 // ── Log project activity (admin client to bypass RLS) ────────────────────────
 
@@ -83,7 +104,7 @@ export async function createProject(data: {
     .single()
 
   if (error || !project) {
-    return { error: error?.message ?? 'Failed to create project.' }
+    return { error: sanitizeError(error, { route: 'projects.ts#createProject', fallback: 'Failed to create project.' }) }
   }
 
   await logProjectActivity({
@@ -176,7 +197,10 @@ export async function bulkCreateProjects(
       .select('id')
       .single()
 
-    if (error || !project) { errors.push(`${rowLabel}: ${error?.message ?? 'Failed to create project.'}`); continue }
+    if (error || !project) {
+      errors.push(`${rowLabel}: ${sanitizeError(error, { route: 'projects.ts#bulkCreateProjects', fallback: 'Failed to create project.' })}`)
+      continue
+    }
 
     imported++
     await logProjectActivity({ projectId: project.id, orgId, actorId: profile.id, action: 'created' })
@@ -240,7 +264,7 @@ export async function updateProject(
     .select('id')
     .maybeSingle()
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'projects.ts#updateProject', fallback: 'Failed to update project.' }) }
   if (!updated) return { error: 'You do not have permission to edit this project.' }
 
   if (data.status !== undefined && data.status !== oldStatus && profile.org_id) {
@@ -273,7 +297,7 @@ export async function archiveProject(id: string): Promise<ActionResult> {
     .select('id')
     .maybeSingle()
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'projects.ts#archiveProject', fallback: 'Failed to archive project.' }) }
   if (!archived) return { error: 'You do not have permission to archive this project.' }
 
   if (profile.org_id) {
@@ -305,7 +329,7 @@ export async function attachToProject(
     .select('id')
     .maybeSingle()
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'projects.ts#attachToProject', fallback: 'Failed to link.' }) }
   if (!attached) return { error: `You do not have permission to edit this ${entity}.` }
 
   if (projectId) revalidatePath(`/projects/${projectId}`)
@@ -329,6 +353,10 @@ export async function createMilestone(data: {
   if (data.endDate < data.startDate) return { error: 'End date must be on or after the start date.' }
 
   const supabase = await createClient()
+  if (!(await canAccessProject(supabase, data.projectId))) {
+    return { error: 'You do not have access to this project.' }
+  }
+
   const { data: milestone, error } = await supabase
     .from('milestones')
     .insert({
@@ -342,7 +370,7 @@ export async function createMilestone(data: {
     .select('id')
     .single()
 
-  if (error || !milestone) return { error: error?.message ?? 'Failed to create milestone.' }
+  if (error || !milestone) return { error: sanitizeError(error, { route: 'projects.ts#createMilestone', fallback: 'Failed to create milestone.' }) }
 
   revalidatePath(`/projects/${data.projectId}`)
   refresh()
@@ -373,6 +401,13 @@ export async function updateMilestone(
   }
 
   const supabase = await createClient()
+
+  const { data: existing } = await supabase.from('milestones').select('project_id').eq('id', id).maybeSingle()
+  if (!existing) return { error: 'Enhancement not found.' }
+  if (!(await canAccessProject(supabase, existing.project_id))) {
+    return { error: 'You do not have access to this project.' }
+  }
+
   const { data: milestone, error } = await supabase
     .from('milestones')
     .update({
@@ -389,7 +424,7 @@ export async function updateMilestone(
     .select('project_id')
     .single()
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'projects.ts#updateMilestone', fallback: 'Failed to update milestone.' }) }
 
   if (milestone) revalidatePath(`/projects/${milestone.project_id}`)
   refresh()
@@ -406,7 +441,7 @@ export async function deleteMilestone(id: string): Promise<ActionResult> {
   const { data: milestone } = await supabase.from('milestones').select('project_id').eq('id', id).maybeSingle()
 
   const { data: deleted, error } = await supabase.from('milestones').delete().eq('id', id).select('id').maybeSingle()
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'projects.ts#deleteMilestone', fallback: 'Failed to delete milestone.' }) }
   if (!deleted) return { error: 'You do not have permission to delete this enhancement.' }
 
   if (milestone) revalidatePath(`/projects/${milestone.project_id}`)
@@ -420,7 +455,7 @@ export async function assignTaskMilestone(taskId: string, milestoneId: string | 
 
   const supabase = await createClient()
   const { data, error } = await supabase.from('tasks').update({ milestone_id: milestoneId }).eq('id', taskId).select('id').maybeSingle()
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'projects.ts#assignTaskMilestone', fallback: 'Failed to update milestone.' }) }
   if (!data) return { error: 'You do not have permission to edit this task.' }
 
   refresh()
@@ -439,6 +474,10 @@ export async function addProjectMember(
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const supabase = await createClient()
+  if (!(await canAccessProject(supabase, projectId))) {
+    return { error: 'You do not have access to this project.' }
+  }
+
   const { error } = await supabase.from('project_members').insert({
     project_id: projectId,
     user_id: userId,
@@ -446,7 +485,7 @@ export async function addProjectMember(
     role,
     added_by: profile.id,
   })
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'projects.ts#addProjectMember', fallback: 'Failed to add member.' }) }
 
   revalidatePath(`/projects/${projectId}`)
   refresh()
@@ -458,6 +497,10 @@ export async function removeProjectMember(projectId: string, userId: string): Pr
   if (!profile) return { error: 'Not authenticated.' }
 
   const supabase = await createClient()
+  if (!(await canAccessProject(supabase, projectId))) {
+    return { error: 'You do not have access to this project.' }
+  }
+
   const { data, error } = await supabase
     .from('project_members')
     .delete()
@@ -465,7 +508,7 @@ export async function removeProjectMember(projectId: string, userId: string): Pr
     .eq('user_id', userId)
     .select('project_id')
     .maybeSingle()
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'projects.ts#removeProjectMember', fallback: 'Failed to remove member.' }) }
   if (!data) return { error: 'You do not have permission to remove this member.' }
 
   revalidatePath(`/projects/${projectId}`)
@@ -500,7 +543,7 @@ export async function createProjectUpdate(data: {
     percent_snapshot: Math.min(100, Math.max(0, Math.round(data.percentComplete))),
     blockers: data.blockers?.trim() || null,
   })
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'projects.ts#createProjectUpdate', fallback: 'Failed to post update.' }) }
 
   revalidatePath(`/projects/${data.projectId}`)
   refresh()
@@ -513,7 +556,7 @@ export async function deleteProjectUpdate(id: string, projectId: string): Promis
 
   const supabase = await createClient()
   const { data, error } = await supabase.from('project_updates').delete().eq('id', id).select('id').maybeSingle()
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'projects.ts#deleteProjectUpdate', fallback: 'Failed to delete update.' }) }
   if (!data) return { error: 'You do not have permission to delete this update.' }
 
   revalidatePath(`/projects/${projectId}`)

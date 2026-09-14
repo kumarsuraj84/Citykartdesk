@@ -20,7 +20,7 @@ import { SLABadge } from './SLABadge'
 import { SubmittedFieldRow } from './SubmittedFieldRow'
 import { requesterCanSet } from '@/lib/forms/sections'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelativeTime, formatDateTime } from '@/lib/utils'
 import type { RequestStatus, RequestPriority, RequestCollaborator, FormField, FormSection, AllowedSubCategory } from '@/types'
 
 interface TeamMember { id: string; full_name: string }
@@ -892,7 +892,9 @@ export function RequestSidebarPanel({
 
         {/* Read-only: Created */}
         <PropRow label="Created">
-          <span className="text-xs text-muted-foreground" suppressHydrationWarning>{formatRelativeTime(createdAt)}</span>
+          <span className="text-xs text-muted-foreground" suppressHydrationWarning>
+            {formatDateTime(createdAt)} <span className="text-muted-foreground/60">({formatRelativeTime(createdAt).replace(/ ago$/, '')})</span>
+          </span>
         </PropRow>
 
         {/* Read-only: Due */}

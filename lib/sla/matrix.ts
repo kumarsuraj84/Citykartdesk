@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { resolveFormSections } from '@/lib/forms/sections'
+import { resolveServiceFormSections } from '@/lib/forms/sections'
 import { flattenLeafOptions } from '@/lib/forms/options'
 import type { FormField, SLAConfig } from '@/types'
 
@@ -41,7 +41,7 @@ export async function getFieldSlaMatrix(): Promise<FieldSlaMatrixRow[]> {
     supabase
       .from('services')
       .select(
-        'id, name, sort_order, form_sections, form_fields, category:service_categories(name), sub_category:service_sub_categories(name)'
+        'id, name, sort_order, form_sections, form_fields, template:form_templates(form_sections), category:service_categories(name), sub_category:service_sub_categories(name)'
       )
       .order('sort_order'),
     supabase.from('field_sla_overrides').select('service_id, field_id, option_value, sla_config'),
@@ -54,7 +54,7 @@ export async function getFieldSlaMatrix(): Promise<FieldSlaMatrixRow[]> {
 
   const rows: FieldSlaMatrixRow[] = []
   for (const service of services ?? []) {
-    const sections = resolveFormSections(service)
+    const sections = resolveServiceFormSections(service)
     const fields: FormField[] = sections.flatMap((s) => s.fields)
     const optionFields = fields.filter(
       (f) => f.type === 'select' || f.type === 'multiselect' || f.type === 'radio'
