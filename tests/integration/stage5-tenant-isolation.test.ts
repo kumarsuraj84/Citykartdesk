@@ -50,8 +50,10 @@ describe('Stage 5 — tenant isolation from Meta phone_number_id through ticket 
 
     requesterA = await createTestUser('stage5-tenant-req-a', 'Stage5 Tenant Requester A')
     requesterB = await createTestUser('stage5-tenant-req-b', 'Stage5 Tenant Requester B')
-    await admin.from('profiles').update({ mobile_number: SHARED_MOBILE, whatsapp_enabled: true, is_active: true }).eq('id', requesterA.id)
-    await admin.from('profiles').update({ org_id: orgBId, mobile_number: SHARED_MOBILE, whatsapp_enabled: true, is_active: true }).eq('id', requesterB.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requesterA.id)
+    await admin.from('profiles').update({ org_id: orgBId, whatsapp_enabled: true, is_active: true }).eq('id', requesterB.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requesterA.id, org_id: fxA.orgId, mobile_number: SHARED_MOBILE })
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requesterB.id, org_id: orgBId, mobile_number: SHARED_MOBILE })
     mockedCreateClient.mockResolvedValue(admin as never)
   }, 60_000)
 

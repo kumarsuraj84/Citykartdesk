@@ -3055,6 +3055,42 @@ export type Database = {
           },
         ]
       }
+      profile_mobile_numbers: {
+        Row: {
+          created_at: string
+          mobile_number: string
+          org_id: string
+          profile_id: string
+        }
+        Insert: {
+          created_at?: string
+          mobile_number: string
+          org_id: string
+          profile_id: string
+        }
+        Update: {
+          created_at?: string
+          mobile_number?: string
+          org_id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_mobile_numbers_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_mobile_numbers_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -3071,7 +3107,6 @@ export type Database = {
           location_id: string | null
           store_id: string | null
           manager_id: string | null
-          mobile_number: string | null
           must_reset_password: boolean
           org_id: string | null
           role: Database["public"]["Enums"]["user_role"]
@@ -3093,7 +3128,6 @@ export type Database = {
           location_id?: string | null
           store_id?: string | null
           manager_id?: string | null
-          mobile_number?: string | null
           must_reset_password?: boolean
           org_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -3115,7 +3149,6 @@ export type Database = {
           location_id?: string | null
           store_id?: string | null
           manager_id?: string | null
-          mobile_number?: string | null
           must_reset_password?: boolean
           org_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]

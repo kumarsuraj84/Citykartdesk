@@ -72,8 +72,10 @@ describe('Stage 6, Part 12 — Business Rules genuinely evaluate real fields on 
     ])
     const senderA = '9666800001'
     const senderB = '9666800002'
-    await admin.from('profiles').update({ mobile_number: senderA, whatsapp_enabled: true, is_active: true }).eq('id', requesterA.id)
-    await admin.from('profiles').update({ mobile_number: senderB, whatsapp_enabled: true, is_active: true }).eq('id', requesterB.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requesterA.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requesterB.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requesterA.id, org_id: fxA.orgId, mobile_number: senderA })
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requesterB.id, org_id: fxA.orgId, mobile_number: senderB })
     await admin.from('profiles').update({ role: 'agent' }).eq('id', agentA.id)
     await admin.from('profiles').update({ role: 'agent' }).eq('id', agentB.id)
     // The "assign" rule action skips any assignee who isn't a member of the

@@ -189,19 +189,23 @@ describe('Stage 6, Part 1 — WhatsApp channel readiness diagnostic', () => {
 
   it('requesterMobileCoverage counts active users with/without a mobile number correctly', async () => {
     const countActive = async (filter: 'with' | 'without' | 'all') => {
-      let q = admin.from('profiles').select('id', { count: 'exact', head: true }).eq('org_id', EXISTING_ORG_ID).eq('is_active', true)
-      if (filter === 'with') q = q.not('mobile_number', 'is', null)
-      if (filter === 'without') q = q.is('mobile_number', null)
-      const { count } = await q
-      return count ?? 0
+      const { data: activeProfiles } = await admin.from('profiles').select('id').eq('org_id', EXISTING_ORG_ID).eq('is_active', true)
+      const activeIds = (activeProfiles ?? []).map((p: { id: string }) => p.id)
+      if (filter === 'all') return activeIds.length
+      const { data: mobileRows } = activeIds.length
+        ? await admin.from('profile_mobile_numbers').select('profile_id').eq('org_id', EXISTING_ORG_ID).in('profile_id', activeIds)
+        : { data: [] as { profile_id: string }[] }
+      const withCount = new Set((mobileRows ?? []).map((r: { profile_id: string }) => r.profile_id)).size
+      return filter === 'with' ? withCount : activeIds.length - withCount
     }
     const beforeAll_ = await countActive('all')
     const beforeWith = await countActive('with')
 
     const withMobile = await createTestUser('stage6-readiness-mob-with', 'Stage6 Mobile Coverage With')
     const withoutMobile = await createTestUser('stage6-readiness-mob-without', 'Stage6 Mobile Coverage Without')
-    await admin.from('profiles').update({ is_active: true, mobile_number: '9812300001' }).eq('id', withMobile.id)
-    await admin.from('profiles').update({ is_active: true, mobile_number: null }).eq('id', withoutMobile.id)
+    await admin.from('profiles').update({ is_active: true }).eq('id', withMobile.id)
+    await admin.from('profiles').update({ is_active: true }).eq('id', withoutMobile.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: withMobile.id, org_id: EXISTING_ORG_ID, mobile_number: '9812300001' })
 
     try {
       const { readiness } = await getWhatsAppChannelReadiness(wa.channelId)
@@ -213,6 +217,26 @@ describe('Stage 6, Part 1 — WhatsApp channel readiness diagnostic', () => {
     } finally {
       await admin.auth.admin.deleteUser(withMobile.id)
       await admin.auth.admin.deleteUser(withoutMobile.id)
+    }
+  })
+
+  it('a profile with multiple mobile numbers is counted once, not once per number', async () => {
+    const twoNumberUser = await createTestUser('stage6-readiness-mob-multi', 'Stage6 Mobile Coverage Multi')
+    await admin.from('profiles').update({ is_active: true }).eq('id', twoNumberUser.id)
+    await admin.from('profile_mobile_numbers').insert([
+      { profile_id: twoNumberUser.id, org_id: EXISTING_ORG_ID, mobile_number: '9812300010' },
+      { profile_id: twoNumberUser.id, org_id: EXISTING_ORG_ID, mobile_number: '9812300011' },
+    ])
+
+    try {
+      const { readiness: before } = await getWhatsAppChannelReadiness(wa.channelId)
+      // Remove one of the two numbers — the count must not change, since the
+      // profile still has (at least) one number either way.
+      await admin.from('profile_mobile_numbers').delete().eq('profile_id', twoNumberUser.id).eq('mobile_number', '9812300011')
+      const { readiness: after } = await getWhatsAppChannelReadiness(wa.channelId)
+      expect(after?.requesterMobileCoverage.activeWithMobile).toBe(before?.requesterMobileCoverage.activeWithMobile)
+    } finally {
+      await admin.auth.admin.deleteUser(twoNumberUser.id)
     }
   })
 })

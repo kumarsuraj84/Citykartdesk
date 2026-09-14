@@ -57,7 +57,8 @@ function log(label: string, value: unknown) { console.log(`[STAGE7a-EVIDENCE] ${
 
 async function makePersona(admin: ReturnType<typeof getAdmin>, label: string, mobile: string): Promise<TestUser> {
   const user = await createTestUser(`${RUN_TAG}-${label}`, `UAT7a ${label}`)
-  await admin.from('profiles').update({ mobile_number: mobile, whatsapp_enabled: true, is_active: true }).eq('id', user.id)
+  await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', user.id)
+  await admin.from('profile_mobile_numbers').insert({ profile_id: user.id, org_id: ORG_ID, mobile_number: mobile })
   return user
 }
 

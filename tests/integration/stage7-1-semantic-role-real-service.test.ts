@@ -49,7 +49,8 @@ describe('Stage 7.1 — Subject/Description semantic-role fix on the real IT Sup
   beforeAll(async () => {
     wa = await setupWhatsAppChannelFixture({ runTag: RUN_TAG, orgId: ORG_ID, phoneNumberId: `1555${RUN_TAG.slice(-6)}` })
     requester = await createTestUser('stage71-semrole-req', 'Stage71 SemanticRole Requester')
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: ORG_ID, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
   }, 60_000)
 

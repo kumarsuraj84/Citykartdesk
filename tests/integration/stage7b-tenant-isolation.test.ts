@@ -66,8 +66,10 @@ describe('Stage 7B — UAT-28/UAT-29: WhatsApp tenant isolation (same mobile num
     requesterA = await createTestUser('uat7b-tenant-req-a', 'UAT7B Tenant Requester A')
     requesterB = await createTestUser('uat7b-tenant-req-b', 'UAT7B Tenant Requester B')
     // The SAME mobile number, deliberately, on two profiles in two different orgs.
-    await admin.from('profiles').update({ mobile_number: SHARED_MOBILE, whatsapp_enabled: true, is_active: true }).eq('id', requesterA.id)
-    await admin.from('profiles').update({ mobile_number: SHARED_MOBILE, whatsapp_enabled: true, is_active: true, org_id: orgBId }).eq('id', requesterB.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requesterA.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true, org_id: orgBId }).eq('id', requesterB.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requesterA.id, org_id: fxA.orgId, mobile_number: SHARED_MOBILE })
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requesterB.id, org_id: orgBId, mobile_number: SHARED_MOBILE })
 
     mockedCreateClient.mockResolvedValue(admin as never)
   }, 60_000)
@@ -142,7 +144,8 @@ describe('Stage 7B — UAT-28/UAT-29: WhatsApp tenant isolation (same mobile num
     // A's own conversation.
     const senderAOnly = '9700400002'
     const freshA = await createTestUser('uat7b-tenant-req-a2', 'UAT7B Tenant Requester A2')
-    await admin.from('profiles').update({ mobile_number: senderAOnly, whatsapp_enabled: true, is_active: true }).eq('id', freshA.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', freshA.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: freshA.id, org_id: fxA.orgId, mobile_number: senderAOnly })
 
     try {
       const rNewA = await sendA(buildTextMessagePayload({ phoneNumberId: waA.phoneNumberId, from: `91${senderAOnly}`, body: 'Hi', runTag: `${RUN_TAG}-iso` }))

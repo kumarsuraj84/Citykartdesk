@@ -63,7 +63,8 @@ describe('Stage 6, Part 22 — all 9 WhatsApp audit-log event types produce real
     })
     wa = await setupWhatsAppChannelFixture({ runTag: RUN_TAG, orgId: fx.orgId, phoneNumberId: `1555${RUN_TAG.slice(-6)}` })
     registeredRequester = await createTestUser('stage6-audit-registered', 'Stage6 Audit Registered')
-    await admin.from('profiles').update({ mobile_number: '9666900101', whatsapp_enabled: true, is_active: true }).eq('id', registeredRequester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', registeredRequester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: registeredRequester.id, org_id: fx.orgId, mobile_number: '9666900101' })
     mockedCreateClient.mockResolvedValue(admin as never)
   }, 60_000)
 
@@ -177,7 +178,8 @@ describe('Stage 6, Part 22 — all 9 WhatsApp audit-log event types produce real
     const sender = '9666900606'
     const senderMeta = `91${sender}`
     const requester = await createTestUser('stage6-audit-attach', 'Stage6 Audit Attachment')
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
 
     try {
       const mock = createMockGraphFetch()
@@ -222,7 +224,8 @@ describe('Stage 6, Part 22 — all 9 WhatsApp audit-log event types produce real
     const sender = '9666900707'
     const senderMeta = `91${sender}`
     const requester = await createTestUser('stage6-audit-sendfail', 'Stage6 Audit Send Failure')
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
 
     try {
       const mock = createMockGraphFetch()

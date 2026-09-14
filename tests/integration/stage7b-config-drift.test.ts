@@ -39,7 +39,8 @@ describe('Stage 7B — UAT-30: service deactivated mid-WhatsApp-conversation on 
     const wa = await setupWhatsAppChannelFixture({ runTag: RUN_TAG, orgId: fx.orgId, phoneNumberId: `1562${RUN_TAG.slice(-6)}` })
     const requester = await createTestUser('uat7b-drift-req', 'UAT7B Config Drift Requester')
     const sender = '9700500001'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
     const senderMeta = `91${sender}`
 
@@ -94,7 +95,8 @@ describe('Stage 7B — UAT-30: service deactivated mid-WhatsApp-conversation on 
     const wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-b`, orgId: fx.orgId, phoneNumberId: `1563${RUN_TAG.slice(-6)}` })
     const requester = await createTestUser('uat7b-drift-req-b', 'UAT7B Config Drift Requester B')
     const sender = '9700500002'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
     const senderMeta = `91${sender}`
 

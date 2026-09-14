@@ -36,7 +36,7 @@ function normalizeAnswerValue(field: FormField, rawValue: unknown): unknown {
     case 'phone':
       // A ticket-form `phone` field is independent free-text requester input
       // — NEVER auto-substituted with the Stage 2 mobile identity
-      // (profiles.mobile_number/resolveUserByWhatsAppNumber()), which is a
+      // (profile_mobile_numbers/resolveUserByWhatsAppNumber()), which is a
       // separate WhatsApp-sender-identity concept entirely. See
       // STAGE_3_REPORT.md and Stage 2's own docs for why the two must not be
       // conflated.

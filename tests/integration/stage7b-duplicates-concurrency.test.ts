@@ -46,7 +46,8 @@ describe('Stage 7B — UAT-24: replaying the identical Meta message.id produces 
     fx = await setupConversationFixture({ runTag: `${RUN_TAG}-a`, fields: FIELDS })
     wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-a`, orgId: fx.orgId, phoneNumberId: `1557${RUN_TAG.slice(-6)}` })
     requester = await createTestUser('uat7b-dup-req', 'UAT7B Duplicate Requester')
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
   }, 60_000)
 
@@ -132,7 +133,8 @@ describe('Stage 7B — UAT-25: two near-simultaneous distinct WhatsApp messages 
   it('two distinct real messages answering the same pending field, sent back-to-back, resolve deterministically with no corrupted/mixed answer', async () => {
     const requester = await createTestUser('uat7b-conc-fields-req', 'UAT7B Concurrency Fields Requester')
     const sender = '9700300002'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     const senderMeta = `91${sender}`
     const mock = createMockGraphFetch()
     const send = async (rawBody: string) => processWhatsAppWebhookPayload({ admin: admin as never, rawBody, signatureHeader: signPayload(rawBody, wa.appSecret), fetchImpl: mock.fetchImpl })
@@ -192,7 +194,8 @@ describe('Stage 7B — UAT-25: two near-simultaneous distinct WhatsApp messages 
   it('two distinct real CREATE confirmations racing at Review produce exactly one ticket', async () => {
     const requester = await createTestUser('uat7b-conc-create-req', 'UAT7B Concurrency Create Requester')
     const sender = '9700300003'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     const senderMeta = `91${sender}`
     const mock = createMockGraphFetch()
     const send = async (rawBody: string) => processWhatsAppWebhookPayload({ admin: admin as never, rawBody, signatureHeader: signPayload(rawBody, wa.appSecret), fetchImpl: mock.fetchImpl })

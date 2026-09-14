@@ -11,6 +11,8 @@ import {
   setUserTeams,
   adminSendPasswordReset,
   adminSetPassword,
+  addMobileNumber,
+  removeMobileNumber,
 } from '@/lib/actions/admin/users'
 import type { UserWithTeams, Department, Location, Store, CostCenter, JobFunction, Designation, ProfileMini, TeamOption } from './page'
 import type { UserRole } from '@/types'
@@ -178,7 +180,7 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
     employee_id?: string | null
     job_title?: string | null
     manager_id?: string | null
-    mobile_number?: string | null
+    mobile_numbers?: string[]
     whatsapp_enabled?: boolean
   }
 
@@ -196,10 +198,18 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
     designation_id:orgUser.designation_id ?? '',
     manager_id:    orgUser.manager_id ?? '',
     role:          user.role as UserRole,
-    mobile_number: orgUser.mobile_number ?? '',
   })
   const [whatsappEnabled, setWhatsappEnabled] = useState(orgUser.whatsapp_enabled ?? true)
   const [selectedTeams, setSelectedTeams] = useState<string[]>(initialTeamIds)
+
+  // Mobile numbers (many:1 — a shared "store" login can have several
+  // phones) are added/removed one at a time via their own server actions,
+  // independent of handleSave()'s batched field-save below — see
+  // keen-mapping-adleman.md.
+  const [mobileNumbers, setMobileNumbers] = useState<string[]>(orgUser.mobile_numbers ?? [])
+  const [newMobileInput, setNewMobileInput] = useState('')
+  const [mobileError, setMobileError] = useState<string | null>(null)
+  const [mobilePending, startMobileTransition] = useTransition()
 
   const isSelf = user.id === currentUserId
 
@@ -213,12 +223,31 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
     setSuccess(false)
   }
 
+  function handleAddMobile() {
+    setMobileError(null)
+    const check = normalizeMobileNumber(newMobileInput)
+    if (!check.ok) { setMobileError(check.error); return }
+    startMobileTransition(async () => {
+      const result = await addMobileNumber(user.id, newMobileInput)
+      if (result.error) { setMobileError(result.error); return }
+      setMobileNumbers(prev => [...prev, check.normalized])
+      setNewMobileInput('')
+      router.refresh()
+    })
+  }
+
+  function handleRemoveMobile(number: string) {
+    setMobileError(null)
+    startMobileTransition(async () => {
+      const result = await removeMobileNumber(user.id, number)
+      if (result.error) { setMobileError(result.error); return }
+      setMobileNumbers(prev => prev.filter(n => n !== number))
+      router.refresh()
+    })
+  }
+
   function handleSave() {
     setError(null)
-    if (form.mobile_number.trim() && !normalizeMobileNumber(form.mobile_number).ok) {
-      setError('Enter a valid 10-digit Indian mobile number, or leave it blank.')
-      return
-    }
     startTransition(async () => {
       const [r1, r2, r3] = await Promise.all([
         updateUserProfile(user.id, {
@@ -232,9 +261,6 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
           function_id:   form.function_id || null,
           designation_id:form.designation_id || null,
           manager_id:    form.manager_id || null,
-          // Empty string clears the number entirely (mobile_number → NULL) —
-          // see updateUserProfile()'s own doc comment on this field.
-          mobile_number: form.mobile_number || null,
           whatsapp_enabled: whatsappEnabled,
         }),
         isAdmin && !isSelf && form.role !== user.role
@@ -289,24 +315,50 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
             </Field>
           </section>
 
-          {/* WhatsApp identity (Stage 2) */}
+          {/* WhatsApp identity (Stage 2, many-numbers-per-user as of the
+              profile_mobile_numbers migration) */}
           <section className="space-y-3">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">WhatsApp</h3>
-            <Field label="Mobile Number">
-              <input
-                value={form.mobile_number}
-                onChange={e => set('mobile_number', e.target.value)}
-                className="input-field"
-                placeholder="9876543210"
-                inputMode="numeric"
-              />
-              {form.mobile_number.trim() && !normalizeMobileNumber(form.mobile_number).ok && (
-                <p className="mt-1 text-[11px] text-red-600">
-                  {(normalizeMobileNumber(form.mobile_number) as { ok: false; error: string }).error}
-                </p>
+            <Field label="Mobile Numbers">
+              {mobileNumbers.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {mobileNumbers.map(number => (
+                    <span key={number} className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] text-foreground">
+                      {number}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMobile(number)}
+                        disabled={mobilePending}
+                        className="text-muted-foreground hover:text-red-600 disabled:opacity-50"
+                        aria-label={`Remove ${number}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
               )}
+              <div className="flex gap-2">
+                <input
+                  value={newMobileInput}
+                  onChange={e => { setNewMobileInput(e.target.value); setMobileError(null) }}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMobile() } }}
+                  className="input-field flex-1"
+                  placeholder="9876543210"
+                  inputMode="numeric"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddMobile}
+                  disabled={mobilePending || !newMobileInput.trim()}
+                  className="shrink-0 rounded-lg border border-border px-3 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
+                >
+                  + Add
+                </button>
+              </div>
+              {mobileError && <p className="mt-1 text-[11px] text-red-600">{mobileError}</p>}
               <p className="mt-1 text-[10px] text-muted-foreground">
-                10-digit Indian mobile number. Leave blank to remove WhatsApp identity for this user.
+                Add every phone that should be able to text WhatsApp for this account — e.g. every cashier&apos;s phone for a shared store login. Every ticket created from any of these numbers is attributed to this one user.
               </p>
             </Field>
             <label className="flex items-center gap-2 text-xs text-foreground">
@@ -689,12 +741,12 @@ function UserRow({ user, profiles, departments, onEdit, currentUserId, isAdmin }
     manager_id?: string | null
     job_title?: string | null
     employee_id?: string | null
-    mobile_number?: string | null
+    mobile_numbers?: string[]
     whatsapp_enabled?: boolean
   }
   const deptName = departments.find(d => d.id === orgUser.department_id)?.name
   const managerName = profiles.find(p => p.id === orgUser.manager_id)?.full_name
-  const whatsappReady = !!orgUser.mobile_number && orgUser.whatsapp_enabled !== false
+  const whatsappReady = (orgUser.mobile_numbers?.length ?? 0) > 0 && orgUser.whatsapp_enabled !== false
 
   return (
     <div className="grid grid-cols-[auto_1fr_140px_120px_100px_100px] items-center gap-x-3 border-b border-[#EEF2F8] last:border-0 px-4 py-2.5 hover:bg-[#FAFBFF] transition-colors group">
@@ -717,8 +769,8 @@ function UserRow({ user, profiles, departments, onEdit, currentUserId, isAdmin }
           {deptName && <span className="text-[10px] text-violet-600/80 bg-violet-50 border border-violet-100 rounded px-1.5 py-0.5">{deptName}</span>}
           {managerName && <span className="text-[10px] text-blue-600/80 bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">↑ {managerName}</span>}
           {whatsappReady && (
-            <span title={`WhatsApp: ${orgUser.mobile_number}`} className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600/80 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5">
-              <MessageCircle className="h-2.5 w-2.5" /> WhatsApp
+            <span title={`WhatsApp: ${orgUser.mobile_numbers!.join(', ')}`} className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600/80 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5">
+              <MessageCircle className="h-2.5 w-2.5" /> WhatsApp{orgUser.mobile_numbers!.length > 1 ? ` (${orgUser.mobile_numbers!.length})` : ''}
             </span>
           )}
         </div>

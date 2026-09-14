@@ -12,33 +12,39 @@ import type { UserRole } from '@/types'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: any }
 
-// ── Mobile number helpers (Stage 2) ─────────────────────────────────────────
-// Shared by updateUserProfile/inviteUser/bulkCreateUsers below — the only
-// three places a profile's mobile_number is ever written. Every write path
-// normalizes via lib/users/mobile.ts (never trusts a pre-normalized value
-// from the client) and re-checks org-scoped uniqueness in application code
-// for a clear error message; idx_profiles_org_mobile_number_unique remains
-// the final race-condition guard (see the 23505 handling at each call site).
+// ── Mobile number helpers (Stage 2, extended for many-numbers-per-profile
+// by migration 20240101000140) ──────────────────────────────────────────────
+// A number lives in profile_mobile_numbers, not a profiles column — several
+// numbers can point at the same profile (a shared "store" login used by
+// several people's phones). Every write path still normalizes via
+// lib/users/mobile.ts (never trusts a pre-normalized value from the client)
+// and re-checks org-scoped uniqueness in application code for a clear error
+// message; idx_profile_mobile_numbers_org_mobile_unique remains the final
+// race-condition guard (see the 23505 handling at each call site).
 
-/** Returns a clear error if `normalizedMobile` already belongs to a
- *  different profile in this org, else null. `excludeUserId` lets an
- *  existing user's edit compare against everyone EXCEPT themselves, so
- *  re-saving their own unchanged number never false-positives. */
+/** Returns a clear error if `normalizedMobile` is already registered in
+ *  this org, else null. `forProfileId`, when given, distinguishes "already
+ *  on a DIFFERENT profile" (a real conflict) from "already on THIS profile"
+ *  (a harmless duplicate-add attempt — still surfaced as a friendly error
+ *  rather than a silent no-op, so the caller/UI doesn't need special-case
+ *  handling for it). */
 async function checkMobileNotTaken(
   admin: AnyClient,
   orgId: string,
   normalizedMobile: string,
-  excludeUserId?: string
+  forProfileId?: string
 ): Promise<string | null> {
-  let query = admin
-    .from('profiles')
-    .select('id', { count: 'exact', head: true })
+  const { data: existing } = await admin
+    .from('profile_mobile_numbers')
+    .select('profile_id')
     .eq('org_id', orgId)
     .eq('mobile_number', normalizedMobile)
-  if (excludeUserId) query = query.neq('id', excludeUserId)
-  const { count } = await query
-  if ((count ?? 0) > 0) return 'This mobile number is already registered to another user in this organization.'
-  return null
+    .maybeSingle()
+  if (!existing) return null
+  if (forProfileId && existing.profile_id === forProfileId) {
+    return 'This number is already added to this user.'
+  }
+  return 'This mobile number is already registered to another user in this organization.'
 }
 
 // A tenant admin could otherwise grant themselves (or anyone) `platform_owner`
@@ -109,10 +115,6 @@ export async function updateUserProfile(
     function_id?: string | null
     designation_id?: string | null
     manager_id?: string | null
-    /** Raw, human-entered value (e.g. "9876543210" or "+91 98765 43210") —
-     *  never a pre-normalized one. `null`/empty clears the number entirely
-     *  (mobile_number → NULL), matching the "remove mobile" requirement. */
-    mobile_number?: string | null
     whatsapp_enabled?: boolean
   }
 ): Promise<{ error?: string }> {
@@ -147,32 +149,76 @@ export async function updateUserProfile(
   if ('designation_id' in fields) update.designation_id = fields.designation_id || null
   if ('manager_id' in fields) update.manager_id = fields.manager_id || null
 
-  // mobile_number is normalized and stored together — there is never a
-  // state where the raw input and the stored (normalized) value disagree,
-  // because only the normalized value is ever stored. Clearing (empty/null)
-  // sets mobile_number → NULL in this same update, atomically with every
-  // other field — no separate "clear mobile" action/step exists.
-  if ('mobile_number' in fields) {
-    const raw = fields.mobile_number?.trim()
-    if (!raw) {
-      update.mobile_number = null
-    } else {
-      const normalized = normalizeMobileNumber(raw)
-      if (!normalized.ok) return { error: normalized.error }
-      const dupError = await checkMobileNotTaken(admin, profile.org_id, normalized.normalized, userId)
-      if (dupError) return { error: dupError }
-      update.mobile_number = normalized.normalized
-    }
-  }
   if (fields.whatsapp_enabled !== undefined) update.whatsapp_enabled = fields.whatsapp_enabled
 
   const { error } = await admin.from('profiles').update(update).eq('id', userId).eq('org_id', profile.org_id)
   if (error) {
-    // 23505 = idx_profiles_org_mobile_number_unique caught a race the
-    // checkMobileNotTaken() pre-check above missed (two concurrent saves).
+    return { error: error.message }
+  }
+  revalidatePath('/admin/users')
+  return {}
+}
+
+/** Adds one mobile number to a profile (many:1 — a profile can have several
+ *  numbers, e.g. every cashier's phone for a shared store login). Numbers
+ *  2+ are added here rather than through updateUserProfile() because the
+ *  admin UI's chip editor adds/removes one at a time, not a whole-list
+ *  replace — see keen-mapping-adleman.md for why. */
+export async function addMobileNumber(
+  userId: string,
+  rawMobileNumber: string
+): Promise<{ error?: string }> {
+  const profile = await getCurrentProfile()
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
+
+  const normalized = normalizeMobileNumber(rawMobileNumber)
+  if (!normalized.ok) return { error: normalized.error }
+
+  const admin = createAdminClient() as unknown as AnyClient
+
+  // Target must belong to caller's org — createAdminClient() bypasses RLS.
+  const { data: target } = await admin.from('profiles').select('org_id').eq('id', userId).maybeSingle()
+  if (!target || target.org_id !== profile.org_id) return { error: 'User not found.' }
+
+  const dupError = await checkMobileNotTaken(admin, profile.org_id, normalized.normalized, userId)
+  if (dupError) return { error: dupError }
+
+  const { error } = await admin.from('profile_mobile_numbers').insert({
+    profile_id: userId,
+    org_id: profile.org_id,
+    mobile_number: normalized.normalized,
+  })
+  if (error) {
+    // 23505 = idx_profile_mobile_numbers_org_mobile_unique caught a race the
+    // checkMobileNotTaken() pre-check above missed (two concurrent adds).
     if (error.code === '23505') return { error: 'This mobile number is already registered to another user in this organization.' }
     return { error: error.message }
   }
+  revalidatePath('/admin/users')
+  return {}
+}
+
+/** Removes one mobile number from a profile. Removing a number that isn't
+ *  actually on this profile is a harmless no-op (DELETE matches zero rows),
+ *  not an error — mirrors ordinary idempotent-delete behavior elsewhere in
+ *  this codebase. */
+export async function removeMobileNumber(
+  userId: string,
+  mobileNumber: string
+): Promise<{ error?: string }> {
+  const profile = await getCurrentProfile()
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
+
+  const admin = createAdminClient() as unknown as AnyClient
+  const { error } = await admin
+    .from('profile_mobile_numbers')
+    .delete()
+    .eq('profile_id', userId)
+    .eq('org_id', profile.org_id)
+    .eq('mobile_number', mobileNumber)
+  if (error) return { error: error.message }
   revalidatePath('/admin/users')
   return {}
 }
@@ -219,7 +265,11 @@ export async function inviteUser(fields: {
   manager_id?: string | null
   job_title?: string | null
   team_id?: string | null
-  /** Raw, human-entered value — see updateUserProfile()'s matching doc comment. */
+  /** Raw, human-entered value (e.g. "9876543210" or "+91 98765 43210") —
+   *  never a pre-normalized one. This is the account's FIRST mobile number;
+   *  additional numbers (e.g. the rest of a shared store login's phones)
+   *  are added afterward via addMobileNumber() on the user's edit screen —
+   *  the invite/CSV-import flows only ever set one number at creation. */
   mobile_number?: string | null
   whatsapp_enabled?: boolean
 }): Promise<{ error?: string }> {
@@ -313,13 +363,27 @@ export async function inviteUser(fields: {
   if (fields.store_id) profileUpdate.store_id = fields.store_id
   if (fields.manager_id) profileUpdate.manager_id = fields.manager_id
   if (fields.job_title) profileUpdate.job_title = fields.job_title.trim()
-  if (normalizedMobile) profileUpdate.mobile_number = normalizedMobile
   if (fields.whatsapp_enabled !== undefined) profileUpdate.whatsapp_enabled = fields.whatsapp_enabled
 
   const { error: profileErr } = await admin.from('profiles').update(profileUpdate).eq('id', uid)
   if (profileErr) {
-    if (profileErr.code === '23505') return { error: 'This mobile number is already registered to another user in this organization.' }
     return { error: profileErr.message }
+  }
+
+  // Attach the first mobile number, if any, as its own step AFTER role/
+  // department/etc. already committed above — unlike the old combined
+  // profileUpdate write, a rare concurrent-duplicate race here only fails
+  // the mobile attachment, not the whole invite.
+  if (normalizedMobile && profile.org_id) {
+    const { error: mobileErr } = await admin.from('profile_mobile_numbers').insert({
+      profile_id: uid,
+      org_id: profile.org_id,
+      mobile_number: normalizedMobile,
+    })
+    if (mobileErr) {
+      if (mobileErr.code === '23505') return { error: 'This mobile number is already registered to another user in this organization.' }
+      return { error: mobileErr.message }
+    }
   }
 
   // team_members.org_id is NOT NULL with no DB default — must be set explicitly
@@ -396,11 +460,12 @@ export async function bulkCreateUsers(
     remainingSeats = Math.max(0, org.seat_limit - (count ?? 0))
   }
 
-  const [{ data: departmentsData }, { data: locationsData }, { data: storesData }, { data: orgProfiles }, { data: authList }] = await Promise.all([
+  const [{ data: departmentsData }, { data: locationsData }, { data: storesData }, { data: orgProfiles }, { data: orgMobileNumbers }, { data: authList }] = await Promise.all([
     admin.from('departments').select('id, name').eq('org_id', orgId),
     admin.from('locations').select('id, name').eq('org_id', orgId),
     admin.from('stores').select('id, code').eq('org_id', orgId),
-    admin.from('profiles').select('id, mobile_number').eq('org_id', orgId),
+    admin.from('profiles').select('id').eq('org_id', orgId),
+    admin.from('profile_mobile_numbers').select('mobile_number').eq('org_id', orgId),
     admin.auth.admin.listUsers({ perPage: 1000 }),
   ])
   const deptByName = new Map<string, string>(
@@ -418,17 +483,17 @@ export async function bulkCreateUsers(
       .filter((u) => u.email && orgProfileIds.has(u.id))
       .map((u) => [u.email!.trim().toLowerCase(), u.id])
   )
-  // Every mobile number already registered to an EXISTING profile in this
-  // org — bulkCreateUsers() is create-only (an existing email is always
-  // skipped, never updated, see the email-dedupe check below), so unlike
-  // updateUserProfile() there is no "does this row's mobile belong to the
-  // very profile being edited" self-conflict case to account for here: every
-  // row that reaches account creation is, by construction, a brand-new
-  // profile.
+  // Every mobile number already registered to ANY existing profile in this
+  // org (regardless of how many numbers that profile already has) —
+  // bulkCreateUsers() is create-only (an existing email is always skipped,
+  // never updated, see the email-dedupe check below), so unlike
+  // updateUserProfile()/addMobileNumber() there is no "does this row's
+  // mobile belong to the very profile being edited" self-conflict case to
+  // account for here: every row that reaches account creation is, by
+  // construction, a brand-new profile.
   const existingMobileNumbers = new Set<string>(
-    (orgProfiles ?? [])
-      .map((p: { mobile_number: string | null }) => p.mobile_number)
-      .filter((m: string | null): m is string => !!m)
+    (orgMobileNumbers ?? [])
+      .map((m: { mobile_number: string }) => m.mobile_number)
   )
 
   // Pre-pass: normalize every row's mobile number and detect in-CSV
@@ -562,21 +627,32 @@ export async function bulkCreateUsers(
     if (managerId) profileUpdate.manager_id = managerId
     if (row.job_title?.trim()) profileUpdate.job_title = row.job_title.trim()
     if (row.employee_id?.trim()) profileUpdate.employee_id = row.employee_id.trim()
-    if (mobileNumber) profileUpdate.mobile_number = mobileNumber
     if (whatsappParsed.value !== undefined) profileUpdate.whatsapp_enabled = whatsappParsed.value
 
     const { error: profileErr } = await admin.from('profiles').update(profileUpdate).eq('id', uid)
     if (profileErr) {
-      // 23505 = idx_profiles_org_mobile_number_unique — the pre-pass +
-      // existingMobileNumbers checks above cover every case derivable from
-      // data already read at the start of this call, but a second admin
-      // importing a colliding number in a concurrent request is still
-      // possible; this is that race's final backstop.
-      const reason = profileErr.code === '23505'
-        ? 'this mobile number is already assigned to another user'
-        : profileErr.message
-      errors.push(`${rowLabel}: account created for "${email}" but profile setup failed (${reason}).`)
+      errors.push(`${rowLabel}: account created for "${email}" but profile setup failed (${profileErr.message}).`)
       continue
+    }
+
+    if (mobileNumber) {
+      const { error: mobileErr } = await admin.from('profile_mobile_numbers').insert({
+        profile_id: uid,
+        org_id: orgId,
+        mobile_number: mobileNumber,
+      })
+      if (mobileErr) {
+        // 23505 = idx_profile_mobile_numbers_org_mobile_unique — the
+        // pre-pass + existingMobileNumbers checks above cover every case
+        // derivable from data already read at the start of this call, but a
+        // second admin importing a colliding number in a concurrent request
+        // is still possible; this is that race's final backstop.
+        const reason = mobileErr.code === '23505'
+          ? 'this mobile number is already assigned to another user'
+          : mobileErr.message
+        errors.push(`${rowLabel}: account created for "${email}" but mobile number setup failed (${reason}).`)
+        continue
+      }
     }
 
     // Available as a manager for any later row in this same batch.

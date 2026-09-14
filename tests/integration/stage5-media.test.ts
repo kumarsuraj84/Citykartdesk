@@ -72,7 +72,8 @@ describe('Stage 5.1 — required media staged before Review/Create', () => {
     const wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-a`, orgId: fx.orgId, phoneNumberId: `1555${RUN_TAG.slice(-5)}1` })
     const requester = await createTestUser('stage5-media-req-a', 'Stage5 Media A')
     const sender = '9666600001'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
     const senderMeta = `91${sender}`
 
@@ -134,7 +135,8 @@ describe('Stage 5.1 — required media staged before Review/Create', () => {
     const wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-b`, orgId: fx.orgId, phoneNumberId: `1555${RUN_TAG.slice(-5)}2` })
     const requester = await createTestUser('stage5-media-req-b', 'Stage5 Media B')
     const sender = '9666600002'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
     const senderMeta = `91${sender}`
 
@@ -185,7 +187,8 @@ describe('Stage 5.1 — required media staged before Review/Create', () => {
     const wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-c`, orgId: fx.orgId, phoneNumberId: `1555${RUN_TAG.slice(-5)}3` })
     const requester = await createTestUser('stage5-media-req-c', 'Stage5 Media C')
     const sender = '9666600003'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
     const senderMeta = `91${sender}`
 
@@ -214,7 +217,8 @@ describe('Stage 5.1 — required media staged before Review/Create', () => {
     const wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-d`, orgId: fx.orgId, phoneNumberId: `1555${RUN_TAG.slice(-5)}4` })
     const requester = await createTestUser('stage5-media-req-d', 'Stage5 Media D')
     const sender = '9666600004'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
     const senderMeta = `91${sender}`
 
@@ -242,7 +246,8 @@ describe('Stage 5.1 — required media staged before Review/Create', () => {
     const wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-e`, orgId: fx.orgId, phoneNumberId: `1555${RUN_TAG.slice(-5)}5` })
     const requester = await createTestUser('stage5-media-req-e', 'Stage5 Media E')
     const sender = '9666600005'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
     const senderMeta = `91${sender}`
 
@@ -283,7 +288,8 @@ describe('Stage 5.1 — required media staged before Review/Create', () => {
     const wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-f`, orgId: fx.orgId, phoneNumberId: `1555${RUN_TAG.slice(-5)}6` })
     const requester = await createTestUser('stage5-media-req-f', 'Stage5 Media F')
     const sender = '9666600006'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
     const senderMeta = `91${sender}`
 
@@ -354,7 +360,8 @@ describe('Stage 5.1 — required media staged before Review/Create', () => {
     const wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-g`, orgId: fx.orgId, phoneNumberId: `1555${RUN_TAG.slice(-5)}7` })
     const requester = await createTestUser('stage5-media-req-g', 'Stage5 Media G')
     const sender = '9666600007'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
     const senderMeta = `91${sender}`
 

@@ -33,7 +33,8 @@ describe('Stage 5 — webhook security', () => {
     fx = await setupConversationFixture({ runTag: RUN_TAG, fields: FIELDS })
     wa = await setupWhatsAppChannelFixture({ runTag: RUN_TAG, orgId: fx.orgId, phoneNumberId: `1555${RUN_TAG.slice(-6)}` })
     requester = await createTestUser('stage5-sec-requester', 'Stage5 Security Requester')
-    await admin.from('profiles').update({ mobile_number: '9666700001', whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: '9666700001' })
     mockedCreateClient.mockResolvedValue(admin as never)
   }, 60_000)
 
@@ -116,7 +117,8 @@ describe('Stage 5 — webhook security', () => {
 
   it('POST: an inactive requester never enters the conversation engine', async () => {
     const inactive = await createTestUser('stage5-sec-inactive', 'Stage5 Inactive')
-    await admin.from('profiles').update({ mobile_number: '9666700004', whatsapp_enabled: true, is_active: false }).eq('id', inactive.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: false }).eq('id', inactive.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: inactive.id, org_id: fx.orgId, mobile_number: '9666700004' })
     try {
       const mock = createMockGraphFetch()
       const rawBody = buildTextMessagePayload({ phoneNumberId: wa.phoneNumberId, from: '919666700004', body: 'Hi', runTag: RUN_TAG })
@@ -129,7 +131,8 @@ describe('Stage 5 — webhook security', () => {
 
   it('POST: a requester with whatsapp_enabled=false never enters the conversation engine', async () => {
     const disabled = await createTestUser('stage5-sec-disabled', 'Stage5 Disabled')
-    await admin.from('profiles').update({ mobile_number: '9666700005', whatsapp_enabled: false, is_active: true }).eq('id', disabled.id)
+    await admin.from('profiles').update({ whatsapp_enabled: false, is_active: true }).eq('id', disabled.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: disabled.id, org_id: fx.orgId, mobile_number: '9666700005' })
     try {
       const mock = createMockGraphFetch()
       const rawBody = buildTextMessagePayload({ phoneNumberId: wa.phoneNumberId, from: '919666700005', body: 'Hi', runTag: RUN_TAG })

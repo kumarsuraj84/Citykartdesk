@@ -68,7 +68,8 @@ describe('Stage 6, Part 11 — web vs WhatsApp ticket-creation parity', () => {
       createTestUser('stage6-parity-wa-req', 'Stage6 Parity WhatsApp Requester'),
       createTestUser('stage6-parity-agent', 'Stage6 Parity Agent'),
     ])
-    await admin.from('profiles').update({ mobile_number: SENDER, whatsapp_enabled: true, is_active: true }).eq('id', waRequester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', waRequester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: waRequester.id, org_id: fx.orgId, mobile_number: SENDER })
     await admin.from('profiles').update({ role: 'agent' }).eq('id', agent.id)
     await admin.from('team_members').insert({ team_id: fx.teamId, user_id: agent.id, org_id: fx.orgId })
 

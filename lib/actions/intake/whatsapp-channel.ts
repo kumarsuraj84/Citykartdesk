@@ -311,7 +311,16 @@ export async function getWhatsAppChannelReadiness(channelId: string): Promise<{ 
   const webhookCallbackUrl = baseUrl ? `${baseUrl.replace(/\/$/, '')}/api/intake/webhook/whatsapp` : null
 
   const { count: activeUsers } = await rls.from('profiles').select('id', { count: 'exact', head: true }).eq('org_id', profile.org_id).eq('is_active', true)
-  const { count: activeWithMobile } = await rls.from('profiles').select('id', { count: 'exact', head: true }).eq('org_id', profile.org_id).eq('is_active', true).not('mobile_number', 'is', null)
+  // Numbers now live in profile_mobile_numbers (many:1 as of migration
+  // 20240101000140) — count DISTINCT active profiles with at least one
+  // number, not rows, so a profile with several numbers is still counted
+  // once.
+  const { data: activeProfileIdRows } = await rls.from('profiles').select('id').eq('org_id', profile.org_id).eq('is_active', true)
+  const activeProfileIds = (activeProfileIdRows ?? []).map((p: { id: string }) => p.id)
+  const { data: mobileRows } = activeProfileIds.length
+    ? await rls.from('profile_mobile_numbers').select('profile_id').eq('org_id', profile.org_id).in('profile_id', activeProfileIds)
+    : { data: [] as { profile_id: string }[] }
+  const activeWithMobile = new Set((mobileRows ?? []).map((r: { profile_id: string }) => r.profile_id)).size
 
   // Webhook health — derived from this channel's own recent audit trail
   // (Part 22's own audit-log verification is what makes this trustworthy).

@@ -69,7 +69,8 @@ describe('Stage 7B — UAT-16 / UAT-19: web vs WhatsApp parity + SLA on a real p
       createTestUser('uat7b-parity-web', 'UAT7B Parity Web Requester'),
       createTestUser('uat7b-parity-wa', 'UAT7B Parity WA Requester'),
     ])
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', waRequester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', waRequester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: waRequester.id, org_id: ORG_ID, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
   }, 60_000)
 
@@ -197,8 +198,10 @@ describe('Stage 7B — UAT-18: assignment/business-rules routing on real staffed
       createTestUser('uat7b-assign-hr', 'UAT7B Assignment HR Requester'),
       createTestUser('uat7b-assign-agent', 'UAT7B Assignment Rule Agent'),
     ])
-    await admin.from('profiles').update({ mobile_number: '9700100002', whatsapp_enabled: true, is_active: true }).eq('id', itRequester.id)
-    await admin.from('profiles').update({ mobile_number: '9700100003', whatsapp_enabled: true, is_active: true }).eq('id', hrRequester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', itRequester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', hrRequester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: itRequester.id, org_id: ORG_ID, mobile_number: '9700100002' })
+    await admin.from('profile_mobile_numbers').insert({ profile_id: hrRequester.id, org_id: ORG_ID, mobile_number: '9700100003' })
     await admin.from('profiles').update({ role: 'agent' }).eq('id', ruleAgent.id)
     mockedCreateClient.mockResolvedValue(admin as never)
 
@@ -315,7 +318,8 @@ describe('Stage 7B — UAT-18: assignment/business-rules routing on real staffed
     const mock = createMockGraphFetch()
     mock.setMediaFixture('uat7b-rule-media', { mimeType: 'image/jpeg', buffer: JPEG_BYTES })
     const ruleRequester = await createTestUser('uat7b-assign-rule-req', 'UAT7B Assignment Rule Requester')
-    await admin.from('profiles').update({ mobile_number: '9700100004', whatsapp_enabled: true, is_active: true }).eq('id', ruleRequester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', ruleRequester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: ruleRequester.id, org_id: ORG_ID, mobile_number: '9700100004' })
     const senderMeta = '919700100004'
     const send = async (rawBody: string) =>
       processWhatsAppWebhookPayload({ admin: admin as never, rawBody, signatureHeader: signPayload(rawBody, wa.appSecret), fetchImpl: mock.fetchImpl })

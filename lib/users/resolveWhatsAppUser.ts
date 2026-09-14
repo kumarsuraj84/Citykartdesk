@@ -17,10 +17,14 @@
 // module intentionally does not, and must not, offer a phone-only overload
 // that could paper over that step.
 //
-// The User Master (`profiles`) remains the single source of truth — there
-// is no second "WhatsApp users" table to keep in sync. Changing
-// profiles.mobile_number immediately changes what this resolver returns for
-// both the old and the new number, with nothing else to update.
+// The User Master (`profiles`) remains the single source of truth for WHO a
+// number belongs to, but as of migration 20240101000140 a number itself is
+// recorded in the `profile_mobile_numbers` child table, not a `profiles`
+// column — several numbers can point at the same profile (a shared "store"
+// login used by several people's phones, e.g. 2 managers + several
+// cashiers all texting on behalf of the same requester account). Adding or
+// removing a row there immediately changes what this resolver returns,
+// with nothing else to update.
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { normalizeMobileNumber } from './mobile'
@@ -60,8 +64,8 @@ export type WhatsAppResolveResult =
  * revealing whether a *different* org has a matching number — see the
  * Security Review section of the Stage 2 report):
  *   1. the input normalizes to a valid Indian mobile number
- *   2. a profile in `orgId` has that exact profiles.mobile_number
- *   3. that profile is_active
+ *   2. a `profile_mobile_numbers` row in `orgId` has that exact number
+ *   3. that row's profile is_active
  *   4. that profile has whatsapp_enabled
  *
  * `client` defaults to the service-role admin client — the shape a future
@@ -82,11 +86,28 @@ export async function resolveUserByWhatsAppNumber(params: {
   const normalized = normalizeMobileNumber(phoneNumber)
   if (!normalized.ok) return { ok: false, reason: 'invalid_phone' }
 
+  // Step 1: which profile (if any) owns this number, in this org. The
+  // (org_id, mobile_number) unique index on profile_mobile_numbers
+  // guarantees at most one row here even though many rows can now share a
+  // profile_id — the many:1 change only affects how many numbers a profile
+  // can have, never how many profiles a given number can resolve to.
+  const { data: mapping } = await db
+    .from('profile_mobile_numbers')
+    .select('profile_id')
+    .eq('org_id', orgId)
+    .eq('mobile_number', normalized.normalized)
+    .maybeSingle()
+
+  if (!mapping) return { ok: false, reason: 'not_registered' }
+
+  // Step 2: that profile's own eligibility. Re-scoped by org_id too —
+  // defense in depth, never trust the FK alone (same philosophy as every
+  // other lookup in this file).
   const { data: profile } = await db
     .from('profiles')
     .select('id, org_id, full_name, employee_id, role, store_id, department_id, location_id, is_active, whatsapp_enabled')
+    .eq('id', mapping.profile_id)
     .eq('org_id', orgId)
-    .eq('mobile_number', normalized.normalized)
     .maybeSingle()
 
   if (!profile) return { ok: false, reason: 'not_registered' }

@@ -43,7 +43,8 @@ describe('Stage 7B — UAT-31: outbound Meta send failures (429, 5xx, persistent
     const wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-a`, orgId: fx.orgId, phoneNumberId: `1564${RUN_TAG.slice(-6)}` })
     const requester = await createTestUser('uat7b-meta-429-req', 'UAT7B Meta 429 Requester')
     const sender = '9700600001'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
 
     try {
@@ -82,7 +83,8 @@ describe('Stage 7B — UAT-31: outbound Meta send failures (429, 5xx, persistent
     const wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-b`, orgId: fx.orgId, phoneNumberId: `1565${RUN_TAG.slice(-6)}` })
     const requester = await createTestUser('uat7b-meta-persist-req', 'UAT7B Meta Persistent Failure Requester')
     const sender = '9700600002'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
 
     try {
@@ -127,7 +129,8 @@ describe('Stage 7B — UAT-32: webhook security — invalid signature and invali
     const wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-c`, orgId: fx.orgId, phoneNumberId: `1566${RUN_TAG.slice(-6)}` })
     const requester = await createTestUser('uat7b-meta-sig-req', 'UAT7B Invalid Signature Requester')
     const sender = '9700600003'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
 
     try {

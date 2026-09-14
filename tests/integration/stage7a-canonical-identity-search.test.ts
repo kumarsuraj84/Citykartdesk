@@ -54,10 +54,12 @@ function log(label: string, value: unknown) { console.log(`[STAGE7a-EVIDENCE] ${
 async function makePersona(admin: ReturnType<typeof getAdmin>, label: string, mobile: string | null, opts: { active?: boolean; whatsappEnabled?: boolean } = {}): Promise<TestUser> {
   const user = await createTestUser(`${RUN_TAG}-${label}`, `UAT7a ${label}`)
   await admin.from('profiles').update({
-    mobile_number: mobile,
     whatsapp_enabled: opts.whatsappEnabled ?? true,
     is_active: opts.active ?? true,
   }).eq('id', user.id)
+  if (mobile) {
+    await admin.from('profile_mobile_numbers').insert({ profile_id: user.id, org_id: ORG_ID, mobile_number: mobile })
+  }
   return user
 }
 
@@ -276,13 +278,14 @@ describe('STAGE 7 UAT (Agent 7a) — Step 6 canonical flow / Step 7 identity / S
     expect(before.outcome).toMatchObject({ kind: 'processed', state: 'awaiting_service' })
     const oldConversationId = (before.outcome as { conversationId: string }).conversationId
 
-    // Direct, tagged, reversible profile UPDATE — the admin action under test.
-    await admin.from('profiles').update({ mobile_number: NEW }).eq('id', persona.id)
+    // Direct, tagged, reversible mobile-number change (remove old, add new)
+    // — the admin action under test.
+    await admin.from('profile_mobile_numbers').delete().eq('profile_id', persona.id).eq('mobile_number', OLD)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: persona.id, org_id: ORG_ID, mobile_number: NEW })
     log('UAT-26/mobile-changed', { requesterId: persona.id, from: OLD, to: NEW })
 
     // Old number's conversation still sits mid-flow in the DB, but the OLD
-    // number itself no longer resolves to ANY profile (mobile_number is the
-    // sole source of truth — no separate WhatsApp mapping table).
+    // number itself no longer resolves to ANY profile.
     const oldAfter = await send(meta(OLD), 'IT Support', `${RUN_TAG}-uat26-old-2`)
     expect(oldAfter.outcome).toMatchObject({ kind: 'rejected_sender', reason: 'not_registered' })
     const { data: oldConvAfter } = await admin.from('request_conversations').select('state').eq('id', oldConversationId).single()

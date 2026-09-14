@@ -69,7 +69,8 @@ describe('Stage 7B — UAT-33: audit logging completeness across all required wh
     const wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-proc`, orgId: fx.orgId, phoneNumberId: `1570${RUN_TAG.slice(-6)}` })
     const requester = await createTestUser('uat7b-audit-proc', 'UAT7B Audit Processed')
     const sender = '9700700001'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
     try {
       const mock = createMockGraphFetch()
@@ -112,7 +113,8 @@ describe('Stage 7B — UAT-33: audit logging completeness across all required wh
     const wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-uns`, orgId: fx.orgId, phoneNumberId: `1572${RUN_TAG.slice(-6)}` })
     const requester = await createTestUser('uat7b-audit-uns', 'UAT7B Audit Unsupported')
     const sender = '9700700002'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
     try {
       const mock = createMockGraphFetch()
@@ -135,7 +137,8 @@ describe('Stage 7B — UAT-33: audit logging completeness across all required wh
     const wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-rl`, orgId: fx.orgId, phoneNumberId: `1573${RUN_TAG.slice(-6)}` })
     const requester = await createTestUser('uat7b-audit-rl', 'UAT7B Audit Rate Limited')
     const sender = '9700700003'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
     try {
       // TARGETED-REAL-CALL: pre-fills the real, production rateLimit()
@@ -241,7 +244,8 @@ describe('Stage 7B — UAT-33: audit logging completeness across all required wh
     const wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-snd`, orgId: fx.orgId, phoneNumberId: `1577${RUN_TAG.slice(-6)}` })
     const requester = await createTestUser('uat7b-audit-snd', 'UAT7B Audit Send Failed')
     const sender = '9700700008'
-    await admin.from('profiles').update({ mobile_number: sender, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: sender })
     mockedCreateClient.mockResolvedValue(admin as never)
     try {
       const mock = createMockGraphFetch()

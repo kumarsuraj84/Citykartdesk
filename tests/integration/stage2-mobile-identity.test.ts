@@ -2,6 +2,11 @@
  * Stage 2 — mobile identity on the User Master + resolveUserByWhatsAppNumber().
  * Real local Supabase Postgres/Auth — same pattern as Stage 1/1.1's suites.
  *
+ * Extended for migration 20240101000140 (many:1 — a profile can have
+ * several mobile numbers, e.g. every cashier's phone for a shared store
+ * login). Numbers now live in `profile_mobile_numbers`, not a `profiles`
+ * column.
+ *
  * Covers AC-2.1 through AC-2.11 (AC-2.12, the full regression run, is the
  * final `npx vitest run` at the end of this stage, not a test in this file).
  */
@@ -17,7 +22,7 @@ vi.mock('next/headers', () => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), refresh: vi.fn() }))
 
 import { createClient } from '@/lib/supabase/server'
-import { updateUserProfile, inviteUser, bulkCreateUsers } from '@/lib/actions/admin/users'
+import { updateUserProfile, inviteUser, bulkCreateUsers, addMobileNumber, removeMobileNumber } from '@/lib/actions/admin/users'
 import { resolveUserByWhatsAppNumber } from '@/lib/users/resolveWhatsAppUser'
 
 const mockedCreateClient = vi.mocked(createClient)
@@ -68,7 +73,8 @@ async function setup(): Promise<Fx> {
 
 /** Creates a profile directly (bypassing inviteUser) for fixtures that don't
  *  need to exercise the invite action itself — e.g. seeding an Org B user
- *  for the cross-org resolver test. */
+ *  for the cross-org resolver test. `mobileNumber` (if given) is inserted
+ *  into profile_mobile_numbers as this profile's one starting number. */
 async function seedProfile(fx: Fx, opts: { orgId: string; fullName: string; mobileNumber?: string | null; isActive?: boolean; whatsappEnabled?: boolean }): Promise<string> {
   const admin = getAdmin()
   const user = await createTestUser(`stage2-seed-${fx.createdUserIds.length}`, opts.fullName)
@@ -78,13 +84,26 @@ async function seedProfile(fx: Fx, opts: { orgId: string; fullName: string; mobi
     .update({
       org_id: opts.orgId,
       full_name: opts.fullName,
-      mobile_number: opts.mobileNumber ?? null,
       is_active: opts.isActive ?? true,
       whatsapp_enabled: opts.whatsappEnabled ?? true,
     })
     .eq('id', user.id)
   if (error) throw new Error(`[stage2] seedProfile: ${error.message}`)
+  if (opts.mobileNumber) {
+    const { error: mobileErr } = await admin
+      .from('profile_mobile_numbers')
+      .insert({ profile_id: user.id, org_id: opts.orgId, mobile_number: opts.mobileNumber })
+    if (mobileErr) throw new Error(`[stage2] seedProfile mobile: ${mobileErr.message}`)
+  }
   return user.id
+}
+
+/** All numbers currently on a profile, for assertions — order not
+ *  guaranteed, so tests compare as a set. */
+async function mobileNumbersOf(orgId: string, profileId: string): Promise<string[]> {
+  const admin = getAdmin()
+  const { data } = await admin.from('profile_mobile_numbers').select('mobile_number').eq('org_id', orgId).eq('profile_id', profileId)
+  return (data ?? []).map((r: { mobile_number: string }) => r.mobile_number)
 }
 
 describe('Stage 2 — mobile identity & WhatsApp user resolution', () => {
@@ -112,10 +131,10 @@ describe('Stage 2 — mobile identity & WhatsApp user resolution', () => {
     })
     expect(result.error).toBeUndefined()
 
-    const { data: created } = await admin.from('profiles').select('id, mobile_number, whatsapp_enabled').eq('full_name', 'Rahul Kumar').eq('org_id', fx.orgAId).single()
-    expect(created?.mobile_number).toBe('9876543210')
+    const { data: created } = await admin.from('profiles').select('id, whatsapp_enabled').eq('full_name', 'Rahul Kumar').eq('org_id', fx.orgAId).single()
     expect(created?.whatsapp_enabled).toBe(true)
     if (created) fx.createdUserIds.push(created.id)
+    expect(await mobileNumbersOf(fx.orgAId, created!.id)).toEqual(['9876543210'])
   })
 
   it('inviteUser rejects a malformed mobile number and creates no auth account at all', async () => {
@@ -152,56 +171,105 @@ describe('Stage 2 — mobile identity & WhatsApp user resolution', () => {
     expect((authList?.users ?? []).some((u) => u.email === dupEmail)).toBe(false)
   })
 
-  // ── AC-2.2 — edit / remove mobile, atomicity ──────────────────────────────
+  // ── AC-2.2 — add / remove mobile numbers, many:1 ──────────────────────────
 
-  it('AC-2.2: updateUserProfile can add, change, and remove a user\'s mobile number', async () => {
+  it('AC-2.2: addMobileNumber/removeMobileNumber can add and remove a user\'s mobile numbers', async () => {
     const userId = await seedProfile(fx, { orgId: fx.orgAId, fullName: 'Edit Target', mobileNumber: null })
 
     actAs(fx.adminA)
-    const r1 = await updateUserProfile(userId, { mobile_number: '9700000001' })
+    const r1 = await addMobileNumber(userId, '9700000001')
     expect(r1.error).toBeUndefined()
-    let row = (await admin.from('profiles').select('mobile_number').eq('id', userId).single()).data
-    expect(row?.mobile_number).toBe('9700000001')
+    expect(await mobileNumbersOf(fx.orgAId, userId)).toEqual(['9700000001'])
 
-    const r2 = await updateUserProfile(userId, { mobile_number: '9700000002' })
+    const r2 = await addMobileNumber(userId, '9700000002')
     expect(r2.error).toBeUndefined()
-    row = (await admin.from('profiles').select('mobile_number').eq('id', userId).single()).data
-    expect(row?.mobile_number).toBe('9700000002')
+    expect(await mobileNumbersOf(fx.orgAId, userId)).toEqual(expect.arrayContaining(['9700000001', '9700000002']))
 
-    const r3 = await updateUserProfile(userId, { mobile_number: '' })
+    const r3 = await removeMobileNumber(userId, '9700000001')
     expect(r3.error).toBeUndefined()
-    row = (await admin.from('profiles').select('mobile_number').eq('id', userId).single()).data
-    expect(row?.mobile_number).toBeNull()
+    expect(await mobileNumbersOf(fx.orgAId, userId)).toEqual(['9700000002'])
+
+    const r4 = await removeMobileNumber(userId, '9700000002')
+    expect(r4.error).toBeUndefined()
+    expect(await mobileNumbersOf(fx.orgAId, userId)).toEqual([])
   })
 
-  it('updateUserProfile rejects a duplicate mobile but re-saving a user\'s own unchanged number never false-positives', async () => {
-    const userId = await seedProfile(fx, { orgId: fx.orgAId, fullName: 'Self Save', mobileNumber: '9700000010' })
+  it('a profile can have several numbers at once, and removing one does not affect the others', async () => {
+    const userId = await seedProfile(fx, { orgId: fx.orgAId, fullName: 'Store Account (Many Numbers)', mobileNumber: null })
+
+    actAs(fx.adminA)
+    for (const n of ['9700000101', '9700000102', '9700000103']) {
+      const r = await addMobileNumber(userId, n)
+      expect(r.error).toBeUndefined()
+    }
+    expect(await mobileNumbersOf(fx.orgAId, userId)).toEqual(expect.arrayContaining(['9700000101', '9700000102', '9700000103']))
+
+    // Every number resolves to the SAME profile (the shared store-account scenario).
+    for (const n of ['9700000101', '9700000102', '9700000103']) {
+      const result = await resolveUserByWhatsAppNumber({ orgId: fx.orgAId, phoneNumber: n })
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.profile.profileId).toBe(userId)
+    }
+
+    const removeResult = await removeMobileNumber(userId, '9700000102')
+    expect(removeResult.error).toBeUndefined()
+
+    // The removed number no longer resolves; the other two are untouched.
+    expect(await resolveUserByWhatsAppNumber({ orgId: fx.orgAId, phoneNumber: '9700000102' })).toEqual({ ok: false, reason: 'not_registered' })
+    for (const n of ['9700000101', '9700000103']) {
+      const result = await resolveUserByWhatsAppNumber({ orgId: fx.orgAId, phoneNumber: n })
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.profile.profileId).toBe(userId)
+    }
+  })
+
+  it('a number removed from one profile can then be added to a different profile and resolves there', async () => {
+    const profileA = await seedProfile(fx, { orgId: fx.orgAId, fullName: 'Moved Number Origin', mobileNumber: '9700000110' })
+    const profileB = await seedProfile(fx, { orgId: fx.orgAId, fullName: 'Moved Number Destination', mobileNumber: null })
+
+    actAs(fx.adminA)
+    const removeResult = await removeMobileNumber(profileA, '9700000110')
+    expect(removeResult.error).toBeUndefined()
+
+    const addResult = await addMobileNumber(profileB, '9700000110')
+    expect(addResult.error).toBeUndefined()
+
+    const result = await resolveUserByWhatsAppNumber({ orgId: fx.orgAId, phoneNumber: '9700000110' })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.profile.profileId).toBe(profileB)
+  })
+
+  it('addMobileNumber rejects a number already on a different profile, but gives a distinct message for re-adding a number already on the SAME profile', async () => {
+    const ownerId = await seedProfile(fx, { orgId: fx.orgAId, fullName: 'Self Save', mobileNumber: '9700000010' })
     const otherId = await seedProfile(fx, { orgId: fx.orgAId, fullName: 'Other Owner', mobileNumber: '9700000011' })
 
     actAs(fx.adminA)
-    // Re-saving the same number for the same user must succeed.
-    const selfSave = await updateUserProfile(userId, { mobile_number: '9700000010' })
-    expect(selfSave.error).toBeUndefined()
+    // Re-adding a number the profile already has is a friendly, distinct
+    // error — never silently a no-op, and never the generic cross-user
+    // duplicate message.
+    const selfReAdd = await addMobileNumber(ownerId, '9700000010')
+    expect(selfReAdd.error).toBe('This number is already added to this user.')
 
-    // Attempting to take someone else's number must fail.
-    const stealAttempt = await updateUserProfile(userId, { mobile_number: '9700000011' })
+    // Attempting to take someone else's number must fail with the
+    // cross-user duplicate message.
+    const stealAttempt = await addMobileNumber(ownerId, '9700000011')
     expect(stealAttempt.error).toBe('This mobile number is already registered to another user in this organization.')
     void otherId
   })
 
   // ── AC-2.5 — WhatsApp toggle independence ─────────────────────────────────
 
-  it('AC-2.5: disabling whatsapp_enabled does not touch mobile_number, is_active, or normal DESK account state', async () => {
+  it('AC-2.5: disabling whatsapp_enabled does not touch mobile numbers, is_active, or normal DESK account state', async () => {
     const userId = await seedProfile(fx, { orgId: fx.orgAId, fullName: 'Toggle Target', mobileNumber: '9700000020', whatsappEnabled: true })
 
     actAs(fx.adminA)
     const r = await updateUserProfile(userId, { whatsapp_enabled: false })
     expect(r.error).toBeUndefined()
 
-    const row = (await admin.from('profiles').select('mobile_number, is_active, whatsapp_enabled').eq('id', userId).single()).data
+    const row = (await admin.from('profiles').select('is_active, whatsapp_enabled').eq('id', userId).single()).data
     expect(row?.whatsapp_enabled).toBe(false)
-    expect(row?.mobile_number).toBe('9700000020') // untouched
     expect(row?.is_active).toBe(true) // untouched
+    expect(await mobileNumbersOf(fx.orgAId, userId)).toEqual(['9700000020']) // untouched
   })
 
   // ── Resolver: AC-2.6, AC-2.7, AC-2.8 ──────────────────────────────────────
@@ -257,7 +325,7 @@ describe('Stage 2 — mobile identity & WhatsApp user resolution', () => {
     expect(after.ok).toBe(true)
   })
 
-  it('a NULL mobile number never resolves (not_registered), for a normal existing user', async () => {
+  it('a user with no mobile number never resolves (not_registered)', async () => {
     await seedProfile(fx, { orgId: fx.orgAId, fullName: 'No Mobile User', mobileNumber: null })
     // There's no number to even attempt — confirms the absence itself is a
     // clean "not registered" outcome elsewhere, not a crash/exception path.
@@ -294,7 +362,7 @@ describe('Stage 2 — mobile identity & WhatsApp user resolution', () => {
 
   // ── AC-2.9 — the headline mobile-change test ──────────────────────────────
 
-  it('AC-2.9: changing the User Master mobile immediately unauthorizes the old number and authorizes the new one, with no second mapping to update', async () => {
+  it('AC-2.9: changing the User Master mobile (remove old, add new) immediately unauthorizes the old number and authorizes the new one', async () => {
     const userId = await seedProfile(fx, { orgId: fx.orgAId, fullName: 'Rahul Mobile Change', mobileNumber: '9876500000' })
 
     const beforeOld = await resolveUserByWhatsAppNumber({ orgId: fx.orgAId, phoneNumber: '9876500000' })
@@ -302,8 +370,10 @@ describe('Stage 2 — mobile identity & WhatsApp user resolution', () => {
     if (beforeOld.ok) expect(beforeOld.profile.profileId).toBe(userId)
 
     actAs(fx.adminA)
-    const changeResult = await updateUserProfile(userId, { mobile_number: '9812345000' })
-    expect(changeResult.error).toBeUndefined()
+    const removeResult = await removeMobileNumber(userId, '9876500000')
+    expect(removeResult.error).toBeUndefined()
+    const addResult = await addMobileNumber(userId, '9812345000')
+    expect(addResult.error).toBeUndefined()
 
     const afterOld = await resolveUserByWhatsAppNumber({ orgId: fx.orgAId, phoneNumber: '9876500000' })
     expect(afterOld).toEqual({ ok: false, reason: 'not_registered' })
@@ -325,15 +395,15 @@ describe('Stage 2 — mobile identity & WhatsApp user resolution', () => {
       expect(result.data?.imported).toBe(2)
       expect(result.data?.errors).toEqual([])
 
-      const { data: one } = await admin.from('profiles').select('id, mobile_number, whatsapp_enabled').eq('full_name', 'Bulk One').eq('org_id', fx.orgAId).single()
-      expect(one?.mobile_number).toBe('9700001001')
+      const { data: one } = await admin.from('profiles').select('id, whatsapp_enabled').eq('full_name', 'Bulk One').eq('org_id', fx.orgAId).single()
       expect(one?.whatsapp_enabled).toBe(true)
       if (one) fx.createdUserIds.push(one.id)
+      expect(await mobileNumbersOf(fx.orgAId, one!.id)).toEqual(['9700001001'])
 
-      const { data: two } = await admin.from('profiles').select('id, mobile_number, whatsapp_enabled').eq('full_name', 'Bulk Two').eq('org_id', fx.orgAId).single()
-      expect(two?.mobile_number).toBeNull()
+      const { data: two } = await admin.from('profiles').select('id, whatsapp_enabled').eq('full_name', 'Bulk Two').eq('org_id', fx.orgAId).single()
       expect(two?.whatsapp_enabled).toBe(true) // schema default, column left unset
       if (two) fx.createdUserIds.push(two.id)
+      expect(await mobileNumbersOf(fx.orgAId, two!.id)).toEqual([])
     })
 
     it('rejects an invalid mobile number row without blocking the rest of the batch', async () => {
@@ -393,15 +463,15 @@ describe('Stage 2 — mobile identity & WhatsApp user resolution', () => {
     })
   })
 
-  // ── AC-2.11 — existing NULL-mobile users are unaffected ───────────────────
+  // ── AC-2.11 — existing no-mobile users are unaffected ─────────────────────
 
   it('AC-2.11: a profile with no mobile number behaves normally in every other respect (read/update unrelated fields)', async () => {
     const userId = await seedProfile(fx, { orgId: fx.orgAId, fullName: 'Legacy No-Mobile User', mobileNumber: null })
     actAs(fx.adminA)
     const result = await updateUserProfile(userId, { job_title: 'Legacy Role' })
     expect(result.error).toBeUndefined()
-    const row = (await admin.from('profiles').select('job_title, mobile_number').eq('id', userId).single()).data
+    const row = (await admin.from('profiles').select('job_title').eq('id', userId).single()).data
     expect(row?.job_title).toBe('Legacy Role')
-    expect(row?.mobile_number).toBeNull()
+    expect(await mobileNumbersOf(fx.orgAId, userId)).toEqual([])
   })
 })

@@ -51,7 +51,8 @@ describe('Stage 5 — full IT/Printer example, real webhook pipeline', () => {
     fx = await setupConversationFixture({ runTag: RUN_TAG, fields: FIELDS })
     wa = await setupWhatsAppChannelFixture({ runTag: RUN_TAG, orgId: fx.orgId, phoneNumberId: `1555${RUN_TAG.slice(-6)}` })
     requester = await createTestUser('stage5-e2e-requester', 'Stage5 E2E Requester')
-    await admin.from('profiles').update({ mobile_number: SENDER, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: SENDER })
     mockedCreateClient.mockResolvedValue(admin as never)
   }, 60_000)
 

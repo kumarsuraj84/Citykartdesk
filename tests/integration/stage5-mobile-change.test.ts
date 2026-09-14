@@ -1,9 +1,11 @@
 /**
  * Stage 5, Step 29 — Stage 2's mobile-number-is-the-only-source-of-truth
  * behavior, proven through the REAL Stage 5 webhook adapter (not by calling
- * resolveUserByWhatsAppNumber directly). Changing profiles.mobile_number in
- * DESK immediately changes WhatsApp eligibility with no separate WhatsApp
- * mapping to update (AC-5.20).
+ * resolveUserByWhatsAppNumber directly). Changing a profile's mobile number
+ * in DESK (as of migration 20240101000140, "changing" means removing the
+ * old row from profile_mobile_numbers and adding a new one) immediately
+ * changes WhatsApp eligibility with no separate WhatsApp mapping to update
+ * (AC-5.20).
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { getAdmin, createTestUser, type TestUser } from '../setup/fixtures-d03'
@@ -37,7 +39,8 @@ describe('Stage 5 — mobile-number change immediately changes WhatsApp eligibil
     fx = await setupConversationFixture({ runTag: RUN_TAG, fields: FIELDS })
     wa = await setupWhatsAppChannelFixture({ runTag: RUN_TAG, orgId: fx.orgId, phoneNumberId: `1555${RUN_TAG.slice(-6)}` })
     requester = await createTestUser('stage5-mobile-requester', 'Stage5 Mobile Change')
-    await admin.from('profiles').update({ mobile_number: OLD_NUMBER, whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requester.id)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: OLD_NUMBER })
     mockedCreateClient.mockResolvedValue(admin as never)
   }, 60_000)
 
@@ -60,9 +63,10 @@ describe('Stage 5 — mobile-number change immediately changes WhatsApp eligibil
     const before = await send(`91${OLD_NUMBER}`, 'Hi')
     expect(before.outcome).toMatchObject({ kind: 'processed', state: 'awaiting_service' })
 
-    // Admin updates the DESK mobile number (source of truth) — no WhatsApp
-    // mapping table exists to also update.
-    await admin.from('profiles').update({ mobile_number: NEW_NUMBER }).eq('id', requester.id)
+    // Admin changes the DESK mobile number (source of truth) — remove the
+    // old row, add the new one. No separate WhatsApp mapping to update.
+    await admin.from('profile_mobile_numbers').delete().eq('profile_id', requester.id).eq('mobile_number', OLD_NUMBER)
+    await admin.from('profile_mobile_numbers').insert({ profile_id: requester.id, org_id: fx.orgId, mobile_number: NEW_NUMBER })
 
     // The OLD number no longer resolves to this (or any) requester.
     const oldAfter = await send(`91${OLD_NUMBER}`, 'Hi')
