@@ -107,7 +107,19 @@ app.vault_key = ...` — run that before `CREATE EXTENSION supabase_vault`.
 2. Run `postgres-extensions/bootstrap-roles.sql` — creates the
    `anon`/`authenticated`/`service_role` Postgres roles PostgREST's
    role-switching model requires, and grants them + `citykart_desk_app` on
-   `public`.
+   `public`. **On a shared cluster, verify `service_role` actually has
+   `BYPASSRLS` after running this** (`SELECT rolbypassrls FROM pg_roles WHERE
+   rolname = 'service_role'`) — roles are cluster-wide, not per-database, so
+   if a role with that name already existed (from another app, or a prior
+   partial deployment attempt) the script's `CREATE ROLE IF NOT EXISTS` guard
+   skips creating it and silently leaves whatever attributes it already had.
+   The symptom is severe and silent: every `createAdminClient()` write in the
+   app (approvals, notifications, any admin action) appears to succeed —
+   PostgREST returns 200 — but actually updates zero rows, because it's
+   running under normal RLS instead of bypassing it. This happened on the
+   first deployment to `10.0.1.12` and was only caught by testing a bulk
+   write and noticing the row count. Fix: `ALTER ROLE service_role
+   BYPASSRLS;` (safe, idempotent, no downtime).
 3. `CREATE SCHEMA auth; CREATE EXTENSION pgcrypto; CREATE EXTENSION
    "uuid-ossp";` — GoTrue's own migrations only create tables inside `auth`,
    not the schema itself.
