@@ -434,30 +434,40 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
     // Queue view: team work (RLS scopes to team). Exclude own non-intake
     // submissions, but intake-converted requests (where the approver becomes
     // requester_id) must still appear — they're team work, not self-service.
-    const { data: intakeByMe } = await supabase
-      .from('requests')
-      .select('id')
-      .eq('requester_id', userId)
-      .filter('source_metadata', 'cs', '{"created_via":"intake"}')
-    const intakeByMeIds = (intakeByMe ?? []).map((r) => (r as { id: string }).id)
+    //
+    // Both "My Requests" (assignedTo === 'me') and "Team Queue" render through
+    // this same branch, distinguished only by the assignedTo filter applied
+    // below. The self-request/collaborator exclusions only make sense for the
+    // team-browse case ("don't mix my own personal ticket into the team's work
+    // list") — a ticket a technician raised for themselves and is now assigned
+    // to work on is still live work assigned to them and must show up in their
+    // own queue, not vanish because they happen to also be the requester.
+    if (assignedTo !== 'me') {
+      const { data: intakeByMe } = await supabase
+        .from('requests')
+        .select('id')
+        .eq('requester_id', userId)
+        .filter('source_metadata', 'cs', '{"created_via":"intake"}')
+      const intakeByMeIds = (intakeByMe ?? []).map((r) => (r as { id: string }).id)
 
-    if (intakeByMeIds.length > 0) {
-      query = query.or(`requester_id.neq.${userId},id.in.(${intakeByMeIds.join(',')})`)
-    } else {
-      query = query.neq('requester_id', userId)
-    }
+      if (intakeByMeIds.length > 0) {
+        query = query.or(`requester_id.neq.${userId},id.in.(${intakeByMeIds.join(',')})`)
+      } else {
+        query = query.neq('requester_id', userId)
+      }
 
-    // Also exclude anything the user collaborates on — collaborated requests
-    // belong in the dedicated "Collaborated" tab only, kept as a distinct facet
-    // from "raised by me" (My Requests) and "my team's work" (Team Queue) so no
-    // ticket is duplicated across tabs.
-    const { data: collabRows } = await supabase
-      .from('request_collaborators')
-      .select('request_id')
-      .eq('user_id', userId)
-    const collabIds = (collabRows ?? []).map((r) => r.request_id)
-    if (collabIds.length > 0) {
-      query = query.not('id', 'in', `(${collabIds.join(',')})`)
+      // Also exclude anything the user collaborates on — collaborated requests
+      // belong in the dedicated "Collaborated" tab only, kept as a distinct facet
+      // from "raised by me" (My Requests) and "my team's work" (Team Queue) so no
+      // ticket is duplicated across tabs.
+      const { data: collabRows } = await supabase
+        .from('request_collaborators')
+        .select('request_id')
+        .eq('user_id', userId)
+      const collabIds = (collabRows ?? []).map((r) => r.request_id)
+      if (collabIds.length > 0) {
+        query = query.not('id', 'in', `(${collabIds.join(',')})`)
+      }
     }
     // Sort: user-selected or default SLA urgency
     if (opts.sort && opts.sort !== 'updated_at') {
