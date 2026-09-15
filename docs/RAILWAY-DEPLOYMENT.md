@@ -53,7 +53,7 @@ there's nothing else to configure manually for buckets.
 
 `supabase/seed.sql` was written for **local dev only**. Its "ADMIN ACCOUNT"
 section creates the first user by inserting directly into `auth.users` with a
-**hardcoded password** (`Password!!`) baked into the file. That's fine on a
+**hardcoded password** (`Welcome@citykart@123`) baked into the file. That's fine on a
 throwaway local Docker instance; it is **not safe to run as-is against
 production** — anyone who's ever seen this repo's history knows that password.
 

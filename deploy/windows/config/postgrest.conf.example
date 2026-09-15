@@ -1,0 +1,10 @@
+db-uri = "postgres://citykart_desk_app:<DB_PASSWORD>@localhost:5432/citykart_desk"
+db-schemas = "public"
+db-anon-role = "anon"
+db-pool = 10
+
+server-host = "0.0.0.0"
+server-port = 3001
+
+jwt-secret = "<JWT_SECRET>"
+jwt-aud = "authenticated"

@@ -1,0 +1,6 @@
+{
+  "name": "fs-xattr",
+  "version": "0.4.0",
+  "description": "Windows-compatible sidecar-file shim for fs-xattr (NTFS has no getxattr/setxattr syscall)",
+  "main": "index.js"
+}

@@ -1,0 +1,4 @@
+comment = 'Windows-compatible Vault shim: pgcrypto-backed encrypted secret storage, same vault.* interface as Supabase Vault'
+default_version = '1.0'
+relocatable = false
+requires = 'pgcrypto'
