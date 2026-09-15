@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
+import { resilientFetch } from '@/lib/supabase/resilient-fetch'
 
 /**
  * Service-role client for server-side operations that must bypass RLS:
@@ -19,6 +20,7 @@ export function createAdminClient() {
         autoRefreshToken: false,
         persistSession: false,
       },
+      global: { fetch: resilientFetch },
     }
   )
 }
