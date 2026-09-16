@@ -99,6 +99,23 @@ Test-Check "GOTRUE_JWT_VALID_METHODS includes HS256 whenever GOTRUE_JWT_KEYS is 
     return $true
 }
 
+# 6. service_role (and anon/authenticated) must have USAGE on the storage
+#    schema. Table-level grants alone (SELECT/INSERT/etc. on storage.objects,
+#    storage.buckets, ...) are not sufficient without this - a Postgres
+#    schema-USAGE gate sits in front of every table-level grant. Found
+#    missing on Main despite table-level grants being fully correct and
+#    identical to Local's known-working setup: every Storage operation
+#    (create bucket, upload, download, delete) failed with "permission
+#    denied for schema storage" until this was granted. Never caught before
+#    because nothing had actually functionally tested Storage end-to-end.
+Test-Check "service_role/anon/authenticated have USAGE on the storage schema" {
+    $out = & psql $DbUri -t -c "SELECT rolname FROM pg_roles WHERE rolname IN ('service_role','anon','authenticated') AND NOT has_schema_privilege(rolname, 'storage', 'USAGE');" 2>&1
+    if ($LASTEXITCODE -ne 0) { return "could not query Postgres: $out" }
+    $missing = ($out -join '').Trim()
+    if ($missing -eq '') { return $true }
+    return "missing USAGE on schema storage for: $missing - run: GRANT USAGE ON SCHEMA storage TO anon, authenticated, service_role;"
+}
+
 # 4. request_sequences counter sanity - not a hard failure, just surfaces the
 #    current state so a leftover bulk-test counter isn't missed silently.
 Test-Check "request_sequences.last_no (informational)" {
