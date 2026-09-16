@@ -1,0 +1,6 @@
+# Every run's personas-manifest.json contains real (short-lived) access/
+# refresh tokens for the load-test identities it created - never commit
+# these, and never commit raw per-worker metrics either (regenerable,
+# environment-specific, and large).
+*
+!.gitignore

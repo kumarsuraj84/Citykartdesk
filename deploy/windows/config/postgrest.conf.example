@@ -1,7 +1,22 @@
 db-uri = "postgres://citykart_desk_app:<DB_PASSWORD>@127.0.0.1:5432/citykart_desk?sslmode=disable"
 db-schemas = "public"
 db-anon-role = "anon"
-db-pool = 10
+# CONFIRMED BOTTLENECK under real concurrent load (loadtest/, target-load run
+# against 220 requesters / 60 technicians / ~960 tickets):
+# db-pool = 10 (PostgREST's own default) caps the server at ~10-11
+# concurrent Postgres connections (measured directly via pg_stat_activity -
+# the `authenticator` role held steady at 11 connections under 8-10
+# concurrent load-test workers, never higher, regardless of load). Each
+# createRequestCore() call makes several sequential round trips (service/
+# team lookup, SLA resolution, sequence generation, insert, business-rule
+# evaluation, notification creation) - once ~10 requests are simultaneously
+# mid-call, every subsequent step queues for a free connection, compounding
+# into seconds of total latency even though no individual query is slow
+# (confirmed via pg_stat_statements: every query's own mean time stayed
+# under 65ms). A single unconcurrent worker at the SAME ~960-row data
+# volume measured ~320-375ms end to end - proving this is a concurrency
+# ceiling, not a data-volume/query-cost problem, before raising the pool.
+db-pool = 40
 
 server-host = "0.0.0.0"
 server-port = 3001
