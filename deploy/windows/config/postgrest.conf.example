@@ -1,4 +1,4 @@
-db-uri = "postgres://citykart_desk_app:<DB_PASSWORD>@localhost:5432/citykart_desk"
+db-uri = "postgres://citykart_desk_app:<DB_PASSWORD>@127.0.0.1:5432/citykart_desk?sslmode=disable"
 db-schemas = "public"
 db-anon-role = "anon"
 db-pool = 10

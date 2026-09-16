@@ -173,6 +173,56 @@ app.vault_key = ...` — run that before `CREATE EXTENSION supabase_vault`.
     proxy port (8443) — nothing else needs to be reachable from other LAN
     devices.
 
+## Performance: GoTrue (Auth) was 5-10x slower than it should be
+
+Every GoTrue endpoint that touches Postgres — `/token` (login) and
+`/admin/users` (create) — was taking 1.1-1.3 seconds on `10.0.1.12`, making
+every real login feel slow. `/health` (no DB, no bcrypt) was a normal
+~20ms, and an isolated benchmark of `bcrypt.GenerateFromPassword` at
+GoTrue's actual cost factor (`bcrypt.DefaultCost`, unmodified) took 87ms on
+this same hardware — so neither raw CPU speed nor the bcrypt cost factor
+was the problem. Two real, fixable causes were found and fixed, in
+`services/auth/.env` and `services/postgrest/postgrest.conf`:
+
+1. **`localhost` instead of `127.0.0.1`.** Both `DATABASE_URL`/`db-uri`
+   pointed at `localhost:5432`. On this Windows box, connecting to
+   `localhost:5432` measured **768ms** versus **14ms** for `127.0.0.1:5432`
+   (`Measure-Command { Test-NetConnection -ComputerName localhost -Port
+   5432 }` vs the same with `127.0.0.1`) — the classic IPv6 (`::1`)
+   attempted first, timing out, then falling back to IPv4 gotcha. Always
+   use `127.0.0.1` literally in every service's Postgres connection string
+   here, never `localhost`.
+2. **No explicit `sslmode`.** Neither connection string specified one, so
+   the Go Postgres driver's default negotiation (attempt SSL, fall back to
+   plaintext) added real, measurable overhead against a Postgres instance
+   not configured for SSL. Adding `?sslmode=disable` (safe here — this is
+   loopback-only traffic on `127.0.0.1`, never leaving the box) cut login
+   time further, from ~950ms to ~550-650ms.
+
+Together those two took GoTrue from ~1.1-1.3s down to ~550-650ms per
+request — a real, confirmed improvement, not a guess. The remaining
+~500-600ms did not respond to setting `GOTRUE_DB_MAX_POOL_SIZE`/
+`GOTRUE_DB_CONN_MAX_LIFETIME` explicitly (tried, measured, no change), and
+`pg_stat_activity` polled at 100ms resolution during a live request never
+caught GoTrue's own query as "active" even once — consistent with the cost
+being connection/round-trip overhead rather than query execution time.
+Login and create-user each involve several sequential round trips (lookup,
+insert, session, refresh token), and Windows' loopback TCP stack is
+measurably slower per round-trip than Linux's; that compounding is the
+most likely explanation for what's left, but wasn't independently proven
+here (would need packet-level tracing to confirm) — treat it as the
+leading theory, not a closed case. PostgREST wasn't visibly affected by
+either issue because it holds a warm, persistent connection pool from
+startup (`db-pool = 10`) and pays this cost at most once; GoTrue opens
+connections per-request more often, so it pays it repeatedly.
+
+If you're chasing further Auth latency on a future deployment, start here
+before assuming it's the shared-server CPU contention noted above — that's
+a real, separate, and much larger effect (bulk user creation ran at
+~1.2s/row on `10.0.1.12` under load from another app on the box, versus
+~230ms/row on an unloaded local machine), but it's not the whole story on
+its own, as this section's numbers show.
+
 ## NSSM gotcha: `AppParameters` with spaces
 
 `nssm set <service> AppParameters "<value with spaces>"` does not reliably
