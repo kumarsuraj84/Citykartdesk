@@ -72,6 +72,33 @@ Test-Check "auth/.env uses 127.0.0.1 (not localhost) for DATABASE_URL" {
     return "DATABASE_URL does not use 127.0.0.1 + sslmode=disable: $line"
 }
 
+# 5. If GOTRUE_JWT_KEYS is set, GOTRUE_JWT_VALID_METHODS must include HS256.
+#    GoTrue's ApplyDefaults() derives its JWT parser's accepted-algorithm
+#    allow-list SOLELY from the algorithms of GOTRUE_JWT_KEYS when that var
+#    is non-empty, silently dropping HS256 even though GOTRUE_JWT_SECRET
+#    (and FindPublicKeyByKid()'s no-kid fallback) still expect to serve it.
+#    Without this, every GoTrue-native authenticated endpoint (/user,
+#    /admin/*, /logout, MFA) rejects every pre-existing HS256 token,
+#    including the service-role key used by createAdminClient()'s
+#    .auth.admin.* calls - Invite User, Bulk Import Users, Admin Set
+#    Password, List Users all silently start failing with no error in the
+#    logs. This is NOT a hypothetical: it broke Invite/Bulk-Import/List
+#    Users on Main immediately after GOTRUE_JWT_KEYS was first rolled out
+#    there, and was only caught because the load-testing harness's
+#    admin.auth.admin.createUser() calls started failing. PostgREST/Storage
+#    verification is a separate config and is NOT affected by this.
+Test-Check "GOTRUE_JWT_VALID_METHODS includes HS256 whenever GOTRUE_JWT_KEYS is set" {
+    $envPath = "E:\CK Projects\CitykartDesk\services\auth\.env"
+    if (-not (Test-Path $envPath)) { return "not found: $envPath" }
+    $lines = Get-Content $envPath
+    $keysLine = $lines | Where-Object { $_ -match '^GOTRUE_JWT_KEYS=' }
+    if (-not $keysLine) { return $true } # no JWKS configured - HS256-only, nothing to check
+    $validLine = $lines | Where-Object { $_ -match '^GOTRUE_JWT_VALID_METHODS=' }
+    if (-not $validLine) { return "GOTRUE_JWT_KEYS is set but GOTRUE_JWT_VALID_METHODS is missing - add GOTRUE_JWT_VALID_METHODS=`"ES256,HS256`" (see deploy/windows/config/auth.env.example)" }
+    if ($validLine -notmatch 'HS256') { return "GOTRUE_JWT_VALID_METHODS is set but does not include HS256: $validLine" }
+    return $true
+}
+
 # 4. request_sequences counter sanity - not a hard failure, just surfaces the
 #    current state so a leftover bulk-test counter isn't missed silently.
 Test-Check "request_sequences.last_no (informational)" {

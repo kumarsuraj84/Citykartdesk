@@ -251,7 +251,9 @@ This prints three values, one per consuming service — apply all three
 together, then restart `CitykartAuth`, `CitykartPostgrest`, and
 `CitykartStorage`:
 
-- **`services/auth/.env`**: add the printed `GOTRUE_JWT_KEYS` line.
+- **`services/auth/.env`**: add the printed `GOTRUE_JWT_KEYS` line, **and**
+  add `GOTRUE_JWT_VALID_METHODS="ES256,HS256"` (see "GoTrue admin API /
+  getUser() regression" below — this second line is not optional).
   `GOTRUE_JWT_SECRET` stays exactly as it is.
 - **`services/postgrest/postgrest.conf`**: **replace** the `jwt-secret`
   line with the printed one (a JWKS containing both the legacy secret and
@@ -282,7 +284,53 @@ This was the main risk, and it's verified, not assumed:
 
 Validated end-to-end on Main: an existing browser session, logged in
 *before* this change, continued to load real pages with no forced
-re-login immediately after the restart.
+re-login immediately after the restart. That check exercised token
+refresh and PostgREST's own JWT verification (a separate config) — it did
+**not** exercise GoTrue's own protected endpoints, which is exactly where
+the regression below was found.
+
+### GoTrue admin API / `getUser()` regression — `GOTRUE_JWT_VALID_METHODS`
+
+Found on Main shortly after the initial rollout, via the load-testing
+harness's `admin.auth.admin.createUser()` calls suddenly failing with
+`bad_jwt`: **`GOTRUE_JWT_KEYS` alone is not sufficient.**
+
+GoTrue's `internal/api/auth.go` `parseJWTClaims()` builds its JWT parser
+with `jwt.WithValidMethods(config.JWT.ValidMethods)` — a hard allow-list
+checked *before* the Keyfunc (and therefore before `FindPublicKeyByKid()`'s
+no-kid HS256 fallback) ever runs. `internal/conf/configuration.go`'s
+`ApplyDefaults()` only populates `ValidMethods` when it's `nil`, and when
+`GOTRUE_JWT_KEYS` is non-empty it fills it **solely from that array's own
+algorithms** (`ES256`) — never adding `HS256` back in, even though
+`GOTRUE_JWT_SECRET` is still configured and still meant to work for no-kid
+tokens. Net effect: every GoTrue-native endpoint requiring authentication
+(`/user`, `/admin/*`, `/logout`, MFA endpoints — anything going through
+`requireAuthentication`) rejects **every** pre-existing HS256 token,
+including the service-role key (always HS256), with
+`{"code":403,"error_code":"bad_jwt","msg":"invalid JWT: unable to parse or
+verify signature, signing method HS256 is invalid"}`.
+
+This is not cosmetic: `createAdminClient()` (`lib/supabase/admin.ts`) uses
+this exact service-role key for every `.auth.admin.*` call, so Invite
+User, Bulk Import Users, Admin Set Password, and List Users
+(`lib/actions/admin/users.ts`) all start failing silently — no error in
+any service log, just a `{error}` returned from the server action. Any
+already-logged-in user whose session token predates the JWKS key is also
+affected wherever the app calls `supabase.auth.getUser()` (e.g.
+`getCurrentProfile()` in `lib/queries/profiles.ts`, used by nearly every
+admin/action authorization check). PostgREST and Storage are unaffected —
+they verify JWTs with their own separate config, not GoTrue's.
+
+**Fix:** set `GOTRUE_JWT_VALID_METHODS="ES256,HS256"` explicitly in
+`services/auth/.env` whenever `GOTRUE_JWT_KEYS` is set, then restart
+`CitykartAuth`. This restores the exact backward-compatible behavior
+`FindPublicKeyByKid()` already implements — it just stops the parser from
+discarding HS256 tokens before that fallback logic can run. Verified via a
+read-only probe against `/auth/v1/admin/users` on Main: `403 bad_jwt`
+before the fix, `200` after, using the same unmodified service-role key
+both times. `deploy/windows/validate-deployment.ps1` now checks for this
+automatically (fails if `GOTRUE_JWT_KEYS` is set without
+`GOTRUE_JWT_VALID_METHODS` including `HS256`).
 
 ### Rotating the key later
 
