@@ -16,6 +16,12 @@
  * sub-categories, and the one team_members row added for the test agent is
  * removed in afterAll. IT Support / HR Support themselves, their real
  * sub-categories, and their real staffed teams are never modified.
+ *
+ * PRODUCTION CONFIGURATION ACCEPTANCE TEST — both describe blocks below
+ * depend on real, currently-live IT/HR Support catalog config by hardcoded
+ * ID. Gated behind RUN_PRODUCTION_CATALOG_UAT (default off; see
+ * tests/setup/uat-mode.ts) and skipped with a clear reason in a clean-slate
+ * environment. Already self-cleans in afterAll.
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { getAdmin, createTestUser, type TestUser } from '../setup/fixtures-d03'
@@ -23,6 +29,7 @@ import {
   setupWhatsAppChannelFixture, signPayload, buildTextMessagePayload, buildInteractivePayload, buildMediaMessagePayload,
   createMockGraphFetch, type WhatsAppChannelFixture,
 } from '../setup/whatsapp-fixtures'
+import { RUN_PRODUCTION_CATALOG_UAT, PRODUCTION_CATALOG_UAT_SKIP_REASON } from '../setup/uat-mode'
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 vi.mock('next/headers', () => ({
@@ -56,7 +63,9 @@ const HR_GRATUITY_SUBCATEGORY_ID = '0be6c31c-2b7f-4e03-9bb9-2bbcfcc308f7' // rea
 
 const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0])
 
-describe('Stage 7B — UAT-16 / UAT-19: web vs WhatsApp parity + SLA on a real production service (HR Support)', () => {
+describe.skipIf(!RUN_PRODUCTION_CATALOG_UAT)(
+  `Stage 7B — UAT-16 / UAT-19: web vs WhatsApp parity + SLA on a real production service (HR Support)${RUN_PRODUCTION_CATALOG_UAT ? '' : ` — ${PRODUCTION_CATALOG_UAT_SKIP_REASON}`}`,
+  () => {
   let wa: WhatsAppChannelFixture
   let webRequester: TestUser
   let waRequester: TestUser
@@ -179,9 +188,12 @@ describe('Stage 7B — UAT-16 / UAT-19: web vs WhatsApp parity + SLA on a real p
     expect(Math.abs(windowMs(waRow, 'response_due_at') - windowMs(webRow, 'response_due_at'))).toBeLessThan(5000)
     expect(Math.abs(windowMs(waRow, 'resolution_due_at') - windowMs(webRow, 'resolution_due_at'))).toBeLessThan(5000)
   }, 60_000)
-})
+  }
+)
 
-describe('Stage 7B — UAT-18: assignment/business-rules routing on real staffed teams (IT Support + HR Support)', () => {
+describe.skipIf(!RUN_PRODUCTION_CATALOG_UAT)(
+  `Stage 7B — UAT-18: assignment/business-rules routing on real staffed teams (IT Support + HR Support)${RUN_PRODUCTION_CATALOG_UAT ? '' : ` — ${PRODUCTION_CATALOG_UAT_SKIP_REASON}`}`,
+  () => {
   const admin = getAdmin()
   let wa: WhatsAppChannelFixture
   let itRequester: TestUser
@@ -350,4 +362,5 @@ describe('Stage 7B — UAT-18: assignment/business-rules routing on real staffed
       await admin.auth.admin.deleteUser(ruleRequester.id)
     }
   }, 60_000)
-})
+  }
+)

@@ -2,25 +2,27 @@
  * STAGE 7 UAT — Agent 7a, Steps 6-9 (canonical flow, identity, issue search,
  * category derivation).
  *
- * EVIDENCE-GATHERING RUN, not a self-cleaning regression suite: fixtures
- * created here (personas, WhatsApp channel, conversations, requests) are
- * DELIBERATELY LEFT IN PLACE for later review/cleanup, per the Stage 7 UAT
- * brief. Every fixture is tagged with RUN_TAG so it can be identified and
- * removed once evidence has been reviewed.
+ * PRODUCTION CONFIGURATION ACCEPTANCE TEST — exercises the REAL conversation
+ * engine + REAL processWhatsAppWebhookPayload pipeline against REAL
+ * production services (IT Support, HR Support, LEGAL Support, FINANCE &
+ * ACCOUNTS Support, Vendor Creation Support) already configured in org
+ * 00000000-0000-0000-0000-000000000001. Only the outbound Meta Graph API
+ * HTTP boundary is mocked (createMockGraphFetch). This is NOT core
+ * regression: a clean-slate database has none of that catalog config, so
+ * this whole file is gated behind RUN_PRODUCTION_CATALOG_UAT (default off;
+ * see tests/setup/uat-mode.ts) and skipped with a clear reason otherwise.
  *
- * Exercises the REAL conversation engine + REAL processWhatsAppWebhookPayload
- * pipeline against REAL production services (IT Support, HR Support, LEGAL
- * Support, FINANCE & ACCOUNTS Support, Vendor Creation Support) already
- * configured in org 00000000-0000-0000-0000-000000000001. Only the outbound
- * Meta Graph API HTTP boundary is mocked (createMockGraphFetch), exactly the
- * pattern used throughout the stage4, stage5, and stage6 integration suites.
+ * Self-cleans its own fixtures (personas, WhatsApp channel, conversations,
+ * requests) in afterAll by default; set PRESERVE_UAT_FIXTURES=true to leave
+ * them in place for manual review instead.
  */
-import { describe, it, expect, vi, beforeAll } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { getAdmin, createTestUser, type TestUser } from '../setup/fixtures-d03'
 import {
   setupWhatsAppChannelFixture, signPayload, buildTextMessagePayload, buildInteractivePayload,
   buildMediaMessagePayload, createMockGraphFetch, type WhatsAppChannelFixture,
 } from '../setup/whatsapp-fixtures'
+import { RUN_PRODUCTION_CATALOG_UAT, PRESERVE_UAT_FIXTURES, PRODUCTION_CATALOG_UAT_SKIP_REASON, newUatRunTag } from '../setup/uat-mode'
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 vi.mock('next/headers', () => ({
@@ -36,7 +38,7 @@ import { searchSubCategories } from '@/lib/requests/questionnaire/catalog'
 
 const mockedCreateClient = vi.mocked(createClient)
 const ORG_ID = '00000000-0000-0000-0000-000000000001'
-const RUN_TAG = 'uat7a-a1'
+const RUN_TAG = newUatRunTag('uat7a-canon')
 const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46])
 
 // Real production services/sub-categories audited in Stage 6 (see
@@ -51,8 +53,10 @@ const VENDOR_CREATION_ID = 'ee52ce80-ac6e-4d7a-a9d7-1a0f65a55641'
 function meta(mobile: string) { return `91${mobile}` }
 function log(label: string, value: unknown) { console.log(`[STAGE7a-EVIDENCE] ${label}:`, JSON.stringify(value)) }
 
+const personaIds: string[] = []
 async function makePersona(admin: ReturnType<typeof getAdmin>, label: string, mobile: string | null, opts: { active?: boolean; whatsappEnabled?: boolean } = {}): Promise<TestUser> {
   const user = await createTestUser(`${RUN_TAG}-${label}`, `UAT7a ${label}`)
+  personaIds.push(user.id)
   await admin.from('profiles').update({
     whatsapp_enabled: opts.whatsappEnabled ?? true,
     is_active: opts.active ?? true,
@@ -63,7 +67,9 @@ async function makePersona(admin: ReturnType<typeof getAdmin>, label: string, mo
   return user
 }
 
-describe('STAGE 7 UAT (Agent 7a) — Step 6 canonical flow / Step 7 identity / Step 8 search / Step 9 category derivation', () => {
+describe.skipIf(!RUN_PRODUCTION_CATALOG_UAT)(
+  `STAGE 7 UAT (Agent 7a) — Step 6 canonical flow / Step 7 identity / Step 8 search / Step 9 category derivation${RUN_PRODUCTION_CATALOG_UAT ? '' : ` — ${PRODUCTION_CATALOG_UAT_SKIP_REASON}`}`,
+  () => {
   const admin = getAdmin()
   let wa: WhatsAppChannelFixture
 
@@ -71,6 +77,15 @@ describe('STAGE 7 UAT (Agent 7a) — Step 6 canonical flow / Step 7 identity / S
     wa = await setupWhatsAppChannelFixture({ runTag: RUN_TAG, orgId: ORG_ID, phoneNumberId: `1777${Date.now().toString().slice(-7)}` })
     mockedCreateClient.mockResolvedValue(admin as never)
     log('whatsapp-channel-fixture', { channelId: wa.channelId, phoneNumberId: wa.phoneNumberId })
+  }, 60_000)
+
+  afterAll(async () => {
+    if (PRESERVE_UAT_FIXTURES) return
+    await admin.from('conversation_events').delete().eq('org_id', ORG_ID).ilike('external_message_id', `%${RUN_TAG}%`)
+    await admin.from('requests').delete().in('requester_id', personaIds)
+    await admin.from('request_conversations').delete().in('requester_id', personaIds)
+    for (const id of personaIds) await admin.auth.admin.deleteUser(id)
+    await wa.cleanup()
   }, 60_000)
 
   // ── STEP 6 — REAL CANONICAL FLOW (also proves UAT-05, UAT-06, UAT-07, UAT-09, UAT-16, UAT-17) ──
@@ -371,4 +386,5 @@ describe('STAGE 7 UAT (Agent 7a) — Step 6 canonical flow / Step 7 identity / S
       log('STEP9/subcategory-category-mapping', sc)
     }
   })
-})
+  }
+)

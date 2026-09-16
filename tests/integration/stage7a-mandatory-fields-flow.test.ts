@@ -2,22 +2,26 @@
  * STAGE 7 UAT — Agent 7a, Steps 10-12 (description/subject double-ask
  * capture, mandatory-field bypass attempts, no-extra-field flow).
  *
- * EVIDENCE-GATHERING RUN — fixtures created here are DELIBERATELY LEFT IN
- * PLACE (personas, WhatsApp channel, conversations, requests), tagged with
- * RUN_TAG, for later review/cleanup. See stage7a-canonical-identity-search
- * .test.ts for the shared conventions this file follows.
+ * PRODUCTION CONFIGURATION ACCEPTANCE TEST — real production services: IT
+ * Support, FINANCE & ACCOUNTS Support (Step 11's two representative services
+ * — IT Support covers phone/text/textarea/file, FINANCE covers
+ * phone/text/date/number/textarea/file), LEGAL Support (fewest mandatory
+ * fields of the 7 real services, for Step 12). A clean-slate database has
+ * none of that catalog config, so this whole file is gated behind
+ * RUN_PRODUCTION_CATALOG_UAT (default off; see tests/setup/uat-mode.ts) and
+ * skipped with a clear reason otherwise.
  *
- * Real production services: IT Support, FINANCE & ACCOUNTS Support (Step
- * 11's two representative services — IT Support covers phone/text/textarea/
- * file, FINANCE covers phone/text/date/number/textarea/file), LEGAL Support
- * (fewest mandatory fields of the 7 real services, for Step 12).
+ * Self-cleans its own fixtures (personas, WhatsApp channel, conversations,
+ * requests) in afterAll by default; set PRESERVE_UAT_FIXTURES=true to leave
+ * them in place for manual review instead.
  */
-import { describe, it, expect, vi, beforeAll } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { getAdmin, createTestUser, type TestUser } from '../setup/fixtures-d03'
 import {
   setupWhatsAppChannelFixture, signPayload, buildTextMessagePayload, buildInteractivePayload,
   buildMediaMessagePayload, createMockGraphFetch, type WhatsAppChannelFixture,
 } from '../setup/whatsapp-fixtures'
+import { RUN_PRODUCTION_CATALOG_UAT, PRESERVE_UAT_FIXTURES, PRODUCTION_CATALOG_UAT_SKIP_REASON, newUatRunTag } from '../setup/uat-mode'
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 vi.mock('next/headers', () => ({
@@ -32,7 +36,7 @@ import { commandButtonId } from '@/lib/whatsapp/types'
 
 const mockedCreateClient = vi.mocked(createClient)
 const ORG_ID = '00000000-0000-0000-0000-000000000001'
-const RUN_TAG = 'uat7a-a1'
+const RUN_TAG = newUatRunTag('uat7a-mand')
 const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46])
 
 const IT_SUPPORT_ID = '67828964-02a5-4165-bf86-889e1f4863d5'
@@ -55,8 +59,10 @@ const FIN_DESC = 'mttw568m_l'
 function meta(mobile: string) { return `91${mobile}` }
 function log(label: string, value: unknown) { console.log(`[STAGE7a-EVIDENCE] ${label}:`, JSON.stringify(value)) }
 
+const personaIds: string[] = []
 async function makePersona(admin: ReturnType<typeof getAdmin>, label: string, mobile: string): Promise<TestUser> {
   const user = await createTestUser(`${RUN_TAG}-${label}`, `UAT7a ${label}`)
+  personaIds.push(user.id)
   await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', user.id)
   await admin.from('profile_mobile_numbers').insert({ profile_id: user.id, org_id: ORG_ID, mobile_number: mobile })
   return user
@@ -65,13 +71,24 @@ async function makePersona(admin: ReturnType<typeof getAdmin>, label: string, mo
 type BypassAttempt = { field: string; attemptType: string; input: string; expectedOutcome: string; actualStayedPut: boolean; actualErrorSeen: boolean }
 const BYPASS_TABLE: BypassAttempt[] = []
 
-describe('STAGE 7 UAT (Agent 7a) — Step 10 double-ask / Step 11 mandatory-field bypass / Step 12 no-extra-field flow', () => {
+describe.skipIf(!RUN_PRODUCTION_CATALOG_UAT)(
+  `STAGE 7 UAT (Agent 7a) — Step 10 double-ask / Step 11 mandatory-field bypass / Step 12 no-extra-field flow${RUN_PRODUCTION_CATALOG_UAT ? '' : ` — ${PRODUCTION_CATALOG_UAT_SKIP_REASON}`}`,
+  () => {
   const admin = getAdmin()
   let wa: WhatsAppChannelFixture
 
   beforeAll(async () => {
     wa = await setupWhatsAppChannelFixture({ runTag: `${RUN_TAG}-b`, orgId: ORG_ID, phoneNumberId: `1778${Date.now().toString().slice(-7)}` })
     mockedCreateClient.mockResolvedValue(admin as never)
+  }, 60_000)
+
+  afterAll(async () => {
+    if (PRESERVE_UAT_FIXTURES) return
+    await admin.from('conversation_events').delete().eq('org_id', ORG_ID).ilike('external_message_id', `%${RUN_TAG}%`)
+    await admin.from('requests').delete().in('requester_id', personaIds)
+    await admin.from('request_conversations').delete().in('requester_id', personaIds)
+    for (const id of personaIds) await admin.auth.admin.deleteUser(id)
+    await wa.cleanup()
   }, 60_000)
 
   // ── STEP 11a — IT Support mandatory-field bypass attempts ──────────────
@@ -260,4 +277,5 @@ describe('STAGE 7 UAT (Agent 7a) — Step 10 double-ask / Step 11 mandatory-fiel
     // No fake/invented Attachments answer was ever recorded.
     expect((created!.form_data as Record<string, unknown>)['mttuv5lx_b']).toBeUndefined()
   }, 60_000)
-})
+  }
+)

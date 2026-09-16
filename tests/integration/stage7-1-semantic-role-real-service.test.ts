@@ -8,6 +8,12 @@
  * Attachment, but is NEVER separately asked for "Subject" or "Description"
  * — and the final ticket's form_data[subjectFieldId]/form_data[descFieldId]
  * exactly match requests.title/requests.description.
+ *
+ * PRODUCTION CONFIGURATION ACCEPTANCE TEST — depends on the real, currently-
+ * live IT Support Template by hardcoded ID, not a fixture this test creates.
+ * Gated behind RUN_PRODUCTION_CATALOG_UAT (default off; see
+ * tests/setup/uat-mode.ts) and skipped with a clear reason in a clean-slate
+ * environment. Already self-cleans in afterAll.
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { getAdmin, createTestUser, type TestUser } from '../setup/fixtures-d03'
@@ -26,6 +32,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), refresh: vi.fn() }))
 import { createClient } from '@/lib/supabase/server'
 import { processWhatsAppWebhookPayload } from '@/lib/whatsapp/webhook-handler'
 import { commandButtonId } from '@/lib/whatsapp/types'
+import { RUN_PRODUCTION_CATALOG_UAT, PRODUCTION_CATALOG_UAT_SKIP_REASON } from '../setup/uat-mode'
 
 const mockedCreateClient = vi.mocked(createClient)
 const RUN_TAG = `stage71-semrole-${Date.now()}`
@@ -39,7 +46,9 @@ const IT_DESCRIPTION_FIELD = 'mtbftqh9_3'
 
 const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0])
 
-describe('Stage 7.1 — Subject/Description semantic-role fix on the real IT Support Template', () => {
+describe.skipIf(!RUN_PRODUCTION_CATALOG_UAT)(
+  `Stage 7.1 — Subject/Description semantic-role fix on the real IT Support Template${RUN_PRODUCTION_CATALOG_UAT ? '' : ` — ${PRODUCTION_CATALOG_UAT_SKIP_REASON}`}`,
+  () => {
   let wa: WhatsAppChannelFixture
   let requester: TestUser
   const admin = getAdmin()
@@ -114,4 +123,5 @@ describe('Stage 7.1 — Subject/Description semantic-role fix on the real IT Sup
     expect(request!.description).toBe(descriptionText)
     expect(request!.team_id).toBe(IT_TEAM_ID) // still routes normally — nothing else about the ticket changed
   }, 60_000)
-})
+  }
+)

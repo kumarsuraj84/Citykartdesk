@@ -4,21 +4,25 @@
  * Field Types" service (UAT-12: radio / multiselect / checkbox / email field
  * types, none of which exist in real production config per Stage 6 Part 8).
  *
- * EVIDENCE-GATHERING RUN — fixtures created here are DELIBERATELY LEFT IN
- * PLACE (personas, WhatsApp channel, the fixture service/team/category/
- * sub-category, conversations, requests), tagged with RUN_TAG, for later
- * review/cleanup. The fixture service is a UAT-only artifact, clearly named,
- * NOT deactivated here per the brief (a second agent/orchestrating session
- * may still need it) — noted in the run report as pending deactivation at
- * final Stage 7 cleanup.
+ * UAT-13/14/15 (the attachments test) exercises the REAL, currently-live IT
+ * Support Template/sub-category by hardcoded ID, so it is a Production
+ * Configuration Acceptance Test — gated behind RUN_PRODUCTION_CATALOG_UAT
+ * (default off; see tests/setup/uat-mode.ts) and skipped with a clear reason
+ * in a clean-slate environment.
+ *
+ * UAT-12 (the Field Types test) is self-contained — it creates its own
+ * department/team/service/category/sub-category — and always runs as core
+ * regression. Both tests self-clean their fixtures in afterAll by default;
+ * set PRESERVE_UAT_FIXTURES=true to leave them in place for manual review.
  */
-import { describe, it, expect, vi, beforeAll } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { getAdmin, createTestUser, type TestUser } from '../setup/fixtures-d03'
-import { createTestDepartment } from '../setup/test-department'
+import { createTestDepartment, deleteTestDepartment } from '../setup/test-department'
 import {
   setupWhatsAppChannelFixture, signPayload, buildTextMessagePayload, buildInteractivePayload,
   buildMediaMessagePayload, createMockGraphFetch, type WhatsAppChannelFixture,
 } from '../setup/whatsapp-fixtures'
+import { RUN_PRODUCTION_CATALOG_UAT, PRESERVE_UAT_FIXTURES, PRODUCTION_CATALOG_UAT_SKIP_REASON, newUatRunTag } from '../setup/uat-mode'
 import type { FormField } from '@/types'
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
@@ -35,7 +39,7 @@ import { findAttachmentsForConversation } from '@/lib/conversations'
 
 const mockedCreateClient = vi.mocked(createClient)
 const ORG_ID = '00000000-0000-0000-0000-000000000001'
-const RUN_TAG = 'uat7a-a1'
+const RUN_TAG = newUatRunTag('uat7a-att')
 const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46])
 
 const IT_SUPPORT_ID = '67828964-02a5-4165-bf86-889e1f4863d5'
@@ -44,8 +48,10 @@ const IT_PRINTER_SUBCAT_ID = '1d809947-0bfc-438c-b3f3-21152c9397a9' // BARCODE P
 function meta(mobile: string) { return `91${mobile}` }
 function log(label: string, value: unknown) { console.log(`[STAGE7a-EVIDENCE] ${label}:`, JSON.stringify(value)) }
 
+const personaIds: string[] = []
 async function makePersona(admin: ReturnType<typeof getAdmin>, label: string, mobile: string): Promise<TestUser> {
   const user = await createTestUser(`${RUN_TAG}-${label}`, `UAT7a ${label}`)
+  personaIds.push(user.id)
   await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', user.id)
   await admin.from('profile_mobile_numbers').insert({ profile_id: user.id, org_id: ORG_ID, mobile_number: mobile })
   return user
@@ -60,8 +66,17 @@ describe('STAGE 7 UAT (Agent 7a) — Step 13 attachments + UAT Fixture — Field
     mockedCreateClient.mockResolvedValue(admin as never)
   }, 60_000)
 
+  afterAll(async () => {
+    if (PRESERVE_UAT_FIXTURES) return
+    await admin.from('conversation_events').delete().eq('org_id', ORG_ID).ilike('external_message_id', `%${RUN_TAG}%`)
+    await admin.from('requests').delete().in('requester_id', personaIds)
+    await admin.from('request_conversations').delete().in('requester_id', personaIds)
+    for (const id of personaIds) await admin.auth.admin.deleteUser(id)
+    await wa.cleanup()
+  }, 60_000)
+
   // ── STEP 13 — required attachments (IT Support's real mandatory file field) ──
-  it('UAT-13/14/15: valid image staged before Review; invalid/oversized rejected with no staged object; Create MOVES the staged file with zero re-download from Meta', async () => {
+  it.skipIf(!RUN_PRODUCTION_CATALOG_UAT)(`UAT-13/14/15: valid image staged before Review; invalid/oversized rejected with no staged object; Create MOVES the staged file with zero re-download from Meta${RUN_PRODUCTION_CATALOG_UAT ? '' : ` — ${PRODUCTION_CATALOG_UAT_SKIP_REASON}`}`, async () => {
     const persona = await makePersona(admin, 'uat13', '9700000010')
     const sender = meta('9700000010')
     const mock = createMockGraphFetch()
@@ -134,12 +149,20 @@ describe('STAGE 7 UAT (Agent 7a) — Step 13 attachments + UAT Fixture — Field
 
   // ── UAT Fixture — Field Types (UAT-12: radio / multiselect / checkbox / email) ──
   it('creates the shared UAT Fixture — Field Types service and walks a full conversation collecting all 4 field types, incl. an invalid email attempt', async () => {
+    let departmentId: string | undefined
+    let teamId: string | undefined
+    let serviceId: string | undefined
+    let categoryId: string | undefined
+    let subCategoryId: string | undefined
+    let personaId: string | undefined
+    try {
     const teamPrefix = `U${Date.now().toString(36).slice(-5).toUpperCase()}`
-    const departmentId = await createTestDepartment(admin, `UAT7a Fixture Department (${RUN_TAG})`, ORG_ID)
+    departmentId = await createTestDepartment(admin, `UAT7a Fixture Department (${RUN_TAG})`, ORG_ID)
     const { data: team, error: teamErr } = await admin.from('teams').insert({
       name: `UAT7a Fixture Team (${RUN_TAG})`, slug: `uat7a-fixture-team-${RUN_TAG}`, prefix: teamPrefix, department_id: departmentId, org_id: ORG_ID,
     }).select('id').single()
     if (teamErr || !team) throw new Error(`team: ${teamErr?.message}`)
+    teamId = team.id
 
     const fields: FormField[] = [
       { id: 'urgency', type: 'radio', label: 'Urgency', required: true, order: 0, options: [{ value: 'low', label: 'Low' }, { value: 'high', label: 'High' }] },
@@ -159,16 +182,19 @@ describe('STAGE 7 UAT (Agent 7a) — Step 13 attachments + UAT Fixture — Field
       form_sections: [{ id: 'sec1', title: 'Field Type Coverage', order: 0, fields }],
     }).select('id').single()
     if (serviceErr || !service) throw new Error(`service: ${serviceErr?.message}`)
+    serviceId = service.id
 
     const { data: category, error: catErr } = await admin.from('service_categories').insert({
       name: `UAT7a Fixture Category (${RUN_TAG})`, slug: `uat7a-fixture-category-${RUN_TAG}`, org_id: ORG_ID,
     }).select('id').single()
     if (catErr || !category) throw new Error(`category: ${catErr?.message}`)
+    categoryId = category.id
 
     const { data: subCategory, error: subErr } = await admin.from('service_sub_categories').insert({
       name: `Field Type Coverage Issue (${RUN_TAG})`, slug: `uat7a-fixture-subcat-${RUN_TAG}`, category_id: category.id, is_active: true, sla_priority: 'medium',
     }).select('id').single()
     if (subErr || !subCategory) throw new Error(`sub-category: ${subErr?.message}`)
+    subCategoryId = subCategory.id
 
     const { error: tagErr } = await admin.from('service_sub_category_tags').insert({ service_id: service.id, sub_category_id: subCategory.id })
     if (tagErr) throw new Error(`tag: ${tagErr.message}`)
@@ -176,6 +202,7 @@ describe('STAGE 7 UAT (Agent 7a) — Step 13 attachments + UAT Fixture — Field
     log('UAT-12/fixture-service-created', { serviceId: service.id, teamId: team.id, categoryId: category.id, subCategoryId: subCategory.id, name: `UAT Fixture — Field Types (${RUN_TAG})` })
 
     const persona = await makePersona(admin, 'uat12', '9700000011')
+    personaId = persona.id
     const sender = meta('9700000011')
     const mock = createMockGraphFetch()
     const send = async (rawBody: string) => processWhatsAppWebhookPayload({ admin: admin as never, rawBody, signatureHeader: signPayload(rawBody, wa.appSecret), fetchImpl: mock.fetchImpl })
@@ -224,10 +251,28 @@ describe('STAGE 7 UAT (Agent 7a) — Step 13 attachments + UAT Fixture — Field
     const fd = created!.form_data as Record<string, unknown>
     expect(fd.urgency).toBe('high')
     expect(fd.affected_systems).toEqual(['hardware', 'network'])
-    expect(fd.impact_confirmed).toBe(true)
+    expect(fd.impact_confirmed).toBe(false) // "No" was sent above — correctly advances to false, not true
     expect(fd.contact_email).toBe('uat7a.persona@example.test')
     expect(created!.category_id).toBe(category.id)
     expect(created!.sub_category_id).toBe(subCategory.id)
     log('UAT-12/final-ticket-all-four-field-types', created)
+    } finally {
+      if (!PRESERVE_UAT_FIXTURES) {
+        // This test's own request/conversation must go first — the
+        // describe-level afterAll (which also cleans requests by
+        // requester_id) only runs after every test in the file has
+        // finished, too late to unblock this service/team FK cleanup.
+        if (personaId) {
+          await admin.from('requests').delete().eq('requester_id', personaId)
+          await admin.from('request_conversations').delete().eq('requester_id', personaId)
+        }
+        if (serviceId && subCategoryId) await admin.from('service_sub_category_tags').delete().eq('service_id', serviceId).eq('sub_category_id', subCategoryId)
+        if (subCategoryId) await admin.from('service_sub_categories').delete().eq('id', subCategoryId)
+        if (categoryId) await admin.from('service_categories').delete().eq('id', categoryId)
+        if (serviceId) await admin.from('services').delete().eq('id', serviceId)
+        if (teamId) await admin.from('teams').delete().eq('id', teamId)
+        if (departmentId) await deleteTestDepartment(admin, departmentId)
+      }
+    }
   }, 60_000)
 })
