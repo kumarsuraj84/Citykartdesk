@@ -23,6 +23,7 @@
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { createTestUser, clientForToken, getAdmin, type TestUser } from '../setup/fixtures-d03'
+import { createTestDepartment, deleteTestDepartment } from '../setup/test-department'
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 vi.mock('next/headers', () => ({
@@ -42,7 +43,6 @@ function actAs(user: TestUser) {
 }
 
 const EXISTING_ORG_ID = '00000000-0000-0000-0000-000000000001'
-const EXISTING_DEPARTMENT_ID = '10000000-0000-0000-0000-000000000001'
 const RUN_TAG = `whatsapp-stage1-${Date.now()}`
 const TEAM_PREFIX = `S${Date.now().toString(36).slice(-4).toUpperCase()}`
 
@@ -81,13 +81,15 @@ async function setup(): Promise<Fx> {
     .from('org_module_access')
     .upsert({ org_id: EXISTING_ORG_ID, module: 'intake', enabled: true }, { onConflict: 'org_id,module' })
 
+  const departmentId = await createTestDepartment(admin, `Stage1 Test Department ${RUN_TAG}`, EXISTING_ORG_ID)
+
   const { data: team, error: teamError } = await admin
     .from('teams')
     .insert({
       name: `Stage1 Test Team ${RUN_TAG}`,
       slug: `stage1-team-${RUN_TAG}`,
       prefix: TEAM_PREFIX,
-      department_id: EXISTING_DEPARTMENT_ID,
+      department_id: departmentId,
       org_id: EXISTING_ORG_ID,
     })
     .select('id')
@@ -183,7 +185,7 @@ async function setup(): Promise<Fx> {
 
   const { error: agentProfileError } = await admin
     .from('profiles')
-    .update({ role: 'agent', department_id: EXISTING_DEPARTMENT_ID })
+    .update({ role: 'agent', department_id: departmentId })
     .eq('id', agent.id)
   if (agentProfileError) throw new Error(`[stage1 fixtures] promote agent: ${agentProfileError.message}`)
 
@@ -248,6 +250,7 @@ async function setup(): Promise<Fx> {
         const { error } = await admin.auth.admin.deleteUser(u.id)
         if (error) console.error('[stage1 fixtures] cleanup: failed to delete test user', error.message)
       }
+      await deleteTestDepartment(admin, departmentId)
       // Restore this shared org's 'intake' module flag exactly as found.
       await admin
         .from('org_module_access')

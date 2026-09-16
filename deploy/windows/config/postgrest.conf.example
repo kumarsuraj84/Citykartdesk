@@ -8,3 +8,15 @@ server-port = 3001
 
 jwt-secret = "<JWT_SECRET>"
 jwt-aud = "authenticated"
+
+# If GOTRUE_JWT_KEYS is configured on the Auth service (see
+# config/auth.env.example), jwt-secret above MUST be replaced with a JWKS
+# containing BOTH the legacy secret (as an "oct" key) AND the new EC public
+# key - PostgREST has no separate flat-secret fallback once jwt-secret holds
+# a JWKS, so the legacy oct key is required for pre-existing tokens (issued
+# before the switch, which carry no "kid") to keep verifying. The
+# "services/postgrest/postgrest.conf" output of
+# deploy/windows/generate-jwt-signing-key.js is this exact value - use it to
+# REPLACE the jwt-secret line above, not add to it. Verified empirically
+# against the real PostgREST 16.3 binary: old no-kid tokens, new ES256
+# tokens, and tampered signatures all resolved correctly.

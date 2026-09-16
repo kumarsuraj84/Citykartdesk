@@ -8,7 +8,6 @@ import { deleteTestUsers } from './cleanup-user'
 // (DESK-UAT-001) — that file/its tests must not be touched by this work.
 
 const EXISTING_ORG_ID = '00000000-0000-0000-0000-000000000001'
-const EXISTING_DEPARTMENT_ID = '10000000-0000-0000-0000-000000000001'
 const TEST_PASSWORD = 'Uat-Desk-003-Test-Pw!'
 
 const RUN_TAG = `uat-desk-003-${Date.now()}`
@@ -67,6 +66,7 @@ export async function createTestUser(label: string, fullName: string): Promise<T
 
 export type D03Fixtures = {
   orgId: string
+  departmentId: string
   teamA: { id: string; serviceId: string }
   teamB: { id: string; serviceId: string }
   requesterA: TestUser
@@ -92,19 +92,26 @@ export type D03Fixtures = {
 export async function setupD03Fixtures(): Promise<D03Fixtures> {
   const admin = getAdmin()
 
+  const { data: department, error: departmentError } = await admin
+    .from('departments')
+    .insert({ name: `D-03 Test Department ${RUN_TAG}`, org_id: EXISTING_ORG_ID })
+    .select('id').single()
+  if (departmentError || !department) throw new Error(`[fixtures-d03] department: ${departmentError?.message}`)
+  const departmentId = department.id
+
   const [teamARow, teamBRow] = await Promise.all([
     admin.from('teams').insert({
       name: `D-03 Team A ${RUN_TAG}`,
       slug: `d03-team-a-${RUN_TAG}`,
       prefix: TEAM_A_PREFIX,
-      department_id: EXISTING_DEPARTMENT_ID,
+      department_id: departmentId,
       org_id: EXISTING_ORG_ID,
     }).select('id').single(),
     admin.from('teams').insert({
       name: `D-03 Team B ${RUN_TAG}`,
       slug: `d03-team-b-${RUN_TAG}`,
       prefix: TEAM_B_PREFIX,
-      department_id: EXISTING_DEPARTMENT_ID,
+      department_id: departmentId,
       org_id: EXISTING_ORG_ID,
     }).select('id').single(),
   ])
@@ -147,11 +154,11 @@ export async function setupD03Fixtures(): Promise<D03Fixtures> {
   ])
 
   const roleUpdates = await Promise.all([
-    admin.from('profiles').update({ role: 'agent', department_id: EXISTING_DEPARTMENT_ID }).eq('id', agentA.id),
-    admin.from('profiles').update({ role: 'agent', department_id: EXISTING_DEPARTMENT_ID }).eq('id', agentB.id),
-    admin.from('profiles').update({ role: 'manager', department_id: EXISTING_DEPARTMENT_ID }).eq('id', manager.id),
-    admin.from('profiles').update({ role: 'admin', department_id: EXISTING_DEPARTMENT_ID }).eq('id', adminUser.id),
-    admin.from('profiles').update({ role: 'platform_owner', department_id: EXISTING_DEPARTMENT_ID }).eq('id', platformOwner.id),
+    admin.from('profiles').update({ role: 'agent', department_id: departmentId }).eq('id', agentA.id),
+    admin.from('profiles').update({ role: 'agent', department_id: departmentId }).eq('id', agentB.id),
+    admin.from('profiles').update({ role: 'manager', department_id: departmentId }).eq('id', manager.id),
+    admin.from('profiles').update({ role: 'admin', department_id: departmentId }).eq('id', adminUser.id),
+    admin.from('profiles').update({ role: 'platform_owner', department_id: departmentId }).eq('id', platformOwner.id),
   ])
   for (const { error } of roleUpdates) {
     if (error) throw new Error(`[fixtures-d03] role update failed: ${error.message}`)
@@ -216,6 +223,7 @@ export async function setupD03Fixtures(): Promise<D03Fixtures> {
 
   return {
     orgId: EXISTING_ORG_ID,
+    departmentId,
     teamA: { id: teamAId, serviceId: serviceAId },
     teamB: { id: teamBId, serviceId: serviceBId },
     requesterA,
@@ -261,6 +269,8 @@ export async function setupD03Fixtures(): Promise<D03Fixtures> {
         { id: adminUser.id, label: 'adminUser' },
         { id: platformOwner.id, label: 'platformOwner' },
       ])
+      // After every profile referencing it (via department_id) is gone.
+      await admin.from('departments').delete().eq('id', departmentId)
     },
   }
 }

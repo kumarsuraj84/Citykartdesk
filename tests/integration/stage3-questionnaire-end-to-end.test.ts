@@ -21,6 +21,7 @@
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { getAdmin, createTestUser, type TestUser } from '../setup/fixtures-d03'
+import { createTestDepartment, deleteTestDepartment } from '../setup/test-department'
 
 // lib/sla/business-hours.ts (via resolveSlaDeadlines(), called inside
 // createRequestCore()) reads org business-hours config through the RLS-scoped
@@ -48,7 +49,6 @@ import { generateRequestTitle } from '@/lib/requests/questionnaire/title'
 import { buildCreateRequestInputFromDraft } from '@/lib/requests/questionnaire/adapter'
 
 const EXISTING_ORG_ID = '00000000-0000-0000-0000-000000000001'
-const EXISTING_DEPARTMENT_ID = '10000000-0000-0000-0000-000000000001'
 const RUN_TAG = `stage3-1-e2e-${Date.now()}`
 const TEAM_PREFIX = `F${Date.now().toString(36).slice(-4).toUpperCase()}`
 
@@ -71,9 +71,11 @@ type Fx = {
 async function setup(): Promise<Fx> {
   const admin = getAdmin()
 
+  const departmentId = await createTestDepartment(admin, `Stage3.1 E2E Department ${RUN_TAG}`, EXISTING_ORG_ID)
+
   const { data: team, error: teamError } = await admin
     .from('teams')
-    .insert({ name: `Stage3.1 E2E Team ${RUN_TAG}`, slug: `stage3-1-e2e-team-${RUN_TAG}`, prefix: TEAM_PREFIX, department_id: EXISTING_DEPARTMENT_ID, org_id: EXISTING_ORG_ID })
+    .insert({ name: `Stage3.1 E2E Team ${RUN_TAG}`, slug: `stage3-1-e2e-team-${RUN_TAG}`, prefix: TEAM_PREFIX, department_id: departmentId, org_id: EXISTING_ORG_ID })
     .select('id').single()
   if (teamError || !team) throw new Error(`[stage3.1 e2e fixtures] team: ${teamError?.message}`)
 
@@ -146,6 +148,7 @@ async function setup(): Promise<Fx> {
       await admin.from('services').delete().eq('id', service.id)
       await admin.from('sla_policies').delete().eq('id', slaPolicy.id)
       await admin.from('teams').delete().eq('id', team.id)
+      await deleteTestDepartment(admin, departmentId)
       const { error } = await admin.auth.admin.deleteUser(requester.id)
       if (error) console.error('[stage3.1 e2e fixtures] cleanup: failed to delete test user', error.message)
     },

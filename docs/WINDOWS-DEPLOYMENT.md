@@ -223,6 +223,90 @@ a real, separate, and much larger effect (bulk user creation ran at
 ~230ms/row on an unloaded local machine), but it's not the whole story on
 its own, as this section's numbers show.
 
+## JWT signing keys (JWKS) — the other ~500-600ms
+
+The section above closed with "the remaining ~500-600ms did not respond
+to..." — the actual dominant cause of that remainder was found and fixed
+separately: GoTrue was configured with only `GOTRUE_JWT_SECRET` (symmetric
+HS256), so `/.well-known/jwks.json` returned a valid, healthy-looking
+`{"keys":[]}`. The app's `proxy.ts` calls Supabase's `getClaims()` on almost
+every request; `getClaims()` verifies a JWT with **zero network calls** when
+the issuer publishes a real public key, but silently falls back to a real
+network `getUser()` round-trip to GoTrue when the JWKS is empty. On Main
+this turned one page load into 6-7 concurrent `GET /user` calls, each
+1.0-1.7s under load — see
+`docs/CITYKART-DESK-DEPLOYMENT-PARITY-AND-PERFORMANCE-REMEDIATION.md` for
+the full measurement.
+
+### The fix
+
+Add an asymmetric ES256 (P-256) signing key alongside the existing
+`GOTRUE_JWT_SECRET`, without removing or rotating the secret:
+
+```
+node deploy/windows/generate-jwt-signing-key.js "<current GOTRUE_JWT_SECRET>"
+```
+
+This prints three values, one per consuming service — apply all three
+together, then restart `CitykartAuth`, `CitykartPostgrest`, and
+`CitykartStorage`:
+
+- **`services/auth/.env`**: add the printed `GOTRUE_JWT_KEYS` line.
+  `GOTRUE_JWT_SECRET` stays exactly as it is.
+- **`services/postgrest/postgrest.conf`**: **replace** the `jwt-secret`
+  line with the printed one (a JWKS containing both the legacy secret and
+  the new public key — not an addition, a replacement).
+- **`services/storage-src/.env`**: add the printed `JWT_JWKS` line.
+  `AUTH_JWT_SECRET`/`AUTH_JWT_ALGORITHM` stay exactly as they are.
+
+### Why old sessions keep working
+
+This was the main risk, and it's verified, not assumed:
+
+- GoTrue's `FindPublicKeyByKid()` falls back to the raw `GOTRUE_JWT_SECRET`
+  whenever a token's `kid` claim is empty and no `GOTRUE_JWT_KEY_ID` is
+  configured — which describes every token issued before this key existed
+  (a real Main token decoded to `{"alg":"HS256","typ":"JWT"}`, no `kid` at
+  all). Confirmed against GoTrue's actual compiled logic, not just by
+  reading the source.
+- PostgREST has no separate flat-secret fallback once `jwt-secret` holds a
+  JWKS, which is why the legacy secret must be included *inside* that JWKS
+  (as an `"oct"` key) rather than left in place elsewhere. Verified against
+  the real PostgREST 16.3 binary in an isolated container: old no-kid
+  tokens, new ES256 tokens, and a tampered signature all resolved exactly as
+  expected (200, 200, 401).
+- Storage's `src/internal/auth/jwt.ts` has an explicit fast path
+  (`!header.kid && header.alg === jwtAlgorithm`) that keeps using the flat
+  `AUTH_JWT_SECRET` for any no-kid token, so it needs only the new *public*
+  key added via `JWT_JWKS` — the legacy secret doesn't need to move.
+
+Validated end-to-end on Main: an existing browser session, logged in
+*before* this change, continued to load real pages with no forced
+re-login immediately after the restart.
+
+### Rotating the key later
+
+Generate a new key the same way
+(`node deploy/windows/generate-jwt-signing-key.js "<GOTRUE_JWT_SECRET>"`),
+then:
+
+1. Add the new key to `GOTRUE_JWT_KEYS` (as an additional array entry)
+   **alongside** the current one, with the current one's `key_ops` changed
+   from `["sign"]` to `["verify"]` so it keeps validating already-issued
+   tokens without signing new ones. GoTrue requires exactly one key with
+   `key_ops: ["sign"]` across the whole array.
+2. Add the new public key to the PostgREST and Storage JWKS values the same
+   way (append, don't replace) — leave their existing entries in place until
+   every token signed under the old key has expired (`GOTRUE_JWT_EXP`,
+   currently 3600s).
+3. Only remove the old key's entries after that expiry window has passed.
+
+### Validating any of the above
+
+`deploy/windows/validate-deployment.ps1` checks JWKS is non-empty (among
+the other fixes on this page) and fails loudly if it regresses to `{"keys":
+[]}` — run it after any config change or service restart.
+
 ## NSSM gotcha: `AppParameters` with spaces
 
 `nssm set <service> AppParameters "<value with spaces>"` does not reliably

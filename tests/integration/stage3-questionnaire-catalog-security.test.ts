@@ -12,11 +12,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { getAdmin } from '../setup/fixtures-d03'
 import { deleteTestOrg } from '../setup/cleanup-org'
+import { createTestDepartment, deleteTestDepartment } from '../setup/test-department'
 import { listQuestionnaireServices, searchSubCategories } from '@/lib/requests/questionnaire/catalog'
 import { selectSubCategoryForDraft } from '@/lib/requests/questionnaire/subcategory'
 
 const ORG_A_ID = '00000000-0000-0000-0000-000000000001' // the existing seeded org
-const DEPARTMENT_A_ID = '10000000-0000-0000-0000-000000000001'
 const RUN_TAG = `stage3-cat-sec-${Date.now()}`
 
 type Fx = {
@@ -47,9 +47,10 @@ async function setup(): Promise<Fx> {
 
   const teamAPrefix = `C${Date.now().toString(36).slice(-4).toUpperCase()}`
   const teamBPrefix = `D${Date.now().toString(36).slice(-4).toUpperCase()}`
+  const deptAId = await createTestDepartment(admin, `Stage3 Cat Sec Dept A ${RUN_TAG}`, ORG_A_ID)
   const { data: teamA, error: teamAError } = await admin
     .from('teams')
-    .insert({ name: `Stage3 Cat Sec Team A ${RUN_TAG}`, slug: `stage3-cat-sec-team-a-${RUN_TAG}`, prefix: teamAPrefix, department_id: DEPARTMENT_A_ID, org_id: ORG_A_ID })
+    .insert({ name: `Stage3 Cat Sec Team A ${RUN_TAG}`, slug: `stage3-cat-sec-team-a-${RUN_TAG}`, prefix: teamAPrefix, department_id: deptAId, org_id: ORG_A_ID })
     .select('id').single()
   if (teamAError || !teamA) throw new Error(`[stage3 catalog security fixtures] team A: ${teamAError?.message}`)
 
@@ -168,6 +169,7 @@ async function setup(): Promise<Fx> {
       await admin.from('services').delete().in('id', allServiceIds)
       await admin.from('teams').delete().in('id', [teamA.id, teamB.id])
       await admin.from('departments').delete().eq('id', deptB.id)
+      await deleteTestDepartment(admin, deptAId)
       // See tests/setup/cleanup-org.ts — clears the global_sla_config row a
       // DB trigger auto-creates for every org before deleting it.
       await deleteTestOrg(admin, orgB.id)

@@ -14,6 +14,7 @@
  */
 import { describe, it, expect, vi, beforeAll } from 'vitest'
 import { getAdmin, createTestUser, type TestUser } from '../setup/fixtures-d03'
+import { createTestDepartment } from '../setup/test-department'
 import {
   setupWhatsAppChannelFixture, signPayload, buildTextMessagePayload, buildInteractivePayload,
   buildMediaMessagePayload, createMockGraphFetch, type WhatsAppChannelFixture,
@@ -34,7 +35,6 @@ import { findAttachmentsForConversation } from '@/lib/conversations'
 
 const mockedCreateClient = vi.mocked(createClient)
 const ORG_ID = '00000000-0000-0000-0000-000000000001'
-const EXISTING_DEPARTMENT_ID = '10000000-0000-0000-0000-000000000001'
 const RUN_TAG = 'uat7a-a1'
 const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46])
 
@@ -135,8 +135,9 @@ describe('STAGE 7 UAT (Agent 7a) — Step 13 attachments + UAT Fixture — Field
   // ── UAT Fixture — Field Types (UAT-12: radio / multiselect / checkbox / email) ──
   it('creates the shared UAT Fixture — Field Types service and walks a full conversation collecting all 4 field types, incl. an invalid email attempt', async () => {
     const teamPrefix = `U${Date.now().toString(36).slice(-5).toUpperCase()}`
+    const departmentId = await createTestDepartment(admin, `UAT7a Fixture Department (${RUN_TAG})`, ORG_ID)
     const { data: team, error: teamErr } = await admin.from('teams').insert({
-      name: `UAT7a Fixture Team (${RUN_TAG})`, slug: `uat7a-fixture-team-${RUN_TAG}`, prefix: teamPrefix, department_id: EXISTING_DEPARTMENT_ID, org_id: ORG_ID,
+      name: `UAT7a Fixture Team (${RUN_TAG})`, slug: `uat7a-fixture-team-${RUN_TAG}`, prefix: teamPrefix, department_id: departmentId, org_id: ORG_ID,
     }).select('id').single()
     if (teamErr || !team) throw new Error(`team: ${teamErr?.message}`)
 

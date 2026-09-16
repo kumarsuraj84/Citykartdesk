@@ -4,7 +4,6 @@ import type { Database } from '@/types/database'
 import { deleteTestUsers } from './cleanup-user'
 
 const EXISTING_ORG_ID = '00000000-0000-0000-0000-000000000001'
-const EXISTING_DEPARTMENT_ID = '10000000-0000-0000-0000-000000000001'
 const TEST_PASSWORD = 'Uat-Desk-001-Test-Pw!'
 
 const RUN_TAG = `uat-desk-001-${Date.now()}`
@@ -67,6 +66,7 @@ async function createTestUser(label: string, fullName: string): Promise<TestUser
 
 export type Fixtures = {
   orgId: string
+  departmentId: string
   teamId: string
   serviceId: string
   requester: TestUser
@@ -83,13 +83,20 @@ export type Fixtures = {
 export async function setupFixtures(): Promise<Fixtures> {
   const admin = getAdmin()
 
+  const { data: department, error: departmentError } = await admin
+    .from('departments')
+    .insert({ name: `DESK-UAT-001 Test Department ${RUN_TAG}`, org_id: EXISTING_ORG_ID })
+    .select('id')
+    .single()
+  if (departmentError || !department) throw new Error(`[fixtures] failed to create department: ${departmentError?.message}`)
+
   const { data: team, error: teamError } = await admin
     .from('teams')
     .insert({
       name: `DESK-UAT-001 Test Team ${RUN_TAG}`,
       slug: `desk-uat-001-team-${RUN_TAG}`,
       prefix: TEAM_PREFIX,
-      department_id: EXISTING_DEPARTMENT_ID,
+      department_id: department.id,
       org_id: EXISTING_ORG_ID,
     })
     .select('id')
@@ -118,7 +125,7 @@ export async function setupFixtures(): Promise<Fixtures> {
 
   const { error: agentProfileError } = await admin
     .from('profiles')
-    .update({ role: 'agent', department_id: EXISTING_DEPARTMENT_ID })
+    .update({ role: 'agent', department_id: department.id })
     .eq('id', agent.id)
   if (agentProfileError) throw new Error(`[fixtures] failed to promote agent: ${agentProfileError.message}`)
 
@@ -129,6 +136,7 @@ export async function setupFixtures(): Promise<Fixtures> {
 
   return {
     orgId: EXISTING_ORG_ID,
+    departmentId: department.id,
     teamId: team.id,
     serviceId: service.id,
     requester,
@@ -151,6 +159,8 @@ export async function setupFixtures(): Promise<Fixtures> {
         { id: otherRequester.id, label: 'otherRequester' },
         { id: agent.id, label: 'agent' },
       ])
+      // After the agent's own profile (and its department_id FK) is gone.
+      await admin.from('departments').delete().eq('id', department.id)
     },
   }
 }

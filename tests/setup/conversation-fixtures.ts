@@ -6,10 +6,10 @@ import { getAdmin } from './fixtures-d03'
 import type { FormField } from '@/types'
 
 const EXISTING_ORG_ID = '00000000-0000-0000-0000-000000000001'
-const EXISTING_DEPARTMENT_ID = '10000000-0000-0000-0000-000000000001'
 
 export type ConversationFixture = {
   orgId: string
+  departmentId: string
   teamId: string
   serviceId: string
   subCategoryId: string
@@ -27,9 +27,15 @@ export async function setupConversationFixture(params: {
   const orgId = params.orgId ?? EXISTING_ORG_ID
   const teamPrefix = `Q${Date.now().toString(36).slice(-4).toUpperCase()}`
 
+  const { data: department, error: departmentError } = await admin
+    .from('departments')
+    .insert({ name: `Conv Fixture Department ${params.runTag}`, org_id: orgId })
+    .select('id').single()
+  if (departmentError || !department) throw new Error(`[conversation fixtures] department: ${departmentError?.message}`)
+
   const { data: team, error: teamError } = await admin
     .from('teams')
-    .insert({ name: `Conv Fixture Team ${params.runTag}`, slug: `conv-fixture-team-${params.runTag}`, prefix: teamPrefix, department_id: EXISTING_DEPARTMENT_ID, org_id: orgId })
+    .insert({ name: `Conv Fixture Team ${params.runTag}`, slug: `conv-fixture-team-${params.runTag}`, prefix: teamPrefix, department_id: department.id, org_id: orgId })
     .select('id').single()
   if (teamError || !team) throw new Error(`[conversation fixtures] team: ${teamError?.message}`)
 
@@ -81,6 +87,7 @@ export async function setupConversationFixture(params: {
 
   return {
     orgId,
+    departmentId: department.id,
     teamId: team.id,
     serviceId: service.id,
     subCategoryId: subCategory.id,
@@ -99,6 +106,7 @@ export async function setupConversationFixture(params: {
       await admin.from('services').delete().eq('id', service.id)
       await admin.from('sla_policies').delete().eq('id', slaPolicy.id)
       await admin.from('teams').delete().eq('id', team.id)
+      await admin.from('departments').delete().eq('id', department.id)
     },
   }
 }

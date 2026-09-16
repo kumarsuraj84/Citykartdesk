@@ -19,10 +19,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { getAdmin, createTestUser, type TestUser } from '../setup/fixtures-d03'
 import { deleteTestOrg } from '../setup/cleanup-org'
+import { createTestDepartment, deleteTestDepartment } from '../setup/test-department'
 import { createRequestCore } from '@/lib/requests/create-request-core'
 
 const ORG_A_ID = '00000000-0000-0000-0000-000000000001' // the existing seeded org
-const DEPARTMENT_A_ID = '10000000-0000-0000-0000-000000000001'
 const RUN_TAG = `stage1-1-sec-${Date.now()}`
 
 type Fx = {
@@ -58,13 +58,15 @@ async function setup(): Promise<Fx> {
     .single()
   if (deptBError || !deptB) throw new Error(`[stage1.1 security fixtures] dept B: ${deptBError?.message}`)
 
+  const deptAId = await createTestDepartment(admin, `Stage1.1 Dept A ${RUN_TAG}`, ORG_A_ID)
+
   const teamAPrefix = `A${Date.now().toString(36).slice(-4).toUpperCase()}`
   const teamBPrefix = `B${Date.now().toString(36).slice(-4).toUpperCase()}`
 
   const [{ data: teamA, error: teamAError }, { data: teamB, error: teamBError }] = await Promise.all([
     admin.from('teams').insert({
       name: `Stage1.1 Team A ${RUN_TAG}`, slug: `stage1-1-team-a-${RUN_TAG}`, prefix: teamAPrefix,
-      department_id: DEPARTMENT_A_ID, org_id: ORG_A_ID,
+      department_id: deptAId, org_id: ORG_A_ID,
     }).select('id').single(),
     admin.from('teams').insert({
       name: `Stage1.1 Team B ${RUN_TAG}`, slug: `stage1-1-team-b-${RUN_TAG}`, prefix: teamBPrefix,
@@ -169,6 +171,7 @@ async function setup(): Promise<Fx> {
       await admin.from('services').delete().in('id', [serviceA.id, serviceB.id, inactiveServiceA.id, locationRestrictedServiceA.id])
       await admin.from('teams').delete().in('id', [teamA.id, teamB.id])
       await admin.from('departments').delete().eq('id', deptB.id)
+      await deleteTestDepartment(admin, deptAId)
       for (const u of [requesterA, requesterB]) {
         const { error } = await admin.auth.admin.deleteUser(u.id)
         if (error) console.error('[stage1.1 security fixtures] cleanup: failed to delete test user', error.message)

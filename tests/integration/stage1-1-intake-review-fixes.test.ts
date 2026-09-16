@@ -14,6 +14,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { getAdmin, createTestUser, clientForToken, type TestUser } from '../setup/fixtures-d03'
 import { deleteTestOrg } from '../setup/cleanup-org'
+import { createTestDepartment, deleteTestDepartment } from '../setup/test-department'
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 vi.mock('next/headers', () => ({
@@ -31,7 +32,6 @@ function actAs(user: TestUser) {
 }
 
 const ORG_ID = '00000000-0000-0000-0000-000000000001'
-const DEPARTMENT_ID = '10000000-0000-0000-0000-000000000001'
 const RUN_TAG = `stage1-1-intake-${Date.now()}`
 const TEAM_PREFIX = `I${Date.now().toString(36).slice(-4).toUpperCase()}`
 
@@ -63,9 +63,11 @@ async function setup(): Promise<Fx> {
     .maybeSingle()
   await admin.from('org_module_access').upsert({ org_id: ORG_ID, module: 'intake', enabled: true }, { onConflict: 'org_id,module' })
 
+  const departmentId = await createTestDepartment(admin, `Stage1.1 Intake Department ${RUN_TAG}`, ORG_ID)
+
   const { data: team, error: teamError } = await admin
     .from('teams')
-    .insert({ name: `Stage1.1 Intake Team ${RUN_TAG}`, slug: `stage1-1-intake-team-${RUN_TAG}`, prefix: TEAM_PREFIX, department_id: DEPARTMENT_ID, org_id: ORG_ID })
+    .insert({ name: `Stage1.1 Intake Team ${RUN_TAG}`, slug: `stage1-1-intake-team-${RUN_TAG}`, prefix: TEAM_PREFIX, department_id: departmentId, org_id: ORG_ID })
     .select('id')
     .single()
   if (teamError || !team) throw new Error(`[stage1.1 intake fixtures] team: ${teamError?.message}`)
@@ -124,7 +126,7 @@ async function setup(): Promise<Fx> {
   if (tagError) throw new Error(`[stage1.1 intake fixtures] tag: ${tagError.message}`)
 
   const reviewer = await createTestUser('stage1-1-intake-reviewer', 'Stage1.1 Intake Reviewer')
-  await admin.from('profiles').update({ role: 'agent', department_id: DEPARTMENT_ID }).eq('id', reviewer.id)
+  await admin.from('profiles').update({ role: 'agent', department_id: departmentId }).eq('id', reviewer.id)
   await admin.from('team_members').insert({ team_id: team.id, user_id: reviewer.id, org_id: ORG_ID })
 
   const { data: channel, error: channelError } = await admin
@@ -160,6 +162,7 @@ async function setup(): Promise<Fx> {
       await admin.from('teams').delete().eq('id', team.id)
       const { error } = await admin.auth.admin.deleteUser(reviewer.id)
       if (error) console.error('[stage1.1 intake fixtures] cleanup: failed to delete reviewer', error.message)
+      await deleteTestDepartment(admin, departmentId)
       await admin.from('org_module_access').upsert({ org_id: ORG_ID, module: 'intake', enabled: priorIntakeAccess?.enabled ?? false }, { onConflict: 'org_id,module' })
     },
   }

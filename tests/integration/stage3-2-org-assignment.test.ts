@@ -26,6 +26,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { getAdmin, createTestUser, clientForToken, type TestUser } from '../setup/fixtures-d03'
 import { deleteTestOrg, orgExists, globalSlaConfigExists } from '../setup/cleanup-org'
+import { createTestDepartment, deleteTestDepartment } from '../setup/test-department'
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 vi.mock('next/headers', () => ({
@@ -107,9 +108,10 @@ describe('Stage 3.2 — deterministic org assignment & leak-proof cleanup', () =
 
     it('deleteTestOrg() throws (does not silently swallow) if an org-scoped row still blocks the delete', async () => {
       const orgId = await createStrayOrg(admin, 'Stage3.2 Blocked Org')
+      const departmentId = await createTestDepartment(admin, `Stage3.2 Blocking Department ${RUN_TAG}`, orgId)
       const { data: team, error } = await admin
         .from('teams')
-        .insert({ name: `Blocking Team ${RUN_TAG}`, slug: `blocking-team-${RUN_TAG}`, prefix: `BLK`, department_id: '10000000-0000-0000-0000-000000000001', org_id: orgId })
+        .insert({ name: `Blocking Team ${RUN_TAG}`, slug: `blocking-team-${RUN_TAG}`, prefix: `BLK`, department_id: departmentId, org_id: orgId })
         .select('id')
         .single()
       if (error || !team) throw new Error(`setup: ${error?.message}`)
@@ -118,6 +120,7 @@ describe('Stage 3.2 — deterministic org assignment & leak-proof cleanup', () =
 
       // Clean up properly so this test doesn't itself leak.
       await admin.from('teams').delete().eq('id', team.id)
+      await deleteTestDepartment(admin, departmentId)
       await deleteTestOrg(admin, orgId)
       expect(await orgExists(admin, orgId)).toBe(false)
     })
