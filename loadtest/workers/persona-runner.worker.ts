@@ -19,11 +19,13 @@ vi.mock('next/headers', () => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), refresh: vi.fn() }))
 
 import { createClient } from '@/lib/supabase/server'
+import { headers } from 'next/headers'
 import { createRequestCore } from '@/lib/requests/create-request-core'
 import { updateRequestStatus, assignRequest, addComment } from '@/lib/actions/requests'
 import { MetricsRecorder } from '../lib/metrics'
 
 const mockedCreateClient = vi.mocked(createClient)
+const mockedHeaders = vi.mocked(headers)
 
 function clientForToken(accessToken: string) {
   return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
@@ -56,8 +58,17 @@ function myShare<T>(items: T[]): T[] {
   return items.filter((_, i) => i % TOTAL_WORKERS === WORKER_INDEX)
 }
 
+// Mirrors proxy.ts's own behavior exactly: real requests carry an
+// x-verified-user-id header the edge middleware already set after verifying
+// the session once, so getCurrentProfile() (lib/queries/profiles.ts) skips
+// its own redundant auth.getUser() round-trip. Without this, every single
+// action here would take that fallback path - a real network call to
+// GoTrue's /user endpoint on every call from every concurrent worker - which
+// is not what real production traffic does, and inflates every measured
+// latency here with a network hop production requests never pay.
 function asPersona(p: Persona) {
   mockedCreateClient.mockResolvedValue(clientForToken(p.accessToken) as never)
+  mockedHeaders.mockResolvedValue({ get: (name: string) => (name === 'x-verified-user-id' ? p.id : null) } as never)
 }
 
 const DESCRIPTIONS = [
