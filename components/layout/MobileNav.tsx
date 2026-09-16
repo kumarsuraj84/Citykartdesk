@@ -95,6 +95,7 @@ export function MobileNav({ profile, navVisibility, navCounts }: MobileNavProps)
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               className={cn(
                 'flex flex-1 min-w-[60px] flex-col items-center gap-1 py-3 text-[11px] font-medium transition-colors',
                 isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground'

@@ -145,6 +145,7 @@ function NotificationRow({
     return (
       <Link
         href={notification.link}
+        prefetch={false}
         onClick={() => { onRead(notification.id); onClose() }}
         className="block border-b border-border last:border-0"
       >
@@ -310,6 +311,7 @@ export function NotificationBell({
           <div className="border-t border-border px-4 py-2.5">
             <Link
               href="/notifications"
+              prefetch={false}
               onClick={() => setOpen(false)}
               className="block w-full text-center text-xs font-medium text-primary hover:underline"
             >

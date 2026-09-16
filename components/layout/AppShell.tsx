@@ -115,7 +115,7 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
       <header className="flex h-16 shrink-0 items-center gap-4 px-4 border-b border-black/10 bg-[image:var(--gradient-nav)] z-40">
 
         {/* Brand — matches sidebar width */}
-        <Link href="/home" className="flex w-[196px] shrink-0 items-center">
+        <Link href="/home" prefetch={false} className="flex w-[196px] shrink-0 items-center">
           <BrandLogo height={44} className="rounded-lg bg-white px-2.5 py-1.5 shadow-sm" priority />
         </Link>
 
@@ -144,7 +144,7 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
             />
           </Suspense>
           <div className="h-5 w-px bg-white/15 mx-1" />
-          <Link href="/profile" className="flex items-center gap-2 pl-1 pr-2 h-9 rounded-lg hover:bg-white/10 transition-colors">
+          <Link href="/profile" prefetch={false} className="flex items-center gap-2 pl-1 pr-2 h-9 rounded-lg hover:bg-white/10 transition-colors">
             <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-glow to-primary grid place-items-center text-primary-foreground text-[11px] font-bold shadow-sm shrink-0">
               {getInitials(profile.full_name)}
             </div>

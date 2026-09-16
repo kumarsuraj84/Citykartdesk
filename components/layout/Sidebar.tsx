@@ -237,6 +237,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
       <Link
         key={item.href}
         href={item.href}
+        prefetch={false}
         className={cn(
           'group flex items-center gap-2.5 h-8 px-2.5 rounded-md text-[13px] font-medium transition-all duration-150',
           active
@@ -283,6 +284,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 title={item.label}
                 className={cn(
                   'group relative flex h-9 items-center justify-center rounded-md transition-colors',
