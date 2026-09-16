@@ -247,15 +247,27 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   const writeClient: AnyClient = useAdminForWrites ? admin : client
   const parsedFormData: Record<string, unknown> = { ...rawFormData }
 
+  // maybeSingle() (not single()): single() errors on zero matching rows,
+  // which made "not found" and "the query itself failed" indistinguishable
+  // by error-presence alone - confirmed on Main under target-scale load
+  // testing, where a burst of EADDRINUSE-driven fetch failures surfaced as
+  // real "Service not found." errors for services that unquestionably
+  // existed, alongside every legitimate zero-row case (wrong org, inactive
+  // service) hitting the exact same code path. maybeSingle() returns
+  // data: null with no error for zero rows, so the two are now genuinely
+  // separable below.
   const { data: service, error: serviceError } = await client
     .from('services')
     .select('*, team:teams (*), template:form_templates (form_sections), sla_policy:sla_policies (config)')
     .eq('id', serviceId)
     .eq('org_id', orgId)
     .eq('is_active', true)
-    .single()
+    .maybeSingle()
 
-  if (serviceError || !service) return { error: 'Service not found.' }
+  if (serviceError) {
+    return { error: sanitizeError(serviceError, { route: 'create-request-core.ts#createRequestCore', context: { lookup: 'service', serviceId }, fallback: 'Unable to verify the selected service. Please try again.' }) }
+  }
+  if (!service) return { error: 'Service not found.' }
 
   // Location-scoped visibility — see actingUserRoleForLocationCheck's doc comment.
   if (actingUserRoleForLocationCheck === 'user') {
@@ -295,23 +307,29 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   // correctly gets their OWN store, never the acting user's.
   //
   // Stage 1.1 security fix: this lookup's failure was previously ignored —
-  // `.single()` on zero matching rows errors, but only `data` was
-  // destructured, so a `requesterId` that doesn't exist (or belongs to a
-  // DIFFERENT org than `orgId`, e.g. a compromised/buggy admin-client caller)
-  // fell through silently. With `client` as an RLS-scoped session this was
-  // low-risk (RLS already constrains what's visible), but createRequestCore()
-  // is explicitly designed to also be called with the admin client (no RLS)
-  // by a channel with no browser session — for that caller this was a real
-  // cross-tenant gap: a request could be inserted with `org_id: orgId` while
-  // `requester_id` silently referenced a profile in a different org.
+  // only `data` was destructured, so a `requesterId` that doesn't exist (or
+  // belongs to a DIFFERENT org than `orgId`, e.g. a compromised/buggy
+  // admin-client caller) fell through silently. With `client` as an
+  // RLS-scoped session this was low-risk (RLS already constrains what's
+  // visible), but createRequestCore() is explicitly designed to also be
+  // called with the admin client (no RLS) by a channel with no browser
+  // session — for that caller this was a real cross-tenant gap: a request
+  // could be inserted with `org_id: orgId` while `requester_id` silently
+  // referenced a profile in a different org. The `!requesterProfile` check
+  // below still rejects that case; see the service lookup above for why
+  // maybeSingle() (not single()) is what makes a real query failure
+  // separable from a genuine zero-row "not found."
   const { data: requesterProfile, error: requesterProfileError } = await client
     .from('profiles')
     .select('org_id, store_id, full_name')
     .eq('id', requesterId)
     .eq('org_id', orgId)
-    .single()
+    .maybeSingle()
 
-  if (requesterProfileError || !requesterProfile) return { error: 'Requester not found.' }
+  if (requesterProfileError) {
+    return { error: sanitizeError(requesterProfileError, { route: 'create-request-core.ts#createRequestCore', context: { lookup: 'requester', requesterId }, fallback: 'Unable to verify the requester. Please try again.' }) }
+  }
+  if (!requesterProfile) return { error: 'Requester not found.' }
 
   let requesterStoreAddress: string | null = null
   let requesterStoreOemId: string | null = null

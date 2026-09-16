@@ -18,7 +18,17 @@ function isRetryableError(err: unknown): boolean {
   if (err instanceof DOMException && err.name === 'AbortError') return true
   if (err instanceof TypeError) return true // fetch's own "network error" / "fetch failed"
   const code = (err as { cause?: { code?: string } } | undefined)?.cause?.code
-  return code === 'ECONNRESET' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT'
+  // EADDRINUSE here is an outbound-connect failure (ephemeral local port
+  // exhaustion/collision under high concurrent internal traffic), not a
+  // real "address in use" bind conflict - a port frees up within
+  // milliseconds, so this is exactly as transient as ECONNRESET/ETIMEDOUT.
+  // Confirmed on Main under target-scale load testing: without this, a
+  // burst of concurrent internal PostgREST calls surfaced as hard failures
+  // (and, one level up, got misreported as "Service not found"/"Requester
+  // not found" by create-request-core.ts's error-vs-not-found checks)
+  // instead of self-healing via the retry this function already does for
+  // equally transient conditions.
+  return code === 'ECONNRESET' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT' || code === 'EADDRINUSE'
 }
 
 function sleep(ms: number) {

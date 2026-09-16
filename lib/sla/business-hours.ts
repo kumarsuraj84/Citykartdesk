@@ -14,12 +14,30 @@ type Holiday = { date: string; is_recurring: boolean }
 const getSLACalendar = cache(async (): Promise<{
   scheduleMap: Map<number, DaySchedule>
   holidays: Holiday[]
+  /** True when either query itself failed (e.g. a transient connection
+   *  error) rather than genuinely returning zero rows - see the distinct
+   *  logging this drives in computeSLADeadline() below. Confirmed on Main
+   *  under target-scale load testing: a burst of connection failures during
+   *  this read produced an empty scheduleMap that was indistinguishable
+   *  from "business_hours has 0 rows configured" even though the table was
+   *  fully intact - misreporting a transient hiccup as a critical
+   *  misconfiguration alert. */
+  loadError: boolean
 }> => {
   const supabase = await createClient()
-  const [{ data: bizHours }, { data: holidaysData }] = await Promise.all([
+  const [{ data: bizHours, error: bizHoursError }, { data: holidaysData, error: holidaysError }] = await Promise.all([
     supabase.from('business_hours').select('*').order('day_of_week'),
     supabase.from('holidays').select('*'),
   ])
+
+  if (bizHoursError || holidaysError) {
+    logger.error({
+      event: 'sla.calendar_load_failed',
+      message: 'Failed to load business_hours/holidays - treating as empty for this call only, not a real 0-row calendar',
+      route: 'lib/sla/business-hours.ts#getSLACalendar',
+      error: bizHoursError ?? holidaysError,
+    })
+  }
 
   const scheduleMap = new Map<number, DaySchedule>()
   for (const row of bizHours ?? []) {
@@ -29,7 +47,7 @@ const getSLACalendar = cache(async (): Promise<{
       is_active: row.is_active,
     })
   }
-  return { scheduleMap, holidays: (holidaysData ?? []) as Holiday[] }
+  return { scheduleMap, holidays: (holidaysData ?? []) as Holiday[], loadError: Boolean(bizHoursError || holidaysError) }
 })
 
 function isHoliday(date: Date, holidays: Holiday[]): boolean {
@@ -78,7 +96,7 @@ export async function computeSLADeadline(
   startAt: Date,
   slaDurationMinutes: number
 ): Promise<Date | null> {
-  const { scheduleMap, holidays } = await getSLACalendar()
+  const { scheduleMap, holidays, loadError } = await getSLACalendar()
 
   let remaining = slaDurationMinutes
   const cursor = new Date(startAt)
@@ -112,22 +130,30 @@ export async function computeSLADeadline(
     cursor.setHours(0, 0, 0, 0)
   }
 
-  // No business capacity found anywhere within the bound — every configured
-  // day is inactive, no business_hours rows exist at all, or every row's
-  // window is zero/negative width. This is a configuration problem, not a
-  // valid SLA outcome, so it's surfaced (logged + an operator alert) and
-  // returned as "no deadline" rather than silently becoming "now + ~5 years."
+  // No business capacity found anywhere within the bound. Two genuinely
+  // different situations land here, and conflating them previously misled
+  // whoever reads the alert: either the calendar itself failed to load
+  // (loadError - transient, e.g. a connection hiccup; the same table read
+  // fine a moment before and after) or it loaded fine and is genuinely
+  // empty/all-inactive/zero-width (a real configuration problem). Either
+  // way "no deadline" (rather than "now + ~5 years") is still the only safe
+  // return value, but a transient load failure must not page an operator
+  // as a critical misconfiguration.
   logger.error({
-    event: 'sla.business_hours.no_usable_window',
-    message: 'SLA deadline could not be computed — the business-hours calendar has no usable window (all inactive, no rows configured, or every window is zero/negative width)',
+    event: loadError ? 'sla.business_hours.load_failed_no_deadline' : 'sla.business_hours.no_usable_window',
+    message: loadError
+      ? 'SLA deadline could not be computed because business_hours/holidays failed to load (transient failure, not a real misconfiguration)'
+      : 'SLA deadline could not be computed — the business-hours calendar has no usable window (all inactive, no rows configured, or every window is zero/negative width)',
     route: 'lib/sla/business-hours.ts#computeSLADeadline',
-    errorCode: 'sla_business_hours_misconfigured',
+    errorCode: loadError ? 'sla_business_hours_load_failed' : 'sla_business_hours_misconfigured',
     context: { scheduleRowCount: scheduleMap.size, slaDurationMinutes },
   })
   await alertOperator({
-    key: 'sla.business_hours.no_usable_window',
-    severity: 'critical',
-    title: 'SLA deadlines cannot be computed — business-hours calendar has no usable window',
+    key: loadError ? 'sla.business_hours.load_failed' : 'sla.business_hours.no_usable_window',
+    severity: loadError ? 'warning' : 'critical',
+    title: loadError
+      ? 'SLA deadline computation failed to load the business-hours calendar (transient)'
+      : 'SLA deadlines cannot be computed — business-hours calendar has no usable window',
     detail: { scheduleRowCount: scheduleMap.size },
   })
   return null
