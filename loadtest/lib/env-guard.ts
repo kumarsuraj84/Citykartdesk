@@ -42,9 +42,16 @@ export function resolveTarget(): ResolvedTarget {
 
   const runId = process.env.LOADTEST_RUN_ID || newRunId()
 
+  if (env === 'main' && !process.env.LOADTEST_MAIN_BASE_URL) {
+    throw new Error(
+      'LOADTEST_MAIN_BASE_URL must be set explicitly when targeting Main - ' +
+      "never default to a hardcoded IP that will go stale the moment Main's address changes " +
+      '(e.g. once its port is forwarded to a public IP/domain).'
+    )
+  }
   const baseUrl = env === 'local'
     ? (process.env.LOADTEST_LOCAL_BASE_URL || 'http://127.0.0.1:3001')
-    : (process.env.LOADTEST_MAIN_BASE_URL || 'http://10.0.1.12:3210')
+    : (process.env.LOADTEST_MAIN_BASE_URL as string)
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY

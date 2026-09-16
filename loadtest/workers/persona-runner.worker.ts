@@ -81,8 +81,6 @@ const DESCRIPTIONS = [
 
 describe(`loadtest worker ${WORKER_INDEX}/${TOTAL_WORKERS} (run ${RUN_ID})`, () => {
   it('runs its shard of requesters and technicians', async () => {
-    const admin = clientForToken(process.env.SUPABASE_SERVICE_ROLE_KEY!) // service-role-equivalent read-only lookups only via RLS-bypassing key is NOT used for writes below
-
     const myRequesters = myShare(personas.requesters)
     const myTechnicians = myShare(personas.technicians)
 
@@ -206,7 +204,6 @@ describe(`loadtest worker ${WORKER_INDEX}/${TOTAL_WORKERS} (run ${RUN_ID})`, () 
       }
     }
 
-    void admin
     expect(myRequesters.length + myTechnicians.length).toBeGreaterThanOrEqual(0)
   }, 600_000)
 })
