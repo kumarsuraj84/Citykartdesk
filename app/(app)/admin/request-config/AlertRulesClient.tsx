@@ -257,17 +257,11 @@ export function AlertRulesClient({ initialRules }: { initialRules: AlertRule[] }
 
   async function handleCreate(data: AlertRuleData) {
     const result = await createAlertRule(data)
-    if (result.error) throw new Error(result.error)
-    // Optimistic: re-fetch would normally happen via revalidation. Add placeholder.
-    setRules((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        ...data,
-        threshold_minutes: data.threshold_minutes ?? null,
-        is_active: true,
-      },
-    ])
+    if (result.error || !result.data) throw new Error(result.error ?? 'Failed to create alert rule.')
+    // Use the server-returned row (real id, server-normalized fields) rather than
+    // fabricating one client-side — crypto.randomUUID() is unavailable outside a
+    // secure context (e.g. plain HTTP on a LAN IP), which crashed this handler.
+    setRules((prev) => [...prev, result.data!])
     setShowAdd(false)
   }
 

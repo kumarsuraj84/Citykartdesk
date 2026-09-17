@@ -259,28 +259,45 @@ export type AlertRuleData = {
   is_active?: boolean
 }
 
-export async function createAlertRule(data: AlertRuleData): Promise<{ error?: string }> {
+export type AlertRuleRow = {
+  id: string
+  name: string
+  alert_type: string
+  entity_type: string
+  threshold_minutes: number | null
+  notify_roles: string[]
+  notify_assignee: boolean
+  notify_requester: boolean
+  channels: string[]
+  is_active: boolean
+}
+
+export async function createAlertRule(data: AlertRuleData): Promise<{ data?: AlertRuleRow; error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('alert_rules').insert({
-    org_id: profile.org_id,
-    name: data.name.trim(),
-    alert_type: data.alert_type,
-    entity_type: data.entity_type,
-    threshold_minutes: data.threshold_minutes ?? null,
-    notify_roles: data.notify_roles,
-    notify_assignee: data.notify_assignee,
-    notify_requester: data.notify_requester,
-    channels: data.channels,
-    is_active: data.is_active ?? true,
-  })
+  const { data: rule, error } = await admin
+    .from('alert_rules')
+    .insert({
+      org_id: profile.org_id,
+      name: data.name.trim(),
+      alert_type: data.alert_type,
+      entity_type: data.entity_type,
+      threshold_minutes: data.threshold_minutes ?? null,
+      notify_roles: data.notify_roles,
+      notify_assignee: data.notify_assignee,
+      notify_requester: data.notify_requester,
+      channels: data.channels,
+      is_active: data.is_active ?? true,
+    })
+    .select('id, name, alert_type, entity_type, threshold_minutes, notify_roles, notify_assignee, notify_requester, channels, is_active')
+    .single()
 
-  if (error) return { error: error.message }
+  if (error || !rule) return { error: error?.message ?? 'Failed to create alert rule.' }
   revalidatePath('/admin/request-config')
-  return {}
+  return { data: rule }
 }
 
 export async function updateAlertRule(
