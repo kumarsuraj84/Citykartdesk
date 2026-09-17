@@ -41,19 +41,29 @@ export type IntakeDashboardStats = {
 }
 
 // ── Dashboard KPIs ──────────────────────────────────────────────────────────
-// Counts via indexed predicates (head:true), no count:'exact' on hot lists.
+// Counts via indexed predicates (head:true). Deliberately count:'exact', not
+// 'estimated' (DESK-INTAKE-001) — 'estimated' asks PostgREST for Postgres's
+// planner row estimate (pg_class.reltuples) rather than a real COUNT. That
+// estimate is only refreshed by ANALYZE/autovacuum, not by the DELETEs that
+// emptied these tables after early testing, so it kept reporting stale
+// phantom counts (1 in every KPI) long after the tables were genuinely
+// empty — confirmed on Main: `select reltuples from pg_class` matched the
+// wrong KPI values exactly, while `select count(*)` on the same tables
+// returned 0. These are small, per-org-scoped tables (not the kind of huge
+// table 'estimated' exists to help with), so an exact count is cheap and,
+// more importantly, actually correct.
 export async function getIntakeDashboardStats(): Promise<IntakeDashboardStats> {
   const supabase = (await createClient()) as unknown as AnyClient
 
   const [newRes, reviewRes, actionedRes, channelRes, activeChannelRes] = await Promise.all([
-    supabase.from('intake_messages').select('*', { count: 'estimated', head: true }).eq('status', 'new'),
+    supabase.from('intake_messages').select('*', { count: 'exact', head: true }).eq('status', 'new'),
     // Open reviews awaiting a human — counted from the review state machine, not
     // message.status (the pipeline leaves messages 'classified', so a status
     // count read ~0 even with a full queue). pending + in_review = the worklist.
-    supabase.from('intake_reviews').select('*', { count: 'estimated', head: true }).in('state', ['pending', 'in_review']),
-    supabase.from('intake_messages').select('*', { count: 'estimated', head: true }).eq('status', 'actioned'),
-    supabase.from('intake_channels').select('*', { count: 'estimated', head: true }),
-    supabase.from('intake_channels').select('*', { count: 'estimated', head: true }).eq('status', 'active'),
+    supabase.from('intake_reviews').select('*', { count: 'exact', head: true }).in('state', ['pending', 'in_review']),
+    supabase.from('intake_messages').select('*', { count: 'exact', head: true }).eq('status', 'actioned'),
+    supabase.from('intake_channels').select('*', { count: 'exact', head: true }),
+    supabase.from('intake_channels').select('*', { count: 'exact', head: true }).eq('status', 'active'),
   ])
 
   return {
@@ -341,7 +351,9 @@ async function aggregateValidationStatsInJs(
         classification:intake_classifications!classification_id ( stage, provider, cost_microcents ),
         message:intake_messages!inner ( subject, from_address )
       `),
-    supabase.from('intake_messages').select('*', { count: 'estimated', head: true }),
+    // count: 'exact', not 'estimated' — see DESK-INTAKE-001 note on
+    // getIntakeDashboardStats() above; same stale-planner-estimate bug applies here.
+    supabase.from('intake_messages').select('*', { count: 'exact', head: true }),
   ])
   if (rErr || !reviews) {
     console.error('[getIntakeValidationStats] JS fallback failed:', rErr?.message)
