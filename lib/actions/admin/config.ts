@@ -214,20 +214,24 @@ export async function createHoliday(data: {
   name: string
   date: string
   is_recurring: boolean
-}): Promise<{ error?: string }> {
+}): Promise<{ data?: { id: string; name: string; date: string; is_recurring: boolean }; error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('holidays').insert({
-    name: data.name.trim(),
-    date: data.date,
-    is_recurring: data.is_recurring,
-  })
+  const { data: holiday, error } = await admin
+    .from('holidays')
+    .insert({
+      name: data.name.trim(),
+      date: data.date,
+      is_recurring: data.is_recurring,
+    })
+    .select('id, name, date, is_recurring')
+    .single()
 
-  if (error) return { error: error.message }
+  if (error || !holiday) return { error: error?.message ?? 'Failed to create holiday.' }
   revalidatePath('/admin/request-config')
-  return {}
+  return { data: holiday }
 }
 
 export async function deleteHoliday(id: string): Promise<{ error?: string }> {

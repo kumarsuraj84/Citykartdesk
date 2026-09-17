@@ -102,6 +102,25 @@ describe('computeSLADeadline() — SLA business-hours misconfiguration guard', (
     expect(deadline!.getHours()).toBe(10)
   })
 
+  it('a recurring holiday is skipped in a later year too, matched by month/day regardless of the year it was created against', async () => {
+    // DESK-HOLIDAY-001: New Year's Day, created against 2026-01-01, must
+    // still apply in 2027 — 2027-01-01 is a Friday (an ordinary business
+    // day per NORMAL_WEEK), so this only passes if the recurring month/day
+    // match actually fires rather than falling back to the exact-date check.
+    mockSupabaseWith(NORMAL_WEEK, [{ date: '2026-01-01', is_recurring: true }])
+    const computeSLADeadline = await freshComputeSLADeadline()
+    // Thursday 2026-12-31 16:30 + 90 minutes: 30 min left Thursday, Friday
+    // 2027-01-01 is the recurring holiday (skipped), Sat/Sun already
+    // inactive, so the remaining 60 min lands Monday 2027-01-04 09:00-10:00.
+    const start = new Date(2026, 11, 31, 16, 30, 0)
+    const deadline = await computeSLADeadline(start, 90)
+    expect(deadline).not.toBeNull()
+    expect(deadline!.getFullYear()).toBe(2027)
+    expect(deadline!.getMonth()).toBe(0) // January
+    expect(deadline!.getDate()).toBe(4)
+    expect(deadline!.getHours()).toBe(10)
+  })
+
   it('all business-hours rows inactive: returns null, logs a structured warning, and alerts the operator — not a 5-years-out date', async () => {
     const allInactive = NORMAL_WEEK.map((r) => ({ ...r, is_active: false }))
     mockSupabaseWith(allInactive)

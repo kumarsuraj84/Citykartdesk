@@ -23,9 +23,12 @@ export function HolidayCalendarClient({ initialHolidays }: { initialHolidays: Ho
     setError('')
     const result = await createHoliday(form)
     setAdding(false)
-    if (result.error) { setError(result.error); return }
-    // Optimistically add with placeholder id; page will revalidate
-    setHolidays((prev) => [...prev, { id: crypto.randomUUID(), ...form }])
+    if (result.error || !result.data) { setError(result.error ?? 'Failed to create holiday.'); return }
+    const created = result.data
+    // Use the server-returned row (real id, server-normalized fields) rather than
+    // fabricating one client-side — crypto.randomUUID() is unavailable outside a
+    // secure context (e.g. plain HTTP on a LAN IP), which crashed this handler.
+    setHolidays((prev) => [...prev, created])
     setForm({ name: '', date: '', is_recurring: false })
   }
 
