@@ -12,6 +12,7 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 import { getAdmin, createTestUser } from '../setup/fixtures-d03'
+import { deleteTestUser } from '../setup/cleanup-user'
 import { setupConversationFixture } from '../setup/conversation-fixtures'
 import { setupWhatsAppChannelFixture, signPayload, buildTextMessagePayload, buildInteractivePayload, buildMediaMessagePayload, createMockGraphFetch } from '../setup/whatsapp-fixtures'
 import type { FormField } from '@/types'
@@ -124,7 +125,7 @@ describe('Stage 5.1 — required media staged before Review/Create', () => {
       await admin.from('conversation_events').delete().eq('org_id', fx.orgId).ilike('external_message_id', `%${RUN_TAG}%`)
       await admin.from('request_conversations').delete().eq('requester_id', requester.id)
       await admin.from('requests').delete().eq('requester_id', requester.id)
-      await admin.auth.admin.deleteUser(requester.id)
+      await deleteTestUser(admin, requester.id, 'stage5-media-requester')
       await wa.cleanup()
       await fx.cleanup()
     }
@@ -176,7 +177,7 @@ describe('Stage 5.1 — required media staged before Review/Create', () => {
       await admin.from('conversation_events').delete().eq('org_id', fx.orgId).ilike('external_message_id', `%${RUN_TAG}%`)
       await admin.from('request_conversations').delete().eq('requester_id', requester.id)
       await admin.from('requests').delete().eq('requester_id', requester.id)
-      await admin.auth.admin.deleteUser(requester.id)
+      await deleteTestUser(admin, requester.id, 'stage5-media-requester')
       await wa.cleanup()
       await fx.cleanup()
     }
@@ -206,7 +207,7 @@ describe('Stage 5.1 — required media staged before Review/Create', () => {
     } finally {
       await admin.from('conversation_events').delete().eq('org_id', fx.orgId).ilike('external_message_id', `%${RUN_TAG}%`)
       await admin.from('request_conversations').delete().eq('requester_id', requester.id)
-      await admin.auth.admin.deleteUser(requester.id)
+      await deleteTestUser(admin, requester.id, 'stage5-media-requester')
       await wa.cleanup()
       await fx.cleanup()
     }
@@ -235,7 +236,7 @@ describe('Stage 5.1 — required media staged before Review/Create', () => {
     } finally {
       await admin.from('conversation_events').delete().eq('org_id', fx.orgId).ilike('external_message_id', `%${RUN_TAG}%`)
       await admin.from('request_conversations').delete().eq('requester_id', requester.id)
-      await admin.auth.admin.deleteUser(requester.id)
+      await deleteTestUser(admin, requester.id, 'stage5-media-requester')
       await wa.cleanup()
       await fx.cleanup()
     }
@@ -277,7 +278,7 @@ describe('Stage 5.1 — required media staged before Review/Create', () => {
       await admin.from('conversation_events').delete().eq('org_id', fx.orgId).ilike('external_message_id', `%${RUN_TAG}%`)
       await admin.from('request_conversations').delete().eq('requester_id', requester.id)
       await admin.from('requests').delete().eq('requester_id', requester.id)
-      await admin.auth.admin.deleteUser(requester.id)
+      await deleteTestUser(admin, requester.id, 'stage5-media-requester')
       await wa.cleanup()
       await fx.cleanup()
     }
@@ -349,7 +350,7 @@ describe('Stage 5.1 — required media staged before Review/Create', () => {
       await admin.from('conversation_events').delete().eq('org_id', fx.orgId).ilike('external_message_id', `%${RUN_TAG}%`)
       await admin.from('request_conversations').delete().eq('requester_id', requester.id)
       await admin.from('requests').delete().eq('requester_id', requester.id)
-      await admin.auth.admin.deleteUser(requester.id)
+      await deleteTestUser(admin, requester.id, 'stage5-media-requester')
       await wa.cleanup()
       await fx.cleanup()
     }
@@ -418,7 +419,7 @@ describe('Stage 5.1 — required media staged before Review/Create', () => {
       await admin.from('conversation_events').delete().eq('org_id', fx.orgId).ilike('external_message_id', `%${RUN_TAG}%`)
       await admin.from('request_conversations').delete().eq('requester_id', requester.id)
       await admin.from('requests').delete().eq('requester_id', requester.id)
-      await admin.auth.admin.deleteUser(requester.id)
+      await deleteTestUser(admin, requester.id, 'stage5-media-requester')
       await wa.cleanup()
       await fx.cleanup()
     }
