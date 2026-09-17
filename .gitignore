@@ -49,3 +49,7 @@ next-env.d.ts
 supabase/.branches
 supabase/.temp
 .claude/worktrees/
+
+# local pg_dump snapshots taken before destructive cleanup ops — large
+# binary DB dumps, not source, never belongs in git
+/backups/
