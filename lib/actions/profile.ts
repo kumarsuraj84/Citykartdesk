@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { TablesUpdate } from '@/types/database'
 import { validateAttachment } from '@/lib/attachments/validate'
+import { buildPublicStorageUrl } from '@/lib/storage/publicUrl'
 
 export async function updateProfile(data: {
   full_name?: string
@@ -80,17 +81,17 @@ export async function uploadAvatar(formData: FormData): Promise<{ avatarUrl?: st
 
   if (storageError) return { error: 'Upload failed. Please try again.' }
 
-  const { data: { publicUrl } } = admin.storage.from('avatars').getPublicUrl(storagePath)
+  const avatarUrl = buildPublicStorageUrl('avatars', storagePath)
 
   const { error: updateError } = await supabase
     .from('profiles')
-    .update({ avatar_url: publicUrl })
+    .update({ avatar_url: avatarUrl })
     .eq('id', user.id)
 
   if (updateError) return { error: updateError.message }
 
   revalidatePath('/profile')
-  return { avatarUrl: publicUrl }
+  return { avatarUrl }
 }
 
 export async function sendPasswordResetEmail(): Promise<{ error?: string; success?: boolean }> {

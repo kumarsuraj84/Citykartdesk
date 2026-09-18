@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { validateAttachment } from '@/lib/attachments/validate'
+import { buildPublicStorageUrl } from '@/lib/storage/publicUrl'
 
 // ── Guard: admin-only ─────────────────────────────────────────────────────────
 // Same guard as lib/actions/admin/services.ts's requireAdmin() — deliberately
@@ -52,7 +53,5 @@ export async function uploadIconImage(formData: FormData): Promise<{ url?: strin
 
   if (storageError) return { error: 'Upload failed. Please try again.' }
 
-  const { data: { publicUrl } } = admin.storage.from('icons').getPublicUrl(storagePath)
-
-  return { url: publicUrl }
+  return { url: buildPublicStorageUrl('icons', storagePath) }
 }

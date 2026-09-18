@@ -74,16 +74,17 @@ export async function loadReviewDetail(reviewId: string): Promise<ReviewDetailBu
     refs?: string[]; amounts?: string[]; dates?: string[]; emails?: string[]
   }
 
-  const signedAttachments = await Promise.all(
-    attachments.map(async (a) => {
-      // { download: ... } forces Content-Disposition: attachment — defense
-      // in depth beyond the upload-time allowlist/magic-byte check, so an
-      // inbound attachment can never render inline (and execute, for an
-      // HTML/SVG part) in the reviewer's browser even if it slipped through.
-      const { data } = await admin.storage.from('intake-attachments').createSignedUrl(a.storage_path, 300, { download: a.file_name })
-      return { ...a, signedUrl: data?.signedUrl ?? null }
-    })
-  )
+  // DESK-STORAGE-001: a same-origin proxy path, not a real signed URL — see
+  // app/api/storage/attachment/intake/[id]/route.ts, which forces
+  // Content-Disposition: attachment itself (same defense-in-depth this used
+  // to get from createSignedUrl's `{ download: ... }` option) and re-checks
+  // intake_attachments' RLS on every fetch instead of baking access into a
+  // signed URL rooted at NEXT_PUBLIC_SUPABASE_URL — Main's LAN-only address,
+  // unreachable from a browser on the port-forwarded public IP.
+  const signedAttachments = attachments.map((a) => ({
+    ...a,
+    signedUrl: `/api/storage/attachment/intake/${a.id}`,
+  }))
 
   return {
     review,

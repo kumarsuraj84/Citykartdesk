@@ -86,17 +86,15 @@ export default async function IntakeReviewPage({ params }: PageProps) {
   // redirect them to /home, so ReviewClient needs to know not to link there.
   const isAdmin = profile.role === 'admin' || profile.role === 'platform_owner'
 
-  // Generate short-lived signed URLs for attachments (private bucket; admin
-  // client). { download: ... } forces Content-Disposition: attachment —
-  // defense in depth beyond the upload-time allowlist/magic-byte check (see
-  // api/src/intake/store.ts), so an inbound attachment can never render
-  // inline in the browser.
-  const signedAttachments = await Promise.all(
-    attachments.map(async (a) => {
-      const { data } = await admin.storage.from('intake-attachments').createSignedUrl(a.storage_path, 300, { download: a.file_name })
-      return { ...a, signedUrl: data?.signedUrl ?? null }
-    })
-  )
+  // DESK-STORAGE-001: same-origin proxy path, not a real signed URL — see
+  // app/api/storage/attachment/intake/[id]/route.ts (forces
+  // Content-Disposition: attachment itself, and re-checks RLS on every
+  // fetch instead of baking access into a signed URL rooted at
+  // NEXT_PUBLIC_SUPABASE_URL, Main's LAN-only address).
+  const signedAttachments = attachments.map((a) => ({
+    ...a,
+    signedUrl: `/api/storage/attachment/intake/${a.id}`,
+  }))
 
   return (
     <div className="space-y-4">

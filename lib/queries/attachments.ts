@@ -1,23 +1,29 @@
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 import type { RequestAttachmentWithUploader } from '@/types'
 
-const SIGNED_URL_EXPIRY_SECONDS = 3600 // 1 hour
-
 /**
- * Fetch all non-deleted attachments for a request, with fresh signed URLs.
+ * Fetch all non-deleted attachments for a request, with a URL for each.
  *
- * Signed URLs are generated server-side via the admin client at render time.
- * They are never persisted. RLS on request_attachments enforces access control
- * before the admin client generates the URL.
+ * DESK-STORAGE-001: this used to generate real Supabase signed URLs here
+ * (createSignedUrls, 1h expiry) and hand them straight to the browser. Two
+ * problems: (1) a signed URL is absolute, rooted at NEXT_PUBLIC_SUPABASE_URL
+ * — inlined at build time as Main's LAN-only address, unreachable from a
+ * browser on the port-forwarded public IP (see the proxy route below for the
+ * full writeup); (2) a signed URL that leaks stays valid for its full
+ * lifetime regardless of whether the recipient's access is later revoked.
+ * Now this just points at a same-origin proxy route
+ * (app/api/storage/attachment/request/[id]/route.ts), keyed by the
+ * attachment's own id, which re-checks the identical RLS predicate below on
+ * every fetch instead of baking a decision into a signed URL once.
+ *
+ * RLS on request_attachments still enforces access control on this SELECT —
+ * only rows the caller can see are ever returned here.
  */
 export async function getRequestAttachments(
   requestId: string
 ): Promise<RequestAttachmentWithUploader[]> {
   const supabase = await createClient()
-  const admin = createAdminClient()
 
-  // SELECT is gated by RLS — only returns rows the caller can see
   const { data, error } = await supabase
     .from('request_attachments')
     .select(`*, uploader:profiles!request_attachments_uploaded_by_fkey (id, full_name)`)
@@ -27,16 +33,8 @@ export async function getRequestAttachments(
 
   if (error || !data) return []
 
-  // Generate signed URLs in a single storage request instead of one per attachment.
-  const { data: urlList } = await admin.storage
-    .from('request-attachments')
-    .createSignedUrls(
-      data.map((row) => row.storage_path),
-      SIGNED_URL_EXPIRY_SECONDS
-    )
-
-  return data.map((row, i) => ({
+  return data.map((row) => ({
     ...row,
-    signedUrl: urlList?.[i]?.signedUrl ?? '',
+    signedUrl: `/api/storage/attachment/request/${row.id}`,
   })) as RequestAttachmentWithUploader[]
 }

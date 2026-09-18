@@ -39,16 +39,15 @@ export default async function InboxWorkspacePage({ params }: PageProps) {
   // only the fallback for not-yet-classified mail.
   if (message.review?.id) redirect(`/intake/review/${message.review.id}`)
 
-  // Generate signed URLs for attachments. { download: ... } forces
-  // Content-Disposition: attachment — defense in depth beyond the
-  // upload-time allowlist/magic-byte check (see api/src/intake/store.ts),
-  // so an inbound attachment can never render inline in the browser.
-  const signedAttachments = await Promise.all(
-    attachments.map(async (a) => {
-      const { data } = await admin.storage.from('intake-attachments').createSignedUrl(a.storage_path, 300, { download: a.file_name })
-      return { ...a, signedUrl: data?.signedUrl ?? null }
-    })
-  )
+  // DESK-STORAGE-001: same-origin proxy path, not a real signed URL — see
+  // app/api/storage/attachment/intake/[id]/route.ts (forces
+  // Content-Disposition: attachment itself, and re-checks RLS on every
+  // fetch instead of baking access into a signed URL rooted at
+  // NEXT_PUBLIC_SUPABASE_URL, Main's LAN-only address).
+  const signedAttachments = attachments.map((a) => ({
+    ...a,
+    signedUrl: `/api/storage/attachment/intake/${a.id}`,
+  }))
 
   return (
     <WorkspaceClient
