@@ -53,3 +53,5 @@ supabase/.temp
 # local pg_dump snapshots taken before destructive cleanup ops — large
 # binary DB dumps, not source, never belongs in git
 /backups/
+/local_data_dump.sql
+/local_storage_files.tar.gz
