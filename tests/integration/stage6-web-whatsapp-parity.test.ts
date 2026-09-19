@@ -167,17 +167,10 @@ describe('Stage 6, Part 11 — web vs WhatsApp ticket-creation parity', () => {
     expect(Math.abs(responseWindowMs(waRow) - responseWindowMs(webRow))).toBeLessThan(5000)
     expect(Math.abs(resolutionWindowMs(waRow) - resolutionWindowMs(webRow))).toBeLessThan(5000)
 
-    // Stage 6 finding, not a difference this test is asserting as "correct":
-    // lib/rules/run.ts's sourceChannelOf() only ever returns 'intake' or
-    // 'portal' (see lib/rules/run.ts:67-70) — it has no 'whatsapp' case, and
-    // WhatsApp-created requests never get source_metadata.created_via set at
-    // all (buildCreateRequestInputFromDraft() passes sourceMetadata:
-    // undefined — lib/requests/questionnaire/adapter.ts:61 — so
-    // createRequestCore()'s own `sourceMetadata || intakeMessageId` guard at
-    // create-request-core.ts:424-427 leaves it unset). A web-created and a
-    // WhatsApp-created ticket are therefore genuinely indistinguishable by
-    // source_metadata/source_channel today — documented here as an accurate
-    // (not merely expected) equality, not fixed.
-    expect(waRow?.source_metadata).toEqual(webRow?.source_metadata)
+    // Everything above is identical between channels, except the recorded
+    // origin: createRequestCore() stamps source_metadata.created_via so a
+    // technician can tell a WhatsApp ticket from a web one.
+    expect((webRow?.source_metadata as { created_via?: string } | null)?.created_via).toBe('portal')
+    expect((waRow?.source_metadata as { created_via?: string } | null)?.created_via).toBe('whatsapp')
   })
 })

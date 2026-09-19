@@ -2,7 +2,8 @@
  * Shared badge primitives for request status, priority, and SLA.
  * All badge styles source from lib/constants/requests — no duplicates.
  */
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, Globe, MessageCircle, Inbox, Mail, Phone, UserRound, Webhook, type LucideIcon } from 'lucide-react'
+import { ticketSourceKey, TICKET_SOURCE_LABELS, type TicketSourceKey } from '@/lib/sources'
 import { STATUS_LABELS, STATUS_STYLES, PRIORITY_BADGE_STYLES, PRIORITY_LABELS, PRIORITY_ARROWS } from '@/lib/constants/requests'
 import type { RequestStatus, RequestPriority } from '@/types'
 
@@ -72,6 +73,51 @@ export function ReopenedBadge({ count, size = 'md' }: ReopenedBadgeProps) {
     >
       <RotateCcw className="h-3 w-3" />
       Reopened{count > 1 ? ` ×${count}` : ''}
+    </span>
+  )
+}
+
+// ── Source Badge ──────────────────────────────────────────────────────────────
+// Where the ticket came from (Web, WhatsApp, Email, ...) so a technician knows
+// how to reach the requester and what context to expect. Derived from
+// source_metadata.created_via — see ticketSourceKey() in lib/sources.ts.
+
+const SOURCE_ICONS: Record<TicketSourceKey, LucideIcon> = {
+  portal: Globe,
+  whatsapp: MessageCircle,
+  intake: Inbox,
+  email: Mail,
+  phone: Phone,
+  manual: UserRound,
+  api: Webhook,
+}
+
+const SOURCE_STYLES: Record<TicketSourceKey, string> = {
+  portal: 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-300',
+  whatsapp: 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+  intake: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300',
+  email: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300',
+  phone: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+  manual: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+  api: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300',
+}
+
+interface SourceBadgeProps {
+  sourceMetadata: unknown
+  size?: 'sm' | 'md'
+}
+
+export function SourceBadge({ sourceMetadata, size = 'md' }: SourceBadgeProps) {
+  const key = ticketSourceKey(sourceMetadata)
+  const Icon = SOURCE_ICONS[key]
+  const base =
+    size === 'sm'
+      ? 'inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap shrink-0'
+      : 'inline-flex items-center gap-1.5 rounded border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap shrink-0'
+  return (
+    <span className={`${base} ${SOURCE_STYLES[key]}`} title={`Raised via ${TICKET_SOURCE_LABELS[key]}`}>
+      <Icon className={size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
+      {TICKET_SOURCE_LABELS[key]}
     </span>
   )
 }

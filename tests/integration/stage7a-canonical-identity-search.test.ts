@@ -208,11 +208,10 @@ describe.skipIf(!RUN_PRODUCTION_CATALOG_UAT)(
     expect(attachment!.mime_type).toBe('image/jpeg')
     log('STEP6/linked-attachment', attachment)
 
-    // Provenance: requests.source_metadata carries NO whatsapp-specific
-    // marker (confirmed pre-existing Stage 6 Finding — sourceChannelOf() has
-    // no 'whatsapp' case, intakeMessageId is always null for conversation
-    // creates) — the durable provenance link is request_conversations.request_id.
-    expect(req.source_metadata).toBeNull()
+    // Provenance: the ticket records its channel in source_metadata.created_via
+    // (so technicians can see it came from WhatsApp), and the durable link back
+    // to the conversation is request_conversations.request_id.
+    expect((req.source_metadata as { created_via?: string } | null)?.created_via).toBe('whatsapp')
     const { data: convFinal } = await admin.from('request_conversations').select('id, channel_type, request_id, state').eq('id', conversationId).single()
     expect(convFinal?.request_id).toBe(req.id)
     expect(convFinal?.channel_type).toBe('whatsapp')

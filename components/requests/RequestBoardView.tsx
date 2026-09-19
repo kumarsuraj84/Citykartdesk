@@ -19,7 +19,7 @@ import { GripVertical, User, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateRequestStatus } from '@/lib/actions/requests'
 import { AGENT_TRANSITIONS } from '@/lib/constants/request-transitions'
-import { StatusBadge, PriorityBadge, ReopenedBadge } from '@/components/requests/RequestBadges'
+import { StatusBadge, PriorityBadge, ReopenedBadge, SourceBadge } from '@/components/requests/RequestBadges'
 import { SLABadge } from '@/components/requests/SLABadge'
 import type { RequestWithRelations, RequestStatus } from '@/types'
 
@@ -73,9 +73,10 @@ function SortableCard({
         <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50" />
       </div>
 
-      <div className="flex items-center gap-1.5 mb-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
         <span className="font-mono text-[10px] text-muted-foreground">{request.request_no}</span>
         <PriorityBadge priority={request.priority} size="sm" />
+        <SourceBadge sourceMetadata={request.source_metadata} size="sm" />
         <ReopenedBadge count={request.reopen_count ?? 0} size="sm" />
       </div>
 

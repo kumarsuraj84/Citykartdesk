@@ -3,6 +3,7 @@ import { getEntityFields, RECORD_COUNT_FIELD, type EntityKey, type ReportField }
 import type { ReportViewerScope } from '@/lib/reporting/access'
 import { getServiceFormFieldsForOrg, type ServiceFormFieldRef } from '@/lib/forms/sections'
 import { flattenLeafOptions } from '@/lib/forms/options'
+import { sourceChannelOf } from '@/lib/sources'
 import { isEverBreached, isEverResponseBreached } from '@/lib/sla/breach'
 import type { Database } from '@/types/database'
 
@@ -155,10 +156,6 @@ export async function getReportFieldsForEntity(entity: EntityKey, orgId: string)
 // Service-role client, explicit org_id scoping (same posture as lib/export/reports.ts —
 // this is an admin/manager-only surface, gated in lib/actions/reporting.ts).
 
-function sourceChannelOf(sourceMetadata: unknown): string {
-  const createdVia = (sourceMetadata as { created_via?: string } | null)?.created_via
-  return createdVia === 'intake' ? 'intake' : 'portal'
-}
 
 async function fetchRequestRows(
   admin: AnyClient,

@@ -22,7 +22,7 @@ import {
   searchOrgMembers,
 } from '@/lib/actions/requests'
 import { downloadCSV } from '@/lib/export/csv'
-import { StatusBadge, PriorityBadge, ReopenedBadge } from '@/components/requests/RequestBadges'
+import { StatusBadge, PriorityBadge, ReopenedBadge, SourceBadge } from '@/components/requests/RequestBadges'
 import { SLABadge } from '@/components/requests/SLABadge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatRelativeTime } from '@/lib/utils'
@@ -287,6 +287,7 @@ export function RequestsTable({
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Title</th>
               <SortableTh label="Status" col="status" sortCol={sortCol} sortDir={sortDir} pathname={pathname} currentSearch={currentSearch} />
               <SortableTh label="Priority" col="priority" sortCol={sortCol} sortDir={sortDir} pathname={pathname} currentSearch={currentSearch} />
+              <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Source</th>
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Requester</th>
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Technician</th>
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Category</th>
@@ -319,6 +320,7 @@ export function RequestsTable({
                     </div>
                   </td>
                   <td className="px-3 py-2"><PriorityBadge priority={req.priority} size="sm" /></td>
+                  <td className="px-3 py-2"><SourceBadge sourceMetadata={req.source_metadata} size="sm" /></td>
                   <td className="px-3 py-2 whitespace-nowrap text-foreground">{req.requester?.full_name ?? '—'}</td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {req.assignee ? <span className="text-foreground">{req.assignee.full_name}</span> : <span className="text-amber-600 font-medium">Unassigned</span>}

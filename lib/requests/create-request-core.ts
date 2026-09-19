@@ -163,9 +163,7 @@ export type CreateRequestCoreParams = {
    *  Intake, and later WhatsApp) — maps to requests.intake_message_id. */
   intakeMessageId?: string | null
   /** Additional provenance to merge into requests.source_metadata. `source`
-   *  is always folded in as `created_via`. Omit both this and
-   *  intakeMessageId (the web channel does) to leave source_metadata/
-   *  intake_message_id unset, exactly matching today's web-created rows. */
+   *  is always folded in as `created_via` ('portal' for the web channel). */
   sourceMetadata?: Record<string, unknown>
   /** Whether `client`'s writes should run through it directly, or be forced
    *  through the admin client instead. Required whenever `client` has no RLS
@@ -439,10 +437,13 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     teamId = teamIdOverride
   }
 
-  const mergedSourceMetadata: Record<string, unknown> | undefined =
-    sourceMetadata || intakeMessageId
-      ? { ...(sourceMetadata ?? {}), created_via: source }
-      : undefined
+  // Every ticket records where it came from so technicians can see it (web,
+  // WhatsApp, ...). The web channel's value is 'portal' — the name the Source
+  // column, reports and Business Rules already use for it.
+  const mergedSourceMetadata: Record<string, unknown> = {
+    ...(sourceMetadata ?? {}),
+    created_via: source === 'web' ? 'portal' : source,
+  }
 
   const { data: request, error: insertError } = await writeClient
     .from('requests')

@@ -14,7 +14,7 @@ import { ApprovalPanel } from '@/components/requests/ApprovalPanel'
 import { RelatedRequestsPanel } from '@/components/requests/RelatedRequestsPanel'
 import { CsatSurvey } from '@/components/requests/CsatSurvey'
 import { SLABadge } from '@/components/requests/SLABadge'
-import { StatusBadge, PriorityBadge, ReopenedBadge } from '@/components/requests/RequestBadges'
+import { StatusBadge, PriorityBadge, ReopenedBadge, SourceBadge } from '@/components/requests/RequestBadges'
 import { RequestSidebarPanel } from '@/components/requests/RequestSidebarPanel'
 import { SubmittedDataPanel } from '@/components/requests/SubmittedDataPanel'
 import { getActiveServicesForReclassify, getAllowedSubCategoriesForService } from '@/lib/queries/services'
@@ -547,6 +547,11 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
             value={<PriorityBadge priority={request.priority} size="sm" />}
             className="border-t border-border"
           />
+          <TicketCell
+            label="Source"
+            value={<SourceBadge sourceMetadata={request.source_metadata} size="sm" />}
+            className="border-t border-border"
+          />
           {request.assignee && (
             <TicketCell label="Technician" value={request.assignee.full_name} className="border-t border-border" />
           )}
@@ -854,6 +859,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
             <StatusBadge status={request.status} />
             <ReopenedBadge count={request.reopen_count ?? 0} />
             <PriorityBadge priority={request.priority} />
+            <SourceBadge sourceMetadata={request.source_metadata} />
             <SLABadge
               resolutionDueAt={request.resolution_due_at}
               responseDueAt={request.response_due_at}
