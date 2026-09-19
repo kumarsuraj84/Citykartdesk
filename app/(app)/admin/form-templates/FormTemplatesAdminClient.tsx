@@ -2,9 +2,11 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Archive, Trash2, FileText } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Plus, Pencil, Copy, Archive, Trash2, FileText } from 'lucide-react'
 import {
   createFormTemplate,
+  duplicateFormTemplate,
   updateFormTemplate,
   archiveFormTemplate,
   deleteFormTemplate,
@@ -12,15 +14,21 @@ import {
 } from '@/lib/actions/admin/form-templates'
 import type { FormTemplateSummary } from '@/lib/queries/services'
 
-type ModalMode = { type: 'create' } | { type: 'edit'; template: FormTemplateSummary } | null
+type ModalMode =
+  | { type: 'create' }
+  | { type: 'edit'; template: FormTemplateSummary }
+  | { type: 'duplicate'; template: FormTemplateSummary }
+  | null
 
 // ── Create / Edit modal ─────────────────────────────────────────────────────
 
 function TemplateModal({ mode, onClose }: { mode: Exclude<ModalMode, null>; onClose: () => void }) {
+  const router = useRouter()
   const isEdit = mode.type === 'edit'
-  const existing = isEdit ? mode.template : null
+  const isDuplicate = mode.type === 'duplicate'
+  const existing = mode.type === 'create' ? null : mode.template
 
-  const [name, setName] = useState(existing?.name ?? '')
+  const [name, setName] = useState(isDuplicate ? `${existing?.name ?? ''} (Copy)` : existing?.name ?? '')
   const [description, setDescription] = useState(existing?.description ?? '')
   const [error, setError] = useState('')
   const [pending, startTransition] = useTransition()
@@ -34,6 +42,8 @@ function TemplateModal({ mode, onClose }: { mode: Exclude<ModalMode, null>; onCl
     startTransition(async () => {
       const result = isEdit
         ? await updateFormTemplate(existing!.id, data)
+        : isDuplicate
+        ? await duplicateFormTemplate(existing!.id, data)
         : await createFormTemplate(data)
 
       if (result.error) {
@@ -41,6 +51,8 @@ function TemplateModal({ mode, onClose }: { mode: Exclude<ModalMode, null>; onCl
         return
       }
       onClose()
+      // The copy is made to be tweaked — open its fields straight away.
+      if (isDuplicate && 'id' in result && result.id) router.push(`/admin/form-templates/${result.id}`)
     })
   }
 
@@ -49,7 +61,7 @@ function TemplateModal({ mode, onClose }: { mode: Exclude<ModalMode, null>; onCl
       <div className="w-full max-w-md rounded-2xl border border-border bg-card shadow-xl">
         <div className="border-b border-border px-4 py-3">
           <h2 className="text-base font-semibold text-foreground">
-            {isEdit ? 'Edit Template' : 'Create Form Template'}
+            {isEdit ? 'Edit Template' : isDuplicate ? `Duplicate "${mode.template.name}"` : 'Create Form Template'}
           </h2>
         </div>
 
@@ -94,7 +106,7 @@ function TemplateModal({ mode, onClose }: { mode: Exclude<ModalMode, null>; onCl
               Cancel
             </button>
             <button type="submit" disabled={pending} className="btn-gradient px-3 py-1.5 text-xs disabled:opacity-50">
-              {pending ? 'Saving…' : isEdit ? 'Save' : 'Create'}
+              {pending ? 'Saving…' : isEdit ? 'Save' : isDuplicate ? 'Create Duplicate' : 'Create'}
             </button>
           </div>
         </form>
@@ -194,6 +206,13 @@ export default function FormTemplatesAdminClient({ templates }: { templates: For
                 >
                   <Pencil className="h-3 w-3" />
                   Rename
+                </button>
+                <button
+                  onClick={() => setModal({ type: 'duplicate', template: t })}
+                  className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted"
+                >
+                  <Copy className="h-3 w-3" />
+                  Duplicate
                 </button>
                 <button
                   onClick={() => setArchiveTarget(t)}

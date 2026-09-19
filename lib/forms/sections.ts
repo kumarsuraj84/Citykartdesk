@@ -151,3 +151,23 @@ export async function getServiceFormFieldsForOrg(admin: AnyClient, orgId: string
     )
   )
 }
+
+/**
+ * Deep-copies form sections for "Duplicate template", giving every section and
+ * field a brand-new id. Field ids key a request's answers (form_data) and the
+ * report columns, so two templates must never share them. Everything else is
+ * kept: labels, option ids/labels (so answers stay comparable), requester
+ * visibility, required flags and the Field Library link.
+ */
+export function cloneSectionsWithFreshIds(sections: FormSection[], newId: () => string): FormSection[] {
+  return sections.map((section) => ({
+    ...section,
+    id: newId(),
+    fields: section.fields.map((field) => ({
+      ...field,
+      id: newId(),
+      options: field.options ? JSON.parse(JSON.stringify(field.options)) : field.options,
+      validation: field.validation ? { ...field.validation } : field.validation,
+    })),
+  }))
+}

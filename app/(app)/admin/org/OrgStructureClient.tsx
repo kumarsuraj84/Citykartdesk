@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useMemo } from 'react'
+import { useState, useTransition, useMemo, useRef } from 'react'
 import {
   createDepartment, updateDepartment, deleteDepartment, importDepartments,
   createLocation, updateLocation, deleteLocation, importLocations,
@@ -822,6 +822,8 @@ function OemsTab({ oems }: { oems: OemRow[] }) {
   const [editId, setEditId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [duplicateOf, setDuplicateOf] = useState<string | null>(null)
+  const addPanelRef = useRef<HTMLDivElement>(null)
 
   const blank: OemFormValues = { name: '', emails: '', email_subject_template: '', email_body_template: '', is_active: true }
   const [addF, setAddF] = useState(blank)
@@ -838,6 +840,23 @@ function OemsTab({ oems }: { oems: OemRow[] }) {
     })
   }
 
+  // Opens the Add form pre-filled from an existing OEM (name suffixed "(Copy)") so an
+  // admin only renames and tweaks it. Stores mapped to the original are not copied.
+  function startDuplicate(o: OemRow) {
+    setError(null)
+    setEditId(null)
+    setDuplicateOf(o.name)
+    setAddF({
+      name: `${o.name} (Copy)`,
+      emails: o.emails.join('\n'),
+      email_subject_template: o.email_subject_template ?? '',
+      email_body_template: o.email_body_template ?? '',
+      is_active: o.is_active,
+    })
+    setShowAdd(true)
+    requestAnimationFrame(() => addPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+  }
+
   function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -850,7 +869,7 @@ function OemsTab({ oems }: { oems: OemRow[] }) {
         is_active: addF.is_active,
       })
       if (res.error) { setError(res.error); return }
-      setAddF(blank); setShowAdd(false)
+      setAddF(blank); setShowAdd(false); setDuplicateOf(null)
     })
   }
 
@@ -883,7 +902,7 @@ function OemsTab({ oems }: { oems: OemRow[] }) {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <button onClick={() => setShowAdd(v => !v)} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors">
+        <button onClick={() => { setDuplicateOf(null); setAddF(blank); setShowAdd(v => !v) }} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors">
           + Add OEM
         </button>
       </div>
@@ -891,14 +910,14 @@ function OemsTab({ oems }: { oems: OemRow[] }) {
       {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
 
       {showAdd && (
-        <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
-          <p className="text-sm font-semibold text-foreground">New OEM</p>
-          <OemForm f={addF} setF={setAddF} onSubmit={handleAdd} onCancel={() => setShowAdd(false)} submitLabel="Create" pending={pending} />
+        <div ref={addPanelRef} className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
+          <p className="text-sm font-semibold text-foreground">{duplicateOf ? `Duplicate "${duplicateOf}"` : 'New OEM'}</p>
+          <OemForm f={addF} setF={setAddF} onSubmit={handleAdd} onCancel={() => { setShowAdd(false); setDuplicateOf(null) }} submitLabel={duplicateOf ? 'Create Duplicate' : 'Create'} pending={pending} />
         </div>
       )}
 
       <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-        <div className="grid grid-cols-[1fr_1.4fr_80px_120px] gap-x-4 border-b border-border bg-muted/30 px-4 py-2.5">
+        <div className="grid grid-cols-[1fr_1.4fr_80px_190px] gap-x-4 border-b border-border bg-muted/30 px-4 py-2.5">
           {['Name', 'Emails', 'Active', 'Actions'].map(h => (
             <span key={h} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
           ))}
@@ -913,12 +932,13 @@ function OemsTab({ oems }: { oems: OemRow[] }) {
                 <OemForm f={editF} setF={setEditF} onSubmit={handleEdit} onCancel={() => setEditId(null)} submitLabel="Save" pending={pending} />
               </div>
             ) : (
-              <div className="grid grid-cols-[1fr_1.4fr_80px_120px] items-center gap-x-4 border-b border-border/50 last:border-0 px-4 py-3">
+              <div className="grid grid-cols-[1fr_1.4fr_80px_190px] items-center gap-x-4 border-b border-border/50 last:border-0 px-4 py-3">
                 <TableCell>{o.name}</TableCell>
                 <TableCell className="text-muted-foreground text-xs truncate">{o.emails.length > 0 ? o.emails.join(', ') : '—'}</TableCell>
                 <div><ActiveBadge active={o.is_active} /></div>
                 <div className="flex gap-1.5">
                   <button onClick={() => startEdit(o)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Edit</button>
+                  <button onClick={() => startDuplicate(o)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Duplicate</button>
                   {confirmDelete === o.id ? (
                     <>
                       <button onClick={() => handleDelete(o.id)} disabled={pending} className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Confirm</button>

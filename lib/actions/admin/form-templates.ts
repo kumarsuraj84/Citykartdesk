@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
-import { resolveServiceFormSections } from '@/lib/forms/sections'
+import { resolveServiceFormSections, cloneSectionsWithFreshIds } from '@/lib/forms/sections'
 import { syncSectionsWithLibrary } from '@/lib/forms/library'
 import { toLibraryDef } from '@/lib/queries/field-library'
 import { logAdminAudit } from './audit'
@@ -111,6 +111,61 @@ export async function createFormTemplate(
     orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
     entityType: 'form_template', entityId: row.id, action: 'form_template_created',
     metadata: { name: data.name.trim() },
+  })
+
+  revalidatePath('/admin/form-templates')
+  return { id: row.id }
+}
+
+// ── duplicateFormTemplate ─────────────────────────────────────────────────────
+// Copies a template's whole form under a new name so an admin can tweak a copy
+// instead of rebuilding from scratch. Not linked to any service — tag it from
+// Service Catalog once it's ready.
+
+export async function duplicateFormTemplate(
+  sourceId: string,
+  data: FormTemplateInput
+): Promise<ActionResult & { id?: string }> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return guard
+
+  if (!data.name?.trim()) return { error: 'Name is required.' }
+
+  const admin = createAdminClient()
+  const orgId = guard.profile!.org_id!
+
+  const { data: source } = await admin
+    .from('form_templates')
+    .select('name, form_sections')
+    .eq('id', sourceId)
+    .eq('org_id', orgId)
+    .single()
+  if (!source) return { error: 'Template not found.' }
+
+  const sourceSections = (Array.isArray(source.form_sections) ? source.form_sections : []) as unknown as FormSection[]
+  const cloned = cloneSectionsWithFreshIds(sourceSections, () => crypto.randomUUID())
+
+  const { data: row, error } = await admin
+    .from('form_templates')
+    .insert({
+      org_id: orgId,
+      name: data.name.trim(),
+      description: data.description?.trim() || null,
+      form_sections: cloned as never,
+      created_by: guard.profile!.id,
+    })
+    .select('id')
+    .single()
+
+  if (error) {
+    console.error('[duplicateFormTemplate]', error.message)
+    return { error: 'Failed to duplicate template.' }
+  }
+
+  await logAdminAudit({
+    orgId, actorId: guard.profile!.id,
+    entityType: 'form_template', entityId: row.id, action: 'form_template_created',
+    metadata: { name: data.name.trim(), duplicated_from: sourceId },
   })
 
   revalidatePath('/admin/form-templates')

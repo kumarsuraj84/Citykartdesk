@@ -13,11 +13,13 @@ import {
   adminSetPassword,
   addMobileNumber,
   removeMobileNumber,
+  exportUsersCsv,
 } from '@/lib/actions/admin/users'
 import type { UserWithTeams, Department, Location, Store, CostCenter, JobFunction, Designation, ProfileMini, TeamOption } from './page'
 import type { UserRole } from '@/types'
 import { ROLE_LABELS, ROLE_BADGE_STYLES } from '@/lib/constants/roles'
 import { BulkImportUsersDialog } from '@/components/admin/BulkImportUsersDialog'
+import { ExportButton } from '@/components/requests/ExportButton'
 import { normalizeMobileNumber } from '@/lib/users/mobile'
 
 // Every role the DB/RLS actually recognizes (user_role enum) — the role select
@@ -860,6 +862,7 @@ export function UserManagementClient({ initialUsers, currentUserId, isAdmin, dep
         </p>
         {isAdmin && (
           <div className="flex items-center gap-2">
+            <ExportButton action={exportUsersCsv} filename={`users-${new Date().toISOString().slice(0, 10)}`} label="Export" />
             <BulkImportUsersDialog />
             <button
               onClick={() => setShowInvite(true)}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Plus, Pencil, Archive, Trash2, Timer } from 'lucide-react'
+import { Plus, Pencil, Copy, Archive, Trash2, Timer } from 'lucide-react'
 import {
   createSlaPolicy,
   updateSlaPolicy,
@@ -12,15 +12,16 @@ import {
 import { SLA_PRIORITIES, slaConfigToDraft, draftToSlaConfig, type SlaDraft } from '@/lib/forms/sla-draft'
 import type { SlaPolicySummary } from '@/lib/queries/services'
 
-type ModalMode = { type: 'create' } | { type: 'edit'; policy: SlaPolicySummary } | null
+type ModalMode = { type: 'create' } | { type: 'edit'; policy: SlaPolicySummary } | { type: 'duplicate'; policy: SlaPolicySummary } | null
 
 // ── Create / Edit modal ─────────────────────────────────────────────────────
 
 function PolicyModal({ mode, onClose }: { mode: Exclude<ModalMode, null>; onClose: () => void }) {
   const isEdit = mode.type === 'edit'
-  const existing = isEdit ? mode.policy : null
+  const isDuplicate = mode.type === 'duplicate'
+  const existing = mode.type === 'create' ? null : mode.policy
 
-  const [name, setName] = useState(existing?.name ?? '')
+  const [name, setName] = useState(isDuplicate ? `${existing?.name ?? ''} (Copy)` : existing?.name ?? '')
   const [description, setDescription] = useState(existing?.description ?? '')
   const [slaDraft, setSlaDraft] = useState<SlaDraft>(() => slaConfigToDraft(existing?.config))
   const [error, setError] = useState('')
@@ -50,7 +51,7 @@ function PolicyModal({ mode, onClose }: { mode: Exclude<ModalMode, null>; onClos
       <div className="w-full max-w-md rounded-2xl border border-border bg-card shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="border-b border-border px-4 py-3 sticky top-0 bg-card z-10">
           <h2 className="text-base font-semibold text-foreground">
-            {isEdit ? 'Edit SLA Policy' : 'Create SLA Policy'}
+            {isEdit ? 'Edit SLA Policy' : isDuplicate ? `Duplicate "${mode.policy.name}"` : 'Create SLA Policy'}
           </h2>
         </div>
 
@@ -124,7 +125,7 @@ function PolicyModal({ mode, onClose }: { mode: Exclude<ModalMode, null>; onClos
               Cancel
             </button>
             <button type="submit" disabled={pending} className="btn-gradient px-3 py-1.5 text-xs disabled:opacity-50">
-              {pending ? 'Saving…' : isEdit ? 'Save' : 'Create'}
+              {pending ? 'Saving…' : isEdit ? 'Save' : isDuplicate ? 'Create Duplicate' : 'Create'}
             </button>
           </div>
         </form>
@@ -227,6 +228,13 @@ export default function SlaPoliciesAdminClient({ policies }: { policies: SlaPoli
                   >
                     <Pencil className="h-3 w-3" />
                     Edit
+                  </button>
+                  <button
+                    onClick={() => setModal({ type: 'duplicate', policy: p })}
+                    className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted"
+                  >
+                    <Copy className="h-3 w-3" />
+                    Duplicate
                   </button>
                   <button
                     onClick={() => setArchiveTarget(p)}

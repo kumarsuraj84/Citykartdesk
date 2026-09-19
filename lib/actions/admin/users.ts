@@ -7,6 +7,8 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { rateLimit } from '@/lib/rate-limit'
 import { assertRefsInOrg } from './orgScopeGuard'
 import { normalizeMobileNumber } from '@/lib/users/mobile'
+import { toCSV } from '@/lib/export/csv'
+import { USER_EXPORT_COLUMNS, buildUsersExportRows, type ExportProfile } from '@/lib/export/users'
 import type { UserRole } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -716,4 +718,63 @@ export async function adminSetPassword(userId: string, newPassword: string): Pro
   await admin.from('profiles').update({ must_reset_password: true }).eq('id', userId)
 
   return {}
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+// Admin-only, same gate as bulkCreateUsers(). Returns CSV text for the client to
+// download (same shape as the other Export buttons). Exports every user in the
+// org — the on-screen search filter is a view aid, not an export scope.
+
+export async function exportUsersCsv(): Promise<string> {
+  const profile = await getCurrentProfile()
+  if (!profile || !['admin', 'platform_owner'].includes(profile.role)) throw new Error('Unauthorized.')
+  if (!profile.org_id) throw new Error('Your account is not linked to an organisation.')
+
+  const admin = createAdminClient() as unknown as AnyClient
+  const orgId = profile.org_id
+
+  const [profiles, departments, locations, stores, jobFunctions, designations, costCenters, mobiles, teamMembers] = await Promise.all([
+    admin.from('profiles').select('id, full_name, role, is_active, whatsapp_enabled, job_title, employee_id, department_id, location_id, store_id, manager_id, function_id, designation_id, cost_center_id, created_at').eq('org_id', orgId).order('full_name'),
+    admin.from('departments').select('id, name').eq('org_id', orgId),
+    admin.from('locations').select('id, name').eq('org_id', orgId),
+    admin.from('stores').select('id, code').eq('org_id', orgId),
+    admin.from('job_functions').select('id, name').eq('org_id', orgId),
+    admin.from('designations').select('id, name').eq('org_id', orgId),
+    admin.from('cost_centers').select('id, name').eq('org_id', orgId),
+    admin.from('profile_mobile_numbers').select('profile_id, mobile_number').eq('org_id', orgId),
+    admin.from('team_members').select('user_id, team:teams (name)').eq('org_id', orgId),
+  ])
+  if (profiles.error) throw new Error('Failed to load users.')
+
+  const orgProfileIds = new Set(((profiles.data ?? []) as { id: string }[]).map((p) => p.id))
+  const emailById = new Map<string, string>()
+  for (let page = 1; page <= 20; page++) {
+    const { data } = await admin.auth.admin.listUsers({ page, perPage: 1000 })
+    const users = (data?.users ?? []) as { id: string; email?: string }[]
+    for (const u of users) if (u.email && orgProfileIds.has(u.id)) emailById.set(u.id, u.email)
+    if (users.length < 1000) break
+  }
+
+  const mobileNumbersById = new Map<string, string[]>()
+  for (const m of (mobiles.data ?? []) as { profile_id: string; mobile_number: string }[]) {
+    mobileNumbersById.set(m.profile_id, [...(mobileNumbersById.get(m.profile_id) ?? []), m.mobile_number])
+  }
+  const teamNamesById = new Map<string, string[]>()
+  for (const t of (teamMembers.data ?? []) as { user_id: string; team: { name: string } | null }[]) {
+    if (t.team?.name) teamNamesById.set(t.user_id, [...(teamNamesById.get(t.user_id) ?? []), t.team.name])
+  }
+
+  const rows = buildUsersExportRows({
+    profiles: (profiles.data ?? []) as ExportProfile[],
+    emailById,
+    departments: departments.data ?? [],
+    locations: locations.data ?? [],
+    stores: stores.data ?? [],
+    jobFunctions: jobFunctions.data ?? [],
+    designations: designations.data ?? [],
+    costCenters: costCenters.data ?? [],
+    mobileNumbersById,
+    teamNamesById,
+  })
+  return toCSV(rows, USER_EXPORT_COLUMNS)
 }
