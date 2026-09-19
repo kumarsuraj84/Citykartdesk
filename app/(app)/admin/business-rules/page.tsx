@@ -3,6 +3,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { getServiceFormFieldsForOrg } from '@/lib/forms/sections'
+import { toLibraryDef } from '@/lib/queries/field-library'
 import { BusinessRulesClient } from './BusinessRulesClient'
 import type { Profile } from '@/types'
 
@@ -32,6 +33,7 @@ export default async function BusinessRulesPage() {
     assignmentRulesCount,
     escalationRulesCount,
     formFields,
+    libraryResult,
   ] = await Promise.all([
     admin.from('business_rules').select('*').eq('org_id', orgId).order('execution_order', { ascending: true }),
     admin.from('services').select('id, name').eq('org_id', orgId).order('name', { ascending: true }),
@@ -56,7 +58,9 @@ export default async function BusinessRulesPage() {
     // also used by the Report Builder, so a field added to a service's form
     // shows up as a condition here with no code change.
     getServiceFormFieldsForOrg(admin, orgId),
+    admin.from('form_field_library').select('id, label, type, placeholder, help_text, options, is_active').eq('org_id', orgId).eq('is_active', true).order('label', { ascending: true }),
   ])
+  const libraryFields = ((libraryResult.data ?? []) as Parameters<typeof toLibraryDef>[0][]).map(toLibraryDef)
 
   return (
     <div className="space-y-4 max-w-5xl">
@@ -79,6 +83,7 @@ export default async function BusinessRulesPage() {
         projects={projectsResult.data ?? []}
         templates={templatesResult.data ?? []}
         formFields={formFields}
+        libraryFields={libraryFields}
         legacyRulesAvailable={(assignmentRulesCount.count ?? 0) + (escalationRulesCount.count ?? 0) > 0}
       />
     </div>

@@ -4,6 +4,7 @@ import {
   fieldFromLibrary,
   findDuplicateGroups,
   libraryUsage,
+  libraryFieldValues,
   syncSectionsWithLibrary,
   type LibraryFieldDef,
 } from '@/lib/forms/library'
@@ -144,5 +145,19 @@ describe('libraryUsage', () => {
     const linked = applyLibraryDefinition(field({ id: 'a' }), contact)
     const usage = libraryUsage([template('1', [linked]), template('2', [{ ...linked, id: 'b' }]), template('3', [field({ id: 'c' })])])
     expect(usage.get('lib-contact')).toEqual(['T-1', 'T-2'])
+  })
+})
+
+describe('libraryFieldValues', () => {
+  it('maps a request’s answers to library ids using its own form’s instance ids', () => {
+    const a = applyLibraryDefinition(field({ id: 'a_contact' }), contact)
+    const plain = field({ id: 'a_subject', label: 'Subject' })
+    expect(libraryFieldValues([section([a, plain])], { a_contact: '98', a_subject: 'hi' })).toEqual({ 'lib-contact': '98' })
+  })
+
+  it('omits library fields the form has no answer for, and handles empty data', () => {
+    const a = applyLibraryDefinition(field({ id: 'a_contact' }), contact)
+    expect(libraryFieldValues([section([a])], {})).toEqual({})
+    expect(libraryFieldValues([section([a])], null)).toEqual({})
   })
 })

@@ -150,6 +150,23 @@ export function findDuplicateGroups(
   return groups.sort((a, b) => b.instances.length - a.instances.length || a.label.localeCompare(b.label))
 }
 
+/** A request's answers keyed by library field id — whichever template field
+ *  instance its own form has for each library field. Fields not linked to the
+ *  library are omitted; a library field the form lacks is simply absent. */
+export function libraryFieldValues(
+  sections: FormSection[],
+  formData: Record<string, unknown> | null | undefined
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (!formData) return out
+  for (const s of sections) {
+    for (const f of s.fields ?? []) {
+      if (f.library_field_id && f.id in formData) out[f.library_field_id] = formData[f.id]
+    }
+  }
+  return out
+}
+
 /** Which templates use each library field (by template name). */
 export function libraryUsage(templates: TemplateForScan[]): Map<string, string[]> {
   const usage = new Map<string, Set<string>>()

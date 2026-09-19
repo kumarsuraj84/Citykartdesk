@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Zap, Plus, Pencil, Trash2, X, RefreshCw } from 'lucide-react'
+import { Zap, Plus, Pencil, Copy, Trash2, X, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants/requests'
 import {
@@ -19,6 +19,7 @@ import { flattenLeafOptions } from '@/lib/forms/options'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { ROLE_LABELS } from '@/lib/constants/roles'
 import type { ServiceFormFieldRef } from '@/lib/forms/sections'
+import type { LibraryFieldDef } from '@/lib/forms/library'
 import type { Profile, FormFieldType, FormFieldOption, UserRole } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -61,6 +62,8 @@ interface BusinessRulesClientProps {
   projects: Ref[]
   templates: Ref[]
   formFields: RuleFormFieldRef[]
+  /** Every active Field Library field — offered as one condition covering all templates. */
+  libraryFields: LibraryFieldDef[]
   legacyRulesAvailable: boolean
 }
 
@@ -101,9 +104,16 @@ const REQUESTER_FIELD_OPTIONS: { value: RuleConditionField; label: string }[] = 
 ]
 
 const FORM_FIELD_PREFIX = 'form:'
+const LIBRARY_FIELD_PREFIX = 'lib:'
 
-function encodeFieldSelection(condition: RuleCondition): string {
-  return condition.field === 'form_field' ? `${FORM_FIELD_PREFIX}${condition.form_field_id ?? ''}` : condition.field
+/** The picker value for a condition. A rule saved against one template's copy of
+ *  a field that is now a library field shows as that library field (it keeps
+ *  evaluating exactly as saved until the user changes it). */
+function encodeFieldSelection(condition: RuleCondition, formFields: RuleFormFieldRef[]): string {
+  if (condition.field !== 'form_field') return condition.field
+  if (condition.library_field_id) return `${LIBRARY_FIELD_PREFIX}${condition.library_field_id}`
+  const libId = formFields.find((f) => f.id === condition.form_field_id)?.libraryFieldId
+  return libId ? `${LIBRARY_FIELD_PREFIX}${libId}` : `${FORM_FIELD_PREFIX}${condition.form_field_id ?? ''}`
 }
 
 const OPERATOR_OPTIONS: { value: RuleConditionOperator; label: string }[] = [
@@ -158,6 +168,7 @@ const inputCls = selectCls
 const SOURCE_CHANNEL_OPTIONS = [
   { value: 'portal', label: 'Portal' },
   { value: 'intake', label: 'Intake' },
+  { value: 'whatsapp', label: 'WhatsApp' },
 ]
 
 function conditionValueOptions(field: RuleConditionField, refs: BusinessRulesClientProps): { value: string; label: string }[] | null {
@@ -252,13 +263,23 @@ function ConditionRow({
   const operator = uiOperator(condition)
   const needsValue = operator !== 'is_empty' && operator !== 'is_not_empty'
   const allowsMultiple = operator === 'equals' || operator === 'not_equals'
-  const formField = condition.field === 'form_field' ? refs.formFields.find((f) => f.id === condition.form_field_id) : undefined
+  // A library condition reads the field's shared definition from any one of its
+  // template copies (label/type/options are identical across all of them).
+  const libraryDef = condition.library_field_id
+    ? refs.libraryFields.find((l) => l.id === condition.library_field_id)
+    : undefined
+  const formField: RuleFormFieldRef | undefined = libraryDef
+    ? { id: libraryDef.id, label: libraryDef.label, type: libraryDef.type, options: libraryDef.options ?? undefined, serviceId: '', serviceName: '' }
+    : condition.field === 'form_field' && !condition.library_field_id
+    ? refs.formFields.find((f) => f.id === condition.form_field_id)
+    : undefined
   const options = condition.field === 'form_field'
     ? (formField ? formFieldValueOptions(formField) : null)
     : conditionValueOptions(condition.field, refs)
 
   const formFieldsByService = new Map<string, RuleFormFieldRef[]>()
   for (const f of refs.formFields) {
+    if (f.libraryFieldId) continue
     const list = formFieldsByService.get(f.serviceName) ?? []
     list.push(f)
     formFieldsByService.set(f.serviceName, list)
@@ -269,6 +290,13 @@ function ConditionRow({
   const fieldOptions: FormFieldOption[] = [
     { value: 'group:request', label: 'Request', children: REQUEST_FIELD_OPTIONS.map((f) => ({ value: f.value, label: f.label })) },
     { value: 'group:requester', label: 'Requester', children: REQUESTER_FIELD_OPTIONS.map((f) => ({ value: f.value, label: f.label })) },
+    ...(refs.libraryFields.length > 0
+      ? [{
+          value: 'group:library',
+          label: 'Field Library (all templates)',
+          children: refs.libraryFields.map((f) => ({ value: `${LIBRARY_FIELD_PREFIX}${f.id}`, label: f.label })),
+        }]
+      : []),
     ...[...formFieldsByService.entries()].map(([serviceName, fields]) => ({
       value: `group:svc:${serviceName}`,
       label: serviceName,
@@ -277,7 +305,9 @@ function ConditionRow({
   ]
 
   function handleFieldChange(raw: string) {
-    if (raw.startsWith(FORM_FIELD_PREFIX)) {
+    if (raw.startsWith(LIBRARY_FIELD_PREFIX)) {
+      onChange({ field: 'form_field', library_field_id: raw.slice(LIBRARY_FIELD_PREFIX.length), operator: 'equals', value: null })
+    } else if (raw.startsWith(FORM_FIELD_PREFIX)) {
       onChange({ field: 'form_field', form_field_id: raw.slice(FORM_FIELD_PREFIX.length), operator: 'equals', value: null })
     } else {
       onChange({ field: raw as RuleConditionField, operator: condition.operator, value: null })
@@ -309,7 +339,7 @@ function ConditionRow({
       )}
       <SearchableSelect
         options={fieldOptions}
-        value={encodeFieldSelection(condition)}
+        value={encodeFieldSelection(condition, refs.formFields)}
         onChange={handleFieldChange}
         placeholder="Search fields…"
         className="min-w-[160px] flex-1 basis-[160px]"
@@ -545,28 +575,36 @@ function formStateFromRule(rule: BusinessRuleRow | null): BusinessRuleInput {
   }
 }
 
+/** Form state for the editor: the rule being edited, or a copy of the rule being duplicated. */
+function initialFormState(editRule: BusinessRuleRow | null, duplicateOf: BusinessRuleRow | null): BusinessRuleInput {
+  if (editRule || !duplicateOf) return formStateFromRule(editRule)
+  return { ...formStateFromRule(duplicateOf), name: `${duplicateOf.name} (Copy)` }
+}
+
 function RuleEditor({
   open,
   onClose,
   editRule,
+  duplicateOf,
   refs,
 }: {
   open: boolean
   onClose: () => void
   editRule: BusinessRuleRow | null
+  duplicateOf: BusinessRuleRow | null
   refs: BusinessRulesClientProps
 }) {
   const router = useRouter()
-  const [form, setForm] = useState<BusinessRuleInput>(() => formStateFromRule(editRule))
+  const [form, setForm] = useState<BusinessRuleInput>(() => initialFormState(editRule, duplicateOf))
   const [saving, startSave] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
   // Reset whenever the drawer (re)opens for a different rule — state derived
   // from props, adjusted during render (same pattern as RoutingRulesClient).
-  const [prevKey, setPrevKey] = useState<[boolean, BusinessRuleRow | null]>([open, editRule])
-  if (prevKey[0] !== open || prevKey[1] !== editRule) {
-    setPrevKey([open, editRule])
-    setForm(formStateFromRule(editRule))
+  const [prevKey, setPrevKey] = useState<[boolean, BusinessRuleRow | null, BusinessRuleRow | null]>([open, editRule, duplicateOf])
+  if (prevKey[0] !== open || prevKey[1] !== editRule || prevKey[2] !== duplicateOf) {
+    setPrevKey([open, editRule, duplicateOf])
+    setForm(initialFormState(editRule, duplicateOf))
     setError(null)
   }
 
@@ -624,7 +662,7 @@ function RuleEditor({
     <div className="fixed inset-0 z-40 flex items-center justify-end bg-black/40">
       <div className="h-full w-full max-w-2xl overflow-y-auto bg-background shadow-2xl flex flex-col">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="text-lg font-semibold text-foreground">{editRule ? 'Edit Business Rule' : 'New Business Rule'}</h2>
+          <h2 className="text-lg font-semibold text-foreground">{editRule ? 'Edit Business Rule' : duplicateOf ? 'Duplicate Business Rule' : 'New Business Rule'}</h2>
           <button onClick={onClose} className="rounded-md p-1.5 hover:bg-muted transition-colors text-muted-foreground">
             <X className="h-5 w-5" />
           </button>
@@ -764,7 +802,7 @@ function RuleEditor({
         <div className="shrink-0 border-t border-border px-4 py-3 flex gap-3 justify-end">
           <button onClick={onClose} className="btn-soft">Cancel</button>
           <button onClick={submit} disabled={saving} className="btn-gradient disabled:opacity-50">
-            {saving ? 'Saving…' : editRule ? 'Save Changes' : 'Create Rule'}
+            {saving ? 'Saving…' : editRule ? 'Save Changes' : duplicateOf ? 'Create Duplicate' : 'Create Rule'}
           </button>
         </div>
       </div>
@@ -774,7 +812,7 @@ function RuleEditor({
 
 // ── Rule card ────────────────────────────────────────────────────────────────
 
-function RuleCard({ rule, onEdit, onDelete }: { rule: BusinessRuleRow; onEdit: () => void; onDelete: () => void }) {
+function RuleCard({ rule, onEdit, onDuplicate, onDelete }: { rule: BusinessRuleRow; onEdit: () => void; onDuplicate: () => void; onDelete: () => void }) {
   const [isPending, startTransition] = useTransition()
   const [localActive, setLocalActive] = useState(rule.is_active)
 
@@ -812,6 +850,9 @@ function RuleCard({ rule, onEdit, onDelete }: { rule: BusinessRuleRow; onEdit: (
         <button onClick={onEdit} className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Edit rule">
           <Pencil className="h-4 w-4" />
         </button>
+        <button onClick={onDuplicate} className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Duplicate rule" aria-label="Duplicate rule">
+          <Copy className="h-4 w-4" />
+        </button>
         <button onClick={onDelete} className="rounded-lg border border-border p-1.5 text-red-600/70 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors" title="Delete rule" aria-label="Delete rule">
           <Trash2 className="h-4 w-4" />
         </button>
@@ -845,6 +886,7 @@ export function BusinessRulesClient(props: BusinessRulesClientProps) {
   const [rules, setRules] = useState<BusinessRuleRow[]>(props.rules)
   const [modalOpen, setModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<BusinessRuleRow | null>(null)
+  const [duplicateTarget, setDuplicateTarget] = useState<BusinessRuleRow | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [migrating, startMigrate] = useTransition()
   const [, startDelete] = useTransition()
@@ -855,9 +897,10 @@ export function BusinessRulesClient(props: BusinessRulesClientProps) {
     setRules(props.rules)
   }
 
-  function openCreate() { setEditTarget(null); setModalOpen(true) }
-  function openEdit(rule: BusinessRuleRow) { setEditTarget(rule); setModalOpen(true) }
-  function closeModal() { setModalOpen(false); setEditTarget(null) }
+  function openCreate() { setEditTarget(null); setDuplicateTarget(null); setModalOpen(true) }
+  function openEdit(rule: BusinessRuleRow) { setEditTarget(rule); setDuplicateTarget(null); setModalOpen(true) }
+  function openDuplicate(rule: BusinessRuleRow) { setEditTarget(null); setDuplicateTarget(rule); setModalOpen(true) }
+  function closeModal() { setModalOpen(false); setEditTarget(null); setDuplicateTarget(null) }
 
   function handleDeleteConfirm() {
     if (!deleteTarget) return
@@ -910,12 +953,12 @@ export function BusinessRulesClient(props: BusinessRulesClientProps) {
       ) : (
         <div className="space-y-3">
           {rules.map((rule) => (
-            <RuleCard key={rule.id} rule={rule} onEdit={() => openEdit(rule)} onDelete={() => setDeleteTarget(rule.id)} />
+            <RuleCard key={rule.id} rule={rule} onEdit={() => openEdit(rule)} onDuplicate={() => openDuplicate(rule)} onDelete={() => setDeleteTarget(rule.id)} />
           ))}
         </div>
       )}
 
-      <RuleEditor open={modalOpen} onClose={closeModal} editRule={editTarget} refs={props} />
+      <RuleEditor open={modalOpen} onClose={closeModal} editRule={editTarget} duplicateOf={duplicateTarget} refs={props} />
 
       <ConfirmDialog
         open={!!deleteTarget}

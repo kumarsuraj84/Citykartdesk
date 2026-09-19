@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyCronSecret } from '@/lib/cron-auth'
 import { computeElapsedBusinessMinutes } from '@/lib/sla/business-hours'
+import { resolveServiceFormSections } from '@/lib/forms/sections'
+import { libraryFieldValues } from '@/lib/forms/library'
+import { sourceChannelOf } from '@/lib/sources'
 import { matchesConditions, type RuleCondition, type RuleConditionsLogic, type RuleEvaluationRequest } from '@/lib/rules/evaluate'
 import { executeActions, type RuleAction, type ActionRequest } from '@/lib/rules/actions'
 import { logger } from '@/lib/observability/logger'
@@ -107,10 +110,6 @@ async function alreadyFired(admin: AnyClient, ruleId: string, requestId: string)
   return !!data
 }
 
-function sourceChannelOf(sourceMetadata: unknown): string {
-  const createdVia = (sourceMetadata as { created_via?: string } | null)?.created_via
-  return createdVia === 'intake' ? 'intake' : 'portal'
-}
 
 function isSlaBreached(request: RawRequest): boolean {
   if (!request.resolution_due_at) return false
@@ -159,6 +158,7 @@ async function fireRule(admin: AnyClient, rule: BusinessRuleRow, request: RawReq
     has_attachment: await hasAttachment(admin, request.id),
     age_days: ageDays(request),
     form_data: request.form_data,
+    library_field_values: libraryFieldValues(resolveServiceFormSections(request.service ?? {}), request.form_data),
   }
   if (!matchesConditions(evalRequest, rule.conditions ?? [], rule.conditions_logic)) return false
 

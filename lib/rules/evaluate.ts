@@ -40,6 +40,10 @@ export type RuleCondition = {
   field: RuleConditionField
   /** Only when field === 'form_field': which service form field (by id) this condition reads from request.form_data. */
   form_field_id?: string
+  /** Only when field === 'form_field': a Field Library field, matched on whichever
+   *  template field of that library field the request's own form contains — so one
+   *  condition covers every template using it. Takes precedence over form_field_id. */
+  library_field_id?: string
   operator: RuleConditionOperator
   /** Unused for is_empty/is_not_empty. Array only for `in`/`not_in`. */
   value?: string | string[] | null
@@ -86,6 +90,8 @@ export type RuleEvaluationRequest = {
   has_attachment: boolean
   age_days: number
   form_data?: Record<string, unknown> | null
+  /** The request's answers keyed by Field Library field id — see libraryFieldValues(). */
+  library_field_values?: Record<string, unknown> | null
 }
 
 function textIncludes(haystack: string | null | undefined, needle: string): boolean {
@@ -95,6 +101,7 @@ function textIncludes(haystack: string | null | undefined, needle: string): bool
 /** Raw field value for a condition — form_field conditions read from form_data instead of a fixed column. */
 function rawFieldValue(request: RuleEvaluationRequest, condition: RuleCondition): unknown {
   if (condition.field === 'form_field') {
+    if (condition.library_field_id) return request.library_field_values?.[condition.library_field_id] ?? null
     if (!condition.form_field_id) return null
     return request.form_data?.[condition.form_field_id] ?? null
   }

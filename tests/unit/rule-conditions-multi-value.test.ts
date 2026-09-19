@@ -61,3 +61,29 @@ describe('multi-value rule conditions', () => {
     expect(matchesConditions({ ...request, form_data: { f1: ['a', 'b'] } }, [formCond])).toBe(true)
   })
 })
+
+describe('Field Library conditions', () => {
+  const libCond = (c: Partial<RuleCondition>): RuleCondition =>
+    ({ field: 'form_field', library_field_id: 'lib-contact', operator: 'equals', value: '9811111111', ...c }) as RuleCondition
+
+  it('matches on the library field regardless of which template the request used', () => {
+    expect(matchesConditions({ ...request, library_field_values: { 'lib-contact': '9811111111' } }, [libCond({})])).toBe(true)
+    expect(matchesConditions({ ...request, library_field_values: { 'lib-contact': '9822222222' } }, [libCond({})])).toBe(false)
+  })
+
+  it('treats a form without the library field as empty', () => {
+    expect(matchesConditions(request, [libCond({ operator: 'is_empty', value: null })])).toBe(true)
+    expect(matchesConditions(request, [libCond({})])).toBe(false)
+  })
+
+  it('supports multi-value in / contains on library fields', () => {
+    const r = { ...request, library_field_values: { 'lib-contact': '9811111111' } }
+    expect(matchesConditions(r, [libCond({ operator: 'in', value: ['9800000000', '9811111111'] })])).toBe(true)
+    expect(matchesConditions(r, [libCond({ operator: 'contains', value: '9811' })])).toBe(true)
+  })
+
+  it('library_field_id wins over a stale form_field_id', () => {
+    const r = { ...request, form_data: { old: 'x' }, library_field_values: { 'lib-contact': 'y' } }
+    expect(matchesConditions(r, [libCond({ form_field_id: 'old', value: 'x' })])).toBe(false)
+  })
+})

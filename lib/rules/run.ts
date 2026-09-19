@@ -1,7 +1,12 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { matchesConditions, type RuleCondition, type RuleConditionsLogic, type RuleEvaluationRequest } from './evaluate'
 import { executeActions, type RuleAction, type ActionRequest } from './actions'
+import { resolveServiceFormSections } from '@/lib/forms/sections'
+import { libraryFieldValues } from '@/lib/forms/library'
+import { sourceChannelOf } from '@/lib/sources'
 import type { SLAConfig, FormSection, FormField } from '@/types'
+
+export { sourceChannelOf }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: { admin: { getUserById: (id: string) => any } } }
@@ -64,21 +69,6 @@ async function fetchRequest(admin: AnyClient, requestId: string): Promise<RawReq
   return (data as RawRequest) ?? null
 }
 
-export function sourceChannelOf(sourceMetadata: unknown): string {
-  const createdVia = (sourceMetadata as { created_via?: string } | null)?.created_via
-  // Stage 7.1 (Part 4): WhatsApp-created requests already carry
-  // created_via='whatsapp' (set by createRequestCore() via
-  // lib/conversations/orchestrator.ts's mapChannelToSource()) — this was
-  // simply never recognized here, so every WhatsApp ticket fell into the
-  // 'portal' bucket alongside real web submissions. No active Business Rule
-  // currently filters on source_channel (verified directly against the
-  // live business_rules table before this change), so this is purely
-  // additive: it only enables a rule to be configured to distinguish the
-  // channel later — it changes nothing about priority/SLA/assignment/
-  // routing on its own.
-  if (createdVia === 'whatsapp') return 'whatsapp'
-  return createdVia === 'intake' ? 'intake' : 'portal'
-}
 
 function isSlaBreached(request: RawRequest): boolean {
   if (!request.resolution_due_at) return false
@@ -125,6 +115,7 @@ async function toEvalRequest(admin: AnyClient, request: RawRequest): Promise<Rul
     has_attachment: await hasAttachment(admin, request.id),
     age_days: ageDays(request),
     form_data: request.form_data,
+    library_field_values: libraryFieldValues(resolveServiceFormSections(request.service ?? {}), request.form_data),
   }
 }
 
