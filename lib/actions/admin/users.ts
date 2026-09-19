@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { rateLimit } from '@/lib/rate-limit'
 import { assertRefsInOrg } from './orgScopeGuard'
+import { logAdminAudit } from './audit'
+import { BULK_RESET_BATCH_SIZE, BULK_RESET_ROLES } from '@/lib/users/bulk-reset'
 import { normalizeMobileNumber } from '@/lib/users/mobile'
 import { toCSV } from '@/lib/export/csv'
 import { USER_EXPORT_COLUMNS, buildUsersExportRows, type ExportProfile } from '@/lib/export/users'
@@ -777,4 +779,91 @@ export async function exportUsersCsv(): Promise<string> {
     teamNamesById,
   })
   return toCSV(rows, USER_EXPORT_COLUMNS)
+}
+
+// ── Bulk password reset ───────────────────────────────────────────────────────
+// Sets one temporary password on many accounts at once and flags each so the person
+// must choose their own at their next page load (the same must_reset_password flow
+// adminSetPassword() uses). Admin / platform owner only, org-scoped, never the caller's
+// own account (so nobody locks themselves out), active users only, and never admins or
+// platform owners (only ordinary users, agents and managers). Processed in small
+// batches so the UI can show progress and a slow auth server can't time out one giant
+// request. The temporary password is never logged or stored by us.
+
+const BULK_RESET_CONCURRENCY = 5
+
+/** Who a bulk reset would touch: every active user, agent and manager in the org (not admins / platform owners, not the caller). */
+export async function listPasswordResetTargets(): Promise<{ error?: string; ids?: string[] }> {
+  const profile = await getCurrentProfile()
+  if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
+
+  const admin = createAdminClient() as unknown as AnyClient
+  const { data, error } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('org_id', profile.org_id)
+    .eq('is_active', true)
+    .in('role', BULK_RESET_ROLES)
+    .neq('id', profile.id)
+  if (error) return { error: error.message }
+  return { ids: ((data ?? []) as { id: string }[]).map((r) => r.id) }
+}
+
+export async function resetPasswordsBatch(
+  userIds: string[],
+  newPassword: string
+): Promise<{ error?: string; succeeded?: number; failed?: { id: string; name?: string; error: string }[] }> {
+  const profile = await getCurrentProfile()
+  if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
+  if (typeof newPassword !== 'string' || newPassword.length < 8) return { error: 'Password must be at least 8 characters.' }
+  if (!Array.isArray(userIds) || userIds.length === 0) return { error: 'No users selected.' }
+  if (userIds.length > BULK_RESET_BATCH_SIZE) return { error: `At most ${BULK_RESET_BATCH_SIZE} users per batch.` }
+
+  const admin = createAdminClient() as unknown as AnyClient
+
+  // Re-derive the allowed set on the server — never trust the ids the browser sent.
+  const { data: allowedRows } = await admin
+    .from('profiles')
+    .select('id, full_name')
+    .eq('org_id', profile.org_id)
+    .eq('is_active', true)
+    .in('role', BULK_RESET_ROLES)
+    .neq('id', profile.id)
+    .in('id', [...new Set(userIds)])
+  const nameById = new Map(((allowedRows ?? []) as { id: string; full_name: string }[]).map((r) => [r.id, r.full_name]))
+  const allowed = [...nameById.keys()]
+
+  const failed: { id: string; name?: string; error: string }[] = userIds
+    .filter((id) => !nameById.has(id))
+    .map((id) => ({ id, error: 'Not eligible (must be an active user, agent or manager of this organisation).' }))
+  const succeededIds: string[] = []
+
+  for (let i = 0; i < allowed.length; i += BULK_RESET_CONCURRENCY) {
+    const chunk = allowed.slice(i, i + BULK_RESET_CONCURRENCY)
+    const results = await Promise.all(
+      chunk.map(async (id) => {
+        const { error } = await admin.auth.admin.updateUserById(id, { password: newPassword, email_confirm: true })
+        return { id, error: error?.message ?? null }
+      })
+    )
+    for (const r of results) {
+      if (r.error) failed.push({ id: r.id, name: nameById.get(r.id), error: r.error })
+      else succeededIds.push(r.id)
+    }
+  }
+
+  if (succeededIds.length > 0) {
+    // They never chose this password — force each to set their own before using the portal.
+    await admin.from('profiles').update({ must_reset_password: true }).in('id', succeededIds)
+  }
+
+  await logAdminAudit({
+    orgId: profile.org_id, actorId: profile.id,
+    entityType: 'user', entityId: null, action: 'bulk_password_reset',
+    metadata: { requested: userIds.length, succeeded: succeededIds.length, failed: failed.length },
+  })
+  revalidatePath('/admin/users')
+  return { succeeded: succeededIds.length, failed }
 }
