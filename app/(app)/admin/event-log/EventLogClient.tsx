@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState, useTransition } from 'react'
-import { Download, Loader2 } from 'lucide-react'
+import { Download, Loader2, RefreshCw } from 'lucide-react'
 import { listEvents, exportEventsCsv, type EventRow, type EventFilters } from '@/lib/actions/admin/events'
 import { downloadCSV } from '@/lib/export/csv'
 
@@ -25,6 +25,8 @@ export function EventLogClient({ users }: { users: { id: string; full_name: stri
   const [error, setError] = useState<string | null>(null)
   const [loading, startLoad] = useTransition()
   const [exporting, startExport] = useTransition()
+  const [autoRefresh, setAutoRefresh] = useState(true)
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
 
   const filters = useCallback((): EventFilters => ({ days, kind: kind || undefined, userId: userId || undefined, q }), [days, kind, userId, q])
 
@@ -33,6 +35,7 @@ export function EventLogClient({ users }: { users: { id: string; full_name: stri
       const res = await listEvents(filters())
       setRows(res.rows)
       setError(res.error ?? null)
+      setUpdatedAt(new Date())
     })
   }, [filters])
 
@@ -40,6 +43,16 @@ export function EventLogClient({ users }: { users: { id: string; full_name: stri
     const t = setTimeout(load, q ? 350 : 0)
     return () => clearTimeout(t)
   }, [load, q])
+
+  // New events keep arriving while the page is open, so re-check every 10 seconds
+  // (only while the tab is visible) instead of needing a manual reload.
+  useEffect(() => {
+    if (!autoRefresh) return
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') load()
+    }, 10_000)
+    return () => clearInterval(id)
+  }, [autoRefresh, load])
 
   function download() {
     startExport(async () => {
@@ -79,6 +92,19 @@ export function EventLogClient({ users }: { users: { id: string; full_name: stri
           className={`${inputCls} min-w-[220px] flex-1 max-w-sm`}
         />
         <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="flex items-center gap-1.5 rounded-lg border border-[#E2E8F4] bg-white px-3 py-1.5 text-[13px] text-[#1A1F36] hover:bg-muted disabled:opacity-60"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
+        <label className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+          <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
+          Auto-refresh
+        </label>
+        <button
           onClick={download}
           disabled={exporting}
           className="btn-gradient flex items-center gap-1.5 disabled:opacity-60"
@@ -91,7 +117,7 @@ export function EventLogClient({ users }: { users: { id: string; full_name: stri
       {error && <p className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
 
       <p className="text-xs text-muted-foreground">
-        {loading ? 'Loading…' : `Showing the latest ${rows.length} matching events (the download includes up to 50,000).`}
+        {loading && rows.length === 0 ? 'Loading…' : `Showing the latest ${rows.length} matching events (the download includes up to 50,000).`}{updatedAt ? ` Updated ${updatedAt.toLocaleTimeString()}.` : ''}
       </p>
 
       <div className="overflow-x-auto rounded-xl border border-[#E2E8F4] bg-white">
