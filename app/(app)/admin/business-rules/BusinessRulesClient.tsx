@@ -214,6 +214,28 @@ function formFieldInputType(field: RuleFormFieldRef): string {
   return 'text'
 }
 
+// "is"/"is not" accept several values in the UI. One value is stored as plain
+// equals/not_equals (so existing rules and single-value rules are unchanged);
+// two or more are stored as in/not_in with an array value.
+const MULTI_OPERATOR: Partial<Record<RuleConditionOperator, RuleConditionOperator>> = { equals: 'in', not_equals: 'not_in' }
+
+function uiOperator(c: RuleCondition): RuleConditionOperator {
+  if (c.operator === 'in') return 'equals'
+  if (c.operator === 'not_in') return 'not_equals'
+  return c.operator
+}
+
+function selectedValues(c: RuleCondition): string[] {
+  if (Array.isArray(c.value)) return c.value
+  return typeof c.value === 'string' && c.value ? [c.value] : []
+}
+
+function withValues(c: RuleCondition, op: RuleConditionOperator, values: string[]): RuleCondition {
+  const multi = MULTI_OPERATOR[op]
+  if (multi && values.length > 1) return { ...c, operator: multi, value: values }
+  return { ...c, operator: op, value: values[0] ?? null }
+}
+
 function ConditionRow({
   condition,
   isFirst,
@@ -227,7 +249,9 @@ function ConditionRow({
   onRemove: () => void
   refs: BusinessRulesClientProps
 }) {
-  const needsValue = condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty'
+  const operator = uiOperator(condition)
+  const needsValue = operator !== 'is_empty' && operator !== 'is_not_empty'
+  const allowsMultiple = operator === 'equals' || operator === 'not_equals'
   const formField = condition.field === 'form_field' ? refs.formFields.find((f) => f.id === condition.form_field_id) : undefined
   const options = condition.field === 'form_field'
     ? (formField ? formFieldValueOptions(formField) : null)
@@ -294,8 +318,8 @@ function ConditionRow({
           like the Combobox-based fields do; sharing flex-1 with them squeezes
           this down to just the arrow with the selected label invisible. */}
       <select
-        value={condition.operator}
-        onChange={(e) => onChange({ ...condition, operator: e.target.value as RuleConditionOperator })}
+        value={operator}
+        onChange={(e) => onChange(withValues(condition, e.target.value as RuleConditionOperator, selectedValues(condition)))}
         className={cn(selectCls, 'w-40 shrink-0')}
       >
         {OPERATOR_OPTIONS.map((o) => (
@@ -303,7 +327,16 @@ function ConditionRow({
         ))}
       </select>
       {needsValue && (
-        options ? (
+        options && allowsMultiple ? (
+          <SearchableSelect
+            multiple
+            options={options}
+            value={selectedValues(condition)}
+            onChange={(values) => onChange(withValues(condition, operator, values))}
+            placeholder="Select one or more…"
+            className="min-w-[160px] flex-1 basis-[160px]"
+          />
+        ) : options ? (
           <SearchableSelect
             options={options}
             value={typeof condition.value === 'string' ? condition.value : ''}

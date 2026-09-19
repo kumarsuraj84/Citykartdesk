@@ -30,6 +30,7 @@ export type RuleConditionOperator =
   | 'is_empty'
   | 'is_not_empty'
   | 'in'
+  | 'not_in'
   | 'gt'
   | 'gte'
   | 'lt'
@@ -40,7 +41,7 @@ export type RuleCondition = {
   /** Only when field === 'form_field': which service form field (by id) this condition reads from request.form_data. */
   form_field_id?: string
   operator: RuleConditionOperator
-  /** Unused for is_empty/is_not_empty. Array only for `in`. */
+  /** Unused for is_empty/is_not_empty. Array only for `in`/`not_in`. */
   value?: string | string[] | null
   /** How this condition combines with the ONE BEFORE it (ignored on the first
    *  condition, which has nothing to combine with). Undefined on a condition
@@ -127,10 +128,12 @@ function matchesOne(request: RuleEvaluationRequest, condition: RuleCondition): b
 
   const fieldValue = toComparable(raw)
 
-  if (operator === 'in') {
+  if (operator === 'in' || operator === 'not_in') {
     const values = Array.isArray(value) ? value : []
-    if (Array.isArray(raw)) return raw.some((v) => values.includes(toComparable(v)))
-    return values.includes(fieldValue)
+    const isMatch = Array.isArray(raw)
+      ? raw.some((v) => values.includes(toComparable(v)))
+      : values.includes(fieldValue)
+    return operator === 'in' ? isMatch : !isMatch
   }
 
   if (operator === 'contains' || operator === 'not_contains') {
