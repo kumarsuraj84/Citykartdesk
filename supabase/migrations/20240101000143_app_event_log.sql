@@ -43,3 +43,6 @@ $$;
 
 REVOKE ALL ON FUNCTION purge_app_event_log(INTEGER) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION purge_app_event_log(INTEGER) TO service_role;
+
+-- Make PostgREST pick up the new table immediately (otherwise inserts fail until it restarts).
+NOTIFY pgrst, 'reload schema';
