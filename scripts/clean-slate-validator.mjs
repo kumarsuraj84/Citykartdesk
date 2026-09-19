@@ -60,7 +60,7 @@ async function main() {
     'request_activity', 'request_attachments', 'request_conversations', 'conversation_attachments',
     'conversation_events', 'intake_messages', 'intake_channels', 'services', 'service_categories',
     'service_sub_categories', 'teams', 'departments', 'team_members', 'stores', 'oems',
-    'sla_policies', 'business_rules', 'form_templates', 'kb_articles',
+    'sla_policies', 'business_rules', 'form_templates', 'form_field_library', 'kb_articles',
   ]
   for (const t of operationalTables) {
     report.operational[t] = await count(t)

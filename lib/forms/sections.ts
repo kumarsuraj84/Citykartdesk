@@ -109,6 +109,9 @@ export type ServiceFormFieldRef = {
   options?: FormFieldOption[]
   serviceId: string
   serviceName: string
+  /** Set when the field was added from the Field Library — every instance of the
+   *  same library field across templates/services shares this id. */
+  libraryFieldId?: string
 }
 
 /**
@@ -143,6 +146,7 @@ export async function getServiceFormFieldsForOrg(admin: AnyClient, orgId: string
         options: field.options,
         serviceId: service.id,
         serviceName: service.name,
+        libraryFieldId: field.library_field_id,
       }))
     )
   )

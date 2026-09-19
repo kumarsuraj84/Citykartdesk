@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ChevronLeft, FileText } from 'lucide-react'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { getFormTemplateById } from '@/lib/queries/services'
+import { getActiveLibraryFields } from '@/lib/queries/field-library'
 import { saveTemplateSections } from '@/lib/actions/admin/form-templates'
 import { SectionBuilder } from '@/components/admin/SectionBuilder'
 import type { FormSection } from '@/types'
@@ -18,7 +19,7 @@ export default async function AdminFormTemplateEditorPage({ params }: PageProps)
   if (!profile) redirect('/login')
   if (profile.role !== 'admin' && profile.role !== 'platform_owner') redirect('/home')
 
-  const template = await getFormTemplateById(id)
+  const [template, libraryFields] = await Promise.all([getFormTemplateById(id), getActiveLibraryFields()])
   if (!template) notFound()
 
   const initialSections = Array.isArray(template.form_sections)
@@ -66,6 +67,7 @@ export default async function AdminFormTemplateEditorPage({ params }: PageProps)
       <SectionBuilder
         entityName={template.name}
         initialSections={initialSections}
+        libraryFields={libraryFields}
         onSave={saveTemplateSections.bind(null, template.id)}
       />
     </div>

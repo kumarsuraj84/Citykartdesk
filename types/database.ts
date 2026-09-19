@@ -1256,6 +1256,63 @@ export type Database = {
           },
         ]
       }
+      form_field_library: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          help_text: string | null
+          id: string
+          is_active: boolean
+          label: string
+          options: Json | null
+          org_id: string
+          placeholder: string | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          help_text?: string | null
+          id?: string
+          is_active?: boolean
+          label: string
+          options?: Json | null
+          org_id: string
+          placeholder?: string | null
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          help_text?: string | null
+          id?: string
+          is_active?: boolean
+          label?: string
+          options?: Json | null
+          org_id?: string
+          placeholder?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_field_library_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "form_field_library_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       form_templates: {
         Row: {
           created_at: string

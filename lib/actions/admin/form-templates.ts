@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { resolveServiceFormSections } from '@/lib/forms/sections'
+import { syncSectionsWithLibrary } from '@/lib/forms/library'
+import { toLibraryDef } from '@/lib/queries/field-library'
 import { logAdminAudit } from './audit'
 import type { FormSection } from '@/types'
 
@@ -165,15 +167,29 @@ export async function saveTemplateSections(
   const validationError = validateSections(sections)
   if (validationError) return { error: validationError }
 
-  const normalised: FormSection[] = sections.map((section, si) => ({
+  // Admin client to bypass RLS — auth is already checked by requireAdmin() above,
+  // same pattern as saveFormSections().
+  const admin = createAdminClient()
+
+  // Library-linked fields: the library owns label/type/options, so whatever the
+  // client sent for those is overwritten here — a stale tab can't fork a shared field.
+  const linkedIds = [...new Set(sections.flatMap((s) => s.fields.map((f) => f.library_field_id).filter((v): v is string => !!v)))]
+  let sectionsToSave = sections
+  if (linkedIds.length > 0) {
+    const { data: libRows } = await admin
+      .from('form_field_library')
+      .select('id, label, type, placeholder, help_text, options, is_active')
+      .eq('org_id', guard.profile!.org_id!)
+      .in('id', linkedIds)
+    const libById = new Map((libRows ?? []).map((r) => [r.id, toLibraryDef(r)]))
+    sectionsToSave = syncSectionsWithLibrary(sections, libById).sections
+  }
+
+  const normalised: FormSection[] = sectionsToSave.map((section, si) => ({
     ...section,
     order: si,
     fields: section.fields.map((field, fi) => ({ ...field, order: fi })),
   }))
-
-  // Admin client to bypass RLS — auth is already checked by requireAdmin() above,
-  // same pattern as saveFormSections().
-  const admin = createAdminClient()
 
   const { error } = await admin
     .from('form_templates')

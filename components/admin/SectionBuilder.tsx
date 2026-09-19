@@ -3,7 +3,9 @@
 import { useState, useTransition, useCallback, useEffect, useMemo } from 'react'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { filterActiveOptions } from '@/lib/forms/options'
+import Link from 'next/link'
 import { requesterCanView, requesterCanSet } from '@/lib/forms/sections'
+import { fieldFromLibrary, type LibraryFieldDef } from '@/lib/forms/library'
 import type { FormField, FormFieldType, FormFieldOption, FormSection } from '@/types'
 
 type PreviewAudience = 'requester' | 'technician'
@@ -22,13 +24,17 @@ interface SectionBuilderProps {
    *  orphans that SLA data (never destroyed, just unreachable), so deletion needs a
    *  warning first instead of disappearing silently. */
   fieldIdsWithSla?: string[]
+  /** Active Field Library entries. Passed only by the template builder — when
+   *  present, an "Add from library" panel is shown and library-linked fields
+   *  are locked to the library's definition. */
+  libraryFields?: LibraryFieldDef[]
 }
 
 type Selected = { s: string; f: string } | null
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const FIELD_LIBRARY: { type: FormFieldType; label: string; hint: string; icon: string }[] = [
+export const FIELD_LIBRARY: { type: FormFieldType; label: string; hint: string; icon: string }[] = [
   { type: 'text',        label: 'Short text',   hint: 'Single line',  icon: 'T'  },
   { type: 'textarea',    label: 'Long text',    hint: 'Paragraph',    icon: '¶'  },
   { type: 'select',      label: 'Dropdown',     hint: 'Pick one',     icon: '▾'  },
@@ -281,7 +287,7 @@ function IconBtn({
 
 // ── OptionTreeEditor ──────────────────────────────────────────────────────────
 
-function OptionTreeEditor({
+export function OptionTreeEditor({
   options,
   onChange,
 }: {
@@ -522,8 +528,10 @@ export function SectionBuilder({
   initialSections,
   onSave,
   fieldIdsWithSla = [],
+  libraryFields,
 }: SectionBuilderProps) {
   const slaFieldIds = useMemo(() => new Set(fieldIdsWithSla), [fieldIdsWithSla])
+  const [libraryQuery, setLibraryQuery] = useState('')
   const [sections, setSections] = useState<FormSection[]>(initialSections)
   const [selected, setSelected] = useState<Selected>(null)
   const [previewAudience, setPreviewAudience] = useState<PreviewAudience>('requester')
@@ -550,6 +558,8 @@ export function SectionBuilder({
     if (!selected || !selectedSection) return null
     return selectedSection.fields.find((f) => f.id === selected.f) ?? null
   }, [selected, selectedSection])
+
+  const isLinkedSel = !!selectedField?.library_field_id
 
   // Warn on unsaved changes
   useEffect(() => {
@@ -625,6 +635,35 @@ export function SectionBuilder({
     [],
   )
 
+  const addLibraryField = useCallback(
+    (lib: LibraryFieldDef) => {
+      const sid = selected?.s ?? sections[sections.length - 1]?.id
+      if (!sid) return
+      const f = fieldFromLibrary(lib, uid())
+      setSections((prev) => prev.map((s) => (s.id === sid ? { ...s, fields: [...s.fields, f] } : s)))
+      setSelected({ s: sid, f: f.id })
+    },
+    [selected, sections],
+  )
+
+  const unlinkField = useCallback((sid: string, fid: string) => {
+    setSections((prev) =>
+      prev.map((s) =>
+        s.id !== sid
+          ? s
+          : {
+              ...s,
+              fields: s.fields.map((f) => {
+                if (f.id !== fid) return f
+                const { library_field_id: _unlinked, ...rest } = f
+                void _unlinked
+                return rest
+              }),
+            },
+      ),
+    )
+  }, [])
+
   const deleteField = useCallback(
     (sid: string, fid: string) => {
       setSections((prev) =>
@@ -677,13 +716,20 @@ export function SectionBuilder({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)_380px]">
 
         {/* ── LEFT: Field library + Validation ─────────────────────────────── */}
-        <aside className="lg:sticky lg:top-20 lg:self-start space-y-3">
+        <aside className="flex flex-col gap-3 lg:sticky lg:top-20 lg:self-start">
           {/* Field library */}
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-foreground">Add a field</h3>
+              <h3 className="text-sm font-semibold text-foreground">
+                {libraryFields ? 'Add a one-off field' : 'Add a field'}
+              </h3>
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Click to add</span>
             </div>
+            {libraryFields && (
+              <p className="-mt-1.5 mb-3 text-[11px] text-muted-foreground">
+                For a field only this template needs. Anything reused across templates belongs in the library above.
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-2">
               {FIELD_LIBRARY.map((it) => (
                 <button
@@ -711,6 +757,54 @@ export function SectionBuilder({
               + New section
             </button>
           </div>
+
+          {/* From the Field Library (template builder only) */}
+          {libraryFields && (
+            <div className="order-first rounded-xl border border-border bg-card p-4 shadow-sm">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-foreground">From field library</h3>
+                <Link href="/admin/field-library" className="text-[10px] uppercase tracking-wider text-primary hover:underline">
+                  Manage
+                </Link>
+              </div>
+              {libraryFields.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No shared fields yet. Create them once in the Field Library, then reuse them in every template.
+                </p>
+              ) : (
+                <>
+                  <input
+                    value={libraryQuery}
+                    onChange={(e) => setLibraryQuery(e.target.value)}
+                    placeholder="Search library…"
+                    className={`${inputCls} mb-2`}
+                  />
+                  <ul className="max-h-56 space-y-1 overflow-y-auto">
+                    {libraryFields
+                      .filter((l) => l.label.toLowerCase().includes(libraryQuery.trim().toLowerCase()))
+                      .map((l) => {
+                        const inForm = sections.some((s) => s.fields.some((f) => f.library_field_id === l.id))
+                        return (
+                          <li key={l.id}>
+                            <button
+                              type="button"
+                              disabled={inForm || sections.length === 0}
+                              onClick={() => addLibraryField(l)}
+                              className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-left text-xs transition hover:border-primary/60 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <span className="min-w-0 truncate font-medium text-foreground">{l.label}</span>
+                              <span className="shrink-0 text-[10px] text-muted-foreground">
+                                {inForm ? 'Added' : sections.length === 0 ? 'Add a section first' : getLibEntry(l.type)?.label}
+                              </span>
+                            </button>
+                          </li>
+                        )
+                      })}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Validation panel */}
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -808,6 +902,7 @@ export function SectionBuilder({
                           </span>
                           <span className="block truncate text-xs text-muted-foreground">
                             {lib?.label}
+                            {f.library_field_id ? ' · Library' : ''}
                             {f.required ? ' · Required' : ''}
                             {f.options
                               ? ` · ${leafCount} choice${leafCount === 1 ? '' : 's'}`
@@ -898,39 +993,67 @@ export function SectionBuilder({
                 </span>
               </div>
 
+              {isLinkedSel && (
+                <div className="mb-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-[11px] text-foreground">
+                  <p>
+                    Shared field from the Field Library — its name, type and choices are managed there and
+                    update every template using it. Reports show it as a single column.
+                  </p>
+                  <div className="mt-1.5 flex items-center gap-3">
+                    <Link href="/admin/field-library" className="font-medium text-primary hover:underline">
+                      Edit in library
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm('Unlink this field? It becomes a standalone copy in this template, and reports will show it as its own separate column again.')) {
+                          unlinkField(selectedSection.id, selectedField.id)
+                        }
+                      }}
+                      className="font-medium text-muted-foreground hover:text-destructive"
+                    >
+                      Unlink
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <Labeled label="Label">
                 <input
                   value={selectedField.label}
+                  disabled={isLinkedSel}
                   onChange={(e) =>
                     updateField(selectedSection.id, selectedField.id, { label: e.target.value })
                   }
-                  className={inputCls}
+                  className={`${inputCls} disabled:opacity-60`}
                 />
               </Labeled>
 
               <Labeled label="Placeholder">
                 <input
                   value={selectedField.placeholder ?? ''}
+                  disabled={isLinkedSel}
                   onChange={(e) =>
                     updateField(selectedSection.id, selectedField.id, {
                       placeholder: e.target.value || undefined,
                     })
                   }
                   placeholder="Hint shown inside the field"
-                  className={inputCls}
+                  className={`${inputCls} disabled:opacity-60`}
                 />
               </Labeled>
 
               <Labeled label="Help text">
                 <input
                   value={selectedField.help_text ?? ''}
+                  disabled={isLinkedSel}
                   onChange={(e) =>
                     updateField(selectedSection.id, selectedField.id, {
                       help_text: e.target.value || undefined,
                     })
                   }
                   placeholder="Extra guidance below the field"
-                  className={inputCls}
+                  className={`${inputCls} disabled:opacity-60`}
                 />
               </Labeled>
 
@@ -1058,12 +1181,14 @@ export function SectionBuilder({
               )}
 
               {(selectedField.type === 'select' || selectedField.type === 'multiselect') && (
-                <OptionTreeEditor
-                  options={selectedField.options ?? []}
-                  onChange={(fn) =>
-                    updateOptions(selectedSection.id, selectedField.id, fn)
-                  }
-                />
+                <div className={isLinkedSel ? 'pointer-events-none opacity-60' : undefined}>
+                  <OptionTreeEditor
+                    options={selectedField.options ?? []}
+                    onChange={(fn) =>
+                      updateOptions(selectedSection.id, selectedField.id, fn)
+                    }
+                  />
+                </div>
               )}
             </div>
           ) : (

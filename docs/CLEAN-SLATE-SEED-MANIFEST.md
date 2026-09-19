@@ -76,7 +76,7 @@ needs at startup:
 `sla_escalation_events`, `business_rules`, `business_rule_events`,
 `assignment_rules`, `escalation_policies`, `custom_roles`,
 `permission_overrides`, `designations`, `job_functions`, `locations`,
-`cost_centers`, `stores`, `oems`, `form_templates`, `kb_articles`,
+`cost_centers`, `stores`, `oems`, `form_templates`, `form_field_library`, `kb_articles`,
 `kb_article_services`, `csat_surveys`, `scheduled_reports`, `error_reports`,
 `license_keys`, `org_signup_requests`, `desktime_app_logs`,
 `desktime_project_map`, `desktime_sync_runs`, `desktime_time_logs`,

@@ -76,9 +76,37 @@ const FORM_FIELD_PREFIX = 'form:'
 // isn't reportable. 'file' holds an upload, not a scalar value worth a column.
 const SKIPPED_FORM_FIELD_TYPES = new Set(['toggle', 'file'])
 
+// A Field Library field appears once, under its own name, no matter how many
+// templates/services use it; every other form field stays one column per
+// service, prefixed with the service name. Rows carry null where a request's
+// form doesn't have the field.
+function libraryReportKey(libraryFieldId: string): string {
+  return `${FORM_FIELD_PREFIX}lib:${libraryFieldId}`
+}
+
+function toReportFields(formFields: ServiceFormFieldRef[]): ReportField[] {
+  const seen = new Set<string>()
+  const out: ReportField[] = []
+  for (const f of formFields) {
+    if (f.libraryFieldId) {
+      if (seen.has(f.libraryFieldId)) continue
+      seen.add(f.libraryFieldId)
+    }
+    out.push(serviceFormFieldToReportField(f))
+  }
+  return out
+}
+
+/** Normalizes a raw form_data value into what a report cell holds. */
+function reportCellValue(raw: unknown): string | number | boolean | null {
+  if (raw === undefined || raw === null) return null
+  if (Array.isArray(raw)) return raw.join(', ')
+  return (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean') ? raw : String(raw)
+}
+
 function serviceFormFieldToReportField(f: ServiceFormFieldRef): ReportField {
-  const key = `${FORM_FIELD_PREFIX}${f.id}`
-  const label = `${f.serviceName}: ${f.label}`
+  const key = f.libraryFieldId ? libraryReportKey(f.libraryFieldId) : `${FORM_FIELD_PREFIX}${f.id}`
+  const label = f.libraryFieldId ? f.label : `${f.serviceName}: ${f.label}`
   switch (f.type) {
     case 'number':
       return { key, label, type: 'number', groupable: false, isCustomField: true, customFieldId: f.id }
@@ -118,7 +146,7 @@ export async function getReportFieldsForEntity(entity: EntityKey, orgId: string)
   }
   if (entity === 'requests') {
     const formFields = await getOrgRequestFormFields(admin, orgId)
-    return [RECORD_COUNT_FIELD, ...getEntityFields(entity, formFields.map(serviceFormFieldToReportField))]
+    return [RECORD_COUNT_FIELD, ...getEntityFields(entity, toReportFields(formFields))]
   }
   return [RECORD_COUNT_FIELD, ...getEntityFields(entity)]
 }
@@ -202,6 +230,14 @@ async function fetchRequestRows(
     }
   }
 
+  const libraryInstances = new Map<string, string[]>()
+  for (const f of formFields) {
+    if (!f.libraryFieldId) continue
+    const ids = libraryInstances.get(f.libraryFieldId) ?? []
+    ids.push(f.id)
+    libraryInstances.set(f.libraryFieldId, ids)
+  }
+
   const now = nowIso()
   const rows = pageRows.map((r) => {
     const closedLike = r.resolved_at ?? r.closed_at
@@ -252,12 +288,18 @@ async function fetchRequestRows(
       time_tracked_minutes: timeMinutes.get(r.id) ?? 0,
     }
     for (const f of formFields) {
-      const raw = r.form_data?.[f.id]
-      row[`${FORM_FIELD_PREFIX}${f.id}`] = raw === undefined || raw === null
-        ? null
-        : Array.isArray(raw) ? raw.join(', ')
-        : (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean') ? raw
-        : String(raw)
+      if (f.libraryFieldId) continue
+      row[`${FORM_FIELD_PREFIX}${f.id}`] = reportCellValue(r.form_data?.[f.id])
+    }
+    // Library fields: a request only has an answer under the one instance its own
+    // form contained, so take the first instance that holds a value.
+    for (const [libId, instanceIds] of libraryInstances) {
+      let cell: string | number | boolean | null = null
+      for (const instanceId of instanceIds) {
+        cell = reportCellValue(r.form_data?.[instanceId])
+        if (cell !== null) break
+      }
+      row[libraryReportKey(libId)] = cell
     }
     return row
   })
@@ -624,7 +666,7 @@ export async function fetchReportData(
   if (entity === 'requests') {
     const formFields = await getOrgRequestFormFields(admin, orgId)
     const { rows, truncated } = await fetchRequestRows(admin, orgId, scope, formFields)
-    return { fields: [RECORD_COUNT_FIELD, ...getEntityFields(entity, formFields.map(serviceFormFieldToReportField))], rows, truncated }
+    return { fields: [RECORD_COUNT_FIELD, ...getEntityFields(entity, toReportFields(formFields))], rows, truncated }
   }
 
   const fetchers: Record<Exclude<EntityKey, 'tasks' | 'requests'>, (a: AnyClient, o: string) => Promise<{ rows: ReportRow[]; truncated: boolean }>> = {

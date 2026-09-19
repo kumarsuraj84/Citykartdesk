@@ -240,6 +240,12 @@ export type FormField = {
    *  (lib/conversations/orchestrator.ts); the web form and Email Intake
    *  ignore it entirely and keep asking/showing the field as today. */
   semantic_role?: 'request_title' | 'request_description' | null
+  /** Set on a form-template field that was added from the Field Library. The
+   *  definition (label/type/placeholder/help_text/options) is owned by the
+   *  library entry and re-copied here whenever the library entry changes or the
+   *  template is saved (lib/forms/library.ts); required/visibility/order stay
+   *  per-template. Reports group by this id to show one column across templates. */
+  library_field_id?: string
 }
 
 // ============================================================
