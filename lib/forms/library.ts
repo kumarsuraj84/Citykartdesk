@@ -108,7 +108,8 @@ type TemplateForScan = { id: string; name: string; form_sections: FormSection[] 
  *  different option sets would orphan old answers in reports). */
 export function findDuplicateGroups(
   templates: TemplateForScan[],
-  library: LibraryFieldDef[]
+  library: LibraryFieldDef[],
+  opts: { includeSingles?: boolean } = {}
 ): DuplicateGroup[] {
   const libByLabel = new Map(library.map((l) => [normalizeLabel(l.label), l]))
   const buckets = new Map<string, { label: string; type: FormFieldType; instances: DuplicateInstance[]; sigs: Set<string> }>()
@@ -126,10 +127,18 @@ export function findDuplicateGroups(
     }
   }
 
+  // Library names are unique per org, so two different-typed fields that share a
+  // name can't both be added under it.
+  const typesByLabel = new Map<string, Set<FormFieldType>>()
+  for (const b of buckets.values()) {
+    const k = normalizeLabel(b.label)
+    typesByLabel.set(k, (typesByLabel.get(k) ?? new Set()).add(b.type))
+  }
+
   const groups: DuplicateGroup[] = []
   for (const [key, b] of buckets) {
     const existing = libByLabel.get(normalizeLabel(b.label)) ?? null
-    if (b.instances.length < 2 && !existing) continue
+    if (b.instances.length < 2 && !existing && !opts.includeSingles) continue
 
     let linkable = true
     let reason: string | undefined
@@ -144,6 +153,10 @@ export function findDuplicateGroups(
         linkable = false
         reason = 'The choices differ from the library field of the same name.'
       }
+    }
+    if (linkable && !existing && (typesByLabel.get(normalizeLabel(b.label))?.size ?? 0) > 1) {
+      linkable = false
+      reason = `Other fields named "${b.label}" have a different type — rename one of them first so each library name is unique.`
     }
     groups.push({ key, label: b.label, type: b.type, instances: b.instances, existingLibraryId: existing?.id ?? null, linkable, reason })
   }

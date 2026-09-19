@@ -161,3 +161,42 @@ describe('libraryFieldValues', () => {
     expect(libraryFieldValues([section([a])], null)).toEqual({})
   })
 })
+
+describe('findDuplicateGroups — single-use fields', () => {
+  const t1 = template('1', [field({ id: 'a', label: 'Laptop Serial', type: 'text' }), field({ id: 'b', label: 'Approver Email', type: 'email' })])
+
+  it('hides single-use fields by default (existing behaviour)', () => {
+    expect(findDuplicateGroups([t1], [])).toHaveLength(0)
+  })
+
+  it('lists them when includeSingles is set, each as a one-field linkable group', () => {
+    const groups = findDuplicateGroups([t1], [], { includeSingles: true })
+    expect(groups).toHaveLength(2)
+    expect(groups.every((g) => g.instances.length === 1 && g.linkable && !g.existingLibraryId)).toBe(true)
+  })
+
+  it('does not double-list a single-use field that matches an existing library name', () => {
+    const groups = findDuplicateGroups([template('1', [field({ id: 'a', label: 'Contact Number', type: 'phone' })])], [contact], { includeSingles: true })
+    expect(groups).toHaveLength(1)
+    expect(groups[0].existingLibraryId).toBe('lib-contact')
+  })
+
+  it('blocks two same-named fields of different types (library names are unique)', () => {
+    const groups = findDuplicateGroups(
+      [template('1', [field({ id: 'a', label: 'Reference', type: 'text' })]), template('2', [field({ id: 'b', label: 'reference', type: 'number' })])],
+      [],
+      { includeSingles: true }
+    )
+    expect(groups).toHaveLength(2)
+    expect(groups.every((g) => !g.linkable && /different type/i.test(g.reason ?? ''))).toBe(true)
+  })
+
+  it('still lets a single-use dropdown be added with its own choices', () => {
+    const groups = findDuplicateGroups(
+      [template('1', [field({ id: 'a', label: 'Mode', type: 'select', options: [{ value: '1', label: 'Air' }] })])],
+      [],
+      { includeSingles: true }
+    )
+    expect(groups[0].linkable).toBe(true)
+  })
+})

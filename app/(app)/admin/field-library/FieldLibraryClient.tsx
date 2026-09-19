@@ -7,7 +7,7 @@ import {
   updateLibraryField,
   setLibraryFieldActive,
   deleteLibraryField,
-  linkDuplicateFieldGroup,
+  linkFieldGroups,
 } from '@/lib/actions/admin/field-library'
 import { OptionTreeEditor, FIELD_LIBRARY } from '@/components/admin/SectionBuilder'
 import { LIBRARY_FIELD_TYPES, isOptionType, type DuplicateGroup } from '@/lib/forms/library'
@@ -148,6 +148,59 @@ export default function FieldLibraryClient({
   const [modal, setModal] = useState<{ field: LibraryFieldRow | null } | null>(null)
   const [message, setMessage] = useState<{ kind: 'error' | 'ok'; text: string } | null>(null)
   const [pending, startTransition] = useTransition()
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [singleQuery, setSingleQuery] = useState('')
+  const [singleLimit, setSingleLimit] = useState(100)
+
+  // Fields in 2+ templates (or matching a library name) vs fields used in just one template.
+  const shared = duplicates.filter((g) => g.instances.length > 1 || g.existingLibraryId)
+  const singles = duplicates.filter((g) => g.instances.length === 1 && !g.existingLibraryId)
+  const filteredSingles = singles.filter((g) => {
+    const q = singleQuery.trim().toLowerCase()
+    return !q || g.label.toLowerCase().includes(q) || g.instances[0].templateName.toLowerCase().includes(q)
+  })
+  const shownSingles = filteredSingles.slice(0, singleLimit)
+  const selectableShown = filteredSingles.filter((g) => g.linkable)
+  const allShownSelected = selectableShown.length > 0 && selectableShown.every((g) => selected.has(g.key))
+
+  function toggleOne(key: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  function toggleAllShown() {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (allShownSelected) selectableShown.forEach((g) => next.delete(g.key))
+      else selectableShown.forEach((g) => next.add(g.key))
+      return next
+    })
+  }
+
+  function addToLibrary(keys: string[]) {
+    setMessage(null)
+    startTransition(async () => {
+      const r = await linkFieldGroups(keys)
+      if (r.error) {
+        setMessage({ kind: 'error', text: r.error })
+        return
+      }
+      setSelected(new Set())
+      const skipped = r.skipped ?? []
+      const done = `Added ${r.groups ?? 0} field${r.groups === 1 ? '' : 's'} to the library (${r.linked ?? 0} template field${r.linked === 1 ? '' : 's'} linked).`
+      setMessage({
+        kind: skipped.length > 0 ? 'error' : 'ok',
+        text:
+          skipped.length > 0
+            ? `${done} Skipped ${skipped.length}: ${skipped.slice(0, 3).map((x) => `${x.label} (${x.reason})`).join('; ')}${skipped.length > 3 ? '…' : ''}`
+            : done,
+      })
+    })
+  }
 
   function run(action: () => Promise<{ error?: string }>, okText?: string) {
     setMessage(null)
@@ -237,7 +290,7 @@ export default function FieldLibraryClient({
         )}
       </div>
 
-      {duplicates.length > 0 && (
+      {shared.length > 0 && (
         <section className="space-y-2">
           <div>
             <h2 className="text-sm font-semibold text-foreground">Duplicate fields across templates</h2>
@@ -247,7 +300,7 @@ export default function FieldLibraryClient({
             </p>
           </div>
           <ul className="space-y-2">
-            {duplicates.map((g) => (
+            {shared.map((g) => (
               <li key={g.key} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground">
@@ -261,10 +314,7 @@ export default function FieldLibraryClient({
                 </div>
                 <button
                   disabled={!g.linkable || pending}
-                  onClick={() => run(async () => {
-                    const r = await linkDuplicateFieldGroup(g.key)
-                    return r
-                  }, `Linked "${g.label}".`)}
+                  onClick={() => addToLibrary([g.key])}
                   className="btn-gradient px-3 py-1.5 text-xs disabled:opacity-50"
                 >
                   <Link2 className="h-3.5 w-3.5" />
@@ -273,6 +323,75 @@ export default function FieldLibraryClient({
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {singles.length > 0 && (
+        <section className="space-y-2">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">
+              Fields used in only one template <span className="font-normal text-muted-foreground">({singles.length})</span>
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Optional. Add any of these to the library if you want them reusable in other templates and available as a
+              single report column. Fields you leave here stay exactly as they are.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              value={singleQuery}
+              onChange={(e) => { setSingleQuery(e.target.value); setSingleLimit(100) }}
+              placeholder="Search by field or template name…"
+              className="min-w-[220px] flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input type="checkbox" checked={allShownSelected} onChange={toggleAllShown} disabled={selectableShown.length === 0} />
+              Select all shown ({selectableShown.length})
+            </label>
+            <button
+              disabled={selected.size === 0 || pending}
+              onClick={() => addToLibrary([...selected])}
+              className="btn-gradient px-3 py-1.5 text-xs disabled:opacity-50"
+            >
+              <Link2 className="h-3.5 w-3.5" />
+              {pending ? 'Adding…' : `Add selected to library (${selected.size})`}
+            </button>
+          </div>
+
+          <ul className="space-y-1.5">
+            {shownSingles.map((g) => (
+              <li key={g.key} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-4 py-2.5 shadow-sm">
+                <input
+                  type="checkbox"
+                  checked={selected.has(g.key)}
+                  disabled={!g.linkable}
+                  onChange={() => toggleOne(g.key)}
+                  aria-label={`Select ${g.label}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground">
+                    {g.label} <span className="text-xs font-normal text-muted-foreground">· {TYPE_LABELS[g.type] ?? g.type}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">Only in {g.instances[0].templateName}</p>
+                  {!g.linkable && <p className="mt-0.5 text-xs text-amber-700">{g.reason}</p>}
+                </div>
+                <button
+                  disabled={!g.linkable || pending}
+                  onClick={() => addToLibrary([g.key])}
+                  className="rounded-lg border border-border px-3 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
+                >
+                  Add to library
+                </button>
+              </li>
+            ))}
+          </ul>
+          {filteredSingles.length > shownSingles.length && (
+            <button onClick={() => setSingleLimit((n) => n + 100)} className="text-xs font-medium text-primary hover:underline">
+              Show more ({filteredSingles.length - shownSingles.length} more)
+            </button>
+          )}
+          {filteredSingles.length === 0 && <p className="text-xs text-muted-foreground">No fields match your search.</p>}
         </section>
       )}
 

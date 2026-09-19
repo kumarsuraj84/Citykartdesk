@@ -62,6 +62,6 @@ export async function getFieldLibraryOverview(): Promise<{
   return {
     setupError: null,
     fields: rows.map((r) => ({ ...toLibraryDef(r), is_active: r.is_active, used_in: usage.get(r.id) ?? [] })),
-    duplicates: findDuplicateGroups(scan, defs.filter((d) => rows.find((r) => r.id === d.id)?.is_active)),
+    duplicates: findDuplicateGroups(scan, defs.filter((d) => rows.find((r) => r.id === d.id)?.is_active), { includeSingles: true }),
   }
 }

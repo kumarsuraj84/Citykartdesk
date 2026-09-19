@@ -209,10 +209,17 @@ export async function deleteLibraryField(id: string): Promise<ActionResult> {
   return {}
 }
 
-/** Links a group of same-name/same-type fields (found by findDuplicateGroups) to
- *  one library entry — created from the first instance if none exists yet.
- *  Field ids never change, so already-submitted answers stay exactly where they are. */
-export async function linkDuplicateFieldGroup(groupKey: string): Promise<ActionResult & { linked?: number }> {
+export type LinkSkip = { label: string; reason: string }
+export type LinkResult = ActionResult & { linked?: number; groups?: number; skipped?: LinkSkip[] }
+
+/** Adds groups of template fields (found by findDuplicateGroups, including
+ *  single-use ones) to the library and links each field to it. A group's library
+ *  entry is created from its first field unless one with that name already exists.
+ *  Field ids never change, so already-submitted answers stay exactly where they are.
+ *
+ *  Loads the templates once and writes each changed template once. Groups that
+ *  aren't safe to link are skipped with a reason rather than failing the batch. */
+async function linkGroups(groupKeys: string[]): Promise<LinkResult> {
   const guard = await requireAdmin()
   if ('error' in guard) return guard
   const orgId = guard.profile!.org_id!
@@ -223,62 +230,88 @@ export async function linkDuplicateFieldGroup(groupKey: string): Promise<ActionR
     .from('form_field_library').select('id, label, type, placeholder, help_text, options, is_active').eq('org_id', orgId).eq('is_active', true)
   const libDefs = ((libRows ?? []) as Parameters<typeof toLibraryDef>[0][]).map(toLibraryDef)
 
-  // Recomputed server-side — never trust the client's idea of what is safe to merge.
-  const group = findDuplicateGroups(templates, libDefs).find((g) => g.key === groupKey)
-  if (!group) return { error: 'This group has changed — refresh and try again.' }
-  if (!group.linkable) return { error: group.reason ?? 'This group can’t be linked automatically.' }
+  // Recomputed server-side — never trust the client's idea of what is safe to link.
+  const groups = new Map(findDuplicateGroups(templates, libDefs, { includeSingles: true }).map((g) => [g.key, g]))
 
-  let lib = group.existingLibraryId ? libDefs.find((l) => l.id === group.existingLibraryId) ?? null : null
-  if (!lib) {
-    const first = templates
-      .flatMap((t) => t.form_sections.flatMap((s) => s.fields))
-      .find((f) => `${normalizeLabel(f.label)}|${f.type}` === groupKey && !f.library_field_id)!
-    const { data: created, error } = await admin
-      .from('form_field_library')
-      .insert({
-        org_id: orgId,
-        label: group.label,
-        type: group.type,
-        placeholder: first.placeholder ?? null,
-        help_text: first.help_text ?? null,
-        options: isOptionType(group.type) ? first.options ?? [] : null,
-        created_by: guard.profile!.id,
-      })
-      .select('id, label, type, placeholder, help_text, options, is_active')
-      .single()
-    if (error) {
-      console.error('[linkDuplicateFieldGroup] create', error.message)
-      return { error: `Failed to create the library field: ${error.message}` }
+  const skipped: LinkSkip[] = []
+  const linkedFieldIds = new Map<string, LibraryFieldDef>() // template field id -> library entry
+  let groupsLinked = 0
+
+  for (const key of [...new Set(groupKeys)]) {
+    const group = groups.get(key)
+    if (!group) { skipped.push({ label: key.split('|')[0], reason: 'This field changed — refresh and try again.' }); continue }
+    if (!group.linkable) { skipped.push({ label: group.label, reason: group.reason ?? 'Can’t be linked automatically.' }); continue }
+
+    let lib = group.existingLibraryId ? libDefs.find((l) => l.id === group.existingLibraryId) ?? null : null
+    if (!lib) {
+      const first = templates
+        .flatMap((t) => t.form_sections.flatMap((sec) => sec.fields))
+        .find((f) => `${normalizeLabel(f.label)}|${f.type}` === key && !f.library_field_id)!
+      const { data: created, error } = await admin
+        .from('form_field_library')
+        .insert({
+          org_id: orgId,
+          label: group.label,
+          type: group.type,
+          placeholder: first.placeholder ?? null,
+          help_text: first.help_text ?? null,
+          options: isOptionType(group.type) ? first.options ?? [] : null,
+          created_by: guard.profile!.id,
+        })
+        .select('id, label, type, placeholder, help_text, options, is_active')
+        .single()
+      if (error) {
+        console.error('[linkGroups] create', error.message)
+        skipped.push({ label: group.label, reason: error.code === '23505' ? 'A library field with this name already exists.' : `Could not create it: ${error.message}` })
+        continue
+      }
+      lib = toLibraryDef(created)
+      libDefs.push(lib)
     }
-    lib = toLibraryDef(created)
+    for (const inst of group.instances) linkedFieldIds.set(inst.fieldId, lib)
+    groupsLinked++
   }
 
-  const ids = new Set(group.instances.map((i) => i.fieldId))
   let linked = 0
   for (const t of templates) {
     let touched = false
-    const sections = t.form_sections.map((s) => ({
-      ...s,
-      fields: s.fields.map((f) => {
-        if (!ids.has(f.id) || f.library_field_id) return f
+    const sections = t.form_sections.map((sec) => ({
+      ...sec,
+      fields: sec.fields.map((f) => {
+        const lib = linkedFieldIds.get(f.id)
+        if (!lib || f.library_field_id) return f
         touched = true
         linked++
-        return applyLibraryDefinition(f, lib!)
+        return applyLibraryDefinition(f, lib)
       }),
     }))
     if (!touched) continue
     const { error } = await admin.from('form_templates').update({ form_sections: sections }).eq('id', t.id).eq('org_id', orgId)
     if (error) {
-      console.error('[linkDuplicateFieldGroup] template', t.id, error.message)
-      return { error: `Linked some templates but failed on "${t.name}". Refresh and run it again.` }
+      console.error('[linkGroups] template', t.id, error.message)
+      return { error: `Linked some fields but failed on "${t.name}". Refresh and run it again.`, linked, groups: groupsLinked, skipped }
     }
   }
 
-  await logAdminAudit({
-    orgId, actorId: guard.profile!.id,
-    entityType: 'form_field_library', entityId: lib.id, action: 'form_field_library_linked_duplicates',
-    metadata: { label: group.label, linked_fields: linked },
-  })
-  revalidateFormSurfaces()
-  return { linked }
+  if (groupsLinked > 0) {
+    await logAdminAudit({
+      orgId, actorId: guard.profile!.id,
+      entityType: 'form_field_library', entityId: null, action: 'form_field_library_linked_duplicates',
+      metadata: { groups: groupsLinked, linked_fields: linked },
+    })
+    revalidateFormSurfaces()
+  }
+  return { linked, groups: groupsLinked, skipped }
+}
+
+export async function linkDuplicateFieldGroup(groupKey: string): Promise<LinkResult> {
+  const result = await linkGroups([groupKey])
+  if (result.error) return result
+  const skip = result.skipped?.[0]
+  return skip ? { error: skip.reason } : result
+}
+
+export async function linkFieldGroups(groupKeys: string[]): Promise<LinkResult> {
+  if (!Array.isArray(groupKeys) || groupKeys.length === 0) return { error: 'Nothing selected.' }
+  return linkGroups(groupKeys.slice(0, 500))
 }
