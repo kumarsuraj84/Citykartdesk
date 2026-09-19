@@ -21,7 +21,7 @@ export default async function AppLayout({
   ])
 
   if (!profile) {
-    redirect('/login')
+    redirect('/login?retry=1')
   }
 
   if (trialInfo?.isExpired) {

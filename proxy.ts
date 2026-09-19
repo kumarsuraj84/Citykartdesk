@@ -88,7 +88,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  if (userId && pathname === '/login') {
+  // ?retry=1 is set by the app when a signed-in session could not load its profile —
+  // let the login page render instead of bouncing back to /home (redirect loop).
+  if (userId && pathname === '/login' && request.nextUrl.searchParams.get('retry') !== '1') {
     const raw = request.nextUrl.searchParams.get('next') ?? ''
     const next =
       raw.startsWith('/') && !raw.startsWith('//')

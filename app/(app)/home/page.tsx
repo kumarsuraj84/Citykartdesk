@@ -901,7 +901,7 @@ export default async function HomePage({
   // getCurrentProfile and getEnabledModules are React.cache'd — these resolve
   // immediately on the home page since the layout already called them.
   const [profile, enabledMods] = await Promise.all([getCurrentProfile(), getEnabledModules()])
-  if (!profile) redirect('/login')
+  if (!profile) redirect('/login?retry=1')
 
   autoCloseRequests().catch(() => {})
 

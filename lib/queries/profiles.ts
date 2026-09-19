@@ -24,21 +24,30 @@ export const getCurrentProfile = cache(async function (): Promise<ProfileWithTea
 
   if (!userId) return null
 
-  const { data } = await supabase
-    .from('profiles')
-    .select(`
-      *,
-      team_members (
-        team_id,
-        is_lead,
-        joined_at,
-        team:teams (*)
-      )
-    `)
-    .eq('id', userId)
-    .single()
+  // A one-off database hiccup used to look exactly like "no profile", which the
+  // layout turns into a redirect to /login — and the proxy bounces a signed-in user
+  // straight back, looping until the browser throttles navigation (blank page).
+  // Retry once on a real error; a genuinely missing row (PGRST116) is not retried.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select(`
+        *,
+        team_members (
+          team_id,
+          is_lead,
+          joined_at,
+          team:teams (*)
+        )
+      `)
+      .eq('id', userId)
+      .single()
 
-  return data as ProfileWithTeams | null
+    if (!error) return data as ProfileWithTeams | null
+    if (error.code === 'PGRST116') return null
+    await new Promise((r) => setTimeout(r, 250))
+  }
+  return null
 })
 
 export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
