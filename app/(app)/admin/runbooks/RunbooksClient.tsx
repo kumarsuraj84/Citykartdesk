@@ -89,6 +89,7 @@ const sections: RunbookSection[] = [
     topics: [
       { id: 'auto-close', label: 'Configure Auto-Close' },
       { id: 'data-retention', label: 'Set Data Retention' },
+      { id: 'email-smtp', label: 'Wire Up Email (Google Workspace SMTP)' },
       { id: 'email-resend', label: 'Wire Up Email (Resend)' },
       { id: 'cron-jobs', label: 'Set Up Cron Jobs' },
     ],
@@ -831,6 +832,42 @@ const content: Record<string, React.ReactNode> = {
           compliance team before lowering retention periods.
         </p>
       </div>
+    </article>
+  ),
+
+  'email-smtp': (
+    <article className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
+      <h2>Wire Up Email (Google Workspace SMTP)</h2>
+      <p>
+        Send every notification email straight through a Google Workspace mailbox — no third-party
+        email service. Replies to notifications land in that mailbox.
+      </p>
+      <ol>
+        <li>
+          Create the mailbox in Google Workspace, e.g. <code>citykartdesk@citykartstores.com</code>.
+        </li>
+        <li>
+          Sign in to that account, turn on <strong>2-Step Verification</strong>, then
+          {' '}<strong>Security → App passwords</strong> and create one named &quot;Citykart Desk&quot;. Copy the
+          16-character password. (If App passwords is missing, a Workspace admin must allow it.)
+        </li>
+        <li>
+          On the server, add these lines to the app&apos;s <code>.env.local</code> and restart the app:
+          <pre>
+            <code>{'SMTP_HOST=smtp.gmail.com\nSMTP_PORT=587\nSMTP_USER=citykartdesk@citykartstores.com\nSMTP_PASS=<the app password>'}</code>
+          </pre>
+          The password lives only on the server — never in the database or in git.
+        </li>
+        <li>
+          Go to <strong>Admin → Platform Settings → Integrations → Email Sending</strong>. Delivery should show
+          as configured. Set the <strong>Display name</strong> and use <strong>Send a test email</strong> to confirm.
+        </li>
+      </ol>
+      <p>
+        Notes: Google only lets a mailbox send as itself, so the sender address is always the SMTP user. A
+        Workspace mailbox has a daily sending limit (about 2,000 messages). Prefer no password? Use Google&apos;s SMTP
+        relay (<code>smtp-relay.gmail.com</code>) allow-listed by the server&apos;s IP and leave <code>SMTP_PASS</code> unset.
+      </p>
     </article>
   ),
 

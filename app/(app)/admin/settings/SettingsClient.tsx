@@ -2,8 +2,8 @@
 
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
-import { Save, Check, AlertTriangle, Circle, Mail, MessageSquare, ChevronDown, ExternalLink } from 'lucide-react'
-import { updateEmailFromSettings, updateRetentionPolicy } from '@/lib/actions/admin/config'
+import { Save, Check, AlertTriangle, Circle, Mail, MessageSquare, ChevronDown, ExternalLink, Send } from 'lucide-react'
+import { updateEmailFromSettings, updateRetentionPolicy, sendTestEmail } from '@/lib/actions/admin/config'
 import { EMAIL_REGEX } from '@/lib/validation/formFields'
 import type { WhatsAppChannelReadiness } from '@/lib/actions/intake/whatsapp-channel'
 
@@ -28,8 +28,11 @@ interface WhatsAppChannelSummary {
 interface SettingsClientProps {
   retentionPolicies: RetentionPolicy[]
   integrationStatus: {
-    resendKeySet: boolean
-    resendKeyMasked: string | null
+    provider: 'smtp' | 'resend' | null
+    /** Non-secret description of the active connection, e.g. the SMTP host and login. */
+    detail: string | null
+    /** With SMTP, the mailbox address mail is really sent as (Google rewrites any other). */
+    sendingAs: string | null
   }
   emailFrom: {
     name: string
@@ -201,10 +204,10 @@ function RetentionTab({ policies }: { policies: RetentionPolicy[] }) {
 // they were four facets of one "how does this app send email" question, not
 // four independent integrations.
 function EmailCard({
-  initial, resend,
+  initial, delivery,
 }: {
   initial: SettingsClientProps['emailFrom']
-  resend: SettingsClientProps['integrationStatus']
+  delivery: SettingsClientProps['integrationStatus']
 }) {
   const [name, setName] = useState(initial.name)
   const [address, setAddress] = useState(initial.address)
@@ -213,8 +216,13 @@ function EmailCard({
   const [error, setError] = useState<string | null>(null)
   const [showGuide, setShowGuide] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [testTo, setTestTo] = useState('')
+  const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [testPending, startTest] = useTransition()
 
-  const effective = address.trim() || 'noreply@citykart.org (default — not yet configured)'
+  const connected = delivery.provider !== null
+  const addressLocked = delivery.provider === 'smtp' && !!delivery.sendingAs
+  const effective = delivery.sendingAs || address.trim() || 'noreply@citykart.org (default — not yet configured)'
 
   function handleSave() {
     const trimmedAddress = address.trim()
@@ -232,6 +240,23 @@ function EmailCard({
     })
   }
 
+  function handleTest() {
+    const to = testTo.trim()
+    if (!EMAIL_REGEX.test(to)) {
+      setTestMsg({ ok: false, text: 'Enter a valid email address to send the test to.' })
+      return
+    }
+    setTestMsg(null)
+    startTest(async () => {
+      const r = await sendTestEmail(to)
+      setTestMsg(
+        r.error
+          ? { ok: false, text: r.error }
+          : { ok: true, text: `Test email sent to ${to}. Check the inbox (and the spam folder).` }
+      )
+    })
+  }
+
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm divide-y divide-border">
       {/* Identity — the one address everything sends from */}
@@ -243,7 +268,7 @@ function EmailCard({
               <p className="text-sm font-medium text-foreground">Email Sending</p>
               <p className="text-xs text-muted-foreground">
                 One address for everything this desk emails — ticket notifications, OEM routing, and escalation
-                alerts all send from this identity. Change it here anytime; no code change or redeploy needed.
+                alerts all send from this identity. The display name can be changed here anytime; no code change or redeploy needed.
               </p>
             </div>
             {!editing && (
@@ -273,13 +298,19 @@ function EmailCard({
                 <label className="flex flex-col gap-1">
                   <span className="text-[10px] text-muted-foreground">Email address</span>
                   <input
-                    value={address}
+                    value={addressLocked ? (delivery.sendingAs ?? '') : address}
                     onChange={(e) => setAddress(e.target.value)}
+                    disabled={addressLocked}
                     placeholder="servicedesk@citykart.org"
-                    className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-60"
                   />
                 </label>
               </div>
+              {addressLocked && (
+                <p className="text-[11px] text-muted-foreground">
+                  The address is fixed to the mailbox the server signs in with — Google only allows a mailbox to send as itself.
+                </p>
+              )}
               {error && <p className="text-xs text-red-600">{error}</p>}
               <div className="flex gap-2">
                 <button onClick={handleSave} disabled={isPending} className="btn-gradient disabled:opacity-40">
@@ -311,20 +342,25 @@ function EmailCard({
           {showGuide && (
             <ol className="space-y-2 rounded-lg bg-muted/40 px-4 py-3 text-xs text-muted-foreground list-decimal list-inside">
               <li>
-                Create the mailbox in Google Workspace (e.g. <span className="font-mono">servicedesk@citykart.org</span>) —
-                this is where replies land, and where anyone who emails that address directly reaches a real inbox.
+                Create the mailbox in Google Workspace (e.g. <span className="font-mono">citykartdesk@citykartstores.com</span>) —
+                replies to notifications land in this inbox.
               </li>
               <li>
-                Separately, verify the <span className="font-mono">citykart.org</span> domain with Resend (the email
-                provider this app uses to actually send): Resend dashboard → Domains → Add Domain, then add the SPF
-                and DKIM records it gives you wherever your domain&apos;s DNS is managed. This step doesn&apos;t
-                touch your Workspace mailbox or its MX records — the two coexist fine.
+                Sign in to that mailbox&apos;s Google Account, turn on <strong>2-Step Verification</strong>, then
+                Security → <strong>App passwords</strong> → create one named &quot;Citykart Desk&quot; and copy the 16-character password.
+                (If App passwords isn&apos;t offered, a Workspace admin must allow it for this account.)
               </li>
-              <li>Type the same address into the field above and hit Save — takes effect on the very next email sent, for every channel.</li>
               <li>
-                If email isn&apos;t sending at all yet (see Delivery below), that&apos;s a separate one-time step:
-                a platform admin needs to set <span className="font-mono">RESEND_API_KEY</span> in the hosting
-                environment — ask me for help with that part when you&apos;re ready.
+                On the server, add these to the app&apos;s <span className="font-mono">.env.local</span> and restart the app:{' '}
+                <span className="font-mono">SMTP_HOST=smtp.gmail.com</span>, <span className="font-mono">SMTP_PORT=587</span>,{' '}
+                <span className="font-mono">SMTP_USER=citykartdesk@citykartstores.com</span>,{' '}
+                <span className="font-mono">SMTP_PASS=&lt;the app password&gt;</span>. The password stays on the server only.
+              </li>
+              <li>Come back here — Delivery below turns green. Then use <strong>Send a test email</strong> to confirm it arrives.</li>
+              <li>
+                Optional: set the display name above. Instead of an app password you can use Google&apos;s SMTP relay
+                (<span className="font-mono">smtp-relay.gmail.com</span>, allow-listed by server IP, no password), or the
+                Resend service (<span className="font-mono">RESEND_API_KEY</span>) — SMTP is used first when both are set.
               </li>
             </ol>
           )}
@@ -334,15 +370,36 @@ function EmailCard({
       {/* Delivery — can mail actually leave the system at all */}
       <div className="flex items-start gap-3 px-4 py-3.5">
         <Circle
-          className={`mt-1 h-2.5 w-2.5 shrink-0 fill-current ${resend.resendKeySet ? 'text-emerald-500' : 'text-red-400'}`}
+          className={`mt-1 h-2.5 w-2.5 shrink-0 fill-current ${connected ? 'text-emerald-500' : 'text-red-400'}`}
         />
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium text-foreground">Delivery via Resend</p>
-          <p className="text-xs text-muted-foreground/80 font-mono">
-            {resend.resendKeySet && resend.resendKeyMasked
-              ? `Connected — API key ••••${resend.resendKeyMasked}`
-              : 'RESEND_API_KEY not set — nothing below can actually send until this is configured.'}
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <p className="text-sm font-medium text-foreground">
+            Delivery via {delivery.provider === 'smtp' ? 'SMTP (mail server)' : delivery.provider === 'resend' ? 'Resend' : 'email'}
           </p>
+          <p className="text-xs text-muted-foreground/80 font-mono">
+            {connected && delivery.detail
+              ? `Configured — ${delivery.detail}`
+              : 'Not configured — nothing below can actually send until SMTP_HOST (or RESEND_API_KEY) is set on the server.'}
+          </p>
+          {connected && (
+            <div className="space-y-1.5 pt-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  value={testTo}
+                  onChange={(e) => setTestTo(e.target.value)}
+                  placeholder="send a test email to…"
+                  className="min-w-[220px] flex-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+                <button onClick={handleTest} disabled={testPending} className="btn-soft disabled:opacity-40">
+                  <Send className="h-3.5 w-3.5" />
+                  {testPending ? 'Sending…' : 'Send a test email'}
+                </button>
+              </div>
+              {testMsg && (
+                <p className={`text-xs ${testMsg.ok ? 'text-emerald-600' : 'text-red-600'}`}>{testMsg.text}</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -351,7 +408,7 @@ function EmailCard({
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Where this address is used</p>
         <div className="flex items-start gap-2.5">
           <Circle
-            className={`mt-1 h-2.5 w-2.5 shrink-0 fill-current ${resend.resendKeySet ? 'text-emerald-500' : 'text-red-400'}`}
+            className={`mt-1 h-2.5 w-2.5 shrink-0 fill-current ${connected ? 'text-emerald-500' : 'text-red-400'}`}
           />
           <p className="text-xs text-muted-foreground">
             <span className="font-medium text-foreground">Ticket notifications & OEM routing</span> — sent the
@@ -467,7 +524,7 @@ function IntegrationsTab({ status, emailFrom, whatsappChannels }: {
           Every email this desk sends — notifications, OEM routing, and escalation alerts alike — goes out from one
           configured identity below.
         </p>
-        <EmailCard initial={emailFrom} resend={status} />
+        <EmailCard initial={emailFrom} delivery={status} />
       </div>
 
       <div className="space-y-4">

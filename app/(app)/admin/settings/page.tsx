@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { EMAIL_PROVIDER, SMTP_CONFIG, RESEND_API_KEY, resolveSenderAddress } from '@/lib/email/config'
 import { getWhatsAppChannelReadiness } from '@/lib/actions/intake/whatsapp-channel'
 import { SettingsClient } from './SettingsClient'
 
@@ -34,8 +35,13 @@ export default async function PlatformSettingsPage() {
     })
   )
 
-  const resendKey  = process.env.RESEND_API_KEY ?? null
-  const keyMasked  = resendKey && resendKey.length >= 4 ? resendKey.slice(-4) : null
+  const resendKey = RESEND_API_KEY || null
+  let deliveryDetail: string | null = null
+  if (EMAIL_PROVIDER === 'smtp' && SMTP_CONFIG) {
+    deliveryDetail = `${SMTP_CONFIG.host}:${SMTP_CONFIG.port} — ${SMTP_CONFIG.user ? `signed in as ${SMTP_CONFIG.user}` : 'no login (server trusts this machine)'}`
+  } else if (EMAIL_PROVIDER === 'resend' && resendKey) {
+    deliveryDetail = `API key ••••${resendKey.slice(-4)}`
+  }
 
   const emailFromMap = new Map((emailFromRows ?? []).map((r) => [r.key, r.value]))
 
@@ -48,8 +54,9 @@ export default async function PlatformSettingsPage() {
       <SettingsClient
         retentionPolicies={retentionPolicies ?? []}
         integrationStatus={{
-          resendKeySet:    resendKey != null,
-          resendKeyMasked: keyMasked,
+          provider:  EMAIL_PROVIDER,
+          detail:    deliveryDetail,
+          sendingAs: EMAIL_PROVIDER === 'smtp' ? resolveSenderAddress('smtp', SMTP_CONFIG, null) : null,
         }}
         emailFrom={{
           name:    emailFromMap.get('email_from_name') ?? '',

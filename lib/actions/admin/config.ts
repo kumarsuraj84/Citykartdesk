@@ -3,6 +3,9 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { sendEmail } from '@/lib/email/send'
+import { EMAIL_PROVIDER, getEmailFrom } from '@/lib/email/config'
+import { EMAIL_REGEX } from '@/lib/validation/formFields'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -59,6 +62,29 @@ export async function updateEmailFromSettings(name: string, address: string): Pr
   if (error) return { error: error.message }
   revalidatePath('/admin/settings')
   return {}
+}
+
+/** Sends one small test message so an admin can confirm outbound email really works
+ *  (SMTP login, sender address, spam placement) without waiting for a real ticket. */
+export async function sendTestEmail(to: string): Promise<{ error?: string; from?: string }> {
+  const profile = await getCurrentProfile()
+  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+
+  const recipient = to?.trim()
+  if (!recipient || !EMAIL_REGEX.test(recipient)) return { error: 'Enter a valid email address.' }
+  if (!EMAIL_PROVIDER) {
+    return { error: 'Email sending is not configured on this server yet — set SMTP_HOST (or RESEND_API_KEY) and restart the app.' }
+  }
+
+  const from = await getEmailFrom()
+  const { error } = await sendEmail({
+    to: recipient,
+    subject: 'Citykart Desk — test email',
+    html: '<p>This is a test email from <strong>Citykart Desk</strong>. If you can read this, outbound email is working.</p>',
+    text: 'This is a test email from Citykart Desk. If you can read this, outbound email is working.',
+  })
+  if (error) return { error }
+  return { from }
 }
 
 // ── Task templates ────────────────────────────────────────────────────────────
