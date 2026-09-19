@@ -27,8 +27,8 @@ export const getCurrentProfile = cache(async function (): Promise<ProfileWithTea
   // A one-off database hiccup used to look exactly like "no profile", which the
   // layout turns into a redirect to /login — and the proxy bounces a signed-in user
   // straight back, looping until the browser throttles navigation (blank page).
-  // Retry once on a real error; a genuinely missing row (PGRST116) is not retried.
-  for (let attempt = 0; attempt < 2; attempt++) {
+  // Retry a few times (~2.5s total) on a real error; a genuinely missing row (PGRST116) is not retried.
+  for (let attempt = 0; attempt < 4; attempt++) {
     const { data, error } = await supabase
       .from('profiles')
       .select(`
@@ -45,9 +45,12 @@ export const getCurrentProfile = cache(async function (): Promise<ProfileWithTea
 
     if (!error) return data as ProfileWithTeams | null
     if (error.code === 'PGRST116') return null
-    await new Promise((r) => setTimeout(r, 250))
+    await new Promise((r) => setTimeout(r, 250 * (attempt + 1)))
   }
-  return null
+  // Signed in, but the profile still could not be read: this is a temporary failure,
+  // not "no such user". Throw so the error boundary retries in place (app/error.tsx)
+  // instead of every page treating it as signed-out and redirecting to /login.
+  throw new Error('Could not load the signed-in profile')
 })
 
 export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {

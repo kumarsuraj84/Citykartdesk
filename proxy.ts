@@ -44,6 +44,7 @@ export async function proxy(request: NextRequest) {
   if (PUBLIC_API_ROUTES.has(pathname)) return NextResponse.next({ request })
 
   let supabaseResponse = NextResponse.next({ request })
+  let sessionRefreshed = false
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -54,6 +55,7 @@ export async function proxy(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
+          sessionRefreshed = true
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           )
@@ -116,6 +118,11 @@ export async function proxy(request: NextRequest) {
   // incoming request — the value here is always ours, never the caller's.
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-verified-user-id', userId ?? '')
+  // When the session was just refreshed (token expired while the tab sat idle), the
+  // page render below must see the NEW cookies. Otherwise it tries to refresh again
+  // with the already-used refresh token, fails, and looks signed-out — which is what
+  // used to bounce users /home -> /login -> /home until the browser went blank.
+  if (sessionRefreshed) requestHeaders.set('cookie', request.cookies.toString())
   const finalResponse = NextResponse.next({ request: { headers: requestHeaders } })
   // Carry forward any session-refresh cookies getClaims() queued via setAll()
   // above — without this, replacing supabaseResponse here would silently drop
