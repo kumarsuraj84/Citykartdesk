@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { queueEvent, flushEvents } from '@/lib/events/client'
 
 const MAX_AUTO_RETRIES = 6
 
@@ -11,9 +12,15 @@ const MAX_AUTO_RETRIES = 6
  * back to /home in a loop. Now the user stays on the same URL and the page is
  * quietly re-requested until it loads.
  */
-export default function RouteError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
+export default function RouteError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const router = useRouter()
   const [tries, setTries] = useState(0)
+
+  useEffect(() => {
+    // Record every crash (with the server's digest to match it to the server log).
+    queueEvent({ kind: 'render_error', path: location.pathname, message: error.message, detail: { digest: error.digest } })
+    flushEvents()
+  }, [error])
 
   useEffect(() => {
     if (tries >= MAX_AUTO_RETRIES) return

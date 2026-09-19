@@ -75,6 +75,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
         ...(isManager || isAdmin ? [{ label: 'Dashboards', href: '/admin/reports', icon: BarChart3 }] : []),
         ...(has('requests') ? [{ label: 'Report Builder', href: '/reports/pivot', icon: Table2 }] : []),
         ...(isManager || isAdmin ? [{ label: 'Audit Logs', href: '/admin/audit',    icon: Activity  }] : []),
+        ...(isAdmin ? [{ label: 'Event Log', href: '/admin/event-log', icon: Activity }] : []),
       ],
     },
     {

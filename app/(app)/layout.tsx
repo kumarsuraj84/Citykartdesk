@@ -5,6 +5,7 @@ import { getCurrentProfile, getEnabledModules, getTrialInfo, getNavCounts } from
 import { getNotifications } from '@/lib/queries/notifications'
 import { TrialBanner } from '@/components/layout/TrialBanner'
 import { DemoBanner } from '@/components/layout/DemoBanner'
+import { EventTracker } from '@/components/EventTracker'
 import type { NavVisibility } from '@/types'
 
 export default async function AppLayout({
@@ -62,6 +63,7 @@ export default async function AppLayout({
 
   return (
     <>
+      <EventTracker />
       {isDemo && <DemoBanner />}
       {trialInfo?.isTrial && !trialInfo.isExpired && trialInfo.daysLeft <= 7 && (
         <TrialBanner daysLeft={trialInfo.daysLeft} />

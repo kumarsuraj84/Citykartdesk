@@ -1,3 +1,4 @@
+import { recordEvents } from '@/lib/events/record'
 import { cache } from 'react'
 import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
@@ -50,6 +51,7 @@ export const getCurrentProfile = cache(async function (): Promise<ProfileWithTea
   // Signed in, but the profile still could not be read: this is a temporary failure,
   // not "no such user". Throw so the error boundary retries in place (app/error.tsx)
   // instead of every page treating it as signed-out and redirecting to /login.
+  await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profile after retries' }], { orgId: null, userId })
   throw new Error('Could not load the signed-in profile')
 })
 
