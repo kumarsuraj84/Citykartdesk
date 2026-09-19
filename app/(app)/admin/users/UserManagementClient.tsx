@@ -723,93 +723,138 @@ function SelectField({ value, onChange, options, placeholder }: {
   )
 }
 
-// ─── User Row ─────────────────────────────────────────────────────────────────
+// ─── User list ────────────────────────────────────────────────────────────────
 
-interface UserRowProps {
-  user: UserWithTeams
-  profiles: ProfileMini[]
-  departments: Department[]
-  locations: Location[]
-  costCenters: CostCenter[]
-  currentUserId: string
-  isAdmin: boolean
-  onEdit: () => void
+type UserExtra = UserWithTeams & {
+  department_id?: string | null
+  location_id?: string | null
+  store_id?: string | null
+  designation_id?: string | null
+  manager_id?: string | null
+  job_title?: string | null
+  employee_id?: string | null
+  mobile_numbers?: string[]
+  whatsapp_enabled?: boolean
 }
 
-function UserRow({ user, profiles, departments, onEdit, currentUserId, isAdmin }: UserRowProps) {
-  const isSelf = user.id === currentUserId
-  const teams  = user.team_members.map(tm => tm.team?.name).filter(Boolean)
-  const orgUser = user as UserWithTeams & {
-    department_id?: string | null
-    manager_id?: string | null
-    job_title?: string | null
-    employee_id?: string | null
-    mobile_numbers?: string[]
-    whatsapp_enabled?: boolean
+interface UserListRow {
+  user: UserWithTeams
+  name: string
+  email: string
+  mobiles: string[]
+  location: string
+  department: string
+  store: string
+  designation: string
+  employeeId: string
+  manager: string
+  role: string
+  teams: string[]
+  active: boolean
+  whatsappReady: boolean
+}
+
+type SortKey = 'name' | 'mobile' | 'location' | 'department' | 'store' | 'designation' | 'employeeId' | 'manager' | 'role' | 'teams' | 'status'
+
+const COLUMNS: { key: SortKey; label: string; width: string }[] = [
+  { key: 'name',        label: 'User',        width: 'min-w-[240px]' },
+  { key: 'mobile',      label: 'Mobile',      width: 'min-w-[130px]' },
+  { key: 'location',    label: 'Location',    width: 'min-w-[130px]' },
+  { key: 'department',  label: 'Department',  width: 'min-w-[120px]' },
+  { key: 'store',       label: 'Store',       width: 'min-w-[110px]' },
+  { key: 'designation', label: 'Designation', width: 'min-w-[130px]' },
+  { key: 'employeeId',  label: 'Employee ID', width: 'min-w-[100px]' },
+  { key: 'manager',     label: 'Manager',     width: 'min-w-[130px]' },
+  { key: 'role',        label: 'Role',        width: 'min-w-[110px]' },
+  { key: 'teams',       label: 'Teams',       width: 'min-w-[130px]' },
+  { key: 'status',      label: 'Status',      width: 'min-w-[80px]' },
+]
+
+function sortValue(r: UserListRow, key: SortKey): string {
+  switch (key) {
+    case 'name':        return r.name
+    case 'mobile':      return r.mobiles[0] ?? ''
+    case 'location':    return r.location
+    case 'department':  return r.department
+    case 'store':       return r.store
+    case 'designation': return r.designation
+    case 'employeeId':  return r.employeeId
+    case 'manager':     return r.manager
+    case 'role':        return r.role
+    case 'teams':       return r.teams.join(', ')
+    case 'status':      return r.active ? 'Active' : 'Inactive'
   }
-  const deptName = departments.find(d => d.id === orgUser.department_id)?.name
-  const managerName = profiles.find(p => p.id === orgUser.manager_id)?.full_name
-  const whatsappReady = (orgUser.mobile_numbers?.length ?? 0) > 0 && orgUser.whatsapp_enabled !== false
+}
+
+const Dash = () => <span className="text-xs text-muted-foreground">—</span>
+
+function UserRow({ row, onEdit, currentUserId, isAdmin }: { row: UserListRow; onEdit: () => void; currentUserId: string; isAdmin: boolean }) {
+  const { user } = row
+  const isSelf = user.id === currentUserId
+  const teams = row.teams
 
   return (
-    <div className="grid grid-cols-[auto_1fr_140px_120px_100px_100px] items-center gap-x-3 border-b border-[#EEF2F8] last:border-0 px-4 py-2.5 hover:bg-[#FAFBFF] transition-colors group">
-      {/* Avatar */}
-      <Avatar name={user.full_name || user.email || '?'} size="sm" />
-
-      {/* Name + email + meta */}
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-[12px] font-semibold text-[#1A1F36]">
-            {user.full_name || <span className="text-[#A0AEC0] italic">No name</span>}
-          </p>
-          {isSelf && (
-            <span className="rounded bg-blue-50 border border-blue-200 px-1.5 py-0.5 text-[9px] font-bold text-blue-700 shrink-0">You</span>
-          )}
+    <tr className="border-b border-[#EEF2F8] last:border-0 hover:bg-[#FAFBFF] transition-colors group align-middle">
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-3">
+          <Avatar name={user.full_name || user.email || '?'} size="sm" />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="truncate text-[12px] font-semibold text-[#1A1F36]">
+                {user.full_name || <span className="text-[#A0AEC0] italic">No name</span>}
+              </p>
+              {isSelf && (
+                <span className="rounded bg-blue-50 border border-blue-200 px-1.5 py-0.5 text-[9px] font-bold text-blue-700 shrink-0">You</span>
+              )}
+            </div>
+            <span className="block truncate text-[11px] text-[#7B8DB0]">{user.email ?? '—'}</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="truncate text-[11px] text-[#7B8DB0]">{user.email ?? '—'}</span>
-          {orgUser.job_title && <span className="text-[10px] text-muted-foreground/70">· {orgUser.job_title}</span>}
-          {deptName && <span className="text-[10px] text-violet-600/80 bg-violet-50 border border-violet-100 rounded px-1.5 py-0.5">{deptName}</span>}
-          {managerName && <span className="text-[10px] text-blue-600/80 bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">↑ {managerName}</span>}
-          {whatsappReady && (
-            <span title={`WhatsApp: ${orgUser.mobile_numbers!.join(', ')}`} className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600/80 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5">
-              <MessageCircle className="h-2.5 w-2.5" /> WhatsApp{orgUser.mobile_numbers!.length > 1 ? ` (${orgUser.mobile_numbers!.length})` : ''}
-            </span>
-          )}
+      </td>
+      <td className="px-3 py-2.5 text-[12px] text-[#1A1F36]">
+        {row.mobiles.length > 0 ? (
+          <div className="space-y-0.5">
+            {row.mobiles.map(m => <div key={m} className="whitespace-nowrap">{m}</div>)}
+            {row.whatsappReady && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600/80 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5">
+                <MessageCircle className="h-2.5 w-2.5" /> WhatsApp
+              </span>
+            )}
+          </div>
+        ) : <Dash />}
+      </td>
+      <td className="px-3 py-2.5 text-[12px] text-[#1A1F36]">{row.location || <Dash />}</td>
+      <td className="px-3 py-2.5 text-[12px] text-[#1A1F36]">{row.department || <Dash />}</td>
+      <td className="px-3 py-2.5 text-[12px] text-[#1A1F36]">{row.store || <Dash />}</td>
+      <td className="px-3 py-2.5 text-[12px] text-[#1A1F36]">{row.designation || <Dash />}</td>
+      <td className="px-3 py-2.5 text-[12px] text-[#1A1F36] whitespace-nowrap">{row.employeeId || <Dash />}</td>
+      <td className="px-3 py-2.5 text-[12px] text-[#1A1F36]">{row.manager || <Dash />}</td>
+      <td className="px-3 py-2.5"><RoleBadge role={user.role as UserRole} /></td>
+      <td className="px-3 py-2.5">
+        <div className="flex flex-wrap gap-1 min-w-0">
+          {teams.length > 0 ? teams.slice(0, 2).map(name => (
+            <span key={name} className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground truncate max-w-[100px]">{name}</span>
+          )) : <Dash />}
+          {teams.length > 2 && <span className="text-[10px] text-muted-foreground">+{teams.length - 2}</span>}
         </div>
-      </div>
-
-      {/* Role */}
-      <div><RoleBadge role={user.role as UserRole} /></div>
-
-      {/* Teams */}
-      <div className="flex flex-wrap gap-1 min-w-0">
-        {teams.length > 0 ? teams.slice(0, 2).map(name => (
-          <span key={name} className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground truncate max-w-[100px]">{name}</span>
-        )) : <span className="text-xs text-muted-foreground">—</span>}
-        {teams.length > 2 && <span className="text-[10px] text-muted-foreground">+{teams.length - 2}</span>}
-      </div>
-
-      {/* Status */}
-      <div>
+      </td>
+      <td className="px-3 py-2.5">
         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${user.is_active ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-slate-500 bg-slate-50 border-slate-200'}`}>
           {user.is_active ? 'Active' : 'Inactive'}
         </span>
-      </div>
-
-      {/* Edit button */}
-      <div className="flex justify-end">
+      </td>
+      <td className="px-3 py-2.5 text-right">
         {(isAdmin || !isSelf) && (
           <button
             onClick={onEdit}
-            className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
           >
             <Pencil className="h-3 w-3" />
             Edit
           </button>
         )}
-      </div>
-    </div>
+      </td>
+    </tr>
   )
 }
 
@@ -831,33 +876,90 @@ interface Props {
 
 export function UserManagementClient({ initialUsers, currentUserId, isAdmin, departments, locations, stores, costCenters, jobFunctions, designations, profiles, teams }: Props) {
   const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'name', dir: 'asc' })
   const [editUser, setEditUser] = useState<UserWithTeams | null>(null)
   const [showInvite, setShowInvite] = useState(false)
 
+  const rows = useMemo<UserListRow[]>(() => {
+    return initialUsers.map(u => {
+      const o = u as UserExtra
+      const loc = locations.find(l => l.id === o.location_id)
+      const store = stores.find(s => s.id === o.store_id)
+      return {
+        user: u,
+        name: u.full_name ?? '',
+        email: u.email ?? '',
+        mobiles: o.mobile_numbers ?? [],
+        location: loc ? [loc.name, loc.city].filter(Boolean).join(', ') : '',
+        department: departments.find(d => d.id === o.department_id)?.name ?? '',
+        store: store ? `${store.code} · ${store.name}` : '',
+        designation: designations.find(d => d.id === o.designation_id)?.name ?? o.job_title ?? '',
+        employeeId: o.employee_id ?? '',
+        manager: profiles.find(p => p.id === o.manager_id)?.full_name ?? '',
+        role: ROLE_LABELS[u.role as UserRole] ?? u.role,
+        teams: u.team_members.map(tm => tm.team?.name).filter((n): n is string => !!n),
+        active: !!u.is_active,
+        whatsappReady: (o.mobile_numbers?.length ?? 0) > 0 && o.whatsapp_enabled !== false,
+      }
+    })
+  }, [initialUsers, locations, stores, departments, designations, profiles])
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return initialUsers
-    return initialUsers.filter(u =>
-      u.full_name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
-    )
-  }, [initialUsers, search])
+    const digits = q.replace(/\D/g, '')
+    const list = rows.filter(r => {
+      if (roleFilter && r.user.role !== roleFilter) return false
+      if (statusFilter === 'active' && !r.active) return false
+      if (statusFilter === 'inactive' && r.active) return false
+      if (!q) return true
+      const text = [r.name, r.email, r.location, r.department, r.store, r.designation, r.employeeId, r.manager, r.role, ...r.teams, ...r.mobiles]
+        .join(' ').toLowerCase()
+      return text.includes(q) || (digits.length >= 3 && r.mobiles.some(m => m.replace(/\D/g, '').includes(digits)))
+    })
+    const dir = sort.dir === 'asc' ? 1 : -1
+    return [...list].sort((a, b) => {
+      const av = sortValue(a, sort.key)
+      const bv = sortValue(b, sort.key)
+      // Blanks always last, whichever way we sort.
+      if (!av && bv) return 1
+      if (av && !bv) return -1
+      return av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' }) * dir
+    })
+  }, [rows, search, roleFilter, statusFilter, sort])
+
+  function toggleSort(key: SortKey) {
+    setSort(s => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))
+  }
+
+  const selectCls = 'rounded-lg border border-[#E2E8F4] bg-white py-1.5 px-2 text-[13px] text-[#1A1F36] focus:outline-none focus:ring-2 focus:ring-[#1B2559]/20'
 
   return (
     <section className="space-y-3">
       {/* Toolbar */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[220px] max-w-sm">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
           </svg>
           <input
             type="search"
-            placeholder="Search by name or email…"
+            placeholder="Search name, email, mobile, location, department…"
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full rounded-lg border border-[#E2E8F4] bg-white py-1.5 pl-8 pr-3 text-[13px] text-[#1A1F36] placeholder:text-[#A0AEC0] focus:outline-none focus:ring-2 focus:ring-[#1B2559]/20"
           />
         </div>
+        <select aria-label="Filter by role" value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className={selectCls}>
+          <option value="">All roles</option>
+          {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+        </select>
+        <select aria-label="Filter by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={selectCls}>
+          <option value="">Any status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
         <p className="text-sm text-muted-foreground flex-1">
           {filtered.length} {filtered.length === 1 ? 'user' : 'users'}
         </p>
@@ -878,34 +980,53 @@ export function UserManagementClient({ initialUsers, currentUserId, isAdmin, dep
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-[#E2E8F4] bg-white overflow-hidden">
-        {/* Header */}
-        <div className="grid grid-cols-[auto_1fr_140px_120px_100px_100px] gap-x-3 border-b border-[#E2E8F4] bg-[#F8FAFD] px-4 py-2.5">
-          <div className="w-7" />
-          {['User', 'Role', 'Teams', 'Status', ''].map(h => (
-            <span key={h} className="text-[10px] font-bold uppercase tracking-wider text-[#7B8DB0]">{h}</span>
-          ))}
-        </div>
-
-        {filtered.length === 0 ? (
-          <div className="px-4 py-12 text-center text-sm text-muted-foreground">
-            {search ? 'No users match your search.' : 'No users found.'}
-          </div>
-        ) : (
-          filtered.map(user => (
-            <UserRow
-              key={user.id}
-              user={user}
-              profiles={profiles}
-              departments={departments}
-              locations={locations}
-              costCenters={costCenters}
-              currentUserId={currentUserId}
-              isAdmin={isAdmin}
-              onEdit={() => setEditUser(user)}
-            />
-          ))
-        )}
+      <div className="rounded-xl border border-[#E2E8F4] bg-white overflow-x-auto">
+        <table className="w-full border-collapse text-left">
+          <thead>
+            <tr className="border-b border-[#E2E8F4] bg-[#F8FAFD]">
+              {COLUMNS.map(c => {
+                const active = sort.key === c.key
+                return (
+                  <th
+                    key={c.key}
+                    scope="col"
+                    aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    className={`px-3 py-2.5 ${c.width}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(c.key)}
+                      className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap hover:text-[#1A1F36] ${active ? 'text-[#1A1F36]' : 'text-[#7B8DB0]'}`}
+                    >
+                      {c.label}
+                      <span aria-hidden className="text-[9px]">{active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
+                    </button>
+                  </th>
+                )
+              })}
+              <th className="px-3 py-2.5 w-[70px]" />
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={COLUMNS.length + 1} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                  {search || roleFilter || statusFilter ? 'No users match your search.' : 'No users found.'}
+                </td>
+              </tr>
+            ) : (
+              filtered.map(row => (
+                <UserRow
+                  key={row.user.id}
+                  row={row}
+                  currentUserId={currentUserId}
+                  isAdmin={isAdmin}
+                  onEdit={() => setEditUser(row.user)}
+                />
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
 
       {/* Edit Modal */}

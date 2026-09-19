@@ -74,7 +74,7 @@ export default async function UsersPage() {
     .filter((p: ProfileMini) => p.full_name)
 
   return (
-    <div className="space-y-8 max-w-6xl">
+    <div className="space-y-8">
       <PageHeader
         title="User Management"
         description="Manage users — set roles, departments, managers, and org structure."
