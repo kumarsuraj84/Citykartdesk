@@ -4,7 +4,9 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { sendEmail } from '@/lib/email/send'
-import { EMAIL_PROVIDER, getEmailFrom } from '@/lib/email/config'
+import { getEmailFrom, getEmailSetup } from '@/lib/email/config'
+import { invalidateMailboxCache } from '@/lib/email/mailbox'
+import { logAdminAudit } from './audit'
 import { EMAIL_REGEX } from '@/lib/validation/formFields'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,11 +74,12 @@ export async function sendTestEmail(to: string): Promise<{ error?: string; from?
 
   const recipient = to?.trim()
   if (!recipient || !EMAIL_REGEX.test(recipient)) return { error: 'Enter a valid email address.' }
-  if (!EMAIL_PROVIDER) {
-    return { error: 'Email sending is not configured on this server yet — set SMTP_HOST (or RESEND_API_KEY) and restart the app.' }
+  const setup = await getEmailSetup()
+  if (!setup.provider) {
+    return { error: 'Email sending is not set up yet — save the mailbox in the section above first.' }
   }
 
-  const from = await getEmailFrom()
+  const from = await getEmailFrom(setup)
   const { error } = await sendEmail({
     to: recipient,
     subject: 'Citykart Desk — test email',
@@ -85,6 +88,78 @@ export async function sendTestEmail(to: string): Promise<{ error?: string; from?
   })
   if (error) return { error }
   return { from }
+}
+
+// ── Mailbox (SMTP) settings ───────────────────────────────────────────────────
+// Admin / platform owner only — a mailbox password is a credential. The password goes
+// straight into the encrypted Vault via a service_role-only RPC; it is never stored in a
+// table, never logged, never returned to the browser, and never put in the audit trail.
+
+export async function saveMailboxSettings(input: {
+  host: string
+  port: number
+  username: string
+  password?: string
+}): Promise<{ error?: string }> {
+  const profile = await getCurrentProfile()
+  if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+
+  const host = input.host?.trim() ?? ''
+  const username = input.username?.trim() ?? ''
+  const password = input.password ?? ''
+  const port = Number(input.port)
+
+  if (!host || host.length > 253 || !/^[A-Za-z0-9.-]+$/.test(host)) {
+    return { error: 'Enter a valid mail server address, e.g. smtp.gmail.com.' }
+  }
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return { error: 'Enter a valid port number (587 for Gmail).' }
+  if (username && !EMAIL_REGEX.test(username)) return { error: 'Enter the mailbox as an email address.' }
+  if (password && !username) return { error: 'Enter the mailbox address that this password belongs to.' }
+
+  const admin = createAdminClient() as unknown as AnyClient & { rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data?: unknown; error?: { message: string } | null }> }
+
+  const { data: hasPw } = await admin.rpc('email_smtp_has_password')
+  if (username && !password && hasPw !== true) return { error: 'Enter the mailbox password (a Google App Password).' }
+
+  if (password) {
+    const { error } = await admin.rpc('email_smtp_store_password', { p_secret: password })
+    if (error) return { error: 'Could not store the password securely: ' + error.message }
+  } else if (!username) {
+    // Login-less relay: a previously saved password no longer applies.
+    await admin.rpc('email_smtp_clear_password')
+  }
+
+  const { error } = await admin
+    .from('email_smtp_settings')
+    .upsert({ id: true, host, port, username: username || null, updated_by: profile.id, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+  if (error) return { error: error.message }
+
+  invalidateMailboxCache()
+  await logAdminAudit({
+    orgId: profile.org_id!, actorId: profile.id,
+    entityType: 'email_settings', entityId: null, action: 'email_mailbox_saved',
+    metadata: { host, port, username: username || null, password_changed: !!password },
+  })
+  revalidatePath('/admin/settings')
+  return {}
+}
+
+export async function clearMailboxSettings(): Promise<{ error?: string }> {
+  const profile = await getCurrentProfile()
+  if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+
+  const admin = createAdminClient() as unknown as AnyClient & { rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ error?: { message: string } | null }> }
+  await admin.rpc('email_smtp_clear_password')
+  const { error } = await admin.from('email_smtp_settings').delete().eq('id', true)
+  if (error) return { error: error.message }
+
+  invalidateMailboxCache()
+  await logAdminAudit({
+    orgId: profile.org_id!, actorId: profile.id,
+    entityType: 'email_settings', entityId: null, action: 'email_mailbox_removed',
+  })
+  revalidatePath('/admin/settings')
+  return {}
 }
 
 // ── Task templates ────────────────────────────────────────────────────────────

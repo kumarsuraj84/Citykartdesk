@@ -1,17 +1,17 @@
-// Outbound email has two interchangeable delivery methods, chosen by which
-// environment variables are set (restart the app after changing them):
+// Outbound email has interchangeable delivery methods. In order of priority:
 //
-//   1. SMTP  — a mailbox / mail server you already own, e.g. Google Workspace:
-//        SMTP_HOST=smtp.gmail.com  SMTP_PORT=587
-//        SMTP_USER=citykartdesk@citykartstores.com  SMTP_PASS=<Google App Password>
-//      SMTP_PASS is optional for servers that authenticate by IP address (e.g.
-//      Google's smtp-relay.gmail.com). SMTP_FROM_ADDRESS overrides the sender.
-//   2. Resend — an email API service:  RESEND_API_KEY=re_...
+//   1. A mailbox saved in Admin > Platform Settings (stored in the database, the
+//      password encrypted) — changeable anytime without touching the server.
+//   2. SMTP settings in the server's environment file (SMTP_HOST / SMTP_PORT /
+//      SMTP_USER / SMTP_PASS, optional SMTP_FROM_ADDRESS) — restart to change.
+//   3. Resend, an email API service (RESEND_API_KEY).
 //
-// SMTP wins when both are configured. With neither, email is disabled and every
-// send is a logged no-op (same as before this option existed).
+// With none of them, email is disabled and every send is a logged no-op.
+// SMTP_PASS may be left out for login-less relays (e.g. Google's smtp-relay.gmail.com,
+// which trusts the server's IP address).
 
 export type EmailProvider = 'smtp' | 'resend'
+export type EmailSource = 'database' | 'environment' | 'resend'
 
 export type SmtpConfig = {
   host: string
@@ -20,6 +20,12 @@ export type SmtpConfig = {
   user: string | null
   pass: string | null
   fromAddress: string | null
+}
+
+export type EmailSetup = {
+  provider: EmailProvider | null
+  smtp: SmtpConfig | null
+  source: EmailSource | null
 }
 
 type Env = Record<string, string | undefined>
@@ -39,10 +45,18 @@ export function readSmtpConfig(env: Env = process.env): SmtpConfig | null {
   }
 }
 
-export function resolveEmailProvider(env: Env = process.env): EmailProvider | null {
-  if (readSmtpConfig(env)) return 'smtp'
-  if (env.RESEND_API_KEY) return 'resend'
-  return null
+/** Pure priority rule: saved mailbox, then server-file SMTP, then Resend, else off. */
+export function pickEmailSetup(dbSmtp: SmtpConfig | null, env: Env = process.env): EmailSetup {
+  if (dbSmtp) return { provider: 'smtp', smtp: dbSmtp, source: 'database' }
+  const envSmtp = readSmtpConfig(env)
+  if (envSmtp) return { provider: 'smtp', smtp: envSmtp, source: 'environment' }
+  if (env.RESEND_API_KEY) return { provider: 'resend', smtp: null, source: 'resend' }
+  return { provider: null, smtp: null, source: null }
+}
+
+export async function getEmailSetup(): Promise<EmailSetup> {
+  const { loadDbSmtpConfig } = await import('./mailbox')
+  return pickEmailSetup(await loadDbSmtpConfig())
 }
 
 /**
@@ -70,25 +84,23 @@ export function defaultEmailFrom(env: Env = process.env): string {
 }
 const DEFAULT_EMAIL_FROM = defaultEmailFrom()
 export const RESEND_API_KEY = process.env.RESEND_API_KEY ?? ''
-export const SMTP_CONFIG = readSmtpConfig()
-export const EMAIL_PROVIDER = resolveEmailProvider()
-export const EMAIL_ENABLED = EMAIL_PROVIDER !== null
 
-let cachedFrom: { value: string; expiresAt: number } | null = null
+let cachedFrom: { key: string; value: string; expiresAt: number } | null = null
 const FROM_CACHE_MS = 60_000
 
 /**
- * The "From" address every outbound email sends as — configurable at
- * Admin → Platform Settings → Integrations (app_settings rows
- * 'email_from_name' / 'email_from_address') instead of being baked into an
- * env var, so it can be changed anytime without a redeploy. Governs both
+ * The "From" address every outbound email sends as — the display name is configurable
+ * at Admin → Platform Settings → Integrations (app_settings 'email_from_name' /
+ * 'email_from_address'), so it can be changed anytime without a redeploy. Governs both
  * user notification emails and the OEM auto-routing emails (createRequest())
  * since both go through sendEmail(). Cached briefly to avoid a DB round
  * trip on every single send — a bulk notify() (e.g. one Business Rule
  * emailing every manager) fans out many sendEmail() calls in parallel.
  */
-export async function getEmailFrom(): Promise<string> {
-  if (cachedFrom && cachedFrom.expiresAt > Date.now()) return cachedFrom.value
+export async function getEmailFrom(setup?: EmailSetup): Promise<string> {
+  const active = setup ?? (await getEmailSetup())
+  const key = `${active.provider}|${active.smtp?.user ?? ''}|${active.smtp?.fromAddress ?? ''}`
+  if (cachedFrom && cachedFrom.key === key && cachedFrom.expiresAt > Date.now()) return cachedFrom.value
 
   try {
     const { createAdminClient } = await import('@/lib/supabase/admin')
@@ -98,20 +110,20 @@ export async function getEmailFrom(): Promise<string> {
       .select('key, value')
       .in('key', ['email_from_name', 'email_from_address'])
     const settings = new Map((data ?? []).map((r) => [r.key, r.value]))
-    const address = resolveSenderAddress(EMAIL_PROVIDER, SMTP_CONFIG, settings.get('email_from_address'))
+    const address = resolveSenderAddress(active.provider, active.smtp, settings.get('email_from_address'))
     const value = address
       ? `${settings.get('email_from_name')?.trim() || 'Citykart Desk'} <${address}>`
       : DEFAULT_EMAIL_FROM
 
-    cachedFrom = { value, expiresAt: Date.now() + FROM_CACHE_MS }
+    cachedFrom = { key, value, expiresAt: Date.now() + FROM_CACHE_MS }
     return value
   } catch {
     // DB unreachable — fall back to the env var/default rather than failing
     // the send, but deliberately don't cache it: a transient blip shouldn't
     // silently override a correctly configured custom sender for the full
     // 60s TTL, only for the one send that hit it.
-    if (EMAIL_PROVIDER === 'smtp' && SMTP_CONFIG) {
-      const address = SMTP_CONFIG.fromAddress ?? SMTP_CONFIG.user
+    if (active.provider === 'smtp' && active.smtp) {
+      const address = active.smtp.fromAddress ?? active.smtp.user
       if (address) return `Citykart Desk <${address}>`
     }
     return DEFAULT_EMAIL_FROM

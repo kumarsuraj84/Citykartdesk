@@ -1,9 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useTransition } from 'react'
+import { useState, useSyncExternalStore, useTransition } from 'react'
 import { Save, Check, AlertTriangle, Circle, Mail, MessageSquare, ChevronDown, ExternalLink, Send } from 'lucide-react'
-import { updateEmailFromSettings, updateRetentionPolicy, sendTestEmail } from '@/lib/actions/admin/config'
+import { updateEmailFromSettings, updateRetentionPolicy, sendTestEmail, saveMailboxSettings, clearMailboxSettings } from '@/lib/actions/admin/config'
 import { EMAIL_REGEX } from '@/lib/validation/formFields'
 import type { WhatsAppChannelReadiness } from '@/lib/actions/intake/whatsapp-channel'
 
@@ -33,7 +33,12 @@ interface SettingsClientProps {
     detail: string | null
     /** With SMTP, the mailbox address mail is really sent as (Google rewrites any other). */
     sendingAs: string | null
+    /** Where the active settings come from: saved here, the server file, or Resend. */
+    source: 'database' | 'environment' | 'resend' | null
   }
+  /** The mailbox saved here (never includes the password). Null when none is saved or for non-admins. */
+  mailbox: { host: string; port: number; username: string; hasPassword: boolean } | null
+  canEditMailbox: boolean
   emailFrom: {
     name: string
     address: string
@@ -204,10 +209,12 @@ function RetentionTab({ policies }: { policies: RetentionPolicy[] }) {
 // they were four facets of one "how does this app send email" question, not
 // four independent integrations.
 function EmailCard({
-  initial, delivery,
+  initial, delivery, mailbox, canEditMailbox,
 }: {
   initial: SettingsClientProps['emailFrom']
   delivery: SettingsClientProps['integrationStatus']
+  mailbox: SettingsClientProps['mailbox']
+  canEditMailbox: boolean
 }) {
   const [name, setName] = useState(initial.name)
   const [address, setAddress] = useState(initial.address)
@@ -219,6 +226,50 @@ function EmailCard({
   const [testTo, setTestTo] = useState('')
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [testPending, startTest] = useTransition()
+
+  // Mailbox (SMTP) settings — admin / platform owner only.
+  const [mbUser, setMbUser] = useState(mailbox?.username ?? '')
+  const [mbPass, setMbPass] = useState('')
+  const [mbHost, setMbHost] = useState(mailbox?.host ?? 'smtp.gmail.com')
+  const [mbPort, setMbPort] = useState(String(mailbox?.port ?? 587))
+  const [mbMsg, setMbMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [mbPending, startMb] = useTransition()
+  // Hydration-safe: false on the server, the real value in the browser.
+  const plainHttp = useSyncExternalStore(
+    () => () => {},
+    () => window.location.protocol === 'http:' && !['localhost', '127.0.0.1'].includes(window.location.hostname),
+    () => false
+  )
+
+  function handleSaveMailbox() {
+    setMbMsg(null)
+    startMb(async () => {
+      const r = await saveMailboxSettings({ host: mbHost, port: Number(mbPort), username: mbUser, password: mbPass || undefined })
+      if (r.error) {
+        setMbMsg({ ok: false, text: r.error })
+        return
+      }
+      setMbPass('')
+      setMbMsg({ ok: true, text: 'Mailbox saved. Use "Send a test email" below to confirm it works.' })
+    })
+  }
+
+  function handleRemoveMailbox() {
+    if (!confirm('Remove the saved mailbox? Emails then fall back to the server settings file (or stop if there are none).')) return
+    setMbMsg(null)
+    startMb(async () => {
+      const r = await clearMailboxSettings()
+      if (r.error) {
+        setMbMsg({ ok: false, text: r.error })
+        return
+      }
+      setMbUser('')
+      setMbPass('')
+      setMbHost('smtp.gmail.com')
+      setMbPort('587')
+      setMbMsg({ ok: true, text: 'Saved mailbox removed.' })
+    })
+  }
 
   const connected = delivery.provider !== null
   const addressLocked = delivery.provider === 'smtp' && !!delivery.sendingAs
@@ -351,12 +402,11 @@ function EmailCard({
                 (If App passwords isn&apos;t offered, a Workspace admin must allow it for this account.)
               </li>
               <li>
-                On the server, add these to the app&apos;s <span className="font-mono">.env.local</span> and restart the app:{' '}
-                <span className="font-mono">SMTP_HOST=smtp.gmail.com</span>, <span className="font-mono">SMTP_PORT=587</span>,{' '}
-                <span className="font-mono">SMTP_USER=citykartdesk@citykartstores.com</span>,{' '}
-                <span className="font-mono">SMTP_PASS=&lt;the app password&gt;</span>. The password stays on the server only.
+                In <strong>Mailbox that sends the emails</strong> below, enter the mailbox address and paste the App
+                Password (server <span className="font-mono">smtp.gmail.com</span>, port <span className="font-mono">587</span>),
+                then Save. The password is stored encrypted and you can change or remove it here anytime.
               </li>
-              <li>Come back here — Delivery below turns green. Then use <strong>Send a test email</strong> to confirm it arrives.</li>
+              <li>Delivery below turns green. Then use <strong>Send a test email</strong> to confirm it arrives.</li>
               <li>
                 Optional: set the display name above. Instead of an app password you can use Google&apos;s SMTP relay
                 (<span className="font-mono">smtp-relay.gmail.com</span>, allow-listed by server IP, no password), or the
@@ -366,6 +416,77 @@ function EmailCard({
           )}
         </div>
       </div>
+
+      {canEditMailbox && (
+        <div className="px-4 py-4 space-y-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">Mailbox that sends the emails</p>
+            <p className="text-xs text-muted-foreground">
+              Enter the Google Workspace mailbox and its <strong>App Password</strong> — not the normal Gmail password, which
+              Google rejects for apps (Google Account → Security → 2-Step Verification → App passwords). The password is
+              stored encrypted, is never shown again, and can be changed or removed here anytime.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] text-muted-foreground">Mailbox address</span>
+              <input
+                value={mbUser}
+                onChange={(e) => setMbUser(e.target.value)}
+                placeholder="citykartdesk@citykartstores.com"
+                autoComplete="off"
+                className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] text-muted-foreground">App Password</span>
+              <input
+                type="password"
+                value={mbPass}
+                onChange={(e) => setMbPass(e.target.value)}
+                placeholder={mailbox?.hasPassword ? 'Saved — leave blank to keep' : '16-character app password'}
+                autoComplete="new-password"
+                className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] text-muted-foreground">Mail server</span>
+              <input
+                value={mbHost}
+                onChange={(e) => setMbHost(e.target.value)}
+                className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] text-muted-foreground">Port</span>
+              <input
+                value={mbPort}
+                onChange={(e) => setMbPort(e.target.value)}
+                inputMode="numeric"
+                className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </label>
+          </div>
+          {plainHttp && (
+            <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+              This page isn&apos;t using HTTPS, so what you type here travels unencrypted. Enter the password only from
+              inside the office network (the server&apos;s local address), not over the public internet.
+            </p>
+          )}
+          {mbMsg && <p className={'text-xs ' + (mbMsg.ok ? 'text-emerald-600' : 'text-red-600')}>{mbMsg.text}</p>}
+          <div className="flex gap-2">
+            <button onClick={handleSaveMailbox} disabled={mbPending} className="btn-gradient disabled:opacity-40">
+              <Save className="h-3.5 w-3.5" />
+              {mbPending ? 'Saving…' : 'Save mailbox'}
+            </button>
+            {mailbox && (
+              <button onClick={handleRemoveMailbox} disabled={mbPending} className="btn-soft disabled:opacity-40">
+                Remove saved mailbox
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Delivery — can mail actually leave the system at all */}
       <div className="flex items-start gap-3 px-4 py-3.5">
@@ -378,8 +499,8 @@ function EmailCard({
           </p>
           <p className="text-xs text-muted-foreground/80 font-mono">
             {connected && delivery.detail
-              ? `Configured — ${delivery.detail}`
-              : 'Not configured — nothing below can actually send until SMTP_HOST (or RESEND_API_KEY) is set on the server.'}
+              ? 'Configured (' + (delivery.source === 'database' ? 'saved here' : delivery.source === 'environment' ? 'server settings file' : 'Resend') + ') — ' + delivery.detail
+              : 'Not configured — nothing can be emailed until a mailbox is saved above (or SMTP_HOST / RESEND_API_KEY is set on the server).'}
           </p>
           {connected && (
             <div className="space-y-1.5 pt-1">
@@ -512,10 +633,12 @@ function WhatsAppCard({ channel }: { channel: WhatsAppChannelSummary }) {
   )
 }
 
-function IntegrationsTab({ status, emailFrom, whatsappChannels }: {
+function IntegrationsTab({ status, emailFrom, whatsappChannels, mailbox, canEditMailbox }: {
   status: SettingsClientProps['integrationStatus']
   emailFrom: SettingsClientProps['emailFrom']
   whatsappChannels: SettingsClientProps['whatsappChannels']
+  mailbox: SettingsClientProps['mailbox']
+  canEditMailbox: boolean
 }) {
   return (
     <div className="space-y-6 max-w-2xl">
@@ -524,7 +647,7 @@ function IntegrationsTab({ status, emailFrom, whatsappChannels }: {
           Every email this desk sends — notifications, OEM routing, and escalation alerts alike — goes out from one
           configured identity below.
         </p>
-        <EmailCard initial={emailFrom} delivery={status} />
+        <EmailCard initial={emailFrom} delivery={status} mailbox={mailbox} canEditMailbox={canEditMailbox} />
       </div>
 
       <div className="space-y-4">
@@ -549,7 +672,7 @@ function IntegrationsTab({ status, emailFrom, whatsappChannels }: {
   )
 }
 
-export function SettingsClient({ retentionPolicies, integrationStatus, emailFrom, whatsappChannels }: SettingsClientProps) {
+export function SettingsClient({ retentionPolicies, integrationStatus, emailFrom, whatsappChannels, mailbox, canEditMailbox }: SettingsClientProps) {
   const [tab, setTab] = useState<Tab>('retention')
 
   const tabs: { key: Tab; label: string }[] = [
@@ -576,7 +699,7 @@ export function SettingsClient({ retentionPolicies, integrationStatus, emailFrom
       </div>
 
       {tab === 'retention'    && <RetentionTab policies={retentionPolicies} />}
-      {tab === 'integrations' && <IntegrationsTab status={integrationStatus} emailFrom={emailFrom} whatsappChannels={whatsappChannels} />}
+      {tab === 'integrations' && <IntegrationsTab status={integrationStatus} emailFrom={emailFrom} whatsappChannels={whatsappChannels} mailbox={mailbox} canEditMailbox={canEditMailbox} />}
     </div>
   )
 }

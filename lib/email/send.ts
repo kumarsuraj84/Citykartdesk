@@ -1,5 +1,5 @@
 import nodemailer, { type Transporter } from 'nodemailer'
-import { getEmailFrom, RESEND_API_KEY, EMAIL_PROVIDER, SMTP_CONFIG } from './config'
+import { getEmailFrom, getEmailSetup, RESEND_API_KEY, type EmailSetup, type SmtpConfig } from './config'
 
 export interface EmailPayload {
   to: string
@@ -10,16 +10,19 @@ export interface EmailPayload {
   attachments?: { filename: string; content: string }[]
 }
 
-// One pooled connection set for the process, so a burst of notifications (e.g. a
-// rule emailing every manager) reuses a few authenticated SMTP sessions instead of
-// opening a new TLS connection per message — mail servers throttle those.
-let transporter: Transporter | null = null
+// One pooled connection set per SMTP configuration, so a burst of notifications (e.g. a
+// rule emailing every manager) reuses a few authenticated sessions instead of opening a
+// new TLS connection per message — mail servers throttle those. When the saved mailbox
+// changes, the next send builds a fresh transporter and retires the old one.
+let cached: { key: string; transporter: Transporter } | null = null
 
-function getTransporter(): Transporter {
-  if (transporter) return transporter
-  const c = SMTP_CONFIG!
+function getTransporter(c: SmtpConfig): Transporter {
+  const key = JSON.stringify([c.host, c.port, c.secure, c.user, c.pass])
+  if (cached?.key === key) return cached.transporter
+  cached?.transporter.close()
+
   const auth = c.user && c.pass ? { user: c.user, pass: c.pass } : undefined
-  transporter = nodemailer.createTransport({
+  const transporter = nodemailer.createTransport({
     host: c.host,
     port: c.port,
     secure: c.secure,
@@ -34,12 +37,13 @@ function getTransporter(): Transporter {
     greetingTimeout: 10_000,
     socketTimeout: 30_000,
   })
+  cached = { key, transporter }
   return transporter
 }
 
-async function sendViaSmtp(p: EmailPayload): Promise<{ error?: string }> {
-  const from = await getEmailFrom()
-  await getTransporter().sendMail({
+async function sendViaSmtp(p: EmailPayload, setup: EmailSetup): Promise<{ error?: string }> {
+  const from = await getEmailFrom(setup)
+  await getTransporter(setup.smtp!).sendMail({
     from,
     to: p.to,
     subject: p.subject,
@@ -50,8 +54,8 @@ async function sendViaSmtp(p: EmailPayload): Promise<{ error?: string }> {
   return {}
 }
 
-async function sendViaResend(p: EmailPayload): Promise<{ error?: string }> {
-  const from = await getEmailFrom()
+async function sendViaResend(p: EmailPayload, setup: EmailSetup): Promise<{ error?: string }> {
+  const from = await getEmailFrom(setup)
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -73,13 +77,13 @@ async function sendViaResend(p: EmailPayload): Promise<{ error?: string }> {
 }
 
 export async function sendEmail(p: EmailPayload): Promise<{ error?: string }> {
-  if (!EMAIL_PROVIDER) {
-    console.log('[EMAIL DISABLED] To:', p.to, ' Subject:', p.subject)
-    return {}
-  }
-
   try {
-    return EMAIL_PROVIDER === 'smtp' ? await sendViaSmtp(p) : await sendViaResend(p)
+    const setup = await getEmailSetup()
+    if (!setup.provider) {
+      console.log('[EMAIL DISABLED] To:', p.to, ' Subject:', p.subject)
+      return {}
+    }
+    return setup.provider === 'smtp' ? await sendViaSmtp(p, setup) : await sendViaResend(p, setup)
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) }
   }

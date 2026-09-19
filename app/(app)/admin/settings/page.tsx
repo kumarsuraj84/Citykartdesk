@@ -2,7 +2,8 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { EMAIL_PROVIDER, SMTP_CONFIG, RESEND_API_KEY, resolveSenderAddress } from '@/lib/email/config'
+import { getEmailSetup, RESEND_API_KEY, resolveSenderAddress } from '@/lib/email/config'
+import { readMailboxForAdmin } from '@/lib/email/mailbox'
 import { getWhatsAppChannelReadiness } from '@/lib/actions/intake/whatsapp-channel'
 import { SettingsClient } from './SettingsClient'
 
@@ -35,11 +36,14 @@ export default async function PlatformSettingsPage() {
     })
   )
 
+  const setup = await getEmailSetup()
+  const canEditMailbox = profile.role === 'admin' || profile.role === 'platform_owner'
+  const mailbox = canEditMailbox ? await readMailboxForAdmin() : null
   const resendKey = RESEND_API_KEY || null
   let deliveryDetail: string | null = null
-  if (EMAIL_PROVIDER === 'smtp' && SMTP_CONFIG) {
-    deliveryDetail = `${SMTP_CONFIG.host}:${SMTP_CONFIG.port} — ${SMTP_CONFIG.user ? `signed in as ${SMTP_CONFIG.user}` : 'no login (server trusts this machine)'}`
-  } else if (EMAIL_PROVIDER === 'resend' && resendKey) {
+  if (setup.provider === 'smtp' && setup.smtp) {
+    deliveryDetail = `${setup.smtp.host}:${setup.smtp.port} — ${setup.smtp.user ? `signed in as ${setup.smtp.user}` : 'no login (server trusts this machine)'}`
+  } else if (setup.provider === 'resend' && resendKey) {
     deliveryDetail = `API key ••••${resendKey.slice(-4)}`
   }
 
@@ -54,10 +58,13 @@ export default async function PlatformSettingsPage() {
       <SettingsClient
         retentionPolicies={retentionPolicies ?? []}
         integrationStatus={{
-          provider:  EMAIL_PROVIDER,
+          provider:  setup.provider,
           detail:    deliveryDetail,
-          sendingAs: EMAIL_PROVIDER === 'smtp' ? resolveSenderAddress('smtp', SMTP_CONFIG, null) : null,
+          sendingAs: setup.provider === 'smtp' ? resolveSenderAddress('smtp', setup.smtp, null) : null,
+          source:    setup.source,
         }}
+        mailbox={mailbox}
+        canEditMailbox={canEditMailbox}
         emailFrom={{
           name:    emailFromMap.get('email_from_name') ?? '',
           address: emailFromMap.get('email_from_address') ?? '',

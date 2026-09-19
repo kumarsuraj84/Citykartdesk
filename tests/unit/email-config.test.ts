@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readSmtpConfig, resolveEmailProvider, resolveSenderAddress, defaultEmailFrom } from '@/lib/email/config'
+import { readSmtpConfig, pickEmailSetup, resolveSenderAddress, defaultEmailFrom, type SmtpConfig } from '@/lib/email/config'
 
 describe('readSmtpConfig', () => {
   it('is off unless SMTP_HOST is set', () => {
@@ -30,16 +30,27 @@ describe('readSmtpConfig', () => {
   })
 })
 
-describe('resolveEmailProvider', () => {
+describe('pickEmailSetup (priority: saved mailbox, server file, Resend, off)', () => {
+  const saved: SmtpConfig = { host: 'smtp.gmail.com', port: 587, secure: false, user: 'saved@x.com', pass: 'p', fromAddress: null }
+
   it('is disabled with nothing configured', () => {
-    expect(resolveEmailProvider({})).toBeNull()
+    expect(pickEmailSetup(null, {})).toEqual({ provider: null, smtp: null, source: null })
   })
   it('uses Resend when only its key is set (existing behaviour)', () => {
-    expect(resolveEmailProvider({ RESEND_API_KEY: 're_x' })).toBe('resend')
+    expect(pickEmailSetup(null, { RESEND_API_KEY: 're_x' })).toMatchObject({ provider: 'resend', source: 'resend' })
   })
-  it('uses SMTP when configured, and prefers it over Resend', () => {
-    expect(resolveEmailProvider({ SMTP_HOST: 'smtp.gmail.com' })).toBe('smtp')
-    expect(resolveEmailProvider({ SMTP_HOST: 'smtp.gmail.com', RESEND_API_KEY: 're_x' })).toBe('smtp')
+  it('uses the server-file SMTP settings over Resend', () => {
+    const r = pickEmailSetup(null, { SMTP_HOST: 'smtp.gmail.com', SMTP_USER: 'env@x.com', RESEND_API_KEY: 're_x' })
+    expect(r).toMatchObject({ provider: 'smtp', source: 'environment' })
+    expect(r.smtp?.user).toBe('env@x.com')
+  })
+  it('the mailbox saved in Settings wins over everything else', () => {
+    const r = pickEmailSetup(saved, { SMTP_HOST: 'smtp.gmail.com', SMTP_USER: 'env@x.com', RESEND_API_KEY: 're_x' })
+    expect(r).toMatchObject({ provider: 'smtp', source: 'database' })
+    expect(r.smtp?.user).toBe('saved@x.com')
+  })
+  it('removing the saved mailbox falls back to the server file', () => {
+    expect(pickEmailSetup(null, { SMTP_HOST: 'h', SMTP_USER: 'env@x.com' }).source).toBe('environment')
   })
 })
 
