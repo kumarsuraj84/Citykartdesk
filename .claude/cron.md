@@ -1,3 +1,7 @@
+# Windows server (Main): run `scripts/windows/install-cron-tasks.ps1` once as Administrator.
+# It creates Scheduled Tasks CitykartDesk-Cron-Alerts (30 min) and CitykartDesk-Cron-BusinessRules (15 min),
+# which call scripts/windows/run-cron-tick.ps1 (reads CRON_SECRET from the app's .env.local).
+
 # NOTE: production scheduling now runs on Railway via `scripts/cron-tick.mjs`,
 # not the Vercel `vercel.json` crons this file was originally written for.
 # See docs/RAILWAY-DEPLOYMENT.md § "Scheduled jobs" for the current setup

@@ -538,12 +538,12 @@ function EmailCard({
           </p>
         </div>
         <div className="flex items-start gap-2.5">
-          <Circle className="mt-1 h-2.5 w-2.5 shrink-0 fill-current text-red-400" />
+          <Circle className="mt-1 h-2.5 w-2.5 shrink-0 fill-current text-amber-400" />
           <p className="text-xs text-muted-foreground">
             <span className="font-medium text-foreground">Due-soon/overdue alerts, daily digest & SLA escalation</span> —
-            time-based, so something must call <span className="font-mono">/api/alerts/run</span> and{' '}
-            <span className="font-mono">/api/business-rules/run</span> on a recurring schedule (see{' '}
-            <span className="font-mono">.claude/cron.md</span>). Not scheduled in this environment yet.
+            time-based, sent by the server's scheduler (alerts every 30 min, business rules every 15 min, daily digest at
+            8 AM) through the same mailbox above. Needs the scheduled tasks installed on the server (see{' '}
+            <span className="font-mono">.claude/cron.md</span>); once they are, these go out automatically.
           </p>
         </div>
       </div>
