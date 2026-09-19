@@ -37,9 +37,11 @@ export async function getActiveLibraryFields(): Promise<LibraryFieldDef[]> {
 export async function getFieldLibraryOverview(): Promise<{
   fields: LibraryFieldRow[]
   duplicates: DuplicateGroup[]
+  /** Set when the library table can't be read (e.g. the database migration hasn't been applied on this server). */
+  setupError: string | null
 }> {
   const supabase = await createClient()
-  const [{ data: lib }, { data: templates }] = await Promise.all([
+  const [{ data: lib, error: libError }, { data: templates }] = await Promise.all([
     supabase.from('form_field_library').select('id, label, type, placeholder, help_text, options, is_active').order('label'),
     supabase.from('form_templates').select('id, name, form_sections').eq('is_active', true),
   ])
@@ -53,7 +55,12 @@ export async function getFieldLibraryOverview(): Promise<{
   const defs = rows.map(toLibraryDef)
   const usage = libraryUsage(scan)
 
+  // A missing/unreadable library table must not look like an empty library —
+  // offering to link duplicates against it would only fail.
+  if (libError) return { fields: [], duplicates: [], setupError: libError.message }
+
   return {
+    setupError: null,
     fields: rows.map((r) => ({ ...toLibraryDef(r), is_active: r.is_active, used_in: usage.get(r.id) ?? [] })),
     duplicates: findDuplicateGroups(scan, defs.filter((d) => rows.find((r) => r.id === d.id)?.is_active)),
   }

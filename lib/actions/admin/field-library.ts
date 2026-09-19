@@ -103,7 +103,7 @@ export async function createLibraryField(data: LibraryFieldInput): Promise<Actio
   if (error) {
     if (error.code === '23505') return { error: `A library field named "${data.label.trim()}" already exists.` }
     console.error('[createLibraryField]', error.message)
-    return { error: 'Failed to create field.' }
+    return { error: `Failed to create field: ${error.message}` }
   }
 
   await logAdminAudit({
@@ -248,7 +248,7 @@ export async function linkDuplicateFieldGroup(groupKey: string): Promise<ActionR
       .single()
     if (error) {
       console.error('[linkDuplicateFieldGroup] create', error.message)
-      return { error: 'Failed to create the library field.' }
+      return { error: `Failed to create the library field: ${error.message}` }
     }
     lib = toLibraryDef(created)
   }

@@ -9,7 +9,7 @@ export default async function AdminFieldLibraryPage() {
   if (!profile) redirect('/login')
   if (profile.role !== 'admin' && profile.role !== 'platform_owner') redirect('/home')
 
-  const { fields, duplicates } = await getFieldLibraryOverview()
+  const { fields, duplicates, setupError } = await getFieldLibraryOverview()
 
   return (
     <div className="space-y-6">
@@ -17,7 +17,7 @@ export default async function AdminFieldLibraryPage() {
         title="Field Library"
         description="Create a field once (e.g. Contact Number), then add it to any form template. Reports show one column per library field across all templates."
       />
-      <FieldLibraryClient fields={fields} duplicates={duplicates} />
+      <FieldLibraryClient fields={fields} duplicates={duplicates} setupError={setupError} />
     </div>
   )
 }

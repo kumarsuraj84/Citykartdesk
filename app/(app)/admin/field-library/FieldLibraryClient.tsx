@@ -139,9 +139,11 @@ function FieldModal({ field, onClose }: { field: LibraryFieldRow | null; onClose
 export default function FieldLibraryClient({
   fields,
   duplicates,
+  setupError,
 }: {
   fields: LibraryFieldRow[]
   duplicates: DuplicateGroup[]
+  setupError: string | null
 }) {
   const [modal, setModal] = useState<{ field: LibraryFieldRow | null } | null>(null)
   const [message, setMessage] = useState<{ kind: 'error' | 'ok'; text: string } | null>(null)
@@ -158,8 +160,18 @@ export default function FieldLibraryClient({
 
   return (
     <div className="space-y-6">
+      {setupError && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-semibold">The Field Library isn&apos;t set up on this server yet.</p>
+          <p className="mt-1 text-xs">
+            The database table is missing or not visible to the API — apply migration <code>20240101000141_form_field_library.sql</code>
+            (deploy/windows/apply-migrations.ps1), then restart the PostgREST service so it reloads its table list.
+          </p>
+          <p className="mt-1 text-[11px] opacity-80">Details: {setupError}</p>
+        </div>
+      )}
       <div className="flex items-center justify-end">
-        <button onClick={() => setModal({ field: null })} className="btn-gradient">
+        <button onClick={() => setModal({ field: null })} disabled={!!setupError} className="btn-gradient disabled:opacity-50">
           <Plus className="h-4 w-4" />
           New field
         </button>
