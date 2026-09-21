@@ -9,7 +9,8 @@ import {
   createDesignation, updateDesignation, deleteDesignation,
   createStore, updateStore, deleteStore, importStores,
 } from '@/lib/actions/admin/org'
-import { createOem, updateOem, deleteOem } from '@/lib/actions/admin/oems'
+import { createOem, updateOem, deleteOem, setOemStores } from '@/lib/actions/admin/oems'
+import { planStoreAssignment } from '@/lib/oems/store-assignment'
 import { ImportModal } from '@/components/ui/ImportModal'
 import type { DepartmentRow, LocationRow, CostCenterRow, JobFunctionRow, DesignationRow, UserOption, OemRow, StoreRow } from './page'
 
@@ -816,10 +817,104 @@ function parseEmails(raw: string): string[] {
   return raw.split(/[\n,]/).map(e => e.trim()).filter(Boolean)
 }
 
-function OemsTab({ oems }: { oems: OemRow[] }) {
+// ─── Assign stores to an OEM ───────────────────────────────────────────────────
+// Reverse of choosing an OEM on each store: tick the stores this OEM services.
+// A store has one OEM, so ticking one that belongs to another OEM moves it.
+
+function OemStoresPanel({ oem, stores, oems, onClose }: { oem: OemRow; stores: StoreRow[]; oems: OemRow[]; onClose: () => void }) {
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(stores.filter(s => s.oem_id === oem.id).map(s => s.id)))
+
+  const oemName = (id: string | null) => oems.find(o => o.id === id)?.name ?? null
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return stores
+    return stores.filter(s => [s.code, s.name, s.city, s.state, s.pincode, oemName(s.oem_id)].filter(Boolean).join(' ').toLowerCase().includes(q))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stores, search, oems])
+
+  const plan = useMemo(() => planStoreAssignment(stores, selected, oem.id), [stores, selected, oem.id])
+  const changes = plan.toAssign.length + plan.toUnassign.length
+
+  function toggle(id: string) {
+    setSelected(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
+  }
+  function setShown(on: boolean) {
+    setSelected(prev => { const next = new Set(prev); for (const s of visible) { if (on) next.add(s.id); else next.delete(s.id) } return next })
+  }
+
+  function handleSave() {
+    setError(null); setDone(null)
+    startTransition(async () => {
+      const res = await setOemStores(oem.id, [...selected])
+      if (res.error) { setError(res.error); return }
+      const d = res.data!
+      setDone(`Saved: ${d.assigned} added${d.moved ? ` (${d.moved} moved from another OEM)` : ''}, ${d.removed} removed.`)
+    })
+  }
+
+  const allShownSelected = visible.length > 0 && visible.every(s => selected.has(s.id))
+
+  return (
+    <div className="px-4 py-3 border-b border-border/50 bg-muted/20 space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-sm font-semibold text-foreground">Stores for {oem.name}</p>
+        <span className="text-xs text-muted-foreground">{selected.size} selected of {stores.length}</span>
+        <input
+          type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search code, name, city, state, OEM…"
+          className="min-w-[220px] flex-1 max-w-sm rounded-lg border border-border bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+        />
+        <button type="button" onClick={() => setShown(!allShownSelected)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">
+          {allShownSelected ? 'Untick shown' : `Tick all shown (${visible.length})`}
+        </button>
+      </div>
+
+      <div className="max-h-72 overflow-y-auto rounded-lg border border-border bg-card">
+        {visible.length === 0 ? (
+          <p className="px-4 py-6 text-center text-xs text-muted-foreground">No stores match.</p>
+        ) : visible.map(s => {
+          const other = s.oem_id && s.oem_id !== oem.id ? oemName(s.oem_id) : null
+          return (
+            <label key={s.id} className="flex cursor-pointer items-center gap-3 border-b border-border/40 last:border-0 px-3 py-1.5 text-xs hover:bg-muted/30">
+              <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggle(s.id)} />
+              <span className="w-24 shrink-0 font-mono">{s.code}</span>
+              <span className="min-w-0 flex-1 truncate">{s.name}{s.city ? ` · ${s.city}` : ''}</span>
+              {other && (
+                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${selected.has(s.id) ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-muted text-muted-foreground'}`}>
+                  {selected.has(s.id) ? `moves from ${other}` : `with ${other}`}
+                </span>
+              )}
+              {!s.is_active && <span className="shrink-0 text-[10px] text-muted-foreground">inactive</span>}
+            </label>
+          )
+        })}
+      </div>
+
+      {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+      {done && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">{done}</p>}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" onClick={handleSave} disabled={pending || changes === 0} className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50">
+          {pending ? 'Saving…' : 'Save stores'}
+        </button>
+        <button type="button" onClick={onClose} className="rounded border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/40">Close</button>
+        <span className="text-xs text-muted-foreground">
+          {changes === 0 ? 'No changes yet.' : `${plan.toAssign.length} to add${plan.moved.length ? ` (${plan.moved.length} moving from another OEM)` : ''}, ${plan.toUnassign.length} to remove.`}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function OemsTab({ oems, stores }: { oems: OemRow[]; stores: StoreRow[] }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [editId, setEditId] = useState<string | null>(null)
+  const [storesFor, setStoresFor] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [duplicateOf, setDuplicateOf] = useState<string | null>(null)
@@ -917,8 +1012,8 @@ function OemsTab({ oems }: { oems: OemRow[] }) {
       )}
 
       <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-        <div className="grid grid-cols-[1fr_1.4fr_80px_190px] gap-x-4 border-b border-border bg-muted/30 px-4 py-2.5">
-          {['Name', 'Emails', 'Active', 'Actions'].map(h => (
+        <div className="grid grid-cols-[1fr_1.4fr_80px_80px_290px] gap-x-4 border-b border-border bg-muted/30 px-4 py-2.5">
+          {['Name', 'Emails', 'Stores', 'Active', 'Actions'].map(h => (
             <span key={h} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
           ))}
         </div>
@@ -932,11 +1027,13 @@ function OemsTab({ oems }: { oems: OemRow[] }) {
                 <OemForm f={editF} setF={setEditF} onSubmit={handleEdit} onCancel={() => setEditId(null)} submitLabel="Save" pending={pending} />
               </div>
             ) : (
-              <div className="grid grid-cols-[1fr_1.4fr_80px_190px] items-center gap-x-4 border-b border-border/50 last:border-0 px-4 py-3">
+              <div className="grid grid-cols-[1fr_1.4fr_80px_80px_290px] items-center gap-x-4 border-b border-border/50 last:border-0 px-4 py-3">
                 <TableCell>{o.name}</TableCell>
                 <TableCell className="text-muted-foreground text-xs truncate">{o.emails.length > 0 ? o.emails.join(', ') : '—'}</TableCell>
+                <TableCell className="text-muted-foreground text-xs">{stores.filter(st => st.oem_id === o.id).length}</TableCell>
                 <div><ActiveBadge active={o.is_active} /></div>
                 <div className="flex gap-1.5">
+                  <button onClick={() => setStoresFor(storesFor === o.id ? null : o.id)} className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100">Assign stores</button>
                   <button onClick={() => startEdit(o)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Edit</button>
                   <button onClick={() => startDuplicate(o)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Duplicate</button>
                   {confirmDelete === o.id ? (
@@ -949,6 +1046,9 @@ function OemsTab({ oems }: { oems: OemRow[] }) {
                   )}
                 </div>
               </div>
+            )}
+            {storesFor === o.id && editId !== o.id && (
+              <OemStoresPanel key={o.id} oem={o} stores={stores} oems={oems} onClose={() => setStoresFor(null)} />
             )}
           </div>
         ))}
@@ -1207,7 +1307,7 @@ export function OrgStructureClient({ departments, locations, costCenters, jobFun
         />
       )}
       {activeTab === 'stores' && <StoresTab stores={stores} oems={oems} />}
-      {activeTab === 'oems' && <OemsTab oems={oems} />}
+      {activeTab === 'oems' && <OemsTab oems={oems} stores={stores} />}
     </div>
   )
 }

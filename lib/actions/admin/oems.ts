@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { logAdminAudit } from './audit'
+import { planStoreAssignment } from '@/lib/oems/store-assignment'
 import type { Database } from '@/types/database'
 
 type ActionResult<T = undefined> = { error?: string; data?: T }
@@ -90,4 +92,48 @@ export async function deleteOem(id: string): Promise<ActionResult> {
   if (error) return { error: error.message }
   revalidatePath('/admin/org')
   return {}
+}
+
+// ── Assign stores to an OEM (the reverse of picking an OEM on each store) ─────
+// stores.oem_id is the single source of truth (one OEM per store), so this just
+// applies the difference between the ticked list and what the OEM has now.
+// Ticking a store that belongs to another OEM moves it.
+
+export async function setOemStores(
+  oemId: string,
+  storeIds: string[],
+): Promise<ActionResult<{ assigned: number; removed: number; moved: number }>> {
+  const guard = await requireAdminOrManager()
+  if (guard.error) return { error: guard.error }
+  const orgId = guard.profile!.org_id
+  if (!orgId) return { error: 'Your account is not linked to an organisation.' }
+  if (!Array.isArray(storeIds) || storeIds.length > 5000) return { error: 'Invalid store list.' }
+
+  const admin = createAdminClient()
+  const { data: oem } = await admin.from('oems').select('id, name').eq('id', oemId).eq('org_id', orgId).maybeSingle()
+  if (!oem) return { error: 'OEM not found in your organisation.' }
+
+  // Only this organisation's stores can be touched, whatever ids were sent.
+  const { data: stores, error: loadError } = await admin.from('stores').select('id, oem_id').eq('org_id', orgId)
+  if (loadError) return { error: 'Could not load stores.' }
+
+  const plan = planStoreAssignment((stores ?? []) as { id: string; oem_id: string | null }[], storeIds, oemId)
+
+  if (plan.toAssign.length > 0) {
+    const { error } = await admin.from('stores').update({ oem_id: oemId }).in('id', plan.toAssign).eq('org_id', orgId)
+    if (error) return { error: 'Could not assign the stores. Nothing further was changed.' }
+  }
+  if (plan.toUnassign.length > 0) {
+    const { error } = await admin.from('stores').update({ oem_id: null }).in('id', plan.toUnassign).eq('org_id', orgId).eq('oem_id', oemId)
+    if (error) return { error: 'Stores were assigned, but removing the unticked ones failed. Please try saving again.' }
+  }
+
+  await logAdminAudit({
+    orgId, actorId: guard.profile!.id,
+    entityType: 'oem', entityId: oemId, action: 'oem_stores_updated',
+    metadata: { oem: oem.name, assigned: plan.toAssign.length, removed: plan.toUnassign.length, moved_from_other_oems: plan.moved.length },
+  })
+
+  revalidatePath('/admin/org')
+  return { data: { assigned: plan.toAssign.length, removed: plan.toUnassign.length, moved: plan.moved.length } }
 }
