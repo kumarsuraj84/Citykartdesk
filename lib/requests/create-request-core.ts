@@ -6,6 +6,7 @@ import { resolveServiceFormSections } from '@/lib/forms/sections'
 import { validateRequesterFormCompletion } from '@/lib/requests/validate-requester-form-completion'
 import { resolveSubCategoryForService } from '@/lib/requests/resolve-sub-category'
 import { sendEmail } from '@/lib/email/send'
+import { pickTitleField, subjectToTitle } from '@/lib/requests/title-field'
 import { notifyRequesterTicketLogged } from '@/lib/requests/notify-requester'
 import { escapeHtml } from '@/lib/email/escape'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
@@ -367,12 +368,10 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   const requesterFields = completion.requesterFields
 
   // ── Request title ──────────────────────────────────────────────────────────
-  // Priority: text → textarea → select value → radio value → multiselect (joined) → service name
-  const titleField =
-    requesterFields.find((f) => f.type === 'text') ??
-    requesterFields.find((f) => f.type === 'textarea') ??
-    requesterFields.find((f) => (f.type === 'select' || f.type === 'radio') && parsedFormData[f.id]) ??
-    requesterFields.find((f) => f.type === 'multiselect' && Array.isArray(parsedFormData[f.id]) && (parsedFormData[f.id] as string[]).length > 0)
+  // The field labelled "Subject" is the title, whatever its position in the form. Only when a
+  // template has no Subject does it fall back to: text → textarea → select → radio → multiselect
+  // → service name (see lib/requests/title-field.ts).
+  const { field: titleField, isSubject: titleIsSubject } = pickTitleField(requesterFields, parsedFormData)
 
   let titleValue: string | undefined
   if (titleField) {
@@ -393,7 +392,9 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   // title on the created ticket" holds exactly. Falls back to the existing
   // form-derived title when absent/unusable, unchanged from before this
   // parameter existed.
-  const title = sanitizeTrustedTitle(titleOverride) ?? (titleValue ? `${service.name}: ${titleValue}` : service.name)
+  const title =
+    sanitizeTrustedTitle(titleOverride) ??
+    (titleValue ? (titleIsSubject ? subjectToTitle(titleValue) : `${service.name}: ${titleValue}`) : service.name)
 
   // For the OEM auto-routing email — pulled straight from whichever fields
   // this template happens to have, since there's no fixed

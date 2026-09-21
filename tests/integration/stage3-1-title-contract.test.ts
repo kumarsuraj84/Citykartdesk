@@ -138,11 +138,11 @@ describe('Stage 3.1 — createRequestCore() titleOverride', () => {
     return data?.title ?? ''
   }
 
-  it('TEST 7 — no titleOverride supplied: existing form-derived title behavior is unchanged', async () => {
+  it('TEST 7 — no titleOverride supplied: the ticket title is the Subject field of the form (no service prefix)', async () => {
     const result = await create({})
     expect(result.error).toBeUndefined()
     if (!result.requestId) throw new Error('expected requestId')
-    expect(await titleOf(result.requestId)).toBe('Stage3.1 Title Service ' + RUN_TAG + ': A subject that satisfies the mandatory field')
+    expect(await titleOf(result.requestId)).toBe('A subject that satisfies the mandatory field')
   })
 
   it('a valid titleOverride is stored verbatim, with NO service-name prefix', async () => {
