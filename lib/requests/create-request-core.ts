@@ -6,6 +6,7 @@ import { resolveServiceFormSections } from '@/lib/forms/sections'
 import { validateRequesterFormCompletion } from '@/lib/requests/validate-requester-form-completion'
 import { resolveSubCategoryForService } from '@/lib/requests/resolve-sub-category'
 import { sendEmail } from '@/lib/email/send'
+import { notifyRequesterTicketLogged } from '@/lib/requests/notify-requester'
 import { escapeHtml } from '@/lib/email/escape'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import type { FormField, RequestPriority } from '@/types'
@@ -521,6 +522,15 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     }
   }
 
+  // The requester always gets a confirmation with the ticket number (unless an agent booked it
+  // on their behalf, which has its own message just below).
+  if (requesterId === actingUserId) {
+    notifyRequesterTicketLogged({
+      requesterId, actorId: actingUserId, requestId: request.id,
+      requestNo: request.request_no ?? null, title, serviceName: service?.name ?? null,
+    }).catch(() => {})
+  }
+
   // Booked on behalf of someone else — let them know a request now exists for them.
   if (requesterId !== actingUserId) {
     notify({
@@ -531,6 +541,7 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
       body: 'An agent submitted this request for you.',
       requestId: request.id,
       link: `/requests/${request.id}`,
+      metadata: { audience: 'requester', requestNo: request.request_no ?? '', requestTitle: title, serviceName: service?.name ?? '' },
     }).catch(() => {})
   }
 

@@ -83,8 +83,23 @@ export async function sendEmail(p: EmailPayload): Promise<{ error?: string }> {
       console.log('[EMAIL DISABLED] To:', p.to, ' Subject:', p.subject)
       return {}
     }
-    return setup.provider === 'smtp' ? await sendViaSmtp(p, setup) : await sendViaResend(p, setup)
+    const result = setup.provider === 'smtp' ? await sendViaSmtp(p, setup) : await sendViaResend(p, setup)
+    await logEmailAttempt(p, result.error)
+    return result
   } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) }
+    const error = e instanceof Error ? e.message : String(e)
+    await logEmailAttempt(p, error)
+    return { error }
   }
+}
+
+/** Every send attempt goes in the Admin > Event Log ("system"), so a missing email can be traced. */
+async function logEmailAttempt(p: EmailPayload, error?: string): Promise<void> {
+  try {
+    const { recordEvents } = await import('@/lib/events/record')
+    await recordEvents(
+      [{ kind: error ? 'server_error' : 'system', target: p.to, message: error ? `Email FAILED: ${p.subject} — ${error}` : `Email sent: ${p.subject}` }],
+      { orgId: null, userId: null },
+    )
+  } catch { /* logging must never affect sending */ }
 }

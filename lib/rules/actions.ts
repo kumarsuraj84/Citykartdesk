@@ -1,5 +1,6 @@
 import { notify } from '@/lib/notifications'
 import { sendEmail } from '@/lib/email/send'
+import { notifyRequesterOfAssignment } from '@/lib/requests/notify-requester'
 import { escapeHtml } from '@/lib/email/escape'
 import { logActivity } from '@/lib/activity'
 import { logger } from '@/lib/observability/logger'
@@ -154,6 +155,7 @@ async function runAssign(
       link: `/requests/${request.id}`,
     },
   ]).catch(() => {})
+  notifyRequesterOfAssignment({ requestId: request.id, assigneeId: chosenId, actorId: chosenId }).catch(() => {})
 }
 
 async function runSetPriority(admin: AnyClient, request: ActionRequest, priority: string, ctx: RuleActionContext): Promise<void> {

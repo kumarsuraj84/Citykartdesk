@@ -71,6 +71,15 @@ export async function notify(inputs: NotifyInput | NotifyInput[]): Promise<void>
   )
   if (active.length === 0) return
 
+  // Give every email the ticket number and the real ticket title (the notification's own title is a
+  // sentence like "Request assigned to you", which made a poor subject line).
+  const requestIds = [...new Set(active.map((r) => r.requestId).filter((v): v is string => !!v))]
+  const requestInfo = new Map<string, { request_no: string | null; title: string }>()
+  if (requestIds.length > 0) {
+    const { data: reqRows } = await admin.from('requests').select('id, request_no, title').in('id', requestIds)
+    for (const q of (reqRows ?? []) as { id: string; request_no: string | null; title: string }[]) requestInfo.set(q.id, q)
+  }
+
   // Org-level channel toggles (Request Configuration → Notification Rules).
   // No row for a given (org, event_type) means every channel defaults ON —
   // matches this app's always-on behavior from before this table existed,
@@ -158,7 +167,13 @@ export async function notify(inputs: NotifyInput | NotifyInput[]): Promise<void>
             type: r.type,
             recipientEmail: u.user.email,
             recipientName: (nameByUser.get(r.recipientId) ?? '').split(' ')[0],
-            data: { ...(r.metadata as Record<string, string> ?? {}), title: r.title, body: r.body ?? '', link: r.link ?? '' },
+            data: {
+              ...(r.requestId && requestInfo.get(r.requestId)
+                ? { requestNo: requestInfo.get(r.requestId)!.request_no ?? '', requestTitle: requestInfo.get(r.requestId)!.title }
+                : {}),
+              ...(r.metadata as Record<string, string> ?? {}),
+              title: r.title, body: r.body ?? '', link: r.link ?? '',
+            },
           })
           if (res.error) failedCount++
         } catch {

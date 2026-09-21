@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logActivity } from '@/lib/activity'
+import { notifyRequesterOfAssignment } from '@/lib/requests/notify-requester'
 import { notify, getRequestAudience, parseMentions } from '@/lib/notifications'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
 import { getResolvedReopenWindowHours } from '@/lib/settings/reopenWindow'
@@ -760,6 +761,11 @@ export async function assignRequest(
       requestId,
       link: `/requests/${requestId}`,
     }).catch(() => {})
+  }
+
+  // The requester hears who now owns their ticket
+  if (assigneeId) {
+    notifyRequesterOfAssignment({ requestId, assigneeId, actorId: profile.id, reassigned: request.assigned_to !== null }).catch(() => {})
   }
 
   // Notify previous assignee when reassigned to someone else

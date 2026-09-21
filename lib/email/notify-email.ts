@@ -37,6 +37,8 @@ export async function sendNotificationEmail(opts: {
   try {
     const { type, recipientEmail, data: rawData } = opts
     const recipientName = opts.recipientName || 'there'
+    // Show the ticket number ("CKSD-000123 — title") whenever the caller supplied it.
+    const withNo = (t: string) => (rawData.requestNo ? `${rawData.requestNo} — ${t}` : t)
     const link = absoluteAppUrl(rawData.requestUrl || rawData.taskUrl || rawData.link)
     const data: Record<string, string> = { ...rawData, requestUrl: link, taskUrl: rawData.taskUrl ? absoluteAppUrl(rawData.taskUrl) : link, link }
 
@@ -46,7 +48,7 @@ export async function sendNotificationEmail(opts: {
       case 'request_created':
         template = requestCreatedEmail({
           requesterName: recipientName || data.requesterName || '',
-          requestTitle: data.requestTitle || data.title || '',
+          requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
           serviceName: data.serviceName || '',
         })
@@ -55,7 +57,7 @@ export async function sendNotificationEmail(opts: {
       case 'request_reopened':
         template = requestStatusChangedEmail({
           recipientName: recipientName || '',
-          requestTitle: data.requestTitle || data.title || '',
+          requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
           oldStatus: data.oldStatus || '',
           newStatus: data.newStatus || '',
@@ -65,7 +67,7 @@ export async function sendNotificationEmail(opts: {
       case 'internal_note_added':
         template = commentAddedEmail({
           recipientName: recipientName || '',
-          requestTitle: data.requestTitle || data.title || '',
+          requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
           commenterName: data.commenterName || '',
           commentBody: data.commentBody || data.body || '',
@@ -87,7 +89,7 @@ export async function sendNotificationEmail(opts: {
       case 'approval_requested':
         template = approvalRequiredEmail({
           approverName: recipientName || '',
-          requestTitle: data.requestTitle || data.title || '',
+          requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
           requesterName: data.requesterName || '',
         })
@@ -96,7 +98,7 @@ export async function sendNotificationEmail(opts: {
       case 'sla_breached':
         template = slaBreachEmail({
           recipientName: recipientName || '',
-          requestTitle: data.requestTitle || data.title || '',
+          requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
           slaDeadline: data.slaDeadline || '',
           tier: data.tier || '',
@@ -105,9 +107,20 @@ export async function sendNotificationEmail(opts: {
       case 'request_assigned':
       case 'request_reassigned':
       case 'request_unassigned':
+        // The requester's copy says who is handling their ticket; the technician's says it is theirs.
+        if (data.audience === 'requester' && data.assigneeName) {
+          template = requestEventEmail({
+            recipientName,
+            requestTitle: withNo(data.requestTitle || data.title || ''),
+            requestUrl: data.requestUrl || data.link || '',
+            headline: type === 'request_reassigned' ? 'Your request was reassigned' : 'Your request has been assigned',
+            detail: `${data.assigneeName} is now handling your request.`,
+          })
+          break
+        }
         template = requestAssignedEmail({
           recipientName: recipientName || '',
-          requestTitle: data.requestTitle || data.title || '',
+          requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
           assignerName: data.assignerName || data.actorName || '',
         })
@@ -115,7 +128,7 @@ export async function sendNotificationEmail(opts: {
       case 'approval_approved':
         template = approvalDecisionEmail({
           recipientName: recipientName || '',
-          requestTitle: data.requestTitle || data.title || '',
+          requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
           decision: 'approved',
           reason: data.reason || undefined,
@@ -124,7 +137,7 @@ export async function sendNotificationEmail(opts: {
       case 'approval_rejected':
         template = approvalDecisionEmail({
           recipientName: recipientName || '',
-          requestTitle: data.requestTitle || data.title || '',
+          requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
           decision: 'rejected',
           reason: data.reason || undefined,
@@ -134,7 +147,7 @@ export async function sendNotificationEmail(opts: {
       case 'collaborator_removed':
         template = requestStatusChangedEmail({
           recipientName: recipientName || '',
-          requestTitle: data.requestTitle || data.title || '',
+          requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
           oldStatus: '',
           newStatus: type === 'collaborator_added' ? 'collaborator added' : 'collaborator removed',
@@ -143,7 +156,7 @@ export async function sendNotificationEmail(opts: {
       case 'mentioned':
         template = commentAddedEmail({
           recipientName: recipientName || '',
-          requestTitle: data.requestTitle || data.title || '',
+          requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
           commenterName: data.commenterName || data.actorName || '',
           commentBody: data.commentBody || data.body || '',
@@ -153,7 +166,7 @@ export async function sendNotificationEmail(opts: {
         if (type in SIMPLE_REQUEST_EVENTS) {
           template = requestEventEmail({
             recipientName,
-            requestTitle: data.requestTitle || data.title || '',
+            requestTitle: withNo(data.requestTitle || data.title || ''),
             requestUrl: data.requestUrl || data.link || '',
             headline: SIMPLE_REQUEST_EVENTS[type],
             detail: data.body || undefined,
