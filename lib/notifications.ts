@@ -53,11 +53,14 @@ export async function notify(inputs: NotifyInput | NotifyInput[]): Promise<void>
       .select('user_id, event_type')
       .in('user_id', recipientIds)
       .eq('enabled', false),
-    admin.from('profiles').select('id, org_id').in('id', recipientIds),
+    admin.from('profiles').select('id, org_id, full_name').in('id', recipientIds),
   ])
 
   const optedOutKeys = new Set(
     (optedOut ?? []).map((o) => `${o.user_id}:${o.event_type}`)
+  )
+  const nameByUser = new Map(
+    (recipientProfiles ?? []).map((p) => [p.id, (p as { full_name?: string | null }).full_name ?? ''])
   )
   const orgByUser = new Map(
     (recipientProfiles ?? []).map((p) => [p.id, p.org_id as string | null])
@@ -151,12 +154,13 @@ export async function notify(inputs: NotifyInput | NotifyInput[]): Promise<void>
         try {
           const { data: u } = await adminClient.auth.admin.getUserById(r.recipientId)
           if (!u?.user?.email) return
-          await sendNotificationEmail({
+          const res = await sendNotificationEmail({
             type: r.type,
             recipientEmail: u.user.email,
-            recipientName: '',
+            recipientName: (nameByUser.get(r.recipientId) ?? '').split(' ')[0],
             data: { ...(r.metadata as Record<string, string> ?? {}), title: r.title, body: r.body ?? '', link: r.link ?? '' },
           })
+          if (res.error) failedCount++
         } catch {
           failedCount++
         }

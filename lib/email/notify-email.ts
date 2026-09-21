@@ -8,16 +8,37 @@ import {
   slaBreachEmail,
   requestAssignedEmail,
   approvalDecisionEmail,
+  requestEventEmail,
 } from './templates'
+
+/** Links inside a notification are app-relative ("/requests/123"); an email needs the full address. */
+export function absoluteAppUrl(link: string | undefined): string {
+  if (!link) return ''
+  if (/^https?:\/\//i.test(link)) return link
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
+  return link.startsWith('/') ? `${base}${link}` : link
+}
+
+// Events whose only email is the generic "your request ..." message.
+const SIMPLE_REQUEST_EVENTS: Record<string, string> = {
+  request_resolved: 'Request resolved',
+  request_closed: 'Request closed',
+  request_cancelled: 'Request cancelled',
+  request_auto_closed: 'Request closed automatically',
+  priority_changed: 'Priority changed',
+}
 
 export async function sendNotificationEmail(opts: {
   type: string
   recipientEmail: string
   recipientName: string
   data: Record<string, string>
-}): Promise<void> {
+}): Promise<{ error?: string; skipped?: boolean }> {
   try {
-    const { type, recipientEmail, recipientName, data } = opts
+    const { type, recipientEmail, data: rawData } = opts
+    const recipientName = opts.recipientName || 'there'
+    const link = absoluteAppUrl(rawData.requestUrl || rawData.taskUrl || rawData.link)
+    const data: Record<string, string> = { ...rawData, requestUrl: link, taskUrl: rawData.taskUrl ? absoluteAppUrl(rawData.taskUrl) : link, link }
 
     let template: { subject: string; html: string; text: string } | null = null
 
@@ -129,18 +150,30 @@ export async function sendNotificationEmail(opts: {
         })
         break
       default:
-        return
+        if (type in SIMPLE_REQUEST_EVENTS) {
+          template = requestEventEmail({
+            recipientName,
+            requestTitle: data.requestTitle || data.title || '',
+            requestUrl: data.requestUrl || data.link || '',
+            headline: SIMPLE_REQUEST_EVENTS[type],
+            detail: data.body || undefined,
+          })
+          break
+        }
+        return { skipped: true }
     }
 
-    if (!template) return
+    if (!template) return { skipped: true }
 
-    await sendEmail({
+    const res = await sendEmail({
       to: recipientEmail,
       subject: template.subject,
       html: template.html,
       text: template.text,
     })
-  } catch {
-    // never throw
+    return res.error ? { error: res.error } : {}
+  } catch (e) {
+    // never throw — but tell the caller, so failures are counted and logged
+    return { error: e instanceof Error ? e.message : String(e) }
   }
 }

@@ -171,3 +171,27 @@ export function slaBreachEmail(d: {
   const text = `Hi ${d.recipientName},\n\nSLA alert for "${d.requestTitle}" (${d.tier} tier). Deadline: ${d.slaDeadline}.\n\nView it here: ${d.requestUrl}`
   return { subject, html, text }
 }
+
+/**
+ * One template for the simple "something happened to your request" events
+ * (resolved / closed / cancelled / auto-closed / priority changed) that used to have
+ * a ticked Email box in Notification Rules but no email to send.
+ */
+export function requestEventEmail(d: {
+  recipientName: string
+  requestTitle: string
+  requestUrl: string
+  headline: string
+  detail?: string
+}): { subject: string; html: string; text: string } {
+  const e = escapeEmailFields(d, ['requestUrl'])
+  const subject = `${d.headline}: ${d.requestTitle}`
+  const html = layout(`
+    <p>Hi ${e.recipientName},</p>
+    <p><strong>${e.headline}</strong> — request <strong>${e.requestTitle}</strong>.</p>
+    ${d.detail ? `<p>${e.detail}</p>` : ''}
+    ${btn(e.requestUrl, 'View Request')}
+  `)
+  const text = `Hi ${d.recipientName},\n\n${d.headline} — request "${d.requestTitle}".\n${d.detail ? d.detail + '\n' : ''}\nView it here: ${d.requestUrl}`
+  return { subject, html, text }
+}
