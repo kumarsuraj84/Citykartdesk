@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { emailPasswordResetLink } from '@/lib/email/auth-mail'
 
 export async function signInWithPassword(formData: FormData) {
   const supabase = await createClient()
@@ -32,20 +33,17 @@ export async function signOut() {
 }
 
 export async function forgotPassword(formData: FormData) {
-  const supabase = await createClient()
   const email = (formData.get('email') as string ?? '').trim().toLowerCase()
 
   const ip = await getClientIp()
   const { limited } = await rateLimit(`forgot:${ip}`, 5, 300_000)
   if (limited) return { error: 'Too many requests. Please wait 5 minutes.' }
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/reset-password&type=recovery`,
-  })
+  if (!email) return { error: 'Please enter your email address.' }
 
-  if (error) {
-    return { error: sanitizeError(error, { route: 'auth.ts#forgotPassword', fallback: 'Could not send the reset email. Please try again.' }) }
-  }
+  // Sent through the app's own mailbox (see lib/email/auth-mail.ts).
+  const { error } = await emailPasswordResetLink(email)
+  if (error) return { error }
 
   return { success: true }
 }

@@ -15,6 +15,8 @@ import { getAdmin, createTestUser, clientForToken, type TestUser } from '../setu
 import { deleteTestOrg } from '../setup/cleanup-org'
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
+// Never send real invitation emails from a test run.
+vi.mock('@/lib/email/send', () => ({ sendEmail: vi.fn(async () => ({})) }))
 vi.mock('next/headers', () => ({
   headers: vi.fn().mockResolvedValue({ get: () => null }),
   cookies: vi.fn().mockResolvedValue({ getAll: () => [], set: () => {} }),

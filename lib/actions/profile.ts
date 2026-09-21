@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { emailPasswordResetLink } from '@/lib/email/auth-mail'
 import type { TablesUpdate } from '@/types/database'
 import { validateAttachment } from '@/lib/attachments/validate'
 import { buildPublicStorageUrl } from '@/lib/storage/publicUrl'
@@ -99,10 +100,7 @@ export async function sendPasswordResetEmail(): Promise<{ error?: string; succes
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user || !user.email) return { error: 'Not authenticated.' }
 
-  const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/profile`,
-  })
-
-  if (error) return { error: error.message }
+  const { error } = await emailPasswordResetLink(user.email, '/reset-password')
+  if (error) return { error }
   return { success: true }
 }

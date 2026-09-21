@@ -550,6 +550,9 @@ function InviteModal({ departments, locations, stores, profiles, teams, onClose 
       })
       if (result.error) { setError(result.error); return }
       router.refresh()
+      // The account exists but its invitation email failed: keep the dialog open so the
+      // admin sees why, instead of closing as if everything worked.
+      if (result.warning) { setError(result.warning); return }
       onClose()
     })
   }

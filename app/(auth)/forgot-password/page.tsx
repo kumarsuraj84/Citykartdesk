@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -21,6 +22,7 @@ function ForgotPasswordForm() {
   const [sent, setSent] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const linkExpired = useSearchParams().get('expired') === '1'
 
   const form = useForm<Form>({
     resolver: zodResolver(schema),
@@ -63,6 +65,11 @@ function ForgotPasswordForm() {
 
   return (
     <div className="rounded-lg border bg-card shadow-sm p-6 space-y-4">
+      {linkExpired && !serverError && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          That link has expired or was already used. Enter your email to get a new one.
+        </p>
+      )}
       {serverError && (
         <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {serverError}

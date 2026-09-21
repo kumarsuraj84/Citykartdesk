@@ -2,10 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { rateLimit } from '@/lib/rate-limit'
 import { assertRefsInOrg } from './orgScopeGuard'
+import { emailPasswordResetLink, emailInvitation } from '@/lib/email/auth-mail'
 import { logAdminAudit } from './audit'
 import { BULK_RESET_BATCH_SIZE, BULK_RESET_ROLES } from '@/lib/users/bulk-reset'
 import { normalizeMobileNumber } from '@/lib/users/mobile'
@@ -276,7 +276,7 @@ export async function inviteUser(fields: {
    *  the invite/CSV-import flows only ever set one number at creation. */
   mobile_number?: string | null
   whatsapp_enabled?: boolean
-}): Promise<{ error?: string }> {
+}): Promise<{ error?: string; warning?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin','platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!fields.email.trim()) return { error: 'Email is required.' }
@@ -343,14 +343,13 @@ export async function inviteUser(fields: {
   }
 
   // Create auth user + send an invite email with a set-password link
-  const { data: authData, error: authErr } = await admin.auth.admin.inviteUserByEmail(
-    fields.email.trim().toLowerCase(),
-    {
-      data: { full_name: fields.full_name.trim() },
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/reset-password&type=invite`,
-    }
-  )
+  const { data: authData, error: authErr } = await admin.auth.admin.generateLink({
+    type: 'invite',
+    email: fields.email.trim().toLowerCase(),
+    options: { data: { full_name: fields.full_name.trim() } },
+  })
   if (authErr) return { error: authErr.message }
+  const inviteTokenHash: string | undefined = authData?.properties?.hashed_token
 
   const uid = authData?.user?.id
   if (!uid) return { error: 'Failed to create user.' }
@@ -400,6 +399,13 @@ export async function inviteUser(fields: {
   }
 
   revalidatePath('/admin/users')
+
+  // The account is fully set up — now email the "set your password" link through the
+  // app's own mailbox. If no mailbox is configured yet the invite still succeeds.
+  if (inviteTokenHash) {
+    const mail = await emailInvitation(fields.email, inviteTokenHash, fields.full_name.trim())
+    if (mail.error) return { warning: 'User created, but the invitation email could not be sent. Use "Send password reset" on the user to email them a link.' }
+  }
   return {}
 }
 
@@ -682,11 +688,8 @@ export async function adminSendPasswordReset(email: string): Promise<{ error?: s
   const { limited } = await rateLimit(`admin-password-reset:${profile.id}`, 10, 60_000)
   if (limited) return { error: 'Too many reset emails sent. Please wait a minute.' }
 
-  const supabase = await createClient()
-  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/reset-password&type=recovery`,
-  })
-  if (error) return { error: error.message }
+  const { error } = await emailPasswordResetLink(email)
+  if (error) return { error }
   return {}
 }
 
