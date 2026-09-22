@@ -118,3 +118,22 @@ describe('waiting_user transition: the technician\'s comment reaches the request
     expect(mail.html).toMatch(/waiting on user/i)
   })
 })
+
+describe('resolve transition: the technician\'s comment reaches the requester\'s email', () => {
+  let fx: D03Fixtures
+  beforeAll(async () => { fx = await setupD03Fixtures() }, 90_000)
+  afterAll(async () => { await fx?.cleanup() }, 90_000)
+  beforeEach(() => { sent.length = 0 })
+
+  it('shows the comment the technician typed when resolving', async () => {
+    const req = await seedRequestLike(fx, { requesterId: fx.requesterA.id, serviceId: fx.teamA.serviceId, teamId: fx.teamA.id, assignedTo: fx.agentA.id, status: 'in_progress' })
+    actAs(fx.agentA)
+    const res = await updateRequestStatus(req.id, 'resolved', 'Replaced the toner cartridge and ran a test print — confirmed working.')
+    expect(res.error).toBeUndefined()
+    await waitFor(() => sent.some((e) => e.to.toLowerCase() === fx.requesterA.email.toLowerCase()))
+
+    const mail = sent.find((e) => e.to.toLowerCase() === fx.requesterA.email.toLowerCase())!
+    expect(mail.html).toContain('Replaced the toner cartridge and ran a test print — confirmed working.')
+    expect(mail.html).toMatch(/resolved/i)
+  })
+})

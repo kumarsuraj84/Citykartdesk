@@ -62,3 +62,36 @@ describe('notification emails', () => {
     expect(sent[0].html).not.toContain('<img src=x')
   })
 })
+
+describe('resolved/closed/cancelled emails show the technician\'s comment (not just the generic sentence)', () => {
+  it('resolved: prefers the real comment over the generic "marked it resolved" body', async () => {
+    const res = await sendNotificationEmail({
+      type: 'request_resolved', recipientEmail: 'a@example.com', recipientName: 'Ankur',
+      data: { title: 'Printer jam', link: '/requests/1', body: 'Ajay marked it resolved.', comment: 'Replaced the toner cartridge and ran a test print.' },
+    })
+    expect(res.error).toBeUndefined()
+  })
+
+  it('falls back to the generic sentence when no comment was given', async () => {
+    const { sendEmail } = await import('@/lib/email/send')
+    vi.mocked(sendEmail).mockClear()
+    await sendNotificationEmail({
+      type: 'request_resolved', recipientEmail: 'a@example.com', recipientName: 'Ankur',
+      data: { title: 'Printer jam', link: '/requests/1', body: 'Ajay marked it resolved.' },
+    })
+    const call = vi.mocked(sendEmail).mock.calls.at(-1)![0]
+    expect(call.html).toContain('Ajay marked it resolved.')
+  })
+
+  it('the comment actually appears in the sent email body', async () => {
+    const { sendEmail } = await import('@/lib/email/send')
+    vi.mocked(sendEmail).mockClear()
+    await sendNotificationEmail({
+      type: 'request_resolved', recipientEmail: 'a@example.com', recipientName: 'Ankur',
+      data: { title: 'Printer jam', link: '/requests/1', body: 'Ajay marked it resolved.', comment: 'Replaced the toner cartridge and ran a test print.' },
+    })
+    const call = vi.mocked(sendEmail).mock.calls.at(-1)![0]
+    expect(call.html).toContain('Replaced the toner cartridge and ran a test print.')
+    expect(call.text).toContain('Replaced the toner cartridge and ran a test print.')
+  })
+})

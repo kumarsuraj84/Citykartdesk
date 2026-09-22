@@ -189,7 +189,10 @@ export async function sendNotificationEmail(opts: {
             requestTitle: withNo(data.requestTitle || data.title || ''),
             requestUrl: data.requestUrl || data.link || '',
             headline: SIMPLE_REQUEST_EVENTS[type],
-            detail: data.body || undefined,
+            // The technician's own remark (e.g. what they did to resolve it) is far more
+            // useful to the requester than the generic "X marked it resolved" sentence —
+            // show it when there is one; fall back to that sentence when there isn't.
+            detail: data.comment || data.body || undefined,
           })
           break
         }
