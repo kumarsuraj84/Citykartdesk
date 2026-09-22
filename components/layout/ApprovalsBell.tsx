@@ -29,7 +29,16 @@ export function ApprovalsBell({
   dark = false,
 }: ApprovalsBellProps) {
   const [open, setOpen] = useState(false)
-  const [notifications] = useState(initialNotifications)
+  const [notifications, setNotifications] = useState(initialNotifications)
+  // The badge count above reads `initialCount` straight from props (always fresh on
+  // AppShell's 12s AutoRefresh), but the dropdown's own list was seeded here once and
+  // never updated — the badge could say "3" while the opened list still showed stale/old
+  // items. Same render-time re-sync RequestBoardView/NotificationBell already use.
+  const [prevInitialNotifications, setPrevInitialNotifications] = useState(initialNotifications)
+  if (prevInitialNotifications !== initialNotifications) {
+    setPrevInitialNotifications(initialNotifications)
+    setNotifications(initialNotifications)
+  }
   const [previewApproval, setPreviewApproval] = useState<ApprovalWithDetails | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const ref = useRef<HTMLDivElement>(null)

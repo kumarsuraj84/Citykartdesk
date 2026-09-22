@@ -180,6 +180,21 @@ export function NotificationBell({
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
 
+  // AppShell's AutoRefresh soft-refreshes every page every 12s (router.refresh()) so a
+  // notification someone else triggers shows up without a manual reload — but that only
+  // repaints the server-rendered tree with fresh `initial*` props; this component's own
+  // useState above only reads them once, on mount, and silently ignores every prop change
+  // after that. Without this, the bell stayed frozen at whatever it was when the page first
+  // loaded until a full navigation remounted it — the exact "need to refresh manually" gap.
+  // React's own documented "adjust state during render" pattern (compare + reset), not an
+  // effect, so it applies before paint with no extra render.
+  const [prevInitialNotifications, setPrevInitialNotifications] = useState(initialNotifications)
+  if (prevInitialNotifications !== initialNotifications) {
+    setPrevInitialNotifications(initialNotifications)
+    setNotifications(initialNotifications)
+    setUnreadCount(initialUnreadCount)
+  }
+
   const [previewApproval, setPreviewApproval] = useState<ApprovalWithDetails | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
 

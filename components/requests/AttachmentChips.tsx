@@ -34,6 +34,15 @@ export function AttachmentChips({ attachments: initialAttachments, currentUserId
   const [attachments, setAttachments] = useState(initialAttachments)
   const [isPending, startTransition] = useTransition()
 
+  // Re-sync when someone else adds/removes an attachment and the page's own periodic
+  // refresh (AppShell's AutoRefresh) hands this component a fresh list — same pattern as
+  // RequestSidebarPanel's CollaboratorsRow.
+  const [prevInitial, setPrevInitial] = useState(initialAttachments)
+  if (prevInitial !== initialAttachments) {
+    setPrevInitial(initialAttachments)
+    setAttachments(initialAttachments)
+  }
+
   if (attachments.length === 0) return null
 
   function handleDelete(id: string) {

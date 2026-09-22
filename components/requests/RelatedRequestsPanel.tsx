@@ -32,6 +32,13 @@ const LINK_LABELS: Record<string, string> = {
 
 export function RelatedRequestsPanel({ requestId, initialRelated, canManage }: RelatedRequestsPanelProps) {
   const [related, setRelated]       = useState(initialRelated)
+  // Re-sync when someone else links/unlinks a related request and the page's own periodic
+  // refresh (AppShell's AutoRefresh) hands this component a fresh list.
+  const [prevInitial, setPrevInitial] = useState(initialRelated)
+  if (prevInitial !== initialRelated) {
+    setPrevInitial(initialRelated)
+    setRelated(initialRelated)
+  }
   const [adding, setAdding]         = useState(false)
   const [query, setQuery]           = useState('')
   const [linkType, setLinkType]     = useState('related')
