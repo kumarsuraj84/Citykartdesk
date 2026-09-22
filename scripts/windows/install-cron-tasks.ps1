@@ -2,7 +2,7 @@
 # Only creates/replaces tasks named CitykartDesk-Cron-*; touches nothing else.
 #   CitykartDesk-Cron-Alerts         every 30 min  (due-soon / overdue alerts + 08:00 daily digest)
 #   CitykartDesk-Cron-BusinessRules  every 15 min  (scheduled business rules / SLA escalation)
-#   CitykartDesk-Cron-EmailReplySync every 10 min  (poll IMAP for replies to outbound emails)
+#   CitykartDesk-Cron-EmailReplySync every 1 min   (poll IMAP for replies to outbound emails)
 $runner = Join-Path $PSScriptRoot 'run-cron-tick.ps1'
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
@@ -15,4 +15,4 @@ function Install-Job($name, $job, $minutes) {
 }
 Install-Job 'CitykartDesk-Cron-Alerts' 'alerts' 30
 Install-Job 'CitykartDesk-Cron-BusinessRules' 'business-rules' 15
-Install-Job 'CitykartDesk-Cron-EmailReplySync' 'email-reply-sync' 10
+Install-Job 'CitykartDesk-Cron-EmailReplySync' 'email-reply-sync' 1
