@@ -125,7 +125,9 @@ export type RequestWithRelations = Request & {
 }
 
 export type RequestCommentWithAuthor = RequestComment & {
-  author: Pick<Profile, 'id' | 'full_name'>
+  // null for a comment added from an inbound email reply whose sender has no
+  // Citykart Desk profile (e.g. an OEM contact) — see source/external_name/external_email.
+  author: Pick<Profile, 'id' | 'full_name'> | null
 }
 
 export type RequestAttachmentWithUploader = RequestAttachment & {

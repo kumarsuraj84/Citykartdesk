@@ -1,5 +1,6 @@
 import nodemailer, { type Transporter } from 'nodemailer'
 import { getEmailFrom, getEmailSetup, RESEND_API_KEY, type EmailSetup, type SmtpConfig } from './config'
+import { withSubjectTag, isGmailHost, taggedReplyAddress } from './thread-tag'
 
 export interface EmailPayload {
   to: string
@@ -8,6 +9,10 @@ export interface EmailPayload {
   text?: string
   /** `content` is base64. */
   attachments?: { filename: string; content: string }[]
+  /** Set on every ticket-related email — see thread-tag.ts. Tags the subject and, on
+   *  Gmail, sets a Reply-To so a reply to this email lands back in this ticket's
+   *  conversation (lib/email/inbound.ts) instead of being lost or opening a new ticket. */
+  threadRequestNo?: string
 }
 
 // One pooled connection set per SMTP configuration, so a burst of notifications (e.g. a
@@ -41,14 +46,29 @@ function getTransporter(c: SmtpConfig): Transporter {
   return transporter
 }
 
+/** threadRequestNo -> the actual subject/replyTo to send with (SMTP-provider-specific: only
+ *  Gmail supports the "+tag" reply address our inbound sync polls). */
+function applyThreadTag(p: EmailPayload, setup: EmailSetup): { subject: string; replyTo?: string } {
+  if (!p.threadRequestNo) return { subject: p.subject }
+  const subject = withSubjectTag(p.subject, p.threadRequestNo)
+  const mailbox = setup.provider === 'smtp' ? setup.smtp?.user : null
+  const replyTo =
+    mailbox && setup.smtp && isGmailHost(setup.smtp.host)
+      ? taggedReplyAddress(mailbox, p.threadRequestNo) ?? undefined
+      : undefined
+  return { subject, replyTo }
+}
+
 async function sendViaSmtp(p: EmailPayload, setup: EmailSetup): Promise<{ error?: string }> {
   const from = await getEmailFrom(setup)
+  const { subject, replyTo } = applyThreadTag(p, setup)
   await getTransporter(setup.smtp!).sendMail({
     from,
     to: p.to,
-    subject: p.subject,
+    subject,
     html: p.html,
     text: p.text,
+    replyTo,
     attachments: p.attachments?.map((a) => ({ filename: a.filename, content: a.content, encoding: 'base64' })),
   })
   return {}
@@ -56,6 +76,7 @@ async function sendViaSmtp(p: EmailPayload, setup: EmailSetup): Promise<{ error?
 
 async function sendViaResend(p: EmailPayload, setup: EmailSetup): Promise<{ error?: string }> {
   const from = await getEmailFrom(setup)
+  const { subject, replyTo } = applyThreadTag(p, setup)
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -65,9 +86,10 @@ async function sendViaResend(p: EmailPayload, setup: EmailSetup): Promise<{ erro
     body: JSON.stringify({
       from,
       to: p.to,
-      subject: p.subject,
+      subject,
       html: p.html,
       text: p.text,
+      ...(replyTo ? { reply_to: replyTo } : {}),
       ...(p.attachments ? { attachments: p.attachments } : {}),
     }),
   })

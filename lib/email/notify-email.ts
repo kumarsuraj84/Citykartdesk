@@ -207,6 +207,9 @@ export async function sendNotificationEmail(opts: {
       subject: template.subject,
       html: template.html,
       text: template.text,
+      // Tags every ticket-related email so a reply lands back in this ticket's
+      // conversation — see lib/email/thread-tag.ts / lib/email/inbound.ts.
+      threadRequestNo: data.requestNo || undefined,
     })
     return res.error ? { error: res.error } : {}
   } catch (e) {

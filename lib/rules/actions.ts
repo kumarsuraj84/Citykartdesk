@@ -1,5 +1,6 @@
 import { notify } from '@/lib/notifications'
 import { sendEmail } from '@/lib/email/send'
+import { absoluteAppUrl } from '@/lib/email/notify-email'
 import { notifyRequesterOfAssignment } from '@/lib/requests/notify-requester'
 import { escapeHtml } from '@/lib/email/escape'
 import { logActivity } from '@/lib/activity'
@@ -42,6 +43,7 @@ export type RuleActionContext = {
 
 export type ActionRequest = {
   id: string
+  request_no: string
   title: string
   requester_id: string
   assigned_to: string | null
@@ -396,7 +398,12 @@ async function runNotify(
       // failure — and this call site previously never read that result, so
       // a Resend outage or a bad address silently dropped the notification
       // with zero trace anywhere.
-      const { error } = await sendEmail({ to: email, subject: title, html: `<p>${safeBody}</p><p><a href="/requests/${request.id}">View request</a></p>` })
+      const { error } = await sendEmail({
+        to: email,
+        subject: title,
+        html: `<p>${safeBody}</p><p><a href="${absoluteAppUrl(`/requests/${request.id}`)}">View request</a></p>`,
+        threadRequestNo: request.request_no,
+      })
       return { recipientId, skipped: false as const, error }
     }))
 

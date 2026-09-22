@@ -3753,28 +3753,37 @@ export type Database = {
       }
       request_comments: {
         Row: {
-          author_id: string
+          author_id: string | null
           body: string
           created_at: string
+          external_email: string | null
+          external_name: string | null
           id: string
           is_internal: boolean
           request_id: string
+          source: string
         }
         Insert: {
-          author_id: string
+          author_id?: string | null
           body: string
           created_at?: string
+          external_email?: string | null
+          external_name?: string | null
           id?: string
           is_internal?: boolean
           request_id: string
+          source?: string
         }
         Update: {
-          author_id?: string
+          author_id?: string | null
           body?: string
           created_at?: string
+          external_email?: string | null
+          external_name?: string | null
           id?: string
           is_internal?: boolean
           request_id?: string
+          source?: string
         }
         Relationships: [
           {
@@ -3786,6 +3795,41 @@ export type Database = {
           },
           {
             foreignKeyName: "request_comments_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processed_inbound_emails: {
+        Row: {
+          from_address: string | null
+          id: string
+          message_id: string
+          outcome: string
+          processed_at: string
+          request_id: string | null
+        }
+        Insert: {
+          from_address?: string | null
+          id?: string
+          message_id: string
+          outcome: string
+          processed_at?: string
+          request_id?: string | null
+        }
+        Update: {
+          from_address?: string | null
+          id?: string
+          message_id?: string
+          outcome?: string
+          processed_at?: string
+          request_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processed_inbound_emails_request_id_fkey"
             columns: ["request_id"]
             isOneToOne: false
             referencedRelation: "requests"

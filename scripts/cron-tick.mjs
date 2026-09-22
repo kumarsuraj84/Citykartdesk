@@ -28,6 +28,7 @@ const JOB_PATHS = {
   'business-rules': '/api/business-rules/run',
   'desktime-sync': '/api/desktime/sync',
   'intake-classify': '/api/intake/cron/classify',
+  'email-reply-sync': '/api/email/inbound-sync',
 }
 
 const secret = process.env.CRON_SECRET

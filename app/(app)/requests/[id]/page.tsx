@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   Lock,
   Clock,
+  Mail,
 } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { getCurrentProfile, getTeamMembers } from '@/lib/queries/profiles'
@@ -142,7 +143,12 @@ function CommentBubble({
   currentUserId: string
   canManageAll: boolean
 }) {
-  const initial = comment.author.full_name.charAt(0).toUpperCase()
+  // A comment added from an inbound email reply has no portal profile when the
+  // sender isn't a Citykart Desk user (e.g. an OEM contact) — fall back to the
+  // name/address captured off the email itself.
+  const displayName = comment.author?.full_name ?? comment.external_name ?? comment.external_email ?? 'Unknown'
+  const initial = displayName.charAt(0).toUpperCase()
+  const isFromEmail = comment.source === 'email'
   return (
     <div
       className={`rounded-xl p-4 ${
@@ -165,7 +171,7 @@ function CommentBubble({
           {/* Row 1: author name + absolute timestamp */}
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-sm font-semibold text-foreground">
-              {comment.author.full_name}
+              {displayName}
             </span>
             <span className="shrink-0 text-[11px] text-muted-foreground/70">
               {formatDateTime(comment.created_at)}
@@ -181,6 +187,15 @@ function CommentBubble({
             ) : (
               <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
                 Public
+              </span>
+            )}
+            {isFromEmail && (
+              <span
+                className="flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700"
+                title={comment.external_email ? `Replied by email from ${comment.external_email}` : 'Replied by email'}
+              >
+                <Mail className="h-2.5 w-2.5" />
+                via Email
               </span>
             )}
             <span className="text-xs text-muted-foreground">

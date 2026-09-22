@@ -40,6 +40,7 @@ export async function proxy(request: NextRequest) {
     '/api/intake/webhook/gmail',
     '/api/intake/webhook/outlook',
     '/api/intake/webhook/whatsapp',
+    '/api/email/inbound-sync',
   ])
   if (PUBLIC_API_ROUTES.has(pathname)) return NextResponse.next({ request })
 

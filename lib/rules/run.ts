@@ -22,6 +22,7 @@ type BusinessRuleRow = {
 
 type RawRequest = {
   id: string
+  request_no: string
   title: string
   description: string | null
   priority: string
@@ -62,7 +63,7 @@ type RawRequest = {
 }
 
 const SELECT =
-  'id, title, description, priority, status, service_id, team_id, project_id, requester_id, assigned_to, org_id, created_at, resolved_at, closed_at, source_metadata, form_data, waiting_since, response_due_at, resolution_due_at, category_id, sub_category_id, reopen_count, responded_at, paused_ms_total, service:services(template_id, sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections)), requester:profiles!requester_id(role, department_id, location_id, designation_id, function_id)'
+  'id, request_no, title, description, priority, status, service_id, team_id, project_id, requester_id, assigned_to, org_id, created_at, resolved_at, closed_at, source_metadata, form_data, waiting_since, response_due_at, resolution_due_at, category_id, sub_category_id, reopen_count, responded_at, paused_ms_total, service:services(template_id, sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections)), requester:profiles!requester_id(role, department_id, location_id, designation_id, function_id)'
 
 async function fetchRequest(admin: AnyClient, requestId: string): Promise<RawRequest | null> {
   const { data } = await admin.from('requests').select(SELECT).eq('id', requestId).single()
@@ -122,6 +123,7 @@ async function toEvalRequest(admin: AnyClient, request: RawRequest): Promise<Rul
 function toActionRequest(request: RawRequest): ActionRequest {
   return {
     id: request.id,
+    request_no: request.request_no,
     title: request.title,
     requester_id: request.requester_id,
     assigned_to: request.assigned_to,

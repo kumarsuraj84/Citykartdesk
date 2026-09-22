@@ -14,7 +14,10 @@ import type { Json } from '@/types/database'
 
 export type LogActivityInput = {
   requestId: string
-  actorId: string
+  /** Nullable for activity with no real portal actor — an emailed reply from someone with
+   *  no Citykart Desk account (e.g. an OEM contact); the column itself has always allowed
+   *  this. */
+  actorId: string | null
   action: ActivityAction
   metadata?: Record<string, unknown>
 }

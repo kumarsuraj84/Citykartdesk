@@ -29,6 +29,7 @@ import { executeActions, type ActionRequest, type RuleActionContext } from '@/li
 function baseRequest(overrides: Partial<ActionRequest> = {}): ActionRequest {
   return {
     id: 'req-1',
+    request_no: 'CKSD-000001',
     title: 'Printer not working',
     requester_id: 'user-requester',
     assigned_to: 'user-agent',

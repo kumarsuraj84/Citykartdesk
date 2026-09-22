@@ -95,7 +95,9 @@ async function runOemAutoRouting(params: {
   const bodyHtml = bodyText.split('\n').map((line) => `<p>${line ? escapeHtml(line) : '&nbsp;'}</p>`).join('')
 
   await Promise.all(
-    (oem.emails as string[]).map((to) => sendEmail({ to, subject, html: bodyHtml, text: bodyText }))
+    (oem.emails as string[]).map((to) =>
+      sendEmail({ to, subject, html: bodyHtml, text: bodyText, threadRequestNo: request.request_no })
+    )
   )
 
   await admin.from('request_comments').insert({

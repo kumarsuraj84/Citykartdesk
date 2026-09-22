@@ -16,7 +16,10 @@ import type { Json } from '@/types/database'
 
 export type NotifyInput = {
   recipientId: string
-  actorId: string
+  /** Nullable for a notification with no real portal actor (e.g. an emailed reply from
+   *  someone with no Citykart Desk account) — the column has always allowed this; the
+   *  title/body text is what actually names who did it. */
+  actorId: string | null
   type: NotificationType
   title: string
   body?: string
