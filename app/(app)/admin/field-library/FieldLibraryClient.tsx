@@ -151,6 +151,12 @@ export default function FieldLibraryClient({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [singleQuery, setSingleQuery] = useState('')
   const [singleLimit, setSingleLimit] = useState(100)
+  const [libraryQuery, setLibraryQuery] = useState('')
+
+  const filteredFields = fields.filter((f) => {
+    const q = libraryQuery.trim().toLowerCase()
+    return !q || f.label.toLowerCase().includes(q) || f.used_in.some((t) => t.toLowerCase().includes(q))
+  })
 
   // Fields in 2+ templates (or matching a library name) vs fields used in just one template.
   const shared = duplicates.filter((g) => g.instances.length > 1 || g.existingLibraryId)
@@ -223,7 +229,13 @@ export default function FieldLibraryClient({
           <p className="mt-1 text-[11px] opacity-80">Details: {setupError}</p>
         </div>
       )}
-      <div className="flex items-center justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <input
+          value={libraryQuery}
+          onChange={(e) => setLibraryQuery(e.target.value)}
+          placeholder="Search fields…"
+          className="min-w-[220px] flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+        />
         <button onClick={() => setModal({ field: null })} disabled={!!setupError} className="btn-gradient disabled:opacity-50">
           <Plus className="h-4 w-4" />
           New field
@@ -241,6 +253,8 @@ export default function FieldLibraryClient({
           <div className="px-4 py-10 text-center text-sm text-muted-foreground">
             No library fields yet. Create one (e.g. &quot;Contact Number&quot;), or link your existing duplicate fields below.
           </div>
+        ) : filteredFields.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">No fields match your search.</div>
         ) : (
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -252,7 +266,7 @@ export default function FieldLibraryClient({
               </tr>
             </thead>
             <tbody>
-              {fields.map((f) => (
+              {filteredFields.map((f) => (
                 <tr key={f.id} className="border-b border-border last:border-0">
                   <td className="px-4 py-2.5 font-medium text-foreground">
                     {f.label}
