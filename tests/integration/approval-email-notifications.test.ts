@@ -21,6 +21,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 import { createClient } from '@/lib/supabase/server'
 import { sendAdHocApproval, approveApproval, rejectApproval } from '@/lib/actions/approvals'
+import { updateRequestStatus } from '@/lib/actions/requests'
 
 const mockedCreateClient = vi.mocked(createClient)
 function actAs(user: TestUser) { mockedCreateClient.mockResolvedValue(clientForToken(user.accessToken) as never) }
@@ -122,5 +123,37 @@ describe('approval flow emails: requester + the technician who sent it', () => {
     await approveApproval(approval!.id, 'ok')
     await waitFor(() => sent.length >= 1)
     expect(sent.filter((e) => e.to.toLowerCase() === fx.agentB.email.toLowerCase())).toHaveLength(1)
+  })
+})
+
+describe('the requester can actually reopen a request their approval got rejected on', () => {
+  let fx: D03Fixtures
+  const admin = getAdmin()
+
+  beforeAll(async () => {
+    process.env.NEXT_PUBLIC_APP_URL = 'http://app.test'
+    fx = await setupD03Fixtures()
+  }, 90_000)
+  afterAll(async () => { await fx?.cleanup() }, 90_000)
+
+  it('reopens cleanly — reported bug: RLS silently blocked the plain requester\'s own update', async () => {
+    const req = await seedRequestLike(fx, { requesterId: fx.requesterA.id, serviceId: fx.teamA.serviceId, teamId: fx.teamA.id, assignedTo: fx.agentA.id, status: 'in_progress' })
+    actAs(fx.agentA)
+    await sendAdHocApproval(req.id, [fx.manager.id])
+    const { data: approval } = await admin.from('approvals').select('id').eq('request_id', req.id).single()
+    actAs(fx.manager)
+    await rejectApproval(approval!.id, 'Not needed after all.')
+
+    const { data: before } = await admin.from('requests').select('status, cancellation_reason, reopen_deadline_at').eq('id', req.id).single()
+    expect(before!.status).toBe('cancelled')
+    expect(before!.cancellation_reason).toBe('approval_rejected')
+    expect(new Date(before!.reopen_deadline_at!).getTime()).toBeGreaterThan(Date.now())
+
+    actAs(fx.requesterA) // a plain requester — not on the team, not a manager
+    const res = await updateRequestStatus(req.id, 'assigned')
+    expect(res.error).toBeUndefined()
+
+    const { data: after } = await admin.from('requests').select('status').eq('id', req.id).single()
+    expect(after!.status).toBe('assigned')
   })
 })

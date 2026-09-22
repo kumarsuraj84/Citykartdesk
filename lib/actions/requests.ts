@@ -411,13 +411,21 @@ export async function updateRequestStatus(
   // normal status changes) is untouched and still goes through the RLS client.
   // The .eq('status', currentStatus) race guard applies unchanged either way, so a
   // genuine concurrent write still zero-matches and is still reported as a conflict.
-  const statusUpdateClient = isResolvedReopenByRequester ? createAdminClient() : supabase
+  // A plain requester (not a team member, not a manager+) has no clause in requests_update's
+  // RLS at all — that's true of BOTH self-service reopen paths, not just the resolved one.
+  // isApprovalRejectionReopen used to go through the RLS-scoped client on the mistaken
+  // assumption it didn't need this (see the request's own history: this comment used to say
+  // "untouched and still goes through the RLS client" — wrong; confirmed reproducing the
+  // exact bug report: a requester's own "Reopen" click on an approval-rejected ticket
+  // silently zero-matched and surfaced as "changed by someone else").
+  const requesterInitiatedReopen = isResolvedReopenByRequester || isApprovalRejectionReopen
+  const statusUpdateClient = requesterInitiatedReopen ? createAdminClient() : supabase
   let statusUpdateQuery = statusUpdateClient
     .from('requests')
     .update(updatePayload)
     .eq('id', requestId)
     .eq('status', currentStatus)
-  if (isResolvedReopenByRequester) {
+  if (requesterInitiatedReopen) {
     statusUpdateQuery = statusUpdateQuery.eq('requester_id', profile.id)
   }
   const { data: updatedRow, error: updateError } = await statusUpdateQuery.select('id').maybeSingle()
