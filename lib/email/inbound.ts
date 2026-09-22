@@ -1,5 +1,3 @@
-import { ImapFlow } from 'imapflow'
-import { simpleParser } from 'mailparser'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadDbSmtpConfig } from './mailbox'
 import { isGmailHost } from './thread-tag'
@@ -88,6 +86,16 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
 
   const admin = createAdminClient() as unknown as AnyClient
   const identityCache = new Map<string, Awaited<ReturnType<typeof orgIdentityMaps>>>()
+
+  // Loaded dynamically rather than statically imported: imapflow pulls in pino for
+  // logging, and a static top-level import of either drags both into Next's build-time
+  // module graph, where Turbopack's standalone output has a real bug compiling that
+  // exact combination (a bundled importer reaching into pino, which Next externalizes
+  // by default — the compiled chunk ends up requiring a hashed alias like
+  // "pino-28069d5257187539" that has no corresponding file anywhere in the standalone
+  // bundle, taking down every route that shares that server chunk, not just this one).
+  // A dynamic import resolves at runtime through plain Node module resolution instead.
+  const [{ ImapFlow }, { simpleParser }] = await Promise.all([import('imapflow'), import('mailparser')])
 
   const client = new ImapFlow({
     host: 'imap.gmail.com',

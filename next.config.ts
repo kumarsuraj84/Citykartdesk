@@ -5,6 +5,17 @@ const nextConfig: NextConfig = {
   // actually needs) — the Dockerfile copies just that output, not the full
   // repo + node_modules, into the runtime image. See docs/RAILWAY-DEPLOYMENT.md.
   output: 'standalone',
+  // imapflow pulls in pino for logging. pino is already on Next's default
+  // server-external list, but imapflow itself isn't — a *bundled* importer
+  // (imapflow) reaching into an *externalized* dependency (pino) is exactly
+  // where Turbopack's standalone output breaks: the compiled chunk ends up
+  // requiring a hashed alias (e.g. "pino-28069d5257187539") that has no
+  // corresponding file anywhere in the standalone bundle, even though the
+  // real "pino" folder is right there — a 500 on every route sharing that
+  // server chunk, not just the one that imports imapflow. Marking the whole
+  // chain external makes it use plain Node require() instead, which resolves
+  // by the real package name and just works.
+  serverExternalPackages: ['imapflow', 'mailparser', 'pino'],
   // Deploy builds for Main (built locally on this same machine, with Main's env, while
   // the dev server may still be running against its own `.next/dev` cache — see
   // scripts/windows/build-for-deploy.ps1) go to a SEPARATE directory. Sharing `.next`
