@@ -16,7 +16,15 @@ $env:NEXT_PUBLIC_SUPABASE_ANON_KEY = $SupabaseAnonKey
 $env:NEXT_DIST_DIR = '.next-deploy'
 
 if (Test-Path .next-deploy) { Remove-Item .next-deploy -Recurse -Force }
-$out = npm run build 2>&1
+# --webpack, not the (default-since-Next-16) Turbopack: Turbopack's standalone output has a
+# real, non-deterministic bug tracing packages with native Node dependencies reached through
+# a bundled importer (imapflow -> pino) — the compiled chunk ends up requiring a hashed
+# external alias that has no corresponding file anywhere in the shipped bundle, crashing every
+# route that shares that server chunk. Confirmed by building the exact same commit twice:
+# passed once, failed differently (a different package hash-aliased) the next time. Webpack's
+# file-tracing for standalone output is Next's original, mature implementation and doesn't
+# have this problem. Local dev (`next dev`) is untouched and still uses Turbopack.
+$out = npx next build --webpack 2>&1
 "build exit: $LASTEXITCODE"
 if ($LASTEXITCODE -ne 0) { $out | Select-Object -Last 15; exit 1 }
 
