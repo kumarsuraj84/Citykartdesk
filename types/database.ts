@@ -310,6 +310,7 @@ export type Database = {
           current_step: number
           id: string
           request_id: string
+          requested_by: string | null
           status: Database["public"]["Enums"]["approval_status"]
           updated_at: string
           workflow_id: string
@@ -319,6 +320,7 @@ export type Database = {
           current_step?: number
           id?: string
           request_id: string
+          requested_by?: string | null
           status?: Database["public"]["Enums"]["approval_status"]
           updated_at?: string
           workflow_id: string
@@ -328,6 +330,7 @@ export type Database = {
           current_step?: number
           id?: string
           request_id?: string
+          requested_by?: string | null
           status?: Database["public"]["Enums"]["approval_status"]
           updated_at?: string
           workflow_id?: string
@@ -338,6 +341,13 @@ export type Database = {
             columns: ["request_id"]
             isOneToOne: false
             referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "approvals_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {

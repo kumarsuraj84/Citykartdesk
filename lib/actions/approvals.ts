@@ -192,7 +192,7 @@ export async function sendAdHocApproval(
   // current_step = 0 means parallel — everyone acts simultaneously
   const { data: approval, error: approvalErr } = await admin
     .from('approvals')
-    .insert({ request_id: requestId, workflow_id: workflow.id, status: 'pending', current_step: 0 })
+    .insert({ request_id: requestId, workflow_id: workflow.id, status: 'pending', current_step: 0, requested_by: profile.id })
     .select('id')
     .single()
   if (approvalErr || !approval) return { error: sanitizeError(approvalErr, { route: 'approvals.ts#sendAdHocApproval', fallback: 'Failed to create approval.' }) }
@@ -242,6 +242,22 @@ export async function sendAdHocApproval(
     }).catch(() => {})
   }
 
+  // Let the requester know their ticket has moved to approval, and by whom it's
+  // being reviewed — otherwise it just silently stops progressing from their side.
+  if (req.requester_id !== profile.id) {
+    const approverNames = approvers.map((a) => a.full_name).join(', ')
+    notify({
+      recipientId: req.requester_id,
+      actorId: profile.id,
+      type: 'approval_requested',
+      title: 'Your request has been sent for approval',
+      body: `${profile.full_name} sent it to ${approverNames} for approval.`,
+      requestId,
+      link: `/requests/${requestId}?tab=approvals`,
+      metadata: { audience: 'requester', approverNames, requestTitle: req.title },
+    }).catch(() => {})
+  }
+
   revalidatePath(`/requests/${requestId}`)
   return {}
 }
@@ -257,7 +273,7 @@ async function resolveApprovalContext(approvalId: string) {
 
   const { data: approval } = await supabase
     .from('approvals')
-    .select('id, request_id, workflow_id, current_step, status')
+    .select('id, request_id, workflow_id, current_step, status, requested_by')
     .eq('id', approvalId)
     .single()
 
@@ -434,6 +450,22 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
         body: `${profile.full_name} approved it — work is resuming.`,
         requestId: approval.request_id,
         link: `/requests/${approval.request_id}`,
+        metadata: { approverName: profile.full_name, reason: comment?.trim() || undefined },
+      }).catch(() => {})
+    }
+
+    // Also notify whoever sent it for approval (the technician), if that's someone
+    // other than the requester (already notified above) and the approver themself.
+    if (approval.requested_by && approval.requested_by !== req?.requester_id && approval.requested_by !== profile.id) {
+      notify({
+        recipientId: approval.requested_by,
+        actorId: profile.id,
+        type: 'approval_approved',
+        title: 'Approval granted',
+        body: `${profile.full_name} approved the request you sent for approval.`,
+        requestId: approval.request_id,
+        link: `/requests/${approval.request_id}`,
+        metadata: { approverName: profile.full_name, reason: comment?.trim() || undefined, recipientIsRequester: 'false' },
       }).catch(() => {})
     }
   } else {
@@ -693,9 +725,25 @@ export async function rejectApproval(approvalId: string, comment?: string): Prom
       actorId: profile.id,
       type: 'approval_rejected',
       title: 'Your request was not approved',
-      body: `${profile.full_name} rejected the approval${comment ? `: "${comment.trim()}"` : '.'}`,
+      body: `${profile.full_name} rejected the approval.`,
       requestId: approval.request_id,
       link: `/requests/${approval.request_id}?tab=approvals`,
+      metadata: { approverName: profile.full_name, reason: comment?.trim() || undefined },
+    }).catch(() => {})
+  }
+
+  // Also notify whoever sent it for approval (the technician), if that's someone
+  // other than the requester (already notified above) and the approver themself.
+  if (approval.requested_by && approval.requested_by !== req?.requester_id && approval.requested_by !== profile.id) {
+    notify({
+      recipientId: approval.requested_by,
+      actorId: profile.id,
+      type: 'approval_rejected',
+      title: 'Approval rejected',
+      body: `${profile.full_name} rejected the request you sent for approval.`,
+      requestId: approval.request_id,
+      link: `/requests/${approval.request_id}?tab=approvals`,
+      metadata: { approverName: profile.full_name, reason: comment?.trim() || undefined, recipientIsRequester: 'false' },
     }).catch(() => {})
   }
 

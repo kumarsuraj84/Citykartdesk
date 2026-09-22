@@ -136,17 +136,28 @@ export function approvalDecisionEmail(d: {
   requestTitle: string
   requestUrl: string
   decision: 'approved' | 'rejected'
+  /** Who made the decision — shown so the requester knows who to follow up with. */
+  approverName?: string
+  /** The comment the approver left, whichever way they decided. */
   reason?: string
+  /** False for the technician who sent it for approval (not the requester themselves) —
+   *  "the request you sent for approval" instead of "your request". Defaults to true. */
+  recipientIsRequester?: boolean
 }): { subject: string; html: string; text: string } {
   const e = escapeEmailFields(d, ['requestUrl'])
   const approved = d.decision === 'approved'
+  const isRequester = d.recipientIsRequester !== false
   const subject = approved
-    ? `Your request was approved: ${d.requestTitle}`
-    : `Your request was not approved: ${d.requestTitle}`
+    ? `Request approved: ${d.requestTitle}`
+    : `Request not approved: ${d.requestTitle}`
+  const who = e.approverName ? ` by <strong>${e.approverName}</strong>` : ''
+  const requestRef = isRequester ? 'your request' : `the request you sent for approval,`
   const decisionLine = approved
-    ? `<p>Great news — your request <strong>${e.requestTitle}</strong> has been <strong style="color:#16a34a;">approved</strong>.</p>`
-    : `<p>Unfortunately, your request <strong>${e.requestTitle}</strong> was <strong style="color:#dc2626;">not approved</strong>.</p>`
-  const reasonLine = e.reason ? `<p>Reason: ${e.reason}</p>` : ''
+    ? `<p>Great news — ${requestRef} <strong>${e.requestTitle}</strong> has been <strong style="color:#16a34a;">approved</strong>${who}.</p>`
+    : `<p>${isRequester ? 'Your' : 'The'} request <strong>${e.requestTitle}</strong>${isRequester ? '' : ' you sent for approval'} was <strong style="color:#dc2626;">not approved</strong>${who}.</p>`
+  const reasonLine = e.reason
+    ? `<p style="margin:12px 0;padding:12px 16px;background:#F8FAFD;border-left:3px solid #2563eb;border-radius:4px;">${e.reason}</p>`
+    : ''
   const html = layout(`
     <p>Hi ${e.recipientName},</p>
     ${decisionLine}
@@ -154,8 +165,10 @@ export function approvalDecisionEmail(d: {
     ${btn(e.requestUrl, 'View Request')}
   `)
   const textDecision = approved ? 'approved' : 'not approved'
-  const textReason = d.reason ? `\n\nReason: ${d.reason}` : ''
-  const text = `Hi ${d.recipientName},\n\nYour request "${d.requestTitle}" was ${textDecision}.${textReason}\n\nView it here: ${d.requestUrl}`
+  const textWho = d.approverName ? ` by ${d.approverName}` : ''
+  const textReason = d.reason ? `\n\n"${d.reason}"` : ''
+  const textRequestRef = isRequester ? 'Your request' : 'The request you sent for approval'
+  const text = `Hi ${d.recipientName},\n\n${textRequestRef} "${d.requestTitle}" was ${textDecision}${textWho}.${textReason}\n\nView it here: ${d.requestUrl}`
   return { subject, html, text }
 }
 

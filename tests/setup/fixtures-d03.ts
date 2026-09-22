@@ -251,6 +251,23 @@ export async function setupD03Fixtures(): Promise<D03Fixtures> {
       // "agent-a"/"requester-a" auth users found during Stage 5.1's audit.
       await admin.from('tasks').delete().in('created_by', fixtureUserIds)
       await admin.from('tasks').delete().in('assignee_id', fixtureUserIds)
+      // approval_workflow_steps.approver_user_id -> profiles(id) is RESTRICT, not cascaded
+      // by deleting `requests` (approvals cascades off requests, but the ad-hoc workflow +
+      // its steps that sendAdHocApproval() creates per call live one hop further out, off
+      // approval_workflows — nothing deletes them). A leftover step naming one of these
+      // fixture users as the approver would otherwise block their deleteTestUser() below
+      // exactly the way a leftover `tasks` row does (see the comment above this one).
+      const { data: approvalsToClean } = await admin
+        .from('approvals')
+        .select('workflow_id')
+        .in('request_id',
+          (await admin.from('requests').select('id').in('service_id', [serviceAId, serviceBId])).data?.map((r: { id: string }) => r.id) ?? [],
+        )
+      const workflowIds = [...new Set((approvalsToClean ?? []).map((a: { workflow_id: string }) => a.workflow_id))]
+      if (workflowIds.length > 0) {
+        await admin.from('approval_workflow_steps').delete().in('workflow_id', workflowIds)
+        await admin.from('approval_workflows').delete().in('id', workflowIds)
+      }
       await admin.from('requests').delete().in('service_id', [serviceAId, serviceBId])
       await admin.from('team_members').delete().in('team_id', [teamAId, teamBId])
       await admin.from('services').delete().in('id', [serviceAId, serviceBId])

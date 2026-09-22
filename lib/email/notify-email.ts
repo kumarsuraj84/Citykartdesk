@@ -88,6 +88,19 @@ export async function sendNotificationEmail(opts: {
       // and requests.ts) — this case used to read 'approval_required' and so
       // never matched, silently dropping every approval-request email.
       case 'approval_requested':
+        // The requester's own copy ("your request was sent to X for approval") is a
+        // different message entirely from the approver's ("please review this") —
+        // distinguished the same way request_assigned's requester copy is.
+        if (data.audience === 'requester') {
+          template = requestEventEmail({
+            recipientName,
+            requestTitle: withNo(data.requestTitle || data.title || ''),
+            requestUrl: data.requestUrl || data.link || '',
+            headline: 'Your request has been sent for approval',
+            detail: data.approverNames ? `Waiting on approval from ${data.approverNames}.` : undefined,
+          })
+          break
+        }
         template = approvalRequiredEmail({
           approverName: recipientName || '',
           requestTitle: withNo(data.requestTitle || data.title || ''),
@@ -132,7 +145,11 @@ export async function sendNotificationEmail(opts: {
           requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
           decision: 'approved',
+          approverName: data.approverName || undefined,
           reason: data.reason || undefined,
+          // Set to the string 'false' (not a real boolean — see `data`'s Record<string,
+          // string> typing) for the technician who sent it, as opposed to the requester.
+          recipientIsRequester: data.recipientIsRequester !== 'false',
         })
         break
       case 'approval_rejected':
@@ -141,7 +158,9 @@ export async function sendNotificationEmail(opts: {
           requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
           decision: 'rejected',
+          approverName: data.approverName || undefined,
           reason: data.reason || undefined,
+          recipientIsRequester: data.recipientIsRequester !== 'false',
         })
         break
       case 'collaborator_added':
