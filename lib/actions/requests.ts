@@ -8,6 +8,7 @@ import { logActivity } from '@/lib/activity'
 import { notifyRequesterOfAssignment } from '@/lib/requests/notify-requester'
 import { notify, getRequestAudience, parseMentions } from '@/lib/notifications'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
+import { STATUS_LABELS } from '@/lib/constants/requests'
 import { getResolvedReopenWindowHours } from '@/lib/settings/reopenWindow'
 import { getEnabledModules } from '@/lib/queries/profiles'
 import { validateFieldValue, isFieldValueEmpty } from '@/lib/validation/formFields'
@@ -609,6 +610,9 @@ export async function updateRequestStatus(
         ...notifyConfig,
         requestId,
         link: `/requests/${requestId}`,
+        // The status-changed email template shows "from X to Y" — without these the
+        // email rendered with both blank ("changed from  to ").
+        metadata: { oldStatus: STATUS_LABELS[currentStatus] ?? currentStatus, newStatus: STATUS_LABELS[newStatus] ?? newStatus },
       }).catch(() => {})
     }
   }

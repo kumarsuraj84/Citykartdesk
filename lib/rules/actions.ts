@@ -121,6 +121,13 @@ async function runAssign(
 
   if (!chosenId) return
 
+  // Already exactly this person's ticket (this rule matching again — e.g. the same
+  // "created + updated" rule re-running when the technician clicks Start Working — or a
+  // second overlapping rule choosing the same assignee): nothing actually changed, so
+  // don't re-log it or re-send "assigned to you" / "your ticket has been assigned" a
+  // second time for the same assignment.
+  if (chosenId === request.assigned_to) return
+
   // A rule authored (or left stale) with an assigneeIds list that no longer
   // matches the request's current team — teams/services get reorganized —
   // could otherwise silently place a ticket with someone who has no RLS
