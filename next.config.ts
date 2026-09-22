@@ -5,6 +5,13 @@ const nextConfig: NextConfig = {
   // actually needs) — the Dockerfile copies just that output, not the full
   // repo + node_modules, into the runtime image. See docs/RAILWAY-DEPLOYMENT.md.
   output: 'standalone',
+  // Deploy builds for Main (built locally on this same machine, with Main's env, while
+  // the dev server may still be running against its own `.next/dev` cache — see
+  // scripts/windows/build-for-deploy.ps1) go to a SEPARATE directory. Sharing `.next`
+  // between a live dev server and a one-off production build corrupts the dev server's
+  // Turbopack cache mid-build ("Compaction failed: Another write batch or compaction is
+  // already active"), taking Local down every time Main gets deployed.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   // The floating route-info badge is dev-only UI (never ships to production) and
   // doesn't affect render performance — off because it visually collided with the
   // sidebar's own bottom-left user avatar.
