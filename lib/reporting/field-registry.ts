@@ -269,7 +269,20 @@ export function aggregationsForType(type: FieldDataType): { value: string; label
 }
 
 export function getEntityFields(entity: EntityKey, extra: ReportField[] = []): ReportField[] {
-  return [...REPORT_ENTITIES[entity].fields, ...extra]
+  const builtIn = REPORT_ENTITIES[entity].fields
+  // A custom field (task custom field, or a service form field pulled from the
+  // shared Field Library) can be named anything an admin likes — including,
+  // innocuously, the same word as a built-in column like "Description". Both
+  // are real, different data sources (e.g. the native requests.description
+  // column vs. a custom field an admin happened to call "Description" too),
+  // but showing two identically-labeled, unexplained entries in the Fields
+  // picker and column headers looks like a duplicate/bug. Disambiguate only
+  // the colliding ones, so an unambiguous custom field name is untouched.
+  const builtInLabels = new Set(builtIn.map((f) => f.label.toLowerCase()))
+  const disambiguated = extra.map((f) =>
+    builtInLabels.has(f.label.toLowerCase()) ? { ...f, label: `${f.label} (Custom Field)` } : f
+  )
+  return [...builtIn, ...disambiguated]
 }
 
 /** Turns a raw enum value into its display label — the single place every

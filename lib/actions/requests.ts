@@ -279,7 +279,10 @@ export async function updateRequestStatus(
   // A technician directly cancelling a ticket must say why — the requester
   // can never reopen it (only an approval-rejected cancellation is
   // reopenable), so this remark is their only visibility into the reason.
-  if (agentInitiated && newStatus === 'cancelled' && !comment?.trim()) {
+  // A requester cancelling their own ticket must say why too, for the same
+  // reason the other requester-readable transitions (reopen, etc.) do —
+  // the technician's only visibility into why it was pulled.
+  if (newStatus === 'cancelled' && !comment?.trim()) {
     return { error: 'Please explain why you are cancelling this request.' }
   }
 
@@ -405,31 +408,29 @@ export async function updateRequestStatus(
   // vs. cancelling the same ticket at once) — matches the pattern already
   // used in approveApproval/rejectApproval for the same class of race.
   //
-  // requests_update's RLS policy only grants UPDATE to team members/managers —
-  // a plain requester reopening their own resolved ticket (isResolvedReopenByRequester)
-  // has no clause there at all (DESK-UAT-001: every such attempt hit zero RLS-visible
-  // rows and surfaced as a false "changed by someone else" conflict). That one
-  // transition is routed through the admin client instead, scoped by requester_id
-  // the same way addComment()'s waiting_user auto-transition already does further
-  // down — every other transition (agent reopen, approval-rejection reopen, all
-  // normal status changes) is untouched and still goes through the RLS client.
-  // The .eq('status', currentStatus) race guard applies unchanged either way, so a
-  // genuine concurrent write still zero-matches and is still reported as a conflict.
-  // A plain requester (not a team member, not a manager+) has no clause in requests_update's
-  // RLS at all — that's true of BOTH self-service reopen paths, not just the resolved one.
-  // isApprovalRejectionReopen used to go through the RLS-scoped client on the mistaken
-  // assumption it didn't need this (see the request's own history: this comment used to say
-  // "untouched and still goes through the RLS client" — wrong; confirmed reproducing the
-  // exact bug report: a requester's own "Reopen" click on an approval-rejected ticket
-  // silently zero-matched and surfaced as "changed by someone else").
-  const requesterInitiatedReopen = isResolvedReopenByRequester || isApprovalRejectionReopen
-  const statusUpdateClient = requesterInitiatedReopen ? createAdminClient() : supabase
+  // requests_update's RLS policy only grants UPDATE to team members/managers — a
+  // plain requester (not a team member, not a manager+) has NO clause there at all,
+  // for ANY transition, not just reopening. First caught for resolved-ticket reopen
+  // (DESK-UAT-001) and then again for approval-rejection reopen — both patched by
+  // routing that one specific case through the admin client. Still missed the general
+  // case: a requester cancelling their own *open* ticket (REQUESTER_TRANSITIONS['open']
+  // includes 'cancelled') hit the exact same zero-RLS-rows conflict, because by that
+  // point `agentInitiated` is false but the update still went through the RLS-scoped
+  // client. The real invariant is simpler than "which specific transition is this":
+  // by this point `canTransition` is already true, so if `agentInitiated` is false the
+  // action MUST be requester-initiated (either an allowed REQUESTER_TRANSITIONS entry
+  // or isApprovalRejectionReopen — both requester-only) — so every requester-initiated
+  // path, not just the two reopen ones, needs the same admin-client-scoped-by-requester_id
+  // bypass. The .eq('status', currentStatus) race guard applies unchanged either way, so
+  // a genuine concurrent write still zero-matches and is still reported as a conflict.
+  const requesterInitiated = !agentInitiated
+  const statusUpdateClient = requesterInitiated ? createAdminClient() : supabase
   let statusUpdateQuery = statusUpdateClient
     .from('requests')
     .update(updatePayload)
     .eq('id', requestId)
     .eq('status', currentStatus)
-  if (requesterInitiatedReopen) {
+  if (requesterInitiated) {
     statusUpdateQuery = statusUpdateQuery.eq('requester_id', profile.id)
   }
   const { data: updatedRow, error: updateError } = await statusUpdateQuery.select('id').maybeSingle()

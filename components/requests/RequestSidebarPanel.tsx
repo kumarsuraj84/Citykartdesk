@@ -148,6 +148,13 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
       setPendingComment({ next, heading: 'Resolution details', placeholder: 'What did you do to resolve this?', cta: 'Mark Resolved' })
       return
     }
+    // Cancelling always needs a remark — required server-side for both an
+    // agent and a requester cancelling their own ticket (their only
+    // visibility into why, same reasoning as the other prompts above).
+    if (next === 'cancelled') {
+      setPendingComment({ next, heading: 'Why are you cancelling this?', placeholder: 'Explain the reason for cancelling…', cta: 'Cancel Request' })
+      return
+    }
     apply(next)
   }
 
