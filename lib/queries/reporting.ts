@@ -220,9 +220,16 @@ async function fetchRequestRows(
   // captures descriptionField in lib/requests/create-request-core.ts). Email
   // Intake is the one channel that does populate requests.description
   // directly, so that value wins when both exist.
+  //
+  // A library-linked textarea is excluded here — it already gets its own,
+  // correctly-named report column (see serviceFormFieldToReportField), so
+  // falling back to it here would show the exact same value a second time
+  // under the generic "Description" label with no way to tell they're the
+  // same field. This fallback exists only to give services with a genuine
+  // non-library textarea something readable in "Description" too.
   const textareaFieldByService = new Map<string, string>()
   for (const f of formFields) {
-    if (f.type === 'textarea' && !textareaFieldByService.has(f.serviceId)) {
+    if (f.type === 'textarea' && !f.libraryFieldId && !textareaFieldByService.has(f.serviceId)) {
       textareaFieldByService.set(f.serviceId, f.id)
     }
   }
