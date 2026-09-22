@@ -39,15 +39,22 @@ export function requestStatusChangedEmail(d: {
   requestUrl: string
   oldStatus: string
   newStatus: string
+  /** The comment the technician attached to this transition, if any — shown so the
+   *  requester knows WHY, not just that the status changed (e.g. what they're waiting on). */
+  comment?: string
 }): { subject: string; html: string; text: string } {
   const e = escapeEmailFields(d, ['requestUrl'])
   const subject = `Request updated: ${d.requestTitle}`
+  const commentHtml = d.comment
+    ? `<p style="margin:12px 0;padding:12px 16px;background:#F8FAFD;border-left:3px solid #2563eb;border-radius:4px;">${e.comment}</p>`
+    : ''
   const html = layout(`
     <p>Hi ${e.recipientName},</p>
     <p>The status of request <strong>${e.requestTitle}</strong> has changed from <strong>${e.oldStatus}</strong> to <strong>${e.newStatus}</strong>.</p>
+    ${commentHtml}
     ${btn(e.requestUrl, 'View Request')}
   `)
-  const text = `Hi ${d.recipientName},\n\nRequest "${d.requestTitle}" status changed from ${d.oldStatus} to ${d.newStatus}.\n\nView it here: ${d.requestUrl}`
+  const text = `Hi ${d.recipientName},\n\nRequest "${d.requestTitle}" status changed from ${d.oldStatus} to ${d.newStatus}.${d.comment ? `\n\n"${d.comment}"` : ''}\n\nView it here: ${d.requestUrl}`
   return { subject, html, text }
 }
 

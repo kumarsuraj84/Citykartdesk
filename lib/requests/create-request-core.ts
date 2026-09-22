@@ -562,6 +562,9 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
           body: 'A new request has been submitted that needs attention.',
           requestId: request.id,
           link: `/requests/${request.id}`,
+          // In-app only — whoever it ends up assigned to gets their own "assigned to
+          // you" email; a queue-broadcast email to every other team member too is noise.
+          metadata: { audience: 'team' },
         }).catch(() => {})
       }
     }

@@ -61,6 +61,7 @@ export async function sendNotificationEmail(opts: {
           requestUrl: data.requestUrl || data.link || '',
           oldStatus: data.oldStatus || '',
           newStatus: data.newStatus || '',
+          comment: data.comment || undefined,
         })
         break
       case 'comment_added':

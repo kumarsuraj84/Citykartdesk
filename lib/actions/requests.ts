@@ -612,7 +612,11 @@ export async function updateRequestStatus(
         link: `/requests/${requestId}`,
         // The status-changed email template shows "from X to Y" — without these the
         // email rendered with both blank ("changed from  to ").
-        metadata: { oldStatus: STATUS_LABELS[currentStatus] ?? currentStatus, newStatus: STATUS_LABELS[newStatus] ?? newStatus },
+        metadata: {
+          oldStatus: STATUS_LABELS[currentStatus] ?? currentStatus,
+          newStatus: STATUS_LABELS[newStatus] ?? newStatus,
+          comment: comment?.trim() || undefined,
+        },
       }).catch(() => {})
     }
   }

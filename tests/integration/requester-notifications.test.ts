@@ -77,3 +77,34 @@ describe('requester + technician notification emails', () => {
     await admin.from('notification_rules').delete().eq('org_id', fx.orgId).eq('event_type', 'request_assigned')
   })
 })
+
+describe('team "new request" broadcast is in-app only, never email', () => {
+  let fx: D03Fixtures
+  const admin = getAdmin()
+
+  beforeAll(async () => {
+    process.env.NEXT_PUBLIC_APP_URL = 'http://app.test'
+    fx = await setupD03Fixtures()
+  }, 90_000)
+  afterAll(async () => { await fx?.cleanup() }, 90_000)
+  beforeEach(() => { sent.length = 0 })
+
+  it('a team member (not the assignee) gets the bell but no email for "new request"', async () => {
+    await notify({
+      recipientId: fx.agentA.id, actorId: fx.requesterA.id, type: 'request_created',
+      title: 'New request: Printer jam', body: 'A new request has been submitted that needs attention.',
+      requestId: fx.requestA.id, link: `/requests/${fx.requestA.id}`,
+      metadata: { audience: 'team' },
+    })
+    await new Promise((r) => setTimeout(r, 700))
+    expect(sent).toHaveLength(0)
+    const { data } = await admin.from('notifications').select('id').eq('user_id', fx.agentA.id).eq('request_id', fx.requestA.id).eq('type', 'request_created')
+    expect((data ?? []).length).toBeGreaterThan(0)
+  })
+
+  it('the requester\'s OWN "ticket logged" email is unaffected (different audience)', async () => {
+    await notifyRequesterTicketLogged({ requesterId: fx.requesterA.id, actorId: fx.requesterA.id, requestId: fx.requestA.id, requestNo: 'CKSD-999', title: 'Printer jam' })
+    await new Promise((r) => setTimeout(r, 700))
+    expect(sent.some((e) => e.to.toLowerCase() === fx.requesterA.email.toLowerCase())).toBe(true)
+  })
+})
