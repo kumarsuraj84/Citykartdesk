@@ -363,6 +363,10 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
     profile.role === 'platform_owner' ||
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
   const isRequester = request.requester_id === profile.id
+  // Only fetched when it's actually going to be shown — the requester viewing their own
+  // Resolved ticket, which is the one place the reopen window/countdown appears.
+  const resolvedReopenWindowHours =
+    isRequester && request.status === 'resolved' ? await getResolvedReopenWindowHours() : null
   const canManage   = isAgent
   const isManager   = profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'
   // Tasks is Admin/Owner-only for now (see components/layout/Sidebar.tsx) — a
@@ -852,6 +856,14 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
 
       {isRequester && request.status === 'cancelled' && request.cancellation_reason === 'approval_rejected' && request.reopen_deadline_at && (
         <ApprovalRejectedReopenBanner requestId={request.id} reopenDeadlineAt={request.reopen_deadline_at} />
+      )}
+
+      {isRequester && request.status === 'resolved' && request.reopen_deadline_at && resolvedReopenWindowHours !== null && (
+        <ResolvedReopenBanner
+          requestId={request.id}
+          reopenDeadlineAt={request.reopen_deadline_at}
+          windowHours={resolvedReopenWindowHours}
+        />
       )}
 
       {/* Header card */}

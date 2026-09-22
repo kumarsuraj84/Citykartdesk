@@ -254,10 +254,14 @@ export async function updateRequestStatus(
   // guarded separately below) always requires the same remark but isn't
   // bound by this admin-configurable deadline (Request Configuration → General).
   if (isResolvedReopenByRequester) {
-    const reopenWindowHours = await getResolvedReopenWindowHours()
-    const deadline = request.resolved_at
-      ? new Date(new Date(request.resolved_at).getTime() + reopenWindowHours * 3_600_000)
-      : null
+    // The stored reopen_deadline_at (set once, at the moment this was resolved) is the
+    // single source of truth — it's also exactly what the requester's own "Xh Ym left to
+    // reopen" countdown displays (ResolvedReopenBanner). Recomputing from
+    // resolved_at + the CURRENT admin setting here used to silently disagree with that
+    // display whenever the setting was changed after this particular ticket was resolved
+    // (a since-shortened window would let a "this has expired" banner still succeed here;
+    // a since-lengthened one would reject a reopen the banner was still counting down).
+    const deadline = request.reopen_deadline_at ? new Date(request.reopen_deadline_at) : null
     if (!deadline || deadline < new Date()) {
       return { error: 'The reopen window for this request has expired.' }
     }
@@ -645,9 +649,42 @@ export async function updateRequestStatus(
       title: 'Request reopened',
       body: isApprovalRejectionReopen
         ? `${profile.full_name} reopened a rejected request — it's back with you.`
-        : `A request has been reopened: ${requestId}`,
+        : `${profile.full_name} reopened this request — it's back with you.`,
       requestId,
       link: `/requests/${requestId}`,
+      // Without this the email rendered with blank "changed from  to " (same class of
+      // gap already fixed for in_progress/waiting_user) — and now shows the requester's
+      // own note on why it's not actually fixed.
+      metadata: {
+        oldStatus: STATUS_LABELS[currentStatus] ?? currentStatus,
+        newStatus: STATUS_LABELS[newStatus] ?? newStatus,
+        comment: comment?.trim() || undefined,
+      },
+    }).catch(() => {})
+  }
+
+  // The two self-service reopen paths (resolved -> open, and approval-rejected -> assigned)
+  // are both something the REQUESTER does to their OWN ticket — the block above skips
+  // notifying them precisely because they're the actor, but they still asked for this and
+  // deserve a "yes, it went through, and here's who has it now" confirmation, same as any
+  // other assignment. Not folded into notifyRequesterOfAssignment (that's for someone ELSE
+  // assigning the ticket) since the message here is about reopening, not first assignment.
+  if ((isResolvedReopenByRequester || isApprovalRejectionReopen) && request.assigned_to) {
+    const { data: assignee } = await supabase.from('profiles').select('full_name').eq('id', request.assigned_to).maybeSingle()
+    notify({
+      recipientId: profile.id,
+      actorId: profile.id,
+      type: 'request_reopened',
+      title: 'Your request has been reopened',
+      body: `It's back with ${assignee?.full_name || 'the technician'}.`,
+      requestId,
+      link: `/requests/${requestId}`,
+      metadata: {
+        oldStatus: STATUS_LABELS[currentStatus] ?? currentStatus,
+        newStatus: STATUS_LABELS[newStatus] ?? newStatus,
+        comment: comment?.trim() || undefined,
+        assigneeName: assignee?.full_name || undefined,
+      },
     }).catch(() => {})
   }
 
