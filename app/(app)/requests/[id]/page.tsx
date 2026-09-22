@@ -27,6 +27,7 @@ import { AttachmentChips } from '@/components/requests/AttachmentChips'
 import { RequestDetailTabs } from '@/components/requests/RequestDetailTabs'
 import { RequestActionBar } from '@/components/requests/RequestActionBar'
 import { ApprovalRejectedReopenBanner } from '@/components/requests/ApprovalRejectedReopenBanner'
+import { MarkRequestNotificationsRead } from '@/components/requests/MarkRequestNotificationsRead'
 import { getActiveTimer } from '@/lib/actions/requests'
 import { filterFieldsForRequester, filterFlatFieldsForRequester } from '@/lib/forms/sections'
 import { formatRelativeTime, formatDateTime } from '@/lib/utils'
@@ -833,6 +834,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-6xl space-y-4">
+      <MarkRequestNotificationsRead requestId={request.id} />
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm">
         <Link

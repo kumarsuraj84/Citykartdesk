@@ -49,6 +49,34 @@ export async function markAllNotificationsRead(): Promise<ActionResult> {
   return {}
 }
 
+// ── Mark every notification about one request as read ──────────────────────────
+// Opening a ticket and seeing its status/conversation already IS reading whatever it
+// was notified about — the bell shouldn't still say "unread" for something the person
+// is looking straight at. Scoped to the caller's own notifications for this request
+// only, so viewing one ticket never touches anyone else's or any other ticket's.
+
+export async function markRequestNotificationsRead(requestId: string): Promise<ActionResult & { updated?: number }> {
+  const supabase = await createClient()
+  const profile = await getCurrentProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+
+  const { data, error } = await supabase
+    .from('notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('user_id', profile.id)
+    .eq('request_id', requestId)
+    .is('read_at', null)
+    .is('archived_at', null)
+    .select('id')
+
+  if (error) return { error: error.message }
+  if (data.length === 0) return { updated: 0 }
+
+  revalidatePath('/notifications')
+  revalidatePath('/home')
+  return { updated: data.length }
+}
+
 // ── Archive notification ──────────────────────────────────────────────────────
 
 export async function archiveNotification(
