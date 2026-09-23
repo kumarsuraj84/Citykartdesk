@@ -188,15 +188,25 @@ describe('Stage 6, Part 1 — WhatsApp channel readiness diagnostic', () => {
   })
 
   it('requesterMobileCoverage counts active users with/without a mobile number correctly', async () => {
+    // Ground truth for this org's real (mirrored-from-production) active
+    // user count, which runs into the hundreds locally — matching
+    // getWhatsAppChannelReadiness() itself, this must NOT collect active ids
+    // and cross-reference them via `.in()`: PostgREST's GET request hits a
+    // URL-length limit ("URI too long") well before that list is fully
+    // built, which supabase-js reports as an error that `data ?? []` was
+    // silently swallowing here too, making this ground truth 0 regardless of
+    // real data. An embedded join against profiles has no such limit.
     const countActive = async (filter: 'with' | 'without' | 'all') => {
-      const { data: activeProfiles } = await admin.from('profiles').select('id').eq('org_id', EXISTING_ORG_ID).eq('is_active', true)
-      const activeIds = (activeProfiles ?? []).map((p: { id: string }) => p.id)
-      if (filter === 'all') return activeIds.length
-      const { data: mobileRows } = activeIds.length
-        ? await admin.from('profile_mobile_numbers').select('profile_id').eq('org_id', EXISTING_ORG_ID).in('profile_id', activeIds)
-        : { data: [] as { profile_id: string }[] }
+      const { count: activeCount } = await admin.from('profiles').select('id', { count: 'exact', head: true }).eq('org_id', EXISTING_ORG_ID).eq('is_active', true)
+      const activeIds = activeCount ?? 0
+      if (filter === 'all') return activeIds
+      const { data: mobileRows } = await admin
+        .from('profile_mobile_numbers')
+        .select('profile_id, profiles!inner(is_active)')
+        .eq('org_id', EXISTING_ORG_ID)
+        .eq('profiles.is_active', true)
       const withCount = new Set((mobileRows ?? []).map((r: { profile_id: string }) => r.profile_id)).size
-      return filter === 'with' ? withCount : activeIds.length - withCount
+      return filter === 'with' ? withCount : activeIds - withCount
     }
     const beforeAll_ = await countActive('all')
     const beforeWith = await countActive('with')
