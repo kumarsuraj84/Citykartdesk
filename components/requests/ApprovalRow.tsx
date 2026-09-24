@@ -1,9 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, XCircle, Clock } from 'lucide-react'
+import { toast } from 'sonner'
+import { CheckCircle2, XCircle, Clock, Zap } from 'lucide-react'
 import { StatusBadge, PriorityBadge } from './RequestBadges'
 import { ApprovalPreviewDialog } from './ApprovalPreviewDialog'
+import { ApprovalQuickActions } from './ApprovalQuickActions'
+import { canActOnApproval } from '@/lib/approvals/canAct'
 import { formatRelativeTime } from '@/lib/utils'
 import type { ApprovalWithDetails } from '@/lib/queries/approvals'
 import type { ApprovalStatus, UserRole } from '@/types'
@@ -35,12 +38,19 @@ export function ApprovalRow({
   viewerRole: UserRole
 }) {
   const [open, setOpen] = useState(false)
+  const [quickAction, setQuickAction] = useState(false)
+  const [decided, setDecided] = useState(false)
   const req = approval.request
   if (!req) return null
+  // Optimistic removal on quick-decide — the server action's revalidatePath
+  // will re-sync the real list moments later; this just makes the row vanish
+  // instantly instead of waiting on that round trip.
+  if (decided) return null
 
   const Icon = STATUS_ICONS[approval.status]
   const colorCls = STATUS_COLORS[approval.status]
   const isParallel = approval.current_step === 0
+  const canAct = approval.status === 'pending' && canActOnApproval(approval, viewerId, viewerRole)
 
   const currentStepInfo = isParallel
     ? null
@@ -50,8 +60,14 @@ export function ApprovalRow({
       ? currentStepInfo.approver.full_name
       : 'Any Manager'
 
+  function handleDecided() {
+    setQuickAction(false)
+    setDecided(true)
+    toast.success('Your decision has been recorded.')
+  }
+
   return (
-    <>
+    <div>
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -94,6 +110,31 @@ export function ApprovalRow({
         </span>
       </button>
 
+      {/* Quick-approve — decide right from the list without opening the full
+          detail popup; "View Details" stays one click away via the row above. */}
+      {canAct && !quickAction && (
+        <div className="flex justify-end px-4 pb-2.5 -mt-1">
+          <button
+            type="button"
+            onClick={() => setQuickAction(true)}
+            className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+          >
+            <Zap className="h-3 w-3" />
+            Take Action
+          </button>
+        </div>
+      )}
+
+      {quickAction && (
+        <div className="px-4 pb-3">
+          <ApprovalQuickActions
+            approvalId={approval.id}
+            onDecided={handleDecided}
+            onCancel={() => setQuickAction(false)}
+          />
+        </div>
+      )}
+
       {open && (
         <ApprovalPreviewDialog
           approval={approval}
@@ -102,6 +143,6 @@ export function ApprovalRow({
           onClose={() => setOpen(false)}
         />
       )}
-    </>
+    </div>
   )
 }

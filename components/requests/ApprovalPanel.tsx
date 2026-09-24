@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { CheckCircle2, XCircle, Clock, UserCheck, MessageSquare, CalendarDays } from 'lucide-react'
 import { approveApproval, rejectApproval, delegateApproval, searchUsersForDelegation } from '@/lib/actions/approvals'
+import { canActOnApproval } from '@/lib/approvals/canAct'
 import type { ApprovalWithDetails } from '@/lib/queries/approvals'
 import type { UserRole } from '@/types'
 
@@ -44,31 +45,10 @@ export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: App
   const [delegateSearch, setDelegateSearch] = useState('')
   const [delegateResults, setDelegateResults] = useState<{ id: string; full_name: string }[]>([])
 
-  const isManager  = viewerRole === 'manager' || viewerRole === 'admin' || viewerRole === 'platform_owner'
   const isParallel = approval.current_step === 0
   const isAdHoc    = approval.workflow?.name.startsWith('Ad-hoc:') ?? false
 
-  const currentStep = isParallel
-    ? null
-    : approval.steps.find((s) => s.step_order === (approval.current_step ?? 1))
-
-  const decidedStepOrders = new Set(approval.decisions.map((d) => d.step_order))
-  const myParallelStep = isParallel
-    ? approval.steps.find(
-        (s) => s.approver_type === 'specific_user' && s.approver_user_id === viewerId && !decidedStepOrders.has(s.step_order)
-      )
-    : null
-
-  const canAct =
-    approval.status === 'pending' &&
-    (isParallel
-      ? !!myParallelStep
-      : currentStep &&
-        (
-          (currentStep.approver_type === 'any_manager' && isManager) ||
-          (currentStep.approver_type === 'specific_user' && currentStep.approver_user_id === viewerId)
-        )
-    )
+  const canAct = canActOnApproval(approval, viewerId, viewerRole)
 
   function handleApprove() {
     setError(null)

@@ -2,10 +2,11 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
-import { ClipboardCheck, X, Loader2 } from 'lucide-react'
+import { ClipboardCheck, X, Loader2, Zap } from 'lucide-react'
 import { formatRelativeTime } from '@/lib/utils'
 import { getApprovalForRequestAction } from '@/lib/actions/approvals'
 import { ApprovalPreviewDialog } from '@/components/requests/ApprovalPreviewDialog'
+import { ApprovalQuickActions } from '@/components/requests/ApprovalQuickActions'
 import type { NotificationWithActor, UserRole } from '@/types'
 import type { ApprovalWithDetails } from '@/lib/queries/approvals'
 
@@ -41,6 +42,12 @@ export function ApprovalsBell({
   }
   const [previewApproval, setPreviewApproval] = useState<ApprovalWithDetails | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
+  // Which notification's row is expanded into the inline Take Action form,
+  // and the approval id it resolved to (the notification only carries
+  // request_id — same lookup handlePreview already does for the popup path).
+  const [quickActionNotifId, setQuickActionNotifId] = useState<string | null>(null)
+  const [quickActionApprovalId, setQuickActionApprovalId] = useState<string | null>(null)
+  const [quickActionLoading, setQuickActionLoading] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -59,6 +66,28 @@ export function ApprovalsBell({
     setPreviewLoading(false)
     if (!approval) { toast.error('This approval is no longer available.'); return }
     setPreviewApproval(approval)
+  }
+
+  async function handleTakeAction(n: NotificationWithActor) {
+    if (!n.request_id) return
+    setQuickActionNotifId(n.id)
+    setQuickActionApprovalId(null)
+    setQuickActionLoading(true)
+    const approval = await getApprovalForRequestAction(n.request_id)
+    setQuickActionLoading(false)
+    if (!approval) {
+      toast.error('This approval is no longer available.')
+      setQuickActionNotifId(null)
+      return
+    }
+    setQuickActionApprovalId(approval.id)
+  }
+
+  function handleQuickDecided(notifId: string) {
+    setQuickActionNotifId(null)
+    setQuickActionApprovalId(null)
+    setNotifications((prev) => prev.filter((n) => n.id !== notifId))
+    toast.success('Your decision has been recorded.')
   }
 
   return (
@@ -105,26 +134,60 @@ export function ApprovalsBell({
                 const initials = n.actor?.full_name
                   ? n.actor.full_name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
                   : '?'
+                const isQuickAction = quickActionNotifId === n.id
                 return (
-                  <button
-                    key={n.id}
-                    type="button"
-                    onClick={() => handlePreview(n)}
-                    className={`flex w-full items-start gap-3 border-b border-border px-4 py-2 text-left transition-colors last:border-0 hover:bg-muted/40 ${!n.read_at ? 'bg-primary/[0.03]' : ''}`}
-                  >
-                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[10px] font-bold text-violet-700">
-                      {initials}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className={`text-xs leading-snug ${!n.read_at ? 'font-semibold text-foreground' : 'font-medium text-foreground/80'}`}>
-                        {n.title}
-                      </p>
-                      {n.body && (
-                        <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{n.body}</p>
-                      )}
-                      <p className="mt-1 text-[10px] text-muted-foreground" suppressHydrationWarning>{formatRelativeTime(n.created_at)}</p>
-                    </div>
-                  </button>
+                  <div key={n.id} className={`border-b border-border last:border-0 ${!n.read_at ? 'bg-primary/[0.03]' : ''}`}>
+                    <button
+                      type="button"
+                      onClick={() => handlePreview(n)}
+                      className="flex w-full items-start gap-3 px-4 py-2 text-left transition-colors hover:bg-muted/40"
+                    >
+                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[10px] font-bold text-violet-700">
+                        {initials}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-xs leading-snug ${!n.read_at ? 'font-semibold text-foreground' : 'font-medium text-foreground/80'}`}>
+                          {n.title}
+                        </p>
+                        {n.body && (
+                          <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{n.body}</p>
+                        )}
+                        <p className="mt-1 text-[10px] text-muted-foreground" suppressHydrationWarning>{formatRelativeTime(n.created_at)}</p>
+                      </div>
+                    </button>
+
+                    {/* Quick-approve — decide without leaving the dropdown or
+                        opening the full ticket popup. */}
+                    {!isQuickAction && (
+                      <div className="flex justify-end px-4 pb-2">
+                        <button
+                          type="button"
+                          onClick={() => handleTakeAction(n)}
+                          disabled={quickActionLoading && quickActionNotifId === n.id}
+                          className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline disabled:opacity-60"
+                        >
+                          <Zap className="h-3 w-3" />
+                          {quickActionLoading && quickActionNotifId === n.id ? 'Loading…' : 'Take Action'}
+                        </button>
+                      </div>
+                    )}
+
+                    {isQuickAction && (
+                      <div className="px-4 pb-2.5">
+                        {quickActionLoading || !quickActionApprovalId ? (
+                          <div className="flex items-center justify-center py-3">
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : (
+                          <ApprovalQuickActions
+                            approvalId={quickActionApprovalId}
+                            onDecided={() => handleQuickDecided(n.id)}
+                            onCancel={() => { setQuickActionNotifId(null); setQuickActionApprovalId(null) }}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )
               })
             )}
