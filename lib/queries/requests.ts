@@ -1,4 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import type { ReportViewerScope } from '@/lib/reporting/access'
+import { ACTIVE_TECH_STATUSES, type TechnicianWorkloadRow } from '@/lib/queries/technicianWorkloadShared'
 import type {
   RequestWithRelations,
   RequestActivityWithActor,
@@ -7,6 +10,9 @@ import type {
   RequestStatus,
   RequestPriority,
 } from '@/types'
+
+export { ACTIVE_TECH_STATUSES }
+export type { TechnicianWorkloadRow }
 
 export async function getRequestById(id: string): Promise<RequestWithRelations | null> {
   const supabase = await createClient()
@@ -258,32 +264,38 @@ function sanitizeQuery(q: string): string {
 
 // ── Requests by Technician (admin/manager home dashboard widget) ───────────────
 
-/** The still-in-flight statuses a technician's workload is measured across —
- *  deliberately excludes resolved/closed/cancelled. */
-export const ACTIVE_TECH_STATUSES: RequestStatus[] = ['open', 'assigned', 'in_progress', 'waiting_user', 'pending_approval']
-
-export type TechnicianWorkloadRow = {
-  /** null = the "Unassigned" row. */
-  technicianId: string | null
-  technicianName: string
-  counts: Partial<Record<RequestStatus, number>>
-  total: number
-}
-
 /**
  * One row per technician currently holding at least one active (non-resolved/
  * closed/cancelled) request, plus an "Unassigned" row, each broken down by
- * status. RLS scopes this to the viewer's org the same way getWorkloadMetrics()
- * above relies on it — no explicit org_id filter needed. Technicians with zero
- * active requests right now simply don't appear (matches the reference UI —
- * this is a workload snapshot, not a full roster).
+ * status. Technicians with zero active requests right now simply don't appear
+ * (matches the reference UI — this is a workload snapshot, not a full roster).
+ *
+ * Scoped by the same ReportViewerScope the Report Builder/drill-down drawer
+ * use (lib/reporting/access.ts), so "who sees whose workload" is defined in
+ * one place: platform_owner/admin see the whole org, a manager sees their own
+ * team(s), an agent sees only their own row. Uses the admin client with
+ * explicit scoping (not RLS) for the same reason getAnalytics() does — this
+ * now lives on the Analytics Dashboard, alongside org-wide aggregates RLS was
+ * never designed to hand back in one shot.
  */
-export async function getTechnicianWorkloadBoard(): Promise<TechnicianWorkloadRow[]> {
-  const supabase = await createClient()
-  const { data } = await supabase
+export async function getTechnicianWorkloadBoard(orgId: string, scope: ReportViewerScope): Promise<TechnicianWorkloadRow[]> {
+  // Mirrors the { kind: 'team' } empty-teamIds guard used everywhere else
+  // this scope type is consumed (lib/reporting/access.ts's own callers) —
+  // an empty .in() would otherwise match every row instead of none.
+  if (scope.kind === 'team' && scope.teamIds.length === 0) return []
+
+  const admin = createAdminClient()
+  let query = admin
     .from('requests')
     .select('assigned_to, status')
+    .eq('org_id', orgId)
     .in('status', ACTIVE_TECH_STATUSES)
+
+  if (scope.kind === 'team') query = query.in('team_id', scope.teamIds)
+  else if (scope.kind === 'agent') query = query.eq('assigned_to', scope.userId)
+  else if (scope.kind === 'own') return [] // requesters don't do technician work — nothing to show
+
+  const { data } = await query
 
   const rows = (data ?? []) as { assigned_to: string | null; status: RequestStatus }[]
   if (rows.length === 0) return []
@@ -298,7 +310,7 @@ export async function getTechnicianWorkloadBoard(): Promise<TechnicianWorkloadRo
 
   const technicianIds = [...byAssignee.keys()].filter((k) => k !== 'unassigned')
   const { data: profiles } = technicianIds.length > 0
-    ? await supabase.from('profiles').select('id, full_name').in('id', technicianIds)
+    ? await admin.from('profiles').select('id, full_name').in('id', technicianIds)
     : { data: [] as { id: string; full_name: string }[] }
   const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]))
 

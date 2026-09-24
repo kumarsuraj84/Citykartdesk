@@ -440,13 +440,27 @@ export function SlaGauge({ label, value, sub }: { label: string; value: number |
 
 // ── Aging Bar ─────────────────────────────────────────────────────────────────
 
-export function AgingBar({ aging }: { aging: { d1: number; d7: number; d30: number; d30plus: number } }) {
-  const bands = [
-    { label: '< 1 day',  value: aging.d1,     color: 'var(--success)' },
-    { label: '1–7 days', value: aging.d7,     color: 'var(--warning)' },
-    { label: '7–30 days',value: aging.d30,    color: 'color-mix(in oklab, var(--warning) 60%, var(--destructive))' },
-    { label: '30+ days', value: aging.d30plus, color: 'var(--destructive)' },
-  ]
+// Green -> amber -> red across the 9 buckets in lib/reporting/aging.ts's
+// AGE_BUCKETS, same order — one color stop per bucket so the gradient reads
+// as a continuous severity ramp rather than 4 hard-edged bands.
+const AGING_BAND_COLORS = [
+  'var(--success)',
+  'color-mix(in oklab, var(--success) 60%, var(--warning))',
+  'var(--warning)',
+  'color-mix(in oklab, var(--warning) 75%, var(--destructive))',
+  'color-mix(in oklab, var(--warning) 50%, var(--destructive))',
+  'color-mix(in oklab, var(--warning) 25%, var(--destructive))',
+  'color-mix(in oklab, var(--destructive) 85%, black)',
+  'color-mix(in oklab, var(--destructive) 92%, black)',
+  'var(--destructive)',
+]
+
+export function AgingBar({ aging }: { aging: { bucket: string; label: string; count: number }[] }) {
+  const bands = aging.map((b, i) => ({
+    label: b.label,
+    value: b.count,
+    color: AGING_BAND_COLORS[i] ?? 'var(--destructive)',
+  }))
   const total = bands.reduce((s, b) => s + b.value, 0)
   if (!total) return <p className="text-xs text-muted-foreground py-2">No open tickets</p>
 

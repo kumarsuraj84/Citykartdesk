@@ -5,6 +5,7 @@ import { getServiceFormFieldsForOrg, type ServiceFormFieldRef } from '@/lib/form
 import { flattenLeafOptions } from '@/lib/forms/options'
 import { sourceChannelOf } from '@/lib/sources'
 import { isEverBreached, isEverResponseBreached } from '@/lib/sla/breach'
+import { ageBucketLabel } from '@/lib/reporting/aging'
 import type { Database } from '@/types/database'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -25,6 +26,23 @@ function daysBetween(a: string, b: string): number {
 }
 
 const nowIso = () => new Date().toISOString()
+
+// Every "date" field on requests (created_at, responded_at, resolved_at, …) is
+// really a timestamptz — the report table only ever showed the date portion
+// (FlatTableView.formatCell slices to the first 10 chars), silently dropping
+// the time of day. Rather than change what "Created" etc. display (still a
+// clean date for grouping/filtering), each gets a companion "<Label> Time"
+// field carrying just the HH:MM, so it can be added as its own column when
+// the time actually matters (SLA/response-time analysis). 24-hour, no AM/PM,
+// matching every other time display in the app (lib/export/reports.ts's fmtDate).
+function timeOf(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  try {
+    return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+  } catch {
+    return null
+  }
+}
 
 // ── Task custom fields — dynamic, per-org, merged into the static registry ────
 
@@ -272,16 +290,25 @@ async function fetchRequestRows(
       approval_status: approvalSummaries.get(r.id)?.status ?? 'not_sent',
       approved_by_name: approvalSummaries.get(r.id)?.decidedByName ?? '',
       approval_decided_at: approvalSummaries.get(r.id)?.decidedAt ?? null,
+      approval_decided_at_time: timeOf(approvalSummaries.get(r.id)?.decidedAt),
       is_reopened: r.reopen_count > 0,
       reopen_count: r.reopen_count,
       created_at: r.created_at,
+      created_at_time: timeOf(r.created_at),
       updated_at: r.updated_at,
+      updated_at_time: timeOf(r.updated_at),
       responded_at: r.responded_at,
+      responded_at_time: timeOf(r.responded_at),
       resolved_at: r.resolved_at,
+      resolved_at_time: timeOf(r.resolved_at),
       closed_at: r.closed_at,
+      closed_at_time: timeOf(r.closed_at),
       resolution_due_at: r.resolution_due_at,
+      resolution_due_at_time: timeOf(r.resolution_due_at),
       response_due_at: r.response_due_at,
+      response_due_at_time: timeOf(r.response_due_at),
       age_days: daysBetween(r.created_at, closedLike ?? now),
+      age_bucket: ageBucketLabel(daysBetween(r.created_at, closedLike ?? now)),
       resolution_days: r.resolved_at ? daysBetween(r.created_at, r.resolved_at) : null,
       is_sla_breached: isSlaBreached,
       is_response_sla_breached: isResponseSlaBreached,
@@ -492,6 +519,7 @@ async function fetchTaskRows(admin: AnyClient, orgId: string, customFields: Cust
       completed_at: t.completed_at,
       created_at: t.created_at,
       age_days: daysBetween(t.created_at, t.completed_at ?? now),
+    age_bucket: ageBucketLabel(daysBetween(t.created_at, t.completed_at ?? now)),
       is_overdue: isOverdue,
     }
     const fieldValues = valuesByTask.get(t.id)
@@ -545,6 +573,7 @@ async function fetchProjectRows(admin: AnyClient, orgId: string): Promise<{ rows
     target_date: p.target_date,
     created_at: p.created_at,
     age_days: daysBetween(p.created_at, now),
+    age_bucket: ageBucketLabel(daysBetween(p.created_at, now)),
     is_overdue: !!p.target_date && p.status !== 'done' && p.status !== 'cancelled' && p.target_date < now,
   } satisfies ReportRow))
   return { rows, truncated }
@@ -649,6 +678,7 @@ async function fetchApprovalRows(admin: AnyClient, orgId: string): Promise<{ row
       created_at: a.created_at,
       updated_at: a.updated_at,
       age_days: daysBetween(a.created_at, now),
+      age_bucket: ageBucketLabel(daysBetween(a.created_at, now)),
     } satisfies ReportRow
   })
   return { rows, truncated }

@@ -8,6 +8,7 @@
 // lib/queries/reporting.ts's `withCustomFields()`, which merges them in.
 
 import { STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants/requests'
+import { AGE_BUCKETS } from '@/lib/reporting/aging'
 
 export type FieldDataType = 'string' | 'number' | 'date' | 'boolean' | 'enum'
 
@@ -98,6 +99,11 @@ const BOOL_OPTIONS: FieldOption[] = [
   { value: 'false', label: 'No' },
 ]
 
+// Same 9 buckets as the Analytics dashboard's "Backlog Aging" widget
+// (lib/reporting/aging.ts) -- as an enum field here so it's groupable/
+// filterable in the pivot table, unlike the raw "Age (days)" number field.
+const AGE_BUCKET_OPTIONS: FieldOption[] = AGE_BUCKETS.map((b) => ({ value: b.key, label: b.label }))
+
 // A synthetic field every entity gets, for "how many rows" — the most common
 // pivot value field (Excel's "Count of <table>"). Not a real column.
 export const RECORD_COUNT_FIELD: ReportField = {
@@ -132,19 +138,32 @@ export const REPORT_ENTITIES: Record<EntityKey, ReportEntityDef> = {
       { key: 'approval_status', label: 'Approval Status', type: 'enum', options: REQUEST_APPROVAL_STATUS },
       { key: 'approved_by_name', label: 'Approved/Rejected By', type: 'string' },
       { key: 'approval_decided_at', label: 'Approval Decided On', type: 'date' },
+      { key: 'approval_decided_at_time', label: 'Approval Decided On Time', type: 'string' },
       // Whether this ticket was ever reopened — either the requester
       // reopening a resolution they weren't satisfied with, or reopening a
       // ticket that was cancelled by an approval rejection.
       { key: 'is_reopened', label: 'Reopened', type: 'boolean', options: BOOL_OPTIONS },
       { key: 'reopen_count', label: 'Reopen Count', type: 'number', groupable: false },
+      // Every one of these is really a timestamptz, but the date column stays
+      // date-only for clean at-a-glance grouping/filtering — each has a
+      // companion "… Time" field (HH:MM) for when the time of day matters
+      // (SLA/response-time analysis), added as its own column only when wanted.
       { key: 'created_at', label: 'Created', type: 'date' },
+      { key: 'created_at_time', label: 'Created Time', type: 'string' },
       { key: 'updated_at', label: 'Updated', type: 'date' },
+      { key: 'updated_at_time', label: 'Updated Time', type: 'string' },
       { key: 'responded_at', label: 'First Responded', type: 'date' },
+      { key: 'responded_at_time', label: 'First Responded Time', type: 'string' },
       { key: 'resolved_at', label: 'Resolved', type: 'date' },
+      { key: 'resolved_at_time', label: 'Resolved Time', type: 'string' },
       { key: 'closed_at', label: 'Closed', type: 'date' },
+      { key: 'closed_at_time', label: 'Closed Time', type: 'string' },
       { key: 'resolution_due_at', label: 'Resolution Due', type: 'date' },
+      { key: 'resolution_due_at_time', label: 'Resolution Due Time', type: 'string' },
       { key: 'response_due_at', label: 'Response Due', type: 'date' },
+      { key: 'response_due_at_time', label: 'Response Due Time', type: 'string' },
       { key: 'age_days', label: 'Age (days)', type: 'number', groupable: false },
+      { key: 'age_bucket', label: 'Age Bucket', type: 'enum', options: AGE_BUCKET_OPTIONS },
       { key: 'resolution_days', label: 'Resolution Time (days)', type: 'number', groupable: false },
       { key: 'is_sla_breached', label: 'Resolution SLA Breached', type: 'boolean', options: BOOL_OPTIONS },
       { key: 'is_response_sla_breached', label: 'Response SLA Breached', type: 'boolean', options: BOOL_OPTIONS },
@@ -175,6 +194,7 @@ export const REPORT_ENTITIES: Record<EntityKey, ReportEntityDef> = {
       { key: 'completed_at', label: 'Completed', type: 'date' },
       { key: 'created_at', label: 'Created', type: 'date' },
       { key: 'age_days', label: 'Age (days)', type: 'number', groupable: false },
+      { key: 'age_bucket', label: 'Age Bucket', type: 'enum', options: AGE_BUCKET_OPTIONS },
       { key: 'is_overdue', label: 'Overdue', type: 'boolean', options: BOOL_OPTIONS },
     ],
   },
@@ -193,6 +213,7 @@ export const REPORT_ENTITIES: Record<EntityKey, ReportEntityDef> = {
       { key: 'target_date', label: 'Target Date', type: 'date' },
       { key: 'created_at', label: 'Created', type: 'date' },
       { key: 'age_days', label: 'Age (days)', type: 'number', groupable: false },
+      { key: 'age_bucket', label: 'Age Bucket', type: 'enum', options: AGE_BUCKET_OPTIONS },
       { key: 'is_overdue', label: 'Overdue', type: 'boolean', options: BOOL_OPTIONS },
     ],
   },
@@ -230,6 +251,7 @@ export const REPORT_ENTITIES: Record<EntityKey, ReportEntityDef> = {
       { key: 'created_at', label: 'Created', type: 'date' },
       { key: 'updated_at', label: 'Updated', type: 'date' },
       { key: 'age_days', label: 'Age (days)', type: 'number', groupable: false },
+      { key: 'age_bucket', label: 'Age Bucket', type: 'enum', options: AGE_BUCKET_OPTIONS },
     ],
   },
 }

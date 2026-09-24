@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isCurrentlyBreached } from '@/lib/sla/breach'
+import { AGE_BUCKETS, ageBucketFor } from '@/lib/reporting/aging'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -115,7 +116,8 @@ export type AgentRow = {
 
 export type ServiceRow = { name: string; count: number }
 
-export type BacklogAging = { d1: number; d7: number; d30: number; d30plus: number }
+/** One count per bucket in lib/reporting/aging.ts's AGE_BUCKETS, same order. */
+export type BacklogAging = { bucket: string; label: string; count: number }[]
 
 export type AnalyticsData = {
   period: PeriodParam
@@ -157,10 +159,20 @@ export type AnalyticsData = {
   trend: TrendPoint[]
   // Backlog aging (open tickets only)
   backlogAging: BacklogAging
+  // Today vs yesterday activity — independent of the period selector above
+  dailyActivity: DailyActivity
   // Task KPIs
   tasksOpen: number
   tasksOverdue: number
   tasksDoneInPeriod: number
+}
+
+export type DailyStat = { today: number; yesterday: number }
+export type DailyActivity = {
+  pendingNow: number
+  created: DailyStat
+  closed: DailyStat
+  assigned: DailyStat
 }
 
 // ── Main query ─────────────────────────────────────────────────────────────────
@@ -184,6 +196,17 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
     : { data: [] as { id: string }[] }
   const orgApprovalIds = (orgApprovalIdRows ?? []).map((a: { id: string }) => a.id)
 
+  // Today/yesterday window for the Daily Activity widget -- always the last
+  // two calendar days regardless of the dashboard's own 7d/30d/90d/custom
+  // period selector above, since "how many were created today" is an
+  // absolute question, not one scoped to whatever range happens to be picked.
+  const todayStart = new Date(now)
+  todayStart.setHours(0, 0, 0, 0)
+  const yesterdayStart = new Date(todayStart)
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1)
+  const yesterdayStartIso = yesterdayStart.toISOString()
+  const todayStartIso = todayStart.toISOString()
+
   // Run all fetches in parallel
   const [
     { data: periodRequests },
@@ -194,6 +217,9 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
     { data: services },
     { data: profiles },
     { data: tasks },
+    { data: dailyCreatedRows },
+    { data: dailyClosedRows },
+    { data: dailyAssignedRows },
   ] = await Promise.all([
     // Requests created in period
     admin
@@ -245,6 +271,13 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
       .from('tasks')
       .select('id, status, priority, due_date, assignee_id, team_id, created_at, updated_at')
       .eq('org_id', orgId),
+
+    // Daily Activity widget — created/closed/assigned, today + yesterday only
+    admin.from('requests').select('created_at').eq('org_id', orgId).gte('created_at', yesterdayStartIso),
+    admin.from('requests').select('closed_at').eq('org_id', orgId).not('closed_at', 'is', null).gte('closed_at', yesterdayStartIso),
+    orgRequestIds.length > 0
+      ? admin.from('request_activity').select('created_at').eq('action', 'assigned').in('request_id', orgRequestIds).gte('created_at', yesterdayStartIso)
+      : Promise.resolve({ data: [] }),
   ])
 
   const reqs = (periodRequests ?? []) as Array<{
@@ -450,11 +483,32 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
   const ageOf = (r: { created_at: string }) =>
     (now.getTime() - new Date(r.created_at).getTime()) / (1000 * 3600 * 24)
 
-  const backlogAging: BacklogAging = {
-    d1:     open.filter((r) => ageOf(r) < 1).length,
-    d7:     open.filter((r) => ageOf(r) >= 1 && ageOf(r) < 7).length,
-    d30:    open.filter((r) => ageOf(r) >= 7 && ageOf(r) < 30).length,
-    d30plus: open.filter((r) => ageOf(r) >= 30).length,
+  const openBucketCounts = new Map<string, number>()
+  for (const r of open) {
+    const key = ageBucketFor(ageOf(r)).key
+    openBucketCounts.set(key, (openBucketCounts.get(key) ?? 0) + 1)
+  }
+  const backlogAging: BacklogAging = AGE_BUCKETS.map((b) => ({
+    bucket: b.key,
+    label: b.label,
+    count: openBucketCounts.get(b.key) ?? 0,
+  }))
+
+  // ── Daily Activity (today vs yesterday, always — not period-scoped) ────────
+
+  const bucketByDay = (rows: { at: string }[]): DailyStat => {
+    let today = 0, yesterday = 0
+    for (const r of rows) {
+      if (r.at >= todayStartIso) today++
+      else if (r.at >= yesterdayStartIso) yesterday++
+    }
+    return { today, yesterday }
+  }
+  const dailyActivity: DailyActivity = {
+    pendingNow: totalOpenNow,
+    created: bucketByDay(((dailyCreatedRows ?? []) as { created_at: string }[]).map((r) => ({ at: r.created_at }))),
+    closed: bucketByDay(((dailyClosedRows ?? []) as { closed_at: string }[]).map((r) => ({ at: r.closed_at }))),
+    assigned: bucketByDay(((dailyAssignedRows ?? []) as { created_at: string }[]).map((r) => ({ at: r.created_at }))),
   }
 
   // ── Task KPIs ─────────────────────────────────────────────────────────────
@@ -495,6 +549,7 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
     avgApprovalCycleHours,
     trend,
     backlogAging,
+    dailyActivity,
     tasksOpen,
     tasksOverdue,
     tasksDoneInPeriod,

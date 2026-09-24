@@ -1,8 +1,12 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { TASK_STATUS_GROUP, REQUEST_STATUS_GROUP } from '@/lib/constants/status-groups'
 import { computeProjectProgressPct } from '@/lib/projects/progress'
-import type { BacklogAging } from './analytics'
 import type { TaskStatus, RequestStatus, ProjectStatus } from '@/types'
+
+// Independent from lib/queries/analytics.ts's BacklogAging (Requests-specific,
+// now bucketed 0-5/6-10/.../90+ days) -- this widget is unrelated (overdue
+// milestones, not open requests) and keeps its own simple 4-band scheme.
+export type MilestoneOverdueAging = { d1: number; d7: number; d30: number; d30plus: number }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -65,7 +69,7 @@ export type ProjectAnalyticsData = {
   projectOwnerWorkload: OwnerWorkloadRow[]
   milestonesTimeline: MilestoneTimelineRow[]
   loadItems: LoadItem[]
-  milestoneOverdueAging: BacklogAging
+  milestoneOverdueAging: MilestoneOverdueAging
   projectProgressTrend: ProgressTrendPoint[]
   managerRollups: ManagerRollup[]
   unmanagedOwners: OwnerRollupRow[] // project owners with no manager_id set
@@ -216,7 +220,7 @@ export async function getProjectAnalytics(orgId: string): Promise<ProjectAnalyti
     .filter((m): m is typeof m & { end_date: string } => !!m.end_date)
     .filter((m) => new Date(m.end_date) < now)
   const daysOverdue = (m: { end_date: string }) => (now.getTime() - new Date(m.end_date).getTime()) / (1000 * 3600 * 24)
-  const milestoneOverdueAging: BacklogAging = {
+  const milestoneOverdueAging: MilestoneOverdueAging = {
     d1:      overdueMilestones.filter((m) => daysOverdue(m) < 1).length,
     d7:      overdueMilestones.filter((m) => daysOverdue(m) >= 1 && daysOverdue(m) < 7).length,
     d30:     overdueMilestones.filter((m) => daysOverdue(m) >= 7 && daysOverdue(m) < 30).length,

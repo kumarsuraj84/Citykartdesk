@@ -11,6 +11,8 @@ import {
 } from '@/components/analytics/Charts'
 import { fmtHours } from '@/lib/utils/fmt'
 import { DetailDrawer } from '@/components/analytics/DetailDrawer'
+import { TechnicianWorkloadCard } from '@/components/home/TechnicianWorkloadCard'
+import { ACTIVE_TECH_STATUSES, type TechnicianWorkloadRow } from '@/lib/queries/technicianWorkloadShared'
 import type { DrawerFilter } from '@/lib/actions/analytics'
 import type { AnalyticsData } from '@/lib/queries/analytics'
 
@@ -32,6 +34,14 @@ function Section({ title, icon: Icon, children, className = '' }: {
 
 function Divider() { return <div className="h-px bg-border my-1" /> }
 
+/** A single-day DateRange (local calendar day), daysAgo=0 is today, 1 is yesterday. */
+function dayRange(daysAgo: number): { from: string; to: string } {
+  const d = new Date()
+  d.setDate(d.getDate() - daysAgo)
+  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return { from: iso, to: iso }
+}
+
 function StatRow({ label, value, sub, onClick }: {
   label: string; value: string; sub?: string; onClick?: () => void
 }) {
@@ -52,12 +62,12 @@ function StatRow({ label, value, sub, onClick }: {
 }
 
 function ClickableRow({ children, onClick, className = '' }: {
-  children: React.ReactNode; onClick: () => void; className?: string
+  children: React.ReactNode; onClick?: () => void; className?: string
 }) {
   return (
     <div
       onClick={onClick}
-      className={`cursor-pointer hover:bg-muted/40 rounded-lg transition-colors px-2 -mx-2 ${className}`}
+      className={`rounded-lg transition-colors px-2 -mx-2 ${onClick ? 'cursor-pointer hover:bg-muted/40' : ''} ${className}`}
     >
       {children}
     </div>
@@ -66,7 +76,7 @@ function ClickableRow({ children, onClick, className = '' }: {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
+export function AnalyticsDashboard({ data, technicianWorkload }: { data: AnalyticsData; technicianWorkload: TechnicianWorkloadRow[] }) {
   const [drawer, setDrawer] = useState<DrawerFilter | null>(null)
   const close = useCallback(() => setDrawer(null), [])
 
@@ -157,6 +167,51 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             })}
           />
         </div>
+
+        {/* ── Daily Activity: today vs yesterday, independent of the period picker ── */}
+        <Section title="Daily Activity" icon={Clock}>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-lg bg-muted/40 p-3 text-center">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Pending Now</p>
+              <p className="text-xl font-bold text-foreground mt-0.5">{data.dailyActivity.pendingNow}</p>
+            </div>
+            {([
+              { label: 'Created', stat: data.dailyActivity.created, clickable: true, filterKey: 'createdInPeriod' as const },
+              { label: 'Closed', stat: data.dailyActivity.closed, clickable: true, filterKey: 'closedInPeriod' as const },
+              { label: 'Assigned', stat: data.dailyActivity.assigned, clickable: false, filterKey: null },
+            ]).map(({ label, stat, clickable, filterKey }) => (
+              <div key={label} className="rounded-lg border border-border p-3 space-y-1.5">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground text-center">{label}</p>
+                <div className="flex items-center justify-around">
+                  <ClickableRow
+                    className="text-center px-1 py-0.5 rounded"
+                    onClick={clickable && filterKey ? () => setDrawer({
+                      title: `${label} Today`,
+                      description: `Requests ${label.toLowerCase()} today`,
+                      [filterKey]: true,
+                      period: dayRange(0),
+                    }) : undefined}
+                  >
+                    <p className="text-lg font-bold text-foreground">{stat.today}</p>
+                    <p className="text-[10px] text-muted-foreground">Today</p>
+                  </ClickableRow>
+                  <ClickableRow
+                    className="text-center px-1 py-0.5 rounded"
+                    onClick={clickable && filterKey ? () => setDrawer({
+                      title: `${label} Yesterday`,
+                      description: `Requests ${label.toLowerCase()} yesterday`,
+                      [filterKey]: true,
+                      period: dayRange(1),
+                    }) : undefined}
+                  >
+                    <p className="text-lg font-semibold text-muted-foreground">{stat.yesterday}</p>
+                    <p className="text-[10px] text-muted-foreground">Yesterday</p>
+                  </ClickableRow>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
 
         {/* ── Row 2: Volume Trend + Status Donut ──────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -360,6 +415,13 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             </div>
           )}
         </Section>
+
+        {/* ── Row 4b: Requests by Technician — moved here from Home; scoped by
+             viewer (a manager only ever gets their own team(s), admin/owner
+             get every team — see lib/reporting/access.ts) ─────────────────── */}
+        {technicianWorkload.length > 0 && (
+          <TechnicianWorkloadCard rows={technicianWorkload} statuses={ACTIVE_TECH_STATUSES} />
+        )}
 
         {/* ── Row 5: Top Services + Backlog Aging ─────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

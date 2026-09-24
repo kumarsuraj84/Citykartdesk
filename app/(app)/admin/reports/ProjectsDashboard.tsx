@@ -548,7 +548,12 @@ export function ProjectsDashboard({ data, isAdmin }: { data: ProjectAnalyticsDat
           {data.milestoneOverdueAging.d1 + data.milestoneOverdueAging.d7 + data.milestoneOverdueAging.d30 + data.milestoneOverdueAging.d30plus === 0 ? (
             <p className="text-xs text-muted-foreground py-2">No overdue milestones</p>
           ) : (
-            <AgingBar aging={data.milestoneOverdueAging} />
+            <AgingBar aging={[
+              { bucket: 'd1', label: '< 1 day', count: data.milestoneOverdueAging.d1 },
+              { bucket: 'd7', label: '1–7 days', count: data.milestoneOverdueAging.d7 },
+              { bucket: 'd30', label: '7–30 days', count: data.milestoneOverdueAging.d30 },
+              { bucket: 'd30plus', label: '30+ days', count: data.milestoneOverdueAging.d30plus },
+            ]} />
           )}
         </Section>
       </div>

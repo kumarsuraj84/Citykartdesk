@@ -27,6 +27,7 @@ export type DrawerFilter = {
   frtBreached?: boolean
   resolvedInPeriod?: boolean
   createdInPeriod?: boolean
+  closedInPeriod?: boolean
   period?: PeriodParam
   sort?: 'created_desc' | 'tat_desc' | 'priority'
   // Task-specific filters
@@ -142,6 +143,10 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
     if (filter.createdInPeriod && filter.period) {
       const { start, end } = resolvePeriodParam(filter.period)
       q = q.gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
+    }
+    if (filter.closedInPeriod && filter.period) {
+      const { start, end } = resolvePeriodParam(filter.period)
+      q = q.gte('closed_at', start.toISOString()).lte('closed_at', end.toISOString()).not('closed_at', 'is', null)
     }
 
     q = q.order('created_at', { ascending: false }).limit(50)

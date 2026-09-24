@@ -341,7 +341,12 @@ export function TaskDashboard({ data }: { data: TaskAnalyticsData }) {
           </Section>
 
           <Section title="Backlog Aging (Open Tasks)" icon={Clock}>
-            <AgingBar aging={data.aging} />
+            <AgingBar aging={[
+              { bucket: 'd1', label: '< 1 day', count: data.aging.d1 },
+              { bucket: 'd7', label: '1–7 days', count: data.aging.d7 },
+              { bucket: 'd30', label: '7–30 days', count: data.aging.d30 },
+              { bucket: 'd30plus', label: '30+ days', count: data.aging.d30plus },
+            ]} />
             <Divider />
             <div className="grid grid-cols-4 gap-2 text-center">
               {[

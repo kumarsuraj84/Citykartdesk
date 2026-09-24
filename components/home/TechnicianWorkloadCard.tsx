@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Users } from 'lucide-react'
 import { STATUS_LABELS } from '@/lib/constants/requests'
-import type { TechnicianWorkloadRow } from '@/lib/queries/requests'
+import type { TechnicianWorkloadRow } from '@/lib/queries/technicianWorkloadShared'
 import type { RequestStatus } from '@/types'
 
 function countHref(technicianId: string | null, status: RequestStatus | 'unresolved'): string {

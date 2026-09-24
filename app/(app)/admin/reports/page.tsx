@@ -5,6 +5,7 @@ import { AnalyticsDashboard } from './AnalyticsDashboard'
 import { SLADashboard } from './SLADashboard'
 import { WorkloadDashboard } from './WorkloadDashboard'
 import { ProjectsDashboard } from './ProjectsDashboard'
+import { TechnicianDashboard } from './TechnicianDashboard'
 import { TaskDashboard } from '@/components/analytics/TaskDashboard'
 import { ReportsClient } from './ReportsClient'
 import { ScheduledReportsClient } from './ScheduledReportsClient'
@@ -14,7 +15,9 @@ import { getAnalytics } from '@/lib/queries/analytics'
 import { getTaskAnalytics } from '@/lib/queries/taskAnalytics'
 import { getWorkloadReport, WORKLOAD_THRESHOLD } from '@/lib/queries/workload'
 import { getProjectAnalytics } from '@/lib/queries/projectAnalytics'
+import { getTechnicianWorkloadBoard } from '@/lib/queries/requests'
 import { getEnabledModules, getCurrentProfile } from '@/lib/queries/profiles'
+import { resolveReportAccess } from '@/lib/reporting/access'
 import type { Period, PeriodParam } from '@/lib/queries/analytics'
 
 const PERIODS: { value: Period; label: string }[] = [
@@ -36,14 +39,36 @@ export default async function ReportsPage({
 }) {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
-  if (!['admin', 'manager', 'platform_owner'].includes(profile.role)) redirect('/home')
+  // Technicians get a separate, stripped-down view below (TechnicianDashboard
+  // — their own daily activity + their own row of the workload table only,
+  // none of this page's other Manager+ information); everyone below agent
+  // still has no access to "Dashboards" at all.
+  if (!['admin', 'manager', 'platform_owner', 'agent'].includes(profile.role)) redirect('/home')
   if (!profile.org_id) redirect('/home')
+
+  if (profile.role === 'agent') {
+    const scope = resolveReportAccess(profile, 'requests')
+    if ('error' in scope) redirect('/home')
+    const [analytics, workload] = await Promise.all([
+      getAnalytics(profile.org_id, '30d'),
+      getTechnicianWorkloadBoard(profile.org_id, scope.scope),
+    ])
+    return (
+      <TechnicianDashboard
+        dailyActivity={analytics.dailyActivity}
+        backlogAging={analytics.backlogAging}
+        rows={workload}
+      />
+    )
+  }
 
   // Projects is Admin/Owner-only for now (see components/layout/Sidebar.tsx) —
   // a plain manager can still see this Projects tab (module-gated, not
   // role-gated), but /projects and /projects/[id] redirect anyone else to
   // /home, so ProjectsDashboard needs to know not to link there for them.
   const isAdmin = profile.role === 'admin' || profile.role === 'platform_owner'
+  const scope = resolveReportAccess(profile, 'requests')
+  const viewerScope = 'scope' in scope ? scope.scope : { kind: 'all' as const }
 
   const sp           = await searchParams
   const period       = (['7d','30d','90d'].includes(sp.period) ? sp.period : '30d') as Period
@@ -83,12 +108,17 @@ export default async function ReportsPage({
     workloadRows,
     projectData,
     { data: scheduledReports = [] },
+    technicianWorkload,
   ] = await Promise.all([
     (tab === 'requests' || tab === 'sla') && hasRequests ? getAnalytics(profile.org_id, periodParam) : Promise.resolve(null),
     tab === 'tasks'    && hasTasks    ? getTaskAnalytics(profile.org_id, periodParam) : Promise.resolve(null),
     hasRequests || hasTasks ? getWorkloadReport(profile.org_id) : Promise.resolve([]),
     tab === 'projects' && hasProjects ? getProjectAnalytics(profile.org_id) : Promise.resolve(null),
     getScheduledReports(),
+    // A manager only ever gets { kind: 'team' }; admin/platform_owner get
+    // { kind: 'all' } — see lib/reporting/access.ts. Shown on the Requests
+    // tab alongside the rest of AnalyticsDashboard's org/team-scoped data.
+    (tab === 'requests') && hasRequests ? getTechnicianWorkloadBoard(profile.org_id, viewerScope) : Promise.resolve([]),
   ])
 
   const overloadedAgents = workloadRows.filter((r) => r.totalOpen > WORKLOAD_THRESHOLD)
@@ -203,7 +233,7 @@ export default async function ReportsPage({
       )}
 
       {tab === 'requests' && hasRequests && requestData && (
-        <AnalyticsDashboard data={requestData} />
+        <AnalyticsDashboard data={requestData} technicianWorkload={technicianWorkload} />
       )}
 
       {tab === 'sla' && hasRequests && requestData && (

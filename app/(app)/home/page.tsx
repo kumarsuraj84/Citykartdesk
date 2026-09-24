@@ -12,9 +12,7 @@ import { createClient } from '@/lib/supabase/server'
 import { StatusBadge } from '@/components/requests/RequestBadges'
 import { SLABadge } from '@/components/requests/SLABadge'
 import { getHomeProjectsSummary, type HomeProjectsSummary } from '@/lib/queries/projects'
-import { getTechnicianWorkloadBoard, type TechnicianWorkloadRow, ACTIVE_TECH_STATUSES } from '@/lib/queries/requests'
 import { ProjectStatusBadge } from '@/components/projects/ProjectStatusBadge'
-import { TechnicianWorkloadCard } from '@/components/home/TechnicianWorkloadCard'
 import type { RequestStatus, RequestPriority } from '@/types'
 
 /* ── types ──────────────────────────────────────────────────────────────────── */
@@ -308,13 +306,9 @@ async function DashboardBody({
   isManager: boolean
   tab: string
 }) {
-  const [dashData, projectsSummary, technicianWorkload] = await Promise.all([
+  const [dashData, projectsSummary] = await Promise.all([
     dashPromise,
     projectsSummaryPromise,
-    // Any agent-tier viewer can see this now, not just managers — RLS already
-    // scopes getTechnicianWorkloadBoard()'s query to the viewer's own team(s)
-    // for a plain technician, so it naturally shows "my service's" workload.
-    isAgent ? getTechnicianWorkloadBoard() : Promise.resolve<TechnicianWorkloadRow[]>([]),
   ])
 
   const counts         = dashData?.counts ?? {}
@@ -474,10 +468,6 @@ async function DashboardBody({
                     <KpiCard label="Pending Approval" value={pendingApprovalCount} sublabel="Awaiting review"  accent="#8B5CF6" href="/approvals" />
                   </>)}
                 </div>
-
-                {isAgent && technicianWorkload.length > 0 && (
-                  <TechnicianWorkloadCard rows={technicianWorkload} statuses={ACTIVE_TECH_STATUSES} />
-                )}
 
                 {isAgent && (myQueue.length > 0 || !isManager) && (
                   <div className="overflow-hidden rounded-xl border border-border bg-card">
