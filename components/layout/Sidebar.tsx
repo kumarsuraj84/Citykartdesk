@@ -105,7 +105,8 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
       label: 'Intake Intelligence',
       show: has('intake') && (isAgent || isManager || isAdmin),
       items: [
-        { label: 'Dashboard', href: '/intake',          icon: Sparkles, exactMatch: true },
+        ...(isAdmin
+          ? [{ label: 'Dashboard', href: '/intake', icon: Sparkles, exactMatch: true }] : []),
         { label: 'Inbox',     href: '/intake/inbox',    icon: Inbox    },
         ...(isAdmin
           ? [{ label: 'Channels', href: '/intake/channels', icon: GitBranch }] : []),

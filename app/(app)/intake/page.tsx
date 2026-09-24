@@ -12,7 +12,11 @@ import {
 import { PageHeader } from '@/components/ui/PageHeader'
 import { formatRelativeTime } from '@/lib/utils'
 
-const INTAKE_ROLES = ['agent', 'manager', 'admin', 'platform_owner']
+// This is the org-wide intake analytics dashboard, not the agent triage queue
+// (that's /intake/inbox, which genuinely is agent+ -- see its own page.tsx) --
+// admin/owner only, same as Channels/Rules/Settings and the sidebar's own
+// Dashboard link.
+const DASHBOARD_ROLES = ['admin', 'platform_owner']
 const ADMIN_ROLES = ['admin', 'platform_owner']
 
 const TYPE_CLS: Record<string, string> = {
@@ -57,7 +61,7 @@ function KpiCard({ label, value, sublabel, icon: Icon, href, accent }: {
 export default async function IntakeDashboardPage() {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
-  if (!INTAKE_ROLES.includes(profile.role)) redirect('/home')
+  if (!DASHBOARD_ROLES.includes(profile.role)) redirect('/home')
   const isAdmin = ADMIN_ROLES.includes(profile.role)
 
   const [stats, validation, pending, recent, channels] = await Promise.all([
