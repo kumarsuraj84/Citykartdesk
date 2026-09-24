@@ -9,6 +9,7 @@ import type {
   RequestCollaborator,
   RequestStatus,
   RequestPriority,
+  AllowedSubCategory,
 } from '@/types'
 
 export { ACTIVE_TECH_STATUSES }
@@ -630,4 +631,120 @@ export async function getCsatSurveyForRequest(requestId: string) {
     .eq('request_id', requestId)
     .maybeSingle()
   return data ?? null
+}
+
+// ── Requester's own Recently Used / Frequent Issues (Create Request shortcuts) ──
+
+export type RequesterServiceShortcut = {
+  subCategoryId: string
+  subCategoryName: string
+  categoryId: string
+  categoryName: string
+  lastUsedAt: string
+  count: number
+}
+
+// Bounded to the requester's most recent 200 requests for this service —
+// enough to derive both orderings below without scanning full history or
+// shipping whole request objects to the browser. requester_id is already
+// indexed (idx_requests_requester); service_id narrows further. Revisit with
+// a composite (requester_id, service_id, sub_category_id) index only if real
+// production volume shows this filter step is actually slow — not assumed
+// pre-emptively.
+const SHORTCUT_HISTORY_LIMIT = 200
+
+/**
+ * The signed-in requester's own "Recently Used" and "Your Frequent Issues"
+ * sub-categories for one service — used by the Create Request workspace's
+ * side panels. Explicitly requester_id + service_id scoped (never "whatever
+ * this session's RLS grants" — an agent/manager session can see teammates'
+ * requests too, which must never leak into a personal shortcut list).
+ *
+ * `allowedSubCategories` is the same tagged-and-currently-offered list the
+ * Category/Sub Category picker itself uses (getAllowedSubCategoriesForService)
+ * — reusing it here means a past choice only ever surfaces as a shortcut if
+ * it's still tagged to this service, with no extra query for that part. That
+ * list does NOT filter is_active though (confirmed against its own query —
+ * the picker itself doesn't either), so is_active is checked here with one
+ * extra bounded query against just the handful of distinct sub-categories
+ * actually present in this requester's history — not one query per row.
+ */
+export async function getRequesterServiceShortcuts(
+  userId: string,
+  serviceId: string,
+  allowedSubCategories: AllowedSubCategory[]
+): Promise<{ recent: RequesterServiceShortcut[]; frequent: RequesterServiceShortcut[] }> {
+  if (allowedSubCategories.length === 0) return { recent: [], frequent: [] }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('requests')
+    .select('sub_category_id, created_at')
+    .eq('requester_id', userId)
+    .eq('service_id', serviceId)
+    .not('sub_category_id', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(SHORTCUT_HISTORY_LIMIT)
+
+  // Shortcuts are a personalization nicety, not core to raising a request —
+  // a query hiccup here should never be why someone can't submit a ticket.
+  if (error || !data || data.length === 0) return { recent: [], frequent: [] }
+
+  const allowedById = new Map(allowedSubCategories.map((sc) => [sc.id, sc]))
+  const bySubCategory = new Map<string, { lastUsedAt: string; count: number }>()
+
+  for (const row of data as { sub_category_id: string; created_at: string }[]) {
+    // Still tagged to this service? (allowedSubCategories is the tagged set)
+    if (!allowedById.has(row.sub_category_id)) continue
+    const existing = bySubCategory.get(row.sub_category_id)
+    if (existing) existing.count += 1
+    else bySubCategory.set(row.sub_category_id, { lastUsedAt: row.created_at, count: 1 })
+  }
+
+  if (bySubCategory.size === 0) return { recent: [], frequent: [] }
+
+  // Still active? Neither service_sub_category_tags (tagging) nor
+  // getAllowedSubCategoriesForService filter this, so a since-deactivated
+  // sub-category (or one whose parent category was deactivated) would
+  // otherwise keep surfacing as a shortcut forever off old history. The
+  // ticket itself stays untouched either way — this only affects whether it
+  // gets offered again as a one-click shortcut.
+  const { data: activeRows } = await supabase
+    .from('service_sub_categories')
+    .select('id, is_active, category:service_categories(is_active)')
+    .in('id', [...bySubCategory.keys()])
+  const activeIds = new Set(
+    ((activeRows ?? []) as unknown as { id: string; is_active: boolean; category: { is_active: boolean } | null }[])
+      .filter((r) => r.is_active && (r.category?.is_active ?? true))
+      .map((r) => r.id)
+  )
+  for (const id of [...bySubCategory.keys()]) {
+    if (!activeIds.has(id)) bySubCategory.delete(id)
+  }
+
+  function toShortcut(subCategoryId: string, meta: { lastUsedAt: string; count: number }): RequesterServiceShortcut {
+    const sc = allowedById.get(subCategoryId)!
+    return {
+      subCategoryId,
+      subCategoryName: sc.name,
+      categoryId: sc.category_id,
+      categoryName: sc.category_name,
+      lastUsedAt: meta.lastUsedAt,
+      count: meta.count,
+    }
+  }
+
+  // Map insertion order already tracks first-occurrence order in `data`,
+  // which is sorted newest-first — i.e. already "most recently used first,
+  // deduplicated," no further sort needed for Recently Used.
+  const recent = [...bySubCategory.entries()]
+    .map(([id, meta]) => toShortcut(id, meta))
+    .slice(0, 5)
+
+  const frequent = [...bySubCategory.entries()]
+    .map(([id, meta]) => toShortcut(id, meta))
+    .sort((a, b) => b.count - a.count || (a.lastUsedAt < b.lastUsedAt ? 1 : -1))
+    .slice(0, 5)
+
+  return { recent, frequent }
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2, Send, UserSearch, X } from 'lucide-react'
@@ -29,6 +29,13 @@ interface DynamicFormProps {
    *  selection — the server's own value (based on whoever the final
    *  requester is) is always what actually gets saved. */
   currentUserStoreAddress?: string | null
+}
+
+/** Imperative handle so an external "Recently Used"/"Frequent Issues"
+ *  shortcut panel can drive the form's own Category/Sub Category selection —
+ *  the exact same state the picker itself sets, not a second parallel one. */
+export interface DynamicFormHandle {
+  applyCategoryShortcut: (categoryId: string, subCategoryId: string) => void
 }
 
 type OrgMember = { id: string; full_name: string }
@@ -183,7 +190,7 @@ export function FieldGrid({ fields, values, errors, onChange, requesterContext }
       {rows.map((row, ri) => (
         <div
           key={ri}
-          className={row.length === 2 ? 'grid grid-cols-2 gap-4' : 'grid grid-cols-1'}
+          className={row.length === 2 ? 'grid grid-cols-1 gap-4 sm:grid-cols-2' : 'grid grid-cols-1'}
         >
           {row.map((field) => (
             <FieldRenderer
@@ -235,7 +242,10 @@ export function SectionBlock({ section, values, errors, onChange, requesterConte
 
 // ── DynamicForm ───────────────────────────────────────────────────────────────
 
-export function DynamicForm({ service, canBookOnBehalf, allowedSubCategories, currentUserStoreAddress }: DynamicFormProps) {
+export const DynamicForm = forwardRef<DynamicFormHandle, DynamicFormProps>(function DynamicForm(
+  { service, canBookOnBehalf, allowedSubCategories, currentUserStoreAddress },
+  ref
+) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [serverError, setServerError] = useState<string | null>(null)
@@ -255,6 +265,14 @@ export function DynamicForm({ service, canBookOnBehalf, allowedSubCategories, cu
   const subCategoriesInCategory = categoryId
     ? allowedSubCategories.filter((sc) => sc.category_id === categoryId)
     : []
+
+  useImperativeHandle(ref, () => ({
+    applyCategoryShortcut(nextCategoryId: string, nextSubCategoryId: string) {
+      setCategoryId(nextCategoryId)
+      setSubCategoryId(nextSubCategoryId)
+      setCategoryError(null)
+    },
+  }), [])
 
   // A tagged template is always section-based (it never has a legacy flat
   // shape) — an untagged/legacy service keeps rendering flat, header-less
@@ -374,7 +392,7 @@ export function DynamicForm({ service, canBookOnBehalf, allowedSubCategories, cu
       )}
 
       {categories.length > 0 && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <span className="mr-0.5 text-destructive">*</span>
@@ -453,4 +471,4 @@ export function DynamicForm({ service, canBookOnBehalf, allowedSubCategories, cu
       </div>
     </form>
   )
-}
+})
