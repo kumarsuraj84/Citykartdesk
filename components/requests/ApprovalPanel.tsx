@@ -10,6 +10,11 @@ interface ApprovalPanelProps {
   approval: ApprovalWithDetails
   viewerId: string
   viewerRole: UserRole
+  // Called after approve/reject/delegate succeeds -- unused on the full
+  // request page (this panel is just inline there), but lets a modal host
+  // like ApprovalPreviewDialog close itself once the viewer's decision is
+  // done, instead of leaving them to find a separate Close button.
+  onDecided?: () => void
 }
 
 function formatDate(iso: string) {
@@ -29,7 +34,7 @@ function StatusPill({ status }: { status: string }) {
   return <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700"><Clock className="h-3 w-3" />Pending</span>
 }
 
-export function ApprovalPanel({ approval, viewerId, viewerRole }: ApprovalPanelProps) {
+export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: ApprovalPanelProps) {
   const [isPending, startTransition] = useTransition()
   const [comment, setComment]       = useState('')
   const [error, setError]           = useState<string | null>(null)
@@ -70,7 +75,7 @@ export function ApprovalPanel({ approval, viewerId, viewerRole }: ApprovalPanelP
     startTransition(async () => {
       const result = await approveApproval(approval.id, comment || undefined)
       if (result.error) { setError(result.error) }
-      else { setShowCommentBox(null); setComment('') }
+      else { setShowCommentBox(null); setComment(''); onDecided?.() }
     })
   }
 
@@ -79,7 +84,7 @@ export function ApprovalPanel({ approval, viewerId, viewerRole }: ApprovalPanelP
     startTransition(async () => {
       const result = await rejectApproval(approval.id, comment || undefined)
       if (result.error) { setError(result.error) }
-      else { setShowCommentBox(null); setComment('') }
+      else { setShowCommentBox(null); setComment(''); onDecided?.() }
     })
   }
 
@@ -95,7 +100,7 @@ export function ApprovalPanel({ approval, viewerId, viewerRole }: ApprovalPanelP
     startTransition(async () => {
       const result = await delegateApproval(approval.id, delegateUserId)
       if (result.error) { setError(result.error) }
-      else { setShowDelegate(false); setDelegateUserId(''); setDelegateSearch(''); setDelegateResults([]) }
+      else { setShowDelegate(false); setDelegateUserId(''); setDelegateSearch(''); setDelegateResults([]); onDecided?.() }
     })
   }
 

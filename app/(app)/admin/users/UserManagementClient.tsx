@@ -275,6 +275,7 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
       if (err) { setError(err); return }
       setSuccess(true)
       router.refresh()
+      onClose()
     })
   }
 

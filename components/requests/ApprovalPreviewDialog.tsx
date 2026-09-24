@@ -147,7 +147,7 @@ export function ApprovalPreviewDialog({ approval, viewerId, viewerRole, onClose 
           {/* Approval action panel — same component/logic used on the full
               request page, so parallel/sequential approve/reject stays correct. */}
           <div className="border-t border-border pt-4">
-            <ApprovalPanel approval={approval} viewerId={viewerId} viewerRole={viewerRole} />
+            <ApprovalPanel approval={approval} viewerId={viewerId} viewerRole={viewerRole} onDecided={onClose} />
           </div>
         </div>
       </div>
