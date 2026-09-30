@@ -9,6 +9,7 @@ export const MAX_EXPORT_ROWS = 10000
 const STATUS_LABELS: Record<string, string> = {
   open: 'Open',
   in_progress: 'In Progress',
+  hold_purchase_ho: 'Hold due to Purchase from HO',
   pending_approval: 'Pending Approval',
   on_hold: 'On Hold',
   resolved: 'Resolved',

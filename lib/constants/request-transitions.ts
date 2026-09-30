@@ -36,8 +36,12 @@ import type { RequestStatus } from '@/types'
 export const AGENT_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
   open:             ['cancelled'],
   assigned:         ['cancelled'],
-  in_progress:      ['waiting_user', 'resolved', 'cancelled'],
+  in_progress:      ['waiting_user', 'hold_purchase_ho', 'resolved', 'cancelled'],
   waiting_user:     ['in_progress', 'resolved'],
+  // Only a technician can set this or move it back to in_progress — the
+  // requester's matching row below is intentionally empty. Reachable only
+  // from in_progress, mirroring waiting_user, per the app owner's spec.
+  hold_purchase_ho: ['in_progress'],
   pending_approval: [],
   resolved:         ['open'],
   closed:           [],
@@ -50,6 +54,9 @@ export const REQUESTER_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
   assigned:         [],
   in_progress:      [],
   waiting_user:     ['open', 'cancelled'],
+  // Deliberately empty — the requester has no way to set or leave this status
+  // themselves; only a technician can (see AGENT_TRANSITIONS above).
+  hold_purchase_ho: [],
   pending_approval: [],
   resolved:         ['open'],
   closed:           [],

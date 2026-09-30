@@ -10,7 +10,7 @@ import type { RequestStatus } from '@/types'
 
 /** The still-in-flight statuses a technician's workload is measured across —
  *  deliberately excludes resolved/closed/cancelled. */
-export const ACTIVE_TECH_STATUSES: RequestStatus[] = ['open', 'assigned', 'in_progress', 'waiting_user', 'pending_approval']
+export const ACTIVE_TECH_STATUSES: RequestStatus[] = ['open', 'assigned', 'in_progress', 'waiting_user', 'hold_purchase_ho', 'pending_approval']
 
 export type TechnicianWorkloadRow = {
   /** null = the "Unassigned" row. */

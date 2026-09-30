@@ -353,7 +353,7 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
 
   const statusCounts: Record<string, number> = {}
   reqs.forEach((r) => { statusCounts[r.status] = (statusCounts[r.status] ?? 0) + 1 })
-  const STATUS_ORDER = ['open', 'assigned', 'in_progress', 'waiting_user', 'pending_approval', 'resolved', 'closed', 'cancelled']
+  const STATUS_ORDER = ['open', 'assigned', 'in_progress', 'waiting_user', 'hold_purchase_ho', 'pending_approval', 'resolved', 'closed', 'cancelled']
   const byStatus = STATUS_ORDER
     .filter((s) => statusCounts[s])
     .map((s) => ({ status: s, count: statusCounts[s] }))

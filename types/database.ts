@@ -3837,6 +3837,54 @@ export type Database = {
           },
         ]
       }
+      saved_reports: {
+        Row: {
+          config: Json
+          created_at: string
+          created_by: string | null
+          entity: string
+          id: string
+          name: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          config: Json
+          created_at?: string
+          created_by?: string | null
+          entity: string
+          id?: string
+          name: string
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          entity?: string
+          id?: string
+          name?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_reports_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_reports_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       request_conversations: {
         Row: {
           answers: Json
@@ -5721,6 +5769,7 @@ export type Database = {
         | "assigned"
         | "in_progress"
         | "waiting_user"
+        | "hold_purchase_ho"
         | "resolved"
         | "closed"
         | "cancelled"
@@ -6011,6 +6060,7 @@ export const Constants = {
         "assigned",
         "in_progress",
         "waiting_user",
+        "hold_purchase_ho",
         "resolved",
         "closed",
         "cancelled",

@@ -305,6 +305,16 @@ export async function updateRequestStatus(
     return { error: 'Please add a resolution message before marking this resolved.' }
   }
 
+  // "Hold due to Purchase from HO" — technician-only both ways (see
+  // request-transitions.ts), each direction needs its own remark: one
+  // explaining the hold, a separate one explaining what changed on resume.
+  if (agentInitiated && newStatus === 'hold_purchase_ho' && !comment?.trim()) {
+    return { error: 'Please add a note explaining the purchase hold.' }
+  }
+  if (agentInitiated && currentStatus === 'hold_purchase_ho' && newStatus === 'in_progress' && !comment?.trim()) {
+    return { error: 'Please add a note before moving this back to In Progress.' }
+  }
+
   // Technician-mandatory fields (required, but hidden or read-only for the
   // requester) must be filled in before an agent can move the ticket at all —
   // only applies to the agent-initiated path; a requester reopening/cancelling
@@ -374,15 +384,16 @@ export async function updateRequestStatus(
     updatePayload.reopen_count = (request.reopen_count ?? 0) + 1
   }
 
-  // SLA pause: entering waiting_user
-  if (newStatus === 'waiting_user') {
+  // SLA pause: entering waiting_user or hold_purchase_ho
+  if (newStatus === 'waiting_user' || newStatus === 'hold_purchase_ho') {
     updatePayload.waiting_since = nowIso
   }
 
-  // SLA resume: leaving waiting_user → extend deadlines by paused duration,
-  // and credit it to the running ledger so a later priority/category/service
-  // change (which recomputes deadlines from created_at) doesn't discard it.
-  if (currentStatus === 'waiting_user' && request.waiting_since) {
+  // SLA resume: leaving waiting_user or hold_purchase_ho → extend deadlines by
+  // paused duration, and credit it to the running ledger so a later
+  // priority/category/service change (which recomputes deadlines from
+  // created_at) doesn't discard it.
+  if ((currentStatus === 'waiting_user' || currentStatus === 'hold_purchase_ho') && request.waiting_since) {
     const pausedMs = now.getTime() - new Date(request.waiting_since).getTime()
     if (request.response_due_at) {
       updatePayload.response_due_at = new Date(
@@ -609,6 +620,7 @@ export async function updateRequestStatus(
     const notifyStatuses: Record<string, { type: import('@/lib/notifications').NotifyInput['type']; title: string; body: string }> = {
       in_progress:  { type: 'status_changed',    title: 'Your request is in progress',       body: `${profile.full_name} is working on it.` },
       waiting_user: { type: 'status_changed',    title: 'Action required on your request',   body: `${profile.full_name} is waiting for your response.` },
+      hold_purchase_ho: { type: 'status_changed', title: 'Your request is on hold — pending purchase from HO', body: `${profile.full_name} put this on hold pending a Head Office purchase.` },
       resolved:     { type: 'request_resolved',  title: 'Your request has been resolved',    body: `${profile.full_name} marked it resolved.` },
       closed:       { type: 'request_closed',    title: 'Your request has been closed',      body: `Request ${request.id} is now closed.` },
       cancelled:    { type: 'request_cancelled', title: 'Your request has been cancelled',   body: `${profile.full_name} cancelled the request.` },

@@ -41,6 +41,7 @@ const FILTER_TABS: { label: string; value: string }[] = [
   { label: 'Open',            value: 'open' },
   { label: 'In Progress',     value: 'in_progress' },
   { label: 'Waiting on User', value: 'waiting_user' },
+  { label: 'Hold (HO Purchase)', value: 'hold_purchase_ho' },
   { label: 'Resolved',        value: 'resolved' },
   { label: 'Closed',          value: 'closed' },
   // Every status option is written to the URL explicitly (never by deleting

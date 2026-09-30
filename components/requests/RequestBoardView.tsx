@@ -200,7 +200,7 @@ export function RequestBoardView({
 
   const grouped = COLUMNS.reduce<Record<RequestStatus, RequestWithRelations[]>>(
     (acc, { status }) => { acc[status] = requests.filter((r) => r.status === status); return acc },
-    { open: [], assigned: [], in_progress: [], waiting_user: [], pending_approval: [], resolved: [], closed: [], cancelled: [] }
+    { open: [], assigned: [], in_progress: [], waiting_user: [], hold_purchase_ho: [], pending_approval: [], resolved: [], closed: [], cancelled: [] }
   )
 
   function findColumnForRequest(id: string): RequestStatus | null {

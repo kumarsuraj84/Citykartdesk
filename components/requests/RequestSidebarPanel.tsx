@@ -148,6 +148,19 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
       setPendingComment({ next, heading: 'Resolution details', placeholder: 'What did you do to resolve this?', cta: 'Mark Resolved' })
       return
     }
+    // Technician-only hold — the requester never sees this option at all
+    // (REQUESTER_TRANSITIONS has no entry for it), so isAgent is implied, but
+    // checked explicitly here for the same reason the other branches do.
+    if (isAgent && next === 'hold_purchase_ho') {
+      setPendingComment({ next, heading: 'Why is this on hold?', placeholder: 'e.g. Waiting on HO to procure the replacement part…', cta: 'Set to Hold (Purchase from HO)' })
+      return
+    }
+    // Coming off the hold needs its own separate remark — distinct from the
+    // one that put it on hold — explaining what changed.
+    if (isAgent && cur === 'hold_purchase_ho' && next === 'in_progress') {
+      setPendingComment({ next, heading: 'What changed?', placeholder: 'e.g. Part received from HO, resuming work…', cta: 'Resume — Back to In Progress' })
+      return
+    }
     // Cancelling always needs a remark — required server-side for both an
     // agent and a requester cancelling their own ticket (their only
     // visibility into why, same reasoning as the other prompts above).

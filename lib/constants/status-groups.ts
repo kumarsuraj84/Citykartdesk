@@ -25,6 +25,7 @@ export const REQUEST_STATUS_GROUP: Record<RequestStatus, keyof ProjectProgress> 
   assigned:         'in_progress',
   in_progress:      'in_progress',
   waiting_user:     'in_progress',
+  hold_purchase_ho: 'in_progress',
   resolved:         'done',
   closed:           'done',
   cancelled:        'cancelled',
