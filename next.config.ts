@@ -31,6 +31,17 @@ const nextConfig: NextConfig = {
     root: __dirname,
   },
   experimental: {
+    // Next's own default cap on a Server Action's request body is 1 MB — far
+    // below the 25 MB this app's own uploadAttachment()/task-attachments.ts
+    // already validate against. Below this cap, Next itself rejects the
+    // request with a 413 before the action ever runs, which is exactly what
+    // broke a real requester's ticket submission: the ticket record saved
+    // fine (that's a small, separate action), then the follow-up attachment
+    // upload 413'd and crashed the page. 30mb leaves headroom over the 25mb
+    // file cap for multipart overhead and the request's other form fields.
+    serverActions: {
+      bodySizeLimit: '30mb',
+    },
     // Cache dynamic RSC payloads in the client router cache so back/forward and quick
     // re-navigation are instant (SPA-feel) instead of re-fetching from the server every
     // time (dynamic default is 0s). Mutations still bust the cache via revalidatePath in
