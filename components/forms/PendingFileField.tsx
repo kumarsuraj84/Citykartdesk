@@ -3,6 +3,7 @@
 import { useRef, useState, useCallback } from 'react'
 import { Paperclip, X, Loader2, AlertCircle, FileIcon } from 'lucide-react'
 import { validateAttachment } from '@/lib/attachments/validate'
+import { AlertModal } from '@/components/ui/AlertModal'
 
 // Mirrors components/requests/AttachmentUpload.tsx's dropzone, but that component
 // requires an existing request_id (attachments have a NOT NULL request_id FK) — this
@@ -31,6 +32,7 @@ export function PendingFileField({ id, value, onChange, multiple = true, disable
   const [isDragging, setIsDragging] = useState(false)
   const [validating, setValidating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [tooLargeFileName, setTooLargeFileName] = useState<string | null>(null)
 
   const addFiles = useCallback(
     async (incoming: File[]) => {
@@ -40,7 +42,13 @@ export function PendingFileField({ id, value, onChange, multiple = true, disable
         for (const file of incoming) {
           const result = await validateAttachment(file)
           if (!result.valid) {
-            setError(`"${file.name}": ${result.error ?? 'Invalid file.'}`)
+            if (result.code === 'too_large') {
+              // Never added to `value` in the first place — this popup is the
+              // "reattach within the limit" prompt, not a removal step.
+              setTooLargeFileName(file.name)
+            } else {
+              setError(`"${file.name}": ${result.error ?? 'Invalid file.'}`)
+            }
             return
           }
         }
@@ -150,6 +158,14 @@ export function PendingFileField({ id, value, onChange, multiple = true, disable
             </li>
           ))}
         </ul>
+      )}
+
+      {tooLargeFileName && (
+        <AlertModal
+          title="Attachment too large"
+          message={`"${tooLargeFileName}" is more than 25 MB. Attachments are allowed up to 25 MB — please reattach a smaller file and try again.`}
+          onOk={() => setTooLargeFileName(null)}
+        />
       )}
     </div>
   )

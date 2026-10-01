@@ -6,6 +6,7 @@ import { addComment, deleteEmptyComment } from '@/lib/actions/requests'
 import { uploadAttachment } from '@/lib/actions/attachments'
 import { validateAttachment } from '@/lib/attachments/validate'
 import { CANNED_RESPONSES, CANNED_CATEGORIES } from '@/lib/constants/canned-responses'
+import { AlertModal } from '@/components/ui/AlertModal'
 
 interface CommentFormProps {
   requestId: string
@@ -25,6 +26,7 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
   const [isInternal, setIsInternal]          = useState(false)
   const [files, setFiles]                    = useState<File[]>([])
   const [fileError, setFileError]            = useState<string | null>(null)
+  const [tooLargeFileName, setTooLargeFileName] = useState<string | null>(null)
   const [error, setError]                    = useState<string | null>(null)
   const [isPending, startTransition]         = useTransition()
   const [showCanned, setShowCanned]          = useState(false)
@@ -38,7 +40,13 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
     for (const file of incoming) {
       const result = await validateAttachment(file)
       if (!result.valid) {
-        setFileError(`"${file.name}": ${result.error ?? 'Invalid file.'}`)
+        if (result.code === 'too_large') {
+          // Never added to `files` in the first place — this popup is the
+          // "reattach within the limit" prompt, not a removal step.
+          setTooLargeFileName(file.name)
+        } else {
+          setFileError(`"${file.name}": ${result.error ?? 'Invalid file.'}`)
+        }
         return
       }
     }
@@ -193,7 +201,7 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            title="Attach files"
+            title="Attach files (max 25 MB each)"
             className="flex min-h-[36px] cursor-pointer select-none items-center gap-1.5 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
           >
             <Paperclip className="h-3.5 w-3.5" />
@@ -317,6 +325,14 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
 
       {error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
+      )}
+
+      {tooLargeFileName && (
+        <AlertModal
+          title="Attachment too large"
+          message={`"${tooLargeFileName}" is more than 25 MB. Attachments are allowed up to 25 MB — please reattach a smaller file and try again.`}
+          onOk={() => setTooLargeFileName(null)}
+        />
       )}
     </form>
   )

@@ -66,6 +66,10 @@ const ZIP_SIGNATURES = [
 export interface ValidationResult {
   valid: boolean
   error?: string
+  /** Lets a caller react specifically to "too large" (e.g. a dedicated popup
+   *  telling the user to reattach within the limit) without string-matching
+   *  the error message. */
+  code?: 'too_large' | 'invalid_type' | 'content_mismatch'
 }
 
 function signaturesMatch(bytes: Uint8Array, signatures: number[][], offset = 0): boolean {
@@ -77,12 +81,12 @@ function signaturesMatch(bytes: Uint8Array, signatures: number[][], offset = 0):
 export async function validateAttachment(file: File): Promise<ValidationResult> {
   // 1. Size check
   if (file.size > MAX_FILE_SIZE_BYTES) {
-    return { valid: false, error: 'File exceeds 25MB limit.' }
+    return { valid: false, error: 'File exceeds 25MB limit.', code: 'too_large' }
   }
 
   // 2. MIME type allowlist check
   if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-    return { valid: false, error: 'File type not allowed.' }
+    return { valid: false, error: 'File type not allowed.', code: 'invalid_type' }
   }
 
   // 3. Read first 16 bytes for magic byte inspection
@@ -93,16 +97,16 @@ export async function validateAttachment(file: File): Promise<ValidationResult> 
   if (ZIP_BASED_MIME_TYPES.has(file.type)) {
     // 5. Special case: .docx/.xlsx/.pptx are ZIP-based
     if (!signaturesMatch(bytes, ZIP_SIGNATURES)) {
-      return { valid: false, error: 'File content does not match declared type.' }
+      return { valid: false, error: 'File content does not match declared type.', code: 'content_mismatch' }
     }
   } else if (file.type === 'video/mp4') {
     // ftyp box starts at byte offset 4
     if (!signaturesMatch(bytes, MAGIC_BYTES.get('video/mp4')!, 4)) {
-      return { valid: false, error: 'File content does not match declared type.' }
+      return { valid: false, error: 'File content does not match declared type.', code: 'content_mismatch' }
     }
   } else if (MAGIC_BYTES.has(file.type)) {
     if (!signaturesMatch(bytes, MAGIC_BYTES.get(file.type)!)) {
-      return { valid: false, error: 'File content does not match declared type.' }
+      return { valid: false, error: 'File content does not match declared type.', code: 'content_mismatch' }
     }
   }
 
