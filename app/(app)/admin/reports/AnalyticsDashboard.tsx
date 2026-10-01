@@ -1,9 +1,16 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext, useSortable, arrayMove, rectSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import {
   AlertTriangle, TrendingUp, TrendingDown, Clock,
-  Users, Inbox, ShieldCheck, BarChart2,
+  Users, Inbox, ShieldCheck, BarChart2, ArrowDownToLine, ArrowUpFromLine, GripVertical,
 } from 'lucide-react'
 import {
   KpiCard, DonutChart, LineAreaChart, HorizBar, SlaGauge, AgingBar,
@@ -42,6 +49,16 @@ function dayRange(daysAgo: number): { from: string; to: string } {
   return { from: iso, to: iso }
 }
 
+/** DateRange spanning from `daysAgo` days back through today — for the Req.
+ *  Inflow/Outflow cards' "Last N days" windows (unlike dayRange, a span, not
+ *  one calendar day). */
+function rangeBack(daysAgo: number): { from: string; to: string } {
+  const from = new Date()
+  from.setDate(from.getDate() - daysAgo)
+  const fromIso = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`
+  return { from: fromIso, to: dayRange(0).to }
+}
+
 function StatRow({ label, value, sub, onClick }: {
   label: string; value: string; sub?: string; onClick?: () => void
 }) {
@@ -74,148 +91,184 @@ function ClickableRow({ children, onClick, className = '' }: {
   )
 }
 
+// ── Drag-and-drop widget grid ───────────────────────────────────────────────────
+// Each dashboard section is an independently reorderable grid item — dragging
+// one to a new spot shifts the others around it (CSS grid auto-flow handles
+// the visual packing once the order array changes; dnd-kit's rectSortingStrategy
+// drives the drag affordance on top of that). Order is remembered per-user via
+// localStorage, since this is a personal "arrange my view" preference, not
+// something that needs to sync across devices or be visible to other admins.
+
+type WidgetSpan = 'full' | 'half'
+type Widget = { id: string; span: WidgetSpan; node: React.ReactNode }
+
+const LAYOUT_STORAGE_PREFIX = 'ckdesk-analytics-dashboard-layout:'
+
+function loadSavedOrder(userId: string, knownIds: string[]): string[] {
+  try {
+    const raw = window.localStorage.getItem(LAYOUT_STORAGE_PREFIX + userId)
+    if (!raw) return knownIds
+    const saved = JSON.parse(raw) as string[]
+    if (!Array.isArray(saved)) return knownIds
+    // Keep only ids that still exist, then append any new widget (shipped
+    // after this person last customized their layout) at the end.
+    const kept = saved.filter((id) => knownIds.includes(id))
+    const added = knownIds.filter((id) => !kept.includes(id))
+    return [...kept, ...added]
+  } catch {
+    return knownIds
+  }
+}
+
+function SortableWidget({ id, span, children }: { id: string; span: WidgetSpan; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  }
+  return (
+    <div ref={setNodeRef} style={style} className={`relative group/widget ${span === 'full' ? 'md:col-span-2' : ''}`}>
+      <button
+        {...attributes}
+        {...listeners}
+        type="button"
+        title="Drag to move this widget"
+        aria-label="Drag to reorder widget"
+        className="absolute right-3 top-3 z-10 cursor-grab touch-none rounded-md p-1 text-muted-foreground/40 opacity-0 transition-opacity hover:bg-muted hover:text-foreground active:cursor-grabbing group-hover/widget:opacity-100"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      {children}
+    </div>
+  )
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-export function AnalyticsDashboard({ data, technicianWorkload }: { data: AnalyticsData; technicianWorkload: TechnicianWorkloadRow[] }) {
+export function AnalyticsDashboard({ data, technicianWorkload, userId }: {
+  data: AnalyticsData; technicianWorkload: TechnicianWorkloadRow[]; userId: string
+}) {
   const [drawer, setDrawer] = useState<DrawerFilter | null>(null)
   const close = useCallback(() => setDrawer(null), [])
 
   const periodLabel = data.periodLabel
 
-  return (
-    <>
-      <DetailDrawer filter={drawer} onClose={close} />
-
-      <div className="space-y-4">
-
-        {/* ── KPI Strip ─────────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <KpiCard
-            label="Open Now"
-            value={data.totalOpenNow}
-            sub="Active backlog"
-            accent="#6366F1"
-            onClick={() => setDrawer({
-              title: 'Open Requests',
-              description: 'All currently open requests',
-              status: ['open', 'in_progress', 'pending_approval'],
-            })}
-          />
-          <KpiCard
-            label="Created"
-            value={data.totalCreated}
-            sub={periodLabel}
-            accent="#06B6D4"
-            onClick={() => setDrawer({
-              title: `Created — ${periodLabel}`,
-              description: 'All requests created in the selected period',
-              createdInPeriod: true,
-              period: data.period,
-            })}
-          />
-          <KpiCard
-            label="Resolved"
-            value={data.totalResolved}
-            sub={periodLabel}
-            accent="#10B981"
-            onClick={() => setDrawer({
-              title: `Resolved — ${periodLabel}`,
-              description: 'Requests resolved in the selected period',
-              resolvedInPeriod: true,
-              period: data.period,
-              sort: 'tat_desc',
-            })}
-          />
-          <KpiCard
-            label="SLA Compliance"
-            value={data.slaComplianceRate !== null ? `${data.slaComplianceRate}%` : '—'}
-            sub="Resolution SLA"
-            accent={data.slaComplianceRate !== null && data.slaComplianceRate < 80 ? 'var(--destructive)' : 'var(--success)'}
-            onClick={() => setDrawer({
-              title: 'Currently Breached (Open)',
-              description: 'Open requests that have exceeded their SLA deadline',
-              slaBreached: true,
-            })}
-          />
-          <KpiCard
-            label="Avg Resolution"
-            value={fmtHours(data.avgResolutionHours)}
-            sub={
-              data.dataAnomalies.negativeResolutionDurationCount > 0
-                ? `TAT (resolved) · ${data.dataAnomalies.negativeResolutionDurationCount} excluded (data anomaly)`
-                : 'TAT (resolved)'
-            }
-            accent="var(--primary)"
-            onClick={() => setDrawer({
-              title: `Resolution TAT — ${periodLabel}`,
-              description: 'Resolved requests sorted by resolution time',
-              resolvedInPeriod: true,
-              period: data.period,
-              sort: 'tat_desc',
-            })}
-          />
-          <KpiCard
-            label="Currently Breached"
-            value={data.slaBreachedNow}
-            sub="Open + overdue"
-            accent="var(--destructive)"
-            danger
-            onClick={() => setDrawer({
-              title: 'Currently Breached Requests',
-              description: 'Open tickets past their SLA deadline — needs immediate action',
-              slaBreached: true,
-            })}
-          />
-        </div>
-
-        {/* ── Daily Activity: today vs yesterday, independent of the period picker ── */}
-        <Section title="Daily Activity" icon={Clock}>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="rounded-lg bg-muted/40 p-3 text-center">
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Pending Now</p>
-              <p className="text-xl font-bold text-foreground mt-0.5">{data.dailyActivity.pendingNow}</p>
-            </div>
-            {([
-              { label: 'Created', stat: data.dailyActivity.created, clickable: true, filterKey: 'createdInPeriod' as const },
-              { label: 'Closed', stat: data.dailyActivity.closed, clickable: true, filterKey: 'closedInPeriod' as const },
-              { label: 'Assigned', stat: data.dailyActivity.assigned, clickable: false, filterKey: null },
-            ]).map(({ label, stat, clickable, filterKey }) => (
-              <div key={label} className="rounded-lg border border-border p-3 space-y-1.5">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground text-center">{label}</p>
-                <div className="flex items-center justify-around">
-                  <ClickableRow
-                    className="text-center px-1 py-0.5 rounded"
-                    onClick={clickable && filterKey ? () => setDrawer({
-                      title: `${label} Today`,
-                      description: `Requests ${label.toLowerCase()} today`,
-                      [filterKey]: true,
-                      period: dayRange(0),
-                    }) : undefined}
-                  >
-                    <p className="text-lg font-bold text-foreground">{stat.today}</p>
-                    <p className="text-[10px] text-muted-foreground">Today</p>
-                  </ClickableRow>
-                  <ClickableRow
-                    className="text-center px-1 py-0.5 rounded"
-                    onClick={clickable && filterKey ? () => setDrawer({
-                      title: `${label} Yesterday`,
-                      description: `Requests ${label.toLowerCase()} yesterday`,
-                      [filterKey]: true,
-                      period: dayRange(1),
-                    }) : undefined}
-                  >
-                    <p className="text-lg font-semibold text-muted-foreground">{stat.yesterday}</p>
-                    <p className="text-[10px] text-muted-foreground">Yesterday</p>
-                  </ClickableRow>
-                </div>
+  const widgets: Widget[] = useMemo(() => {
+    const list: Widget[] = [
+      {
+        id: 'daily-activity',
+        span: 'full',
+        node: (
+          <Section title="Daily Activity" icon={Clock}>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-lg bg-muted/40 p-3 text-center">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Pending Now</p>
+                <p className="text-xl font-bold text-foreground mt-0.5">{data.dailyActivity.pendingNow}</p>
               </div>
-            ))}
-          </div>
-        </Section>
-
-        {/* ── Row 2: Volume Trend + Status Donut ──────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Section title="Volume Trend" icon={BarChart2} className="lg:col-span-2">
+              {([
+                { label: 'Created', stat: data.dailyActivity.created, clickable: true, filterKey: 'createdInPeriod' as const },
+                { label: 'Closed', stat: data.dailyActivity.closed, clickable: true, filterKey: 'closedInPeriod' as const },
+                { label: 'Assigned', stat: data.dailyActivity.assigned, clickable: false, filterKey: null },
+              ]).map(({ label, stat, clickable, filterKey }) => (
+                <div key={label} className="rounded-lg border border-border p-3 space-y-1.5">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground text-center">{label}</p>
+                  <div className="flex items-center justify-around">
+                    <ClickableRow
+                      className="text-center px-1 py-0.5 rounded"
+                      onClick={clickable && filterKey ? () => setDrawer({
+                        title: `${label} Today`,
+                        description: `Requests ${label.toLowerCase()} today`,
+                        [filterKey]: true,
+                        period: dayRange(0),
+                      }) : undefined}
+                    >
+                      <p className="text-lg font-bold text-foreground">{stat.today}</p>
+                      <p className="text-[10px] text-muted-foreground">Today</p>
+                    </ClickableRow>
+                    <ClickableRow
+                      className="text-center px-1 py-0.5 rounded"
+                      onClick={clickable && filterKey ? () => setDrawer({
+                        title: `${label} Yesterday`,
+                        description: `Requests ${label.toLowerCase()} yesterday`,
+                        [filterKey]: true,
+                        period: dayRange(1),
+                      }) : undefined}
+                    >
+                      <p className="text-lg font-semibold text-muted-foreground">{stat.yesterday}</p>
+                      <p className="text-[10px] text-muted-foreground">Yesterday</p>
+                    </ClickableRow>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Section>
+        ),
+      },
+      {
+        id: 'req-inflow',
+        span: 'half',
+        node: (
+          <Section title="Req. Inflow" icon={ArrowDownToLine}>
+            <div className="grid grid-cols-3 gap-3">
+              {([
+                { label: 'Last 24 Hours', value: data.requestFlow.inflow.last24h, daysAgo: 1 },
+                { label: 'Last 7 Days', value: data.requestFlow.inflow.last7d, daysAgo: 7 },
+                { label: 'Last 30 Days', value: data.requestFlow.inflow.last30d, daysAgo: 30 },
+              ]).map(({ label, value, daysAgo }) => (
+                <ClickableRow
+                  key={label}
+                  className="text-center py-2 rounded-lg border border-border"
+                  onClick={() => setDrawer({
+                    title: `Req. Inflow — ${label}`,
+                    description: `Requests created in the ${label.toLowerCase()}`,
+                    createdInPeriod: true,
+                    period: rangeBack(daysAgo),
+                  })}
+                >
+                  <p className="text-xl font-bold text-foreground">{value}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
+                </ClickableRow>
+              ))}
+            </div>
+          </Section>
+        ),
+      },
+      {
+        id: 'req-outflow',
+        span: 'half',
+        node: (
+          <Section title="Req. Outflow" icon={ArrowUpFromLine}>
+            <div className="grid grid-cols-3 gap-3">
+              {([
+                { label: 'Last 24 Hours', value: data.requestFlow.outflow.last24h, daysAgo: 1 },
+                { label: 'Last 7 Days', value: data.requestFlow.outflow.last7d, daysAgo: 7 },
+                { label: 'Last 30 Days', value: data.requestFlow.outflow.last30d, daysAgo: 30 },
+              ]).map(({ label, value, daysAgo }) => (
+                <ClickableRow
+                  key={label}
+                  className="text-center py-2 rounded-lg border border-border"
+                  onClick={() => setDrawer({
+                    title: `Req. Outflow — ${label}`,
+                    description: `Requests closed in the ${label.toLowerCase()}`,
+                    closedInPeriod: true,
+                    period: rangeBack(daysAgo),
+                  })}
+                >
+                  <p className="text-xl font-bold text-foreground">{value}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
+                </ClickableRow>
+              ))}
+            </div>
+          </Section>
+        ),
+      },
+      {
+        id: 'volume-trend',
+        span: 'half',
+        node: (
+          <Section title="Volume Trend" icon={BarChart2}>
             <LineAreaChart
               data={data.trend}
               height={170}
@@ -225,7 +278,12 @@ export function AnalyticsDashboard({ data, technicianWorkload }: { data: Analyti
               ]}
             />
           </Section>
-
+        ),
+      },
+      {
+        id: 'status-distribution',
+        span: 'half',
+        node: (
           <Section title="Status Distribution" icon={Inbox}>
             <DonutChart
               data={data.byStatus.map((s) => ({
@@ -266,10 +324,12 @@ export function AnalyticsDashboard({ data, technicianWorkload }: { data: Analyti
               ))}
             </div>
           </Section>
-        </div>
-
-        {/* ── Row 3: SLA Performance + Priority Breakdown ──────────────────────── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        ),
+      },
+      {
+        id: 'sla-performance',
+        span: 'half',
+        node: (
           <Section title="SLA Performance" icon={ShieldCheck}>
             <ClickableRow onClick={() => setDrawer({
               title: 'Currently Breached (Resolution)',
@@ -321,7 +381,12 @@ export function AnalyticsDashboard({ data, technicianWorkload }: { data: Analyti
               />
             </div>
           </Section>
-
+        ),
+      },
+      {
+        id: 'priority-breakdown',
+        span: 'half',
+        node: (
           <Section title="Priority Breakdown" icon={AlertTriangle}>
             <div className="space-y-1">
               {data.byPriority.length === 0 && (
@@ -368,63 +433,75 @@ export function AnalyticsDashboard({ data, technicianWorkload }: { data: Analyti
               )}
             </div>
           </Section>
-        </div>
+        ),
+      },
+      {
+        id: 'technician-group-performance',
+        span: 'full',
+        node: (
+          <Section title="Technician Group Performance" icon={Users}>
+            {data.byTeam.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No technician group data available</p>
+            ) : (
+              <div className="overflow-x-auto -mx-1">
+                <table className="w-full text-sm min-w-[500px]">
+                  <thead>
+                    <tr className="border-b border-border text-left">
+                      {['Group', 'Volume', 'Resolved', 'SLA %', 'Avg TAT', 'Open Now'].map((h) => (
+                        <th key={h} className="pb-2 pr-4 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground last:pr-0">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.byTeam.map((row) => {
+                      const slaColor = row.slaRate === null ? '' : row.slaRate >= 90 ? 'text-green-600' : row.slaRate >= 75 ? 'text-amber-600' : 'text-red-600'
+                      return (
+                        <tr
+                          key={row.teamId}
+                          onClick={() => setDrawer({
+                            title: row.teamName,
+                            description: `All requests handled by ${row.teamName}`,
+                            teamId: row.teamId,
+                          })}
+                          className="border-b border-border/50 last:border-0 cursor-pointer hover:bg-muted/40 transition-colors rounded"
+                        >
+                          <td className="py-2.5 pr-4 font-medium">{row.teamName}</td>
+                          <td className="py-2.5 pr-4 tabular-nums">{row.volume}</td>
+                          <td className="py-2.5 pr-4 tabular-nums">{row.resolved}</td>
+                          <td className={`py-2.5 pr-4 tabular-nums font-semibold ${slaColor}`}>
+                            {row.slaRate !== null ? `${row.slaRate}%` : '—'}
+                          </td>
+                          <td className="py-2.5 pr-4 tabular-nums text-muted-foreground">{fmtHours(row.avgTatHours)}</td>
+                          <td className="py-2.5 tabular-nums">{row.openNow}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Section>
+        ),
+      },
+    ]
 
-        {/* ── Row 4: Team Performance ──────────────────────────────────────── */}
-        <Section title="Technician Group Performance" icon={Users}>
-          {data.byTeam.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No technician group data available</p>
-          ) : (
-            <div className="overflow-x-auto -mx-1">
-              <table className="w-full text-sm min-w-[500px]">
-                <thead>
-                  <tr className="border-b border-border text-left">
-                    {['Group', 'Volume', 'Resolved', 'SLA %', 'Avg TAT', 'Open Now'].map((h) => (
-                      <th key={h} className="pb-2 pr-4 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground last:pr-0">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.byTeam.map((row) => {
-                    const slaColor = row.slaRate === null ? '' : row.slaRate >= 90 ? 'text-green-600' : row.slaRate >= 75 ? 'text-amber-600' : 'text-red-600'
-                    return (
-                      <tr
-                        key={row.teamId}
-                        onClick={() => setDrawer({
-                          title: row.teamName,
-                          description: `All requests handled by ${row.teamName}`,
-                          teamId: row.teamId,
-                        })}
-                        className="border-b border-border/50 last:border-0 cursor-pointer hover:bg-muted/40 transition-colors rounded"
-                      >
-                        <td className="py-2.5 pr-4 font-medium">{row.teamName}</td>
-                        <td className="py-2.5 pr-4 tabular-nums">{row.volume}</td>
-                        <td className="py-2.5 pr-4 tabular-nums">{row.resolved}</td>
-                        <td className={`py-2.5 pr-4 tabular-nums font-semibold ${slaColor}`}>
-                          {row.slaRate !== null ? `${row.slaRate}%` : '—'}
-                        </td>
-                        <td className="py-2.5 pr-4 tabular-nums text-muted-foreground">{fmtHours(row.avgTatHours)}</td>
-                        <td className="py-2.5 tabular-nums">{row.openNow}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Section>
+    // Moved here from Home; scoped by viewer (a manager only ever gets their
+    // own team(s), admin/owner get every team — see lib/reporting/access.ts).
+    if (technicianWorkload.length > 0) {
+      list.push({
+        id: 'requests-by-technician',
+        span: 'full',
+        node: <TechnicianWorkloadCard rows={technicianWorkload} statuses={ACTIVE_TECH_STATUSES} />,
+      })
+    }
 
-        {/* ── Row 4b: Requests by Technician — moved here from Home; scoped by
-             viewer (a manager only ever gets their own team(s), admin/owner
-             get every team — see lib/reporting/access.ts) ─────────────────── */}
-        {technicianWorkload.length > 0 && (
-          <TechnicianWorkloadCard rows={technicianWorkload} statuses={ACTIVE_TECH_STATUSES} />
-        )}
-
-        {/* ── Row 5: Top Services + Backlog Aging ─────────────────────────── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    list.push(
+      {
+        id: 'top-services',
+        span: 'half',
+        node: (
           <Section title="Top Services by Volume" icon={BarChart2}>
             <HorizBar
               data={data.topServices.map((s, i) => ({
@@ -440,7 +517,12 @@ export function AnalyticsDashboard({ data, technicianWorkload }: { data: Analyti
               }))}
             />
           </Section>
-
+        ),
+      },
+      {
+        id: 'backlog-aging',
+        span: 'half',
+        node: (
           <Section title="Backlog Aging (Open Tickets)" icon={Clock}>
             <AgingBar aging={data.backlogAging} />
             <Divider />
@@ -480,12 +562,12 @@ export function AnalyticsDashboard({ data, technicianWorkload }: { data: Analyti
               </ClickableRow>
             </div>
           </Section>
-        </div>
-
-        {/* ── Row 6: Agent Leaderboard + Approval Analytics ─────────────────── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-          {/* Agent leaderboard */}
+        ),
+      },
+      {
+        id: 'agent-leaderboard',
+        span: 'half',
+        node: (
           <Section title="Agent Leaderboard" icon={Users}>
             {data.agentLeaderboard.length === 0 ? (
               <p className="text-xs text-muted-foreground">No agent data</p>
@@ -515,8 +597,12 @@ export function AnalyticsDashboard({ data, technicianWorkload }: { data: Analyti
               </div>
             )}
           </Section>
-
-          {/* Approval analytics */}
+        ),
+      },
+      {
+        id: 'approval-analytics',
+        span: 'half',
+        node: (
           <Section title="Approval Analytics" icon={ShieldCheck}>
             {/* Funnel bar — Approved / Rejected / Pending */}
             {(() => {
@@ -618,7 +704,155 @@ export function AnalyticsDashboard({ data, technicianWorkload }: { data: Analyti
               </ClickableRow>
             </div>
           </Section>
+        ),
+      },
+    )
+
+    return list
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, technicianWorkload, periodLabel])
+
+  const widgetById = useMemo(() => new Map(widgets.map((w) => [w.id, w])), [widgets])
+  const defaultOrder = useMemo(() => widgets.map((w) => w.id), [widgets])
+  const [order, setOrder] = useState<string[]>(defaultOrder)
+
+  // Reconcile with localStorage after mount (client-only; avoids an SSR/
+  // hydration mismatch) and whenever the available widgets themselves change
+  // (e.g. technician-workload card appearing/disappearing with the data).
+  useEffect(() => {
+    setOrder(loadSavedOrder(userId, defaultOrder))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, defaultOrder.join(',')])
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    setOrder((prev) => {
+      const oldIndex = prev.indexOf(String(active.id))
+      const newIndex = prev.indexOf(String(over.id))
+      if (oldIndex === -1 || newIndex === -1) return prev
+      const next = arrayMove(prev, oldIndex, newIndex)
+      try {
+        window.localStorage.setItem(LAYOUT_STORAGE_PREFIX + userId, JSON.stringify(next))
+      } catch {
+        // Private browsing / storage disabled — reordering still works for
+        // this session, it just won't be remembered next visit.
+      }
+      return next
+    })
+  }
+
+  return (
+    <>
+      <DetailDrawer filter={drawer} onClose={close} />
+
+      <div className="space-y-4">
+
+        {/* ── KPI Strip (fixed — a row of small stat tiles, not a movable widget) ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <KpiCard
+            label="Open Now"
+            value={data.totalOpenNow}
+            sub="Active backlog"
+            accent="#6366F1"
+            onClick={() => setDrawer({
+              title: 'Open Requests',
+              description: 'All currently open requests',
+              status: ['open', 'in_progress', 'pending_approval'],
+            })}
+          />
+          <KpiCard
+            label="Created"
+            value={data.totalCreated}
+            sub={periodLabel}
+            accent="#06B6D4"
+            onClick={() => setDrawer({
+              title: `Created — ${periodLabel}`,
+              description: 'All requests created in the selected period',
+              createdInPeriod: true,
+              period: data.period,
+            })}
+          />
+          <KpiCard
+            label="Resolved"
+            value={data.totalResolved}
+            sub={periodLabel}
+            accent="#10B981"
+            onClick={() => setDrawer({
+              title: `Resolved — ${periodLabel}`,
+              description: 'Requests resolved in the selected period',
+              resolvedInPeriod: true,
+              period: data.period,
+              sort: 'tat_desc',
+            })}
+          />
+          <KpiCard
+            label="SLA Compliance"
+            value={data.slaComplianceRate !== null ? `${data.slaComplianceRate}%` : '—'}
+            sub="Resolution SLA"
+            accent={data.slaComplianceRate !== null && data.slaComplianceRate < 80 ? 'var(--destructive)' : 'var(--success)'}
+            onClick={() => setDrawer({
+              title: 'Currently Breached (Open)',
+              description: 'Open requests that have exceeded their SLA deadline',
+              slaBreached: true,
+            })}
+          />
+          <KpiCard
+            label="Avg Resolution"
+            value={fmtHours(data.avgResolutionHours)}
+            sub={
+              data.dataAnomalies.negativeResolutionDurationCount > 0
+                ? `TAT (resolved) · ${data.dataAnomalies.negativeResolutionDurationCount} excluded (data anomaly)`
+                : 'TAT (resolved)'
+            }
+            accent="var(--primary)"
+            onClick={() => setDrawer({
+              title: `Resolution TAT — ${periodLabel}`,
+              description: 'Resolved requests sorted by resolution time',
+              resolvedInPeriod: true,
+              period: data.period,
+              sort: 'tat_desc',
+            })}
+          />
+          <KpiCard
+            label="Currently Breached"
+            value={data.slaBreachedNow}
+            sub="Open + overdue"
+            accent="var(--destructive)"
+            danger
+            onClick={() => setDrawer({
+              title: 'Currently Breached Requests',
+              description: 'Open tickets past their SLA deadline — needs immediate action',
+              slaBreached: true,
+            })}
+          />
         </div>
+
+        {/* ── Reorderable widgets — drag the grip in a widget's top-right corner
+             to move it; everything else shifts to make room. ─────────────── */}
+        {/* A fixed id, not dnd-kit's default auto-incrementing one — the default
+            is a module-level counter, which lands on a different number on the
+            server vs. the client (especially under Strict Mode's double-invoke),
+            producing a hydration-mismatched aria-describedby that silently broke
+            this whole subtree's reactivity (confirmed via React's hydration
+            warning) until pinned here. */}
+        <DndContext id="analytics-dashboard" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={order} strategy={rectSortingStrategy}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {order.map((id) => {
+                const widget = widgetById.get(id)
+                if (!widget) return null
+                return (
+                  <SortableWidget key={id} id={id} span={widget.span}>
+                    {widget.node}
+                  </SortableWidget>
+                )
+              })}
+            </div>
+          </SortableContext>
+        </DndContext>
       </div>
     </>
   )

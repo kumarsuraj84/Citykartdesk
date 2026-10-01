@@ -261,7 +261,7 @@ export function HorizBar({
           onClick={d.onClick}
           className={`flex items-center gap-2 ${d.onClick ? 'cursor-pointer group hover:bg-muted/40 rounded px-1 -mx-1 py-0.5 transition-colors' : ''}`}
         >
-          <span className="w-28 shrink-0 text-xs text-muted-foreground truncate text-right">{d.label}</span>
+          <span title={d.label} className="w-28 sm:w-40 shrink-0 text-xs text-muted-foreground truncate text-right">{d.label}</span>
           <div className="flex-1 rounded-full bg-muted h-2.5 overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-500"

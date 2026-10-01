@@ -161,6 +161,9 @@ export type AnalyticsData = {
   backlogAging: BacklogAging
   // Today vs yesterday activity — independent of the period selector above
   dailyActivity: DailyActivity
+  // Rolling 24h/7d/30d inflow (created) and outflow (closed) — also
+  // independent of the period selector above
+  requestFlow: RequestFlow
   // Task KPIs
   tasksOpen: number
   tasksOverdue: number
@@ -174,6 +177,13 @@ export type DailyActivity = {
   closed: DailyStat
   assigned: DailyStat
 }
+
+// Cumulative rolling windows, each counting everything the shorter window
+// already counts plus more (last7d includes last24h's requests, last30d
+// includes last7d's) — matching how Zoho's own "Req. Inflow"/"Req. Outflow"
+// cards read, rather than three mutually-exclusive buckets.
+export type RollingStat = { last24h: number; last7d: number; last30d: number }
+export type RequestFlow = { inflow: RollingStat; outflow: RollingStat }
 
 // ── Main query ─────────────────────────────────────────────────────────────────
 
@@ -206,6 +216,21 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
   yesterdayStart.setDate(yesterdayStart.getDate() - 1)
   const yesterdayStartIso = yesterdayStart.toISOString()
   const todayStartIso = todayStart.toISOString()
+
+  // Rolling windows for the Req. Inflow/Outflow cards — also absolute, not
+  // scoped to the period selector. Calendar-day granularity (midnight N days
+  // ago through now), matching the Daily Activity widget's own convention —
+  // this keeps each card's headline number consistent with what its
+  // click-through drawer shows (same day boundaries both places), rather
+  // than a millisecond-precise rolling window the drawer can't reproduce.
+  const daysAgoMidnight = (days: number) => {
+    const d = new Date(todayStart)
+    d.setDate(d.getDate() - days)
+    return d
+  }
+  const last24hStartIso = yesterdayStart.toISOString() // "last 24h" ≈ today + yesterday
+  const last7dStartIso = daysAgoMidnight(7).toISOString()
+  const last30dStartIso = daysAgoMidnight(30).toISOString()
 
   // Run all fetches in parallel
   const [
@@ -272,9 +297,11 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
       .select('id, status, priority, due_date, assignee_id, team_id, created_at, updated_at')
       .eq('org_id', orgId),
 
-    // Daily Activity widget — created/closed/assigned, today + yesterday only
-    admin.from('requests').select('created_at').eq('org_id', orgId).gte('created_at', yesterdayStartIso),
-    admin.from('requests').select('closed_at').eq('org_id', orgId).not('closed_at', 'is', null).gte('closed_at', yesterdayStartIso),
+    // Daily Activity (today/yesterday) + Req. Inflow/Outflow (24h/7d/30d) both
+    // bucket off these same rows — fetched back to the widest window either
+    // needs (30 days) so there's one created/closed query, not two.
+    admin.from('requests').select('created_at').eq('org_id', orgId).gte('created_at', last30dStartIso),
+    admin.from('requests').select('closed_at').eq('org_id', orgId).not('closed_at', 'is', null).gte('closed_at', last30dStartIso),
     orgRequestIds.length > 0
       ? admin.from('request_activity').select('created_at').eq('action', 'assigned').in('request_id', orgRequestIds).gte('created_at', yesterdayStartIso)
       : Promise.resolve({ data: [] }),
@@ -511,6 +538,22 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
     assigned: bucketByDay(((dailyAssignedRows ?? []) as { created_at: string }[]).map((r) => ({ at: r.created_at }))),
   }
 
+  // ── Req. Inflow / Outflow (rolling 24h/7d/30d, cumulative) ─────────────────
+
+  const bucketByRollingWindow = (rows: { at: string }[]): RollingStat => {
+    let last24h = 0, last7d = 0, last30d = 0
+    for (const r of rows) {
+      if (r.at >= last30dStartIso) last30d++
+      if (r.at >= last7dStartIso) last7d++
+      if (r.at >= last24hStartIso) last24h++
+    }
+    return { last24h, last7d, last30d }
+  }
+  const requestFlow: RequestFlow = {
+    inflow: bucketByRollingWindow(((dailyCreatedRows ?? []) as { created_at: string }[]).map((r) => ({ at: r.created_at }))),
+    outflow: bucketByRollingWindow(((dailyClosedRows ?? []) as { closed_at: string }[]).map((r) => ({ at: r.closed_at }))),
+  }
+
   // ── Task KPIs ─────────────────────────────────────────────────────────────
 
   const tasksOpen = tasksArr.filter((t) => !['done', 'cancelled'].includes(t.status)).length
@@ -550,6 +593,7 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
     trend,
     backlogAging,
     dailyActivity,
+    requestFlow,
     tasksOpen,
     tasksOverdue,
     tasksDoneInPeriod,
