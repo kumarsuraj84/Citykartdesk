@@ -468,7 +468,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
           <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
             <p className="text-sm font-semibold text-orange-900">Action needed</p>
             <p className="mt-0.5 text-xs text-orange-700">
-              The team is waiting for your response. Add a reply below to continue.
+              The technician group is waiting for your response. Add a reply below to continue.
             </p>
           </div>
         )}
@@ -557,7 +557,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
         </h3>
         <div className="rounded-lg border border-border grid grid-cols-2 divide-x divide-border overflow-hidden">
           <TicketCell label="Service"     value={request.service.name} />
-          <TicketCell label="Team"        value={request.team.name} />
+          <TicketCell label="Technician Group" value={request.team.name} />
           <TicketCell label="Requester"   value={request.requester.full_name} className="border-t border-border" />
           <TicketCell
             label="Status"

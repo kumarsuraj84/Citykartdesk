@@ -478,7 +478,7 @@ function ServiceModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                Team <span className="text-destructive">*</span>
+                Technician Group <span className="text-destructive">*</span>
               </label>
               <select
                 value={teamId}

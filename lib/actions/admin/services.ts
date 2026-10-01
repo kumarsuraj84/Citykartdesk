@@ -196,7 +196,7 @@ export async function createService(
   if ('error' in guard) return guard
 
   if (!data.name?.trim()) return { error: 'Name is required.' }
-  if (!data.team_id) return { error: 'Team is required.' }
+  if (!data.team_id) return { error: 'Technician group is required.' }
 
   const supabase = await createClient()
 

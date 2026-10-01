@@ -64,7 +64,7 @@ const TASK_PRIORITY: FieldOption[] = [
 ]
 const TASK_TYPE: FieldOption[] = [
   { value: 'personal', label: 'Personal' },
-  { value: 'team', label: 'Team' },
+  { value: 'team', label: 'Technician Group' },
 ]
 const PROJECT_STATUS: FieldOption[] = [
   { value: 'not_started', label: 'Not Started' },
@@ -124,7 +124,7 @@ export const REPORT_ENTITIES: Record<EntityKey, ReportEntityDef> = {
       { key: 'category_name', label: 'Category', type: 'string' },
       { key: 'sub_category_name', label: 'Sub Category', type: 'string' },
       { key: 'template_name', label: 'Template', type: 'string' },
-      { key: 'team_name', label: 'Team', type: 'string' },
+      { key: 'team_name', label: 'Technician Group', type: 'string' },
       { key: 'requester_name', label: 'Requester', type: 'string' },
       { key: 'assignee_name', label: 'Technician', type: 'string' },
       { key: 'project_name', label: 'Project', type: 'string' },
@@ -184,7 +184,7 @@ export const REPORT_ENTITIES: Record<EntityKey, ReportEntityDef> = {
       { key: 'task_type', label: 'Type', type: 'enum', options: TASK_TYPE },
       { key: 'assignee_name', label: 'Assignee', type: 'string' },
       { key: 'created_by_name', label: 'Created By', type: 'string' },
-      { key: 'team_name', label: 'Team', type: 'string' },
+      { key: 'team_name', label: 'Technician Group', type: 'string' },
       { key: 'project_name', label: 'Project', type: 'string' },
       { key: 'milestone_name', label: 'Enhancement', type: 'string' },
       { key: 'linked_request_no', label: 'Linked Request', type: 'string' },
@@ -207,7 +207,7 @@ export const REPORT_ENTITIES: Record<EntityKey, ReportEntityDef> = {
       { key: 'priority', label: 'Priority', type: 'enum', options: PROJECT_PRIORITY },
       { key: 'owner_name', label: 'Tech Owner', type: 'string' },
       { key: 'functional_owner_name', label: 'Functional Owner', type: 'string' },
-      { key: 'team_name', label: 'Team', type: 'string' },
+      { key: 'team_name', label: 'Technician Group', type: 'string' },
       { key: 'created_by_name', label: 'Created By', type: 'string' },
       { key: 'start_date', label: 'Start Date', type: 'date' },
       { key: 'target_date', label: 'Target Date', type: 'date' },

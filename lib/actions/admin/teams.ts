@@ -34,7 +34,7 @@ function prefixify(name: string): string {
 export async function createTeam(name: string): Promise<ActionResult<{ id: string }>> {
   const guard = await requireAdmin()
   if (guard.error) return { error: guard.error }
-  if (!name.trim()) return { error: 'Team name is required.' }
+  if (!name.trim()) return { error: 'Technician group name is required.' }
 
   const admin = createAdminClient()
   const orgId = guard.profile!.org_id
@@ -48,7 +48,7 @@ export async function createTeam(name: string): Promise<ActionResult<{ id: strin
     .limit(1)
     .maybeSingle()
 
-  if (!department) return { error: 'Create a department first before adding teams.' }
+  if (!department) return { error: 'Create a department first before adding technician groups.' }
 
   const trimmed = name.trim()
   const baseSlug = slugify(trimmed) || `team-${Date.now()}`
@@ -67,7 +67,7 @@ export async function createTeam(name: string): Promise<ActionResult<{ id: strin
     .single()
 
   if (error) {
-    if (error.code === '23505') return { error: 'A team with a similar name already exists — try a different name.' }
+    if (error.code === '23505') return { error: 'A technician group with a similar name already exists — try a different name.' }
     return { error: error.message }
   }
 
@@ -80,7 +80,7 @@ export async function createTeam(name: string): Promise<ActionResult<{ id: strin
 export async function updateTeam(id: string, name: string): Promise<ActionResult> {
   const guard = await requireAdmin()
   if (guard.error) return { error: guard.error }
-  if (!name.trim()) return { error: 'Team name is required.' }
+  if (!name.trim()) return { error: 'Technician group name is required.' }
 
   const admin = createAdminClient()
 
@@ -105,7 +105,7 @@ export async function deleteTeam(id: string): Promise<ActionResult> {
   const admin = createAdminClient()
 
   const { data: team } = await admin.from('teams').select('id').eq('id', id).eq('org_id', guard.profile!.org_id!).maybeSingle()
-  if (!team) return { error: 'Team not found.' }
+  if (!team) return { error: 'Technician group not found.' }
 
   // Check for members
   const { count: memberCount } = await admin
@@ -114,7 +114,7 @@ export async function deleteTeam(id: string): Promise<ActionResult> {
     .eq('team_id', id)
 
   if (memberCount && memberCount > 0) {
-    return { error: 'Cannot delete a team that still has members.' }
+    return { error: 'Cannot delete a technician group that still has members.' }
   }
 
   // Check for pending requests
@@ -125,7 +125,7 @@ export async function deleteTeam(id: string): Promise<ActionResult> {
     .not('status', 'in', '("resolved","closed","cancelled")')
 
   if (requestCount && requestCount > 0) {
-    return { error: 'Cannot delete a team with open requests.' }
+    return { error: 'Cannot delete a technician group with open requests.' }
   }
 
   const { error } = await admin.from('teams').delete().eq('id', id).eq('org_id', guard.profile!.org_id!)
@@ -153,7 +153,7 @@ export async function addTeamMember(teamId: string, userId: string): Promise<Act
     .eq('org_id', guard.profile!.org_id!)
     .maybeSingle()
 
-  if (!team?.org_id) return { error: 'Team not found or has no organization context.' }
+  if (!team?.org_id) return { error: 'Technician group not found or has no organization context.' }
 
   const { error } = await admin
     .from('team_members')

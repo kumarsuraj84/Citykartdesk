@@ -442,7 +442,7 @@ async function DashboardBody({
                         </div>
                         <div className="flex-1">
                           <p className="text-[12px] font-bold text-warning">{needsAttentionCount} request{needsAttentionCount > 1 ? 's' : ''} waiting for your response</p>
-                          <p className="text-[11px] text-warning/80">The team is waiting on you to move these forward</p>
+                          <p className="text-[11px] text-warning/80">The technician group is waiting on you to move these forward</p>
                         </div>
                         <ArrowRight className="h-4 w-4 text-warning/60 shrink-0" />
                       </Link>
@@ -457,7 +457,7 @@ async function DashboardBody({
                     <KpiCard label="Needs Reply"  value={needsAttentionCount} sublabel="Waiting on user"   accent="#F97316" href="/requests?status=waiting_user" />
                     <KpiCard label="Resolved"     value={resolvedCount}       sublabel="All time"          accent="#10B981" href="/requests?status=resolved" />
                   </>) : isManager ? (<>
-                    <KpiCard label="Team Open"        value={teamRequestsOpen}        sublabel="Active tickets"    accent="#1B2559" href="/requests" />
+                    <KpiCard label="Tech Group Open"  value={teamRequestsOpen}        sublabel="Active tickets"    accent="#1B2559" href="/requests" />
                     <KpiCard label="Currently Breached"     value={teamRequestsSlaBreached} sublabel="Overdue resolution" accent="#EF4444" href="/requests?sla=breached" danger />
                     <KpiCard label="Pending Approval" value={pendingApprovalCount}    sublabel="Awaiting review"   accent="#8B5CF6" href="/approvals" />
                     <KpiCard label="My Open"          value={myOpenCount}             sublabel="My requests"       accent="#10B981" href="/requests?requester=me" />
@@ -502,7 +502,7 @@ async function DashboardBody({
                     <div className="px-4 py-8 text-center">
                       <Inbox className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
                       <p className="text-[13px] font-medium text-foreground">No open requests</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 mb-3">Submit a request to get help from your team</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 mb-3">Submit a request to get help from your technician group</p>
                       <Link href="/services"
                         className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-semibold text-primary-foreground hover:opacity-90 transition-opacity">
                         <LayoutGrid className="h-3.5 w-3.5" />
@@ -603,7 +603,7 @@ async function DashboardBody({
                         <Users className="h-4 w-4 text-info" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Team Open Tasks</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Technician Group Open Tasks</p>
                         <p className="text-[22px] font-extrabold text-foreground leading-tight tabular-nums">{teamTasksOpen}</p>
                       </div>
                       <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -616,7 +616,7 @@ async function DashboardBody({
                         <AlertTriangle className={`h-4 w-4 ${teamTasksOverdue > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
                       </div>
                       <div className="flex-1">
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Team Overdue</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Technician Group Overdue</p>
                         <p className={`text-[22px] font-extrabold leading-tight tabular-nums ${teamTasksOverdue > 0 ? 'text-destructive' : 'text-foreground'}`}>
                           {teamTasksOverdue}
                         </p>
@@ -762,7 +762,7 @@ async function DashboardBody({
                   <QuickAction href="/tasks?filter=overdue"   icon={AlertTriangle} label="Overdue Tasks" sublabel="Tasks past due date" />
                   <QuickAction href="/tasks?filter=due_today" icon={CalendarClock} label="Due Today"     sublabel="Tasks due by end of day" />
                   {isManager && (
-                    <QuickAction href="/tasks?filter=team"    icon={Users}         label="Team Tasks"    sublabel="All tasks across your team" />
+                    <QuickAction href="/tasks?filter=team"    icon={Users}         label="Technician Group Tasks"    sublabel="All tasks across your technician group" />
                   )}
                 </div>
               </section>
@@ -805,7 +805,7 @@ async function DashboardBody({
                 <section>
                   <div className="flex items-center gap-1.5 mb-2">
                     <Users className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Team Tasks</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Technician Group Tasks</span>
                   </div>
                   <div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
                     <div className="flex items-center justify-between px-3 py-2.5">
@@ -820,7 +820,7 @@ async function DashboardBody({
                     </div>
                     <div className="px-3 py-2.5">
                       <Link href="/tasks?filter=team" className="text-[11px] font-semibold text-primary hover:underline">
-                        View team tasks →
+                        View technician group tasks →
                       </Link>
                     </div>
                   </div>

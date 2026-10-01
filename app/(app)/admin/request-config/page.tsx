@@ -263,7 +263,7 @@ export default async function RequestConfigPage({
           <div>
             <h2 className="text-sm font-semibold text-foreground">General Settings</h2>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Global platform behaviour settings applied across all teams and services.
+              Global platform behaviour settings applied across all technician groups and services.
             </p>
           </div>
           <AppSettingsClient autoCloseDays={autoCloseDays} />

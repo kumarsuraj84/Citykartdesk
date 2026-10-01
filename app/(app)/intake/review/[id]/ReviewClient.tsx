@@ -305,7 +305,7 @@ export function ReviewClient({
     if (p.type !== 'ignore' && p.type !== 'informational') {
       if (!workTitle.trim()) { toast.error('Title is required.'); return }
       if ((p.type === 'request' || p.type === 'approval') && !workServiceId) { toast.error('Select a service.'); return }
-      if (!workTeamId) { toast.error('Select a team.'); return }
+      if (!workTeamId) { toast.error('Select a technician group.'); return }
       // Client-side preview of the exact same gate createRequestCore() will
       // run server-side (see requesterCompletion above) — catches it here
       // with field-level detail instead of a single generic error after a
@@ -479,7 +479,7 @@ export function ReviewClient({
         {showNoteBox && (
           <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Internal note</p>
-            <textarea value={noteBody} onChange={(e) => setNoteBody(e.target.value)} rows={3} placeholder="Visible only to your team…" className={`${selCls} bg-white`} />
+            <textarea value={noteBody} onChange={(e) => setNoteBody(e.target.value)} rows={3} placeholder="Visible only to your technician group…" className={`${selCls} bg-white`} />
             <div className="flex gap-2">
               <button onClick={handleAddNote} disabled={isPending || !noteBody.trim()}
                 className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50">Save note</button>
@@ -666,7 +666,7 @@ export function ReviewClient({
             </Field>
           </div>
           <Field label="Decision notes">
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} disabled={!isEditingClassification && isTerminal} rows={2} placeholder="Optional context for the team…" className={`${selCls} resize-none`} />
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} disabled={!isEditingClassification && isTerminal} rows={2} placeholder="Optional context for the technician group…" className={`${selCls} resize-none`} />
           </Field>
         </div>
 
@@ -716,9 +716,9 @@ export function ReviewClient({
                 onChange={(fieldId, value) => setReviewerFieldValues((prev) => ({ ...prev, [fieldId]: value }))}
               />
             )}
-            <Field label="Team">
+            <Field label="Technician Group">
               <select value={workTeamId} onChange={(e) => setWorkTeamId(e.target.value)} className={selCls}>
-                {teams.length === 0 ? <option value="">No teams</option> : teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {teams.length === 0 ? <option value="">No technician groups</option> : teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </Field>
             {(type === 'request' || type === 'approval') && !requesterFormReady && (

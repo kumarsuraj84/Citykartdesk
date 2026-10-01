@@ -763,7 +763,7 @@ export async function assignRequest(
     isManager ||
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
 
-  if (!isOnTeam) return { error: 'Not authorized to assign requests for this team.' }
+  if (!isOnTeam) return { error: 'Not authorized to assign requests for this technician group.' }
 
   // A plain technician (not a manager+) can only hand a ticket to a teammate
   // on the same team — never leave it unassigned, and never forward it to
@@ -771,7 +771,7 @@ export async function assignRequest(
   // anyone" picker for legitimate cross-team escalation.
   if (!isManager) {
     if (!assigneeId) {
-      return { error: 'Technicians cannot unassign a ticket — assign it to a teammate instead.' }
+      return { error: 'Technicians cannot unassign a ticket — assign it to a technician group member instead.' }
     }
     const { count } = await supabase
       .from('team_members')
@@ -779,7 +779,7 @@ export async function assignRequest(
       .eq('team_id', request.team_id)
       .eq('user_id', assigneeId)
     if (!count) {
-      return { error: 'You can only assign this ticket to a teammate on the same team.' }
+      return { error: 'You can only assign this ticket to a member of the same technician group.' }
     }
   }
 
@@ -1074,7 +1074,7 @@ export async function addCollaborator(
     profile.role === 'platform_owner' ||
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
 
-  if (!isOnTeam) return { error: 'Not authorized to add collaborators for this team.' }
+  if (!isOnTeam) return { error: 'Not authorized to add collaborators for this technician group.' }
 
   if (request.assigned_to === userId) {
     return { error: 'Technician is already the primary owner.' }
@@ -1446,7 +1446,7 @@ export async function changePriority(
     profile.role === 'platform_owner' ||
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
 
-  if (!isOnTeam) return { error: 'Not authorized to change priority for this team.' }
+  if (!isOnTeam) return { error: 'Not authorized to change priority for this technician group.' }
 
   const oldPriority = request.priority as RequestPriority
   if (oldPriority === newPriority) return {}
@@ -1563,7 +1563,7 @@ export async function reclassifyRequest(
 
   const isOnTeam = isManagerTier
 
-  if (!isOnTeam) return { error: 'Not authorized to reclassify requests for this team.' }
+  if (!isOnTeam) return { error: 'Not authorized to reclassify requests for this technician group.' }
 
   if (request.service_id === newServiceId) return {}
 
@@ -1706,7 +1706,7 @@ export async function updateRequestCategory(
     profile.role === 'platform_owner' ||
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
 
-  if (!isOnTeam) return { error: 'Not authorized to reclassify requests for this team.' }
+  if (!isOnTeam) return { error: 'Not authorized to reclassify requests for this technician group.' }
 
   if (request.sub_category_id === subCategoryId) return {}
 

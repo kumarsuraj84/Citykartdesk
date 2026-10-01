@@ -178,7 +178,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
         title="Agent Requests"
         description={
           rawTab === 'mine' ? 'Tickets assigned to you'
-          : 'Team queue — all incoming requests'
+          : 'Technician group queue — all incoming requests'
         }
         actions={
           <Link href="/requests" className="rounded-lg border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
@@ -191,7 +191,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
       <div className="flex gap-0.5 rounded-md border border-border bg-muted/50 p-0.5 w-fit">
         {([
           { value: 'mine', label: 'My Requests' },
-          { value: 'team', label: 'Team Queue' },
+          { value: 'team', label: 'Technician Group Queue' },
         ] as { value: 'mine' | 'team'; label: string }[]).map(({ value: v, label }) => (
           <Link
             key={v}

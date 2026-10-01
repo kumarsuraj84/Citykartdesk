@@ -437,7 +437,7 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
       .eq('id', teamIdOverride)
       .eq('org_id', orgId)
       .maybeSingle()
-    if (!overrideTeam) return { error: 'Selected team not found.' }
+    if (!overrideTeam) return { error: 'Selected technician group not found.' }
     teamId = teamIdOverride
   }
 

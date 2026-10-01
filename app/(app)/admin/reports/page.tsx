@@ -133,11 +133,11 @@ export default async function ReportsPage({
           <h1 className="text-xl font-bold tracking-tight text-foreground">Analytics & Reports</h1>
           <p className="text-sm text-muted-foreground">
             {hasRequests && hasTasks
-              ? 'KPIs, SLA, TAT, team performance — per module'
+              ? 'KPIs, SLA, TAT, technician group performance — per module'
               : hasRequests
-              ? 'Request KPIs, SLA compliance, TAT, team performance'
+              ? 'Request KPIs, SLA compliance, TAT, technician group performance'
               : hasTasks
-              ? 'Task KPIs, completion rates, team and agent performance'
+              ? 'Task KPIs, completion rates, technician group and agent performance'
               : 'Export and scheduled report management'}
           </p>
         </div>

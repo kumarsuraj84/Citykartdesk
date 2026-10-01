@@ -181,7 +181,7 @@ export async function approveAndCreate(
       admin.from('intake_classifications').select('entities').eq('message_id', review.message_id).eq('is_final', true).maybeSingle(),
     ])
     if (!svc) return { ok: false, error: 'Selected service not found.' }
-    if (!team) return { ok: false, error: 'Selected team not found.' }
+    if (!team) return { ok: false, error: 'Selected technician group not found.' }
 
     // Autofill the service's fields from extracted entities + the email text,
     // then layer the reviewer's own answers for whatever the autofill
@@ -332,7 +332,7 @@ export async function approveAndCreate(
       .select('id')
       .eq('id', payload.team_id)
       .maybeSingle()
-    if (!team) return { ok: false, error: 'Selected team not found.' }
+    if (!team) return { ok: false, error: 'Selected technician group not found.' }
 
     const taskPriority = mapPriorityToTask(decision.final_priority)
 

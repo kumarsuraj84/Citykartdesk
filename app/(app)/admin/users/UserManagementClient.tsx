@@ -269,7 +269,10 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
         isAdmin && !isSelf && form.role !== user.role
           ? updateUserRole(user.id, form.role)
           : Promise.resolve<{ error?: string }>({}),
-        setUserTeams(user.id, selectedTeams),
+        // A requester has no business being in a technician group — force-clear
+        // rather than trust the hidden section's last state if they were just
+        // demoted from a technician role in this same edit.
+        setUserTeams(user.id, form.role === 'user' ? [] : selectedTeams),
       ])
       const err = r1.error ?? r2.error ?? r3.error
       if (err) { setError(err); return }
@@ -393,28 +396,31 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
           {/* Password */}
           {isAdmin && !isSelf && <PasswordSection userId={user.id} email={user.email} />}
 
-          {/* Teams */}
-          <section className="space-y-3">
-            <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Teams</h3>
-            <div className="flex flex-wrap gap-2">
-              {teams.map(t => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => toggleTeam(t.id)}
-                  className={[
-                    'rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors',
-                    selectedTeams.includes(t.id)
-                      ? 'border-foreground bg-foreground text-background'
-                      : 'border-border text-muted-foreground hover:border-foreground/40',
-                  ].join(' ')}
-                >
-                  {t.name}
-                </button>
-              ))}
-              {teams.length === 0 && <p className="text-xs text-muted-foreground">No teams configured.</p>}
-            </div>
-          </section>
+          {/* Technician Groups — a requester has no use for this, only
+              technicians/admins who actually work tickets as a group. */}
+          {form.role !== 'user' && (
+            <section className="space-y-3">
+              <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Technician Groups</h3>
+              <div className="flex flex-wrap gap-2">
+                {teams.map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => toggleTeam(t.id)}
+                    className={[
+                      'rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors',
+                      selectedTeams.includes(t.id)
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'border-border text-muted-foreground hover:border-foreground/40',
+                    ].join(' ')}
+                  >
+                    {t.name}
+                  </button>
+                ))}
+                {teams.length === 0 && <p className="text-xs text-muted-foreground">No technician groups configured.</p>}
+              </div>
+            </section>
+          )}
 
           {/* Org Structure */}
           <section className="space-y-3">
@@ -520,13 +526,17 @@ function InviteModal({ departments, locations, stores, profiles, teams, onClose 
     location_id: '',
     store_id: '',
     manager_id: '',
-    team_id: '',
     mobile_number: '',
   })
   const [whatsappEnabled, setWhatsappEnabled] = useState(true)
+  const [selectedTeams, setSelectedTeams] = useState<string[]>([])
 
   function set(key: keyof typeof form, value: string) {
     setForm(f => ({ ...f, [key]: value }))
+  }
+
+  function toggleTeam(id: string) {
+    setSelectedTeams(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id])
   }
 
   function handleInvite() {
@@ -545,7 +555,7 @@ function InviteModal({ departments, locations, stores, profiles, teams, onClose 
         location_id: form.location_id || null,
         store_id: form.store_id || null,
         manager_id: form.manager_id || null,
-        team_id: form.team_id || null,
+        team_ids: form.role === 'user' ? [] : selectedTeams,
         mobile_number: form.mobile_number || null,
         whatsapp_enabled: whatsappEnabled,
       })
@@ -664,15 +674,31 @@ function InviteModal({ departments, locations, stores, profiles, teams, onClose 
                 placeholder="None"
               />
             </Field>
-            <Field label="Team">
-              <SelectField
-                value={form.team_id}
-                onChange={v => set('team_id', v)}
-                options={teams.map(t => ({ value: t.id, label: t.name }))}
-                placeholder="No team"
-              />
-            </Field>
           </div>
+          {/* Technician Groups — a requester has no use for one, only
+              technicians/admins who actually work tickets as a group. */}
+          {form.role !== 'user' && (
+          <Field label="Technician Groups">
+            <div className="flex flex-wrap gap-2">
+              {teams.map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => toggleTeam(t.id)}
+                  className={[
+                    'rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors',
+                    selectedTeams.includes(t.id)
+                      ? 'border-foreground bg-foreground text-background'
+                      : 'border-border text-muted-foreground hover:border-foreground/40',
+                  ].join(' ')}
+                >
+                  {t.name}
+                </button>
+              ))}
+              {teams.length === 0 && <p className="text-xs text-muted-foreground">No technician groups configured.</p>}
+            </div>
+          </Field>
+          )}
           {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
         </div>
 
@@ -770,7 +796,7 @@ const COLUMNS: { key: SortKey; label: string; width: string }[] = [
   { key: 'employeeId',  label: 'Employee ID', width: 'min-w-[100px]' },
   { key: 'manager',     label: 'Manager',     width: 'min-w-[130px]' },
   { key: 'role',        label: 'Role',        width: 'min-w-[110px]' },
-  { key: 'teams',       label: 'Teams',       width: 'min-w-[130px]' },
+  { key: 'teams',       label: 'Tech Groups', width: 'min-w-[130px]' },
   { key: 'status',      label: 'Status',      width: 'min-w-[80px]' },
 ]
 

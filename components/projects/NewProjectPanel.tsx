@@ -169,7 +169,7 @@ export function NewProjectPanel({ profiles, teams, currentUserId, onCreated }: N
                       onChange={(e) => setTeamId(e.target.value)}
                       className={chipSelectCls}
                     >
-                      <option value="">No team</option>
+                      <option value="">No technician group</option>
                       {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
                   </div>

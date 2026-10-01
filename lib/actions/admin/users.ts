@@ -238,11 +238,15 @@ export async function setUserTeams(
   const admin = createAdminClient() as unknown as AnyClient
 
   // Target user and every team assigned must belong to the caller's own org.
-  const { data: targetUser } = await admin.from('profiles').select('org_id').eq('id', userId).maybeSingle()
+  const { data: targetUser } = await admin.from('profiles').select('org_id, role').eq('id', userId).maybeSingle()
   if (!targetUser || targetUser.org_id !== profile.org_id) return { error: 'User not found.' }
+  // Technician groups are for technicians/admins to work tickets as a group —
+  // a requester has no use for one, so this is enforced here too, not just
+  // hidden client-side (e.g. a stale selection from before a role downgrade).
+  if (targetUser.role === 'user') teamIds = []
   if (teamIds.length > 0) {
     const { count } = await admin.from('teams').select('id', { count: 'exact', head: true }).eq('org_id', profile.org_id).in('id', teamIds)
-    if ((count ?? 0) !== teamIds.length) return { error: 'One or more teams were not found.' }
+    if ((count ?? 0) !== teamIds.length) return { error: 'One or more technician groups were not found.' }
   }
 
   // Replace all team memberships for this user
@@ -268,7 +272,7 @@ export async function inviteUser(fields: {
   store_id?: string | null
   manager_id?: string | null
   job_title?: string | null
-  team_id?: string | null
+  team_ids?: string[]
   /** Raw, human-entered value (e.g. "9876543210" or "+91 98765 43210") —
    *  never a pre-normalized one. This is the account's FIRST mobile number;
    *  additional numbers (e.g. the rest of a shared store login's phones)
@@ -283,6 +287,11 @@ export async function inviteUser(fields: {
   if (!fields.full_name.trim()) return { error: 'Name is required.' }
   const roleError = assertCanAssignRole(profile.role, fields.role)
   if (roleError) return { error: roleError }
+
+  // Technician groups are for technicians/admins to work tickets as a group —
+  // a requester has no use for one, so this is enforced here too, not just
+  // hidden client-side.
+  if (fields.role === 'user') fields.team_ids = []
 
   // A compromised admin session could otherwise script this into an
   // email-bombing vector against arbitrary addresses — same rationale as
@@ -303,6 +312,11 @@ export async function inviteUser(fields: {
       ...(fields.manager_id ? [{ table: 'profiles', id: fields.manager_id, label: 'manager' }] : []),
     ])
     if (refError) return { error: refError }
+
+    if (fields.team_ids?.length) {
+      const { count } = await admin.from('teams').select('id', { count: 'exact', head: true }).eq('org_id', profile.org_id).in('id', fields.team_ids)
+      if ((count ?? 0) !== fields.team_ids.length) return { error: 'One or more technician groups were not found.' }
+    }
   }
 
   // Same normalize-validate-dedupe sequence as updateUserProfile(), run
@@ -393,9 +407,10 @@ export async function inviteUser(fields: {
   // (matches addTeamMember's fix for the same constraint) or this insert throws
   // and silently leaves the new user with no team, invite result unaffected
   // since the error was previously never even checked.
-  if (fields.team_id && profile.org_id) {
-    const { error: teamErr } = await admin.from('team_members').insert({ team_id: fields.team_id, user_id: uid, org_id: profile.org_id, is_lead: false })
-    if (teamErr) return { error: `User invited, but team assignment failed: ${teamErr.message}` }
+  if (fields.team_ids?.length && profile.org_id) {
+    const rows = fields.team_ids.map(tid => ({ team_id: tid, user_id: uid, org_id: profile.org_id, is_lead: false }))
+    const { error: teamErr } = await admin.from('team_members').insert(rows)
+    if (teamErr) return { error: `User invited, but technician group assignment failed: ${teamErr.message}` }
   }
 
   revalidatePath('/admin/users')

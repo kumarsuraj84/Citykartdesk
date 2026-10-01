@@ -866,7 +866,7 @@ export function RequestSidebarPanel({
         )}
 
         {/* Read-only: Team */}
-        <PropRow label="Team">
+        <PropRow label="Technician Group">
           <span className="text-xs text-foreground">{teamName}</span>
         </PropRow>
 

@@ -81,7 +81,7 @@ export function ServiceRequestWorkspace({
           <div>
             <h2 className="text-sm font-semibold text-foreground">Ticket Description</h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Fill in the details below to submit your request to the {service.team.name} team.
+              Fill in the details below to submit your request to the {service.team.name} technician group.
             </p>
           </div>
           {confirmation && (

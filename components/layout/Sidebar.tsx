@@ -128,7 +128,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
           label: 'Access',
           items: [
             { label: 'Users',               href: '/admin/users', icon: Users    },
-            { label: 'Teams',               href: '/admin/teams', icon: Users    },
+            { label: 'Technician Groups',   href: '/admin/teams', icon: Users    },
             { label: 'Roles & Permissions', href: '/admin/roles', icon: KeyRound },
           ],
         },

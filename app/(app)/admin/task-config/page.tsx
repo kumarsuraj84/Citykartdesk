@@ -9,10 +9,14 @@ export default async function TaskConfigPage() {
   if (!profile) redirect('/login')
   if (!['admin', 'manager', 'platform_owner'].includes(profile.role)) redirect('/home')
 
-  const teamId = profile.team_members[0]?.team_id ?? null
+  // An admin/manager can oversee several teams — templates for all of them
+  // should be visible here, not just the first. A single "primary" team is
+  // still needed for creating a NEW template, which targets exactly one team.
+  const teamIds = profile.team_members.map(tm => tm.team_id)
+  const primaryTeamId = teamIds[0] ?? null
 
   const [templates, statuses, priorities] = await Promise.all([
-    getTaskTemplates(teamId ?? undefined),
+    getTaskTemplates(teamIds),
     getTaskStatuses(),
     getTaskPriorities(),
   ])
@@ -27,7 +31,7 @@ export default async function TaskConfigPage() {
         initialStatuses={statuses}
         initialPriorities={priorities}
         initialTemplates={templates}
-        teamId={teamId}
+        teamId={primaryTeamId}
       />
     </div>
   )

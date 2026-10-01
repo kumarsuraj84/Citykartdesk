@@ -60,7 +60,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     getProjectUpdates(id),
   ])
 
-  const customFields = project.team_id ? await getCustomFields(project.team_id) : []
+  const customFields = project.team_id ? await getCustomFields([project.team_id]) : []
   const customFieldValues =
     tasks.length > 0 && customFields.length > 0
       ? await getCustomFieldValues(tasks.map((t) => t.id))

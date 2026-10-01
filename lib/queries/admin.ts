@@ -65,10 +65,10 @@ export async function getTaskPriorities(): Promise<TaskPriorityRow[]> {
   return (data ?? []) as TaskPriorityRow[]
 }
 
-export async function getTaskTemplates(teamId?: string): Promise<TaskTemplate[]> {
+export async function getTaskTemplates(teamIds?: string[]): Promise<TaskTemplate[]> {
   const admin = (await createClient()) as unknown as AnyClient // RLS: org-scoped to caller
   let q = admin.from('task_templates').select('*').order('created_at', { ascending: false })
-  if (teamId) q = q.eq('team_id', teamId)
+  if (teamIds?.length) q = q.in('team_id', teamIds)
   const { data } = await q
   return (data ?? []) as TaskTemplate[]
 }

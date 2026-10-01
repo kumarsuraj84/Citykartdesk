@@ -31,7 +31,7 @@ const sections: RunbookSection[] = [
       { id: 'create-service', label: 'How to Create a Service' },
       { id: 'service-hierarchy', label: 'Service Hierarchy Setup' },
       { id: 'configure-sla', label: 'Configure SLA for a Service' },
-      { id: 'assign-owners', label: 'Assign Owners and Teams' },
+      { id: 'assign-owners', label: 'Assign Owners and Technician Groups' },
       { id: 'archive-service', label: 'How to Archive a Service' },
     ],
   },
@@ -57,10 +57,10 @@ const sections: RunbookSection[] = [
   },
   {
     id: 'team-user-management',
-    title: 'Team & User Management',
+    title: 'Technician Group & User Management',
     topics: [
-      { id: 'create-team', label: 'How to Create a Team' },
-      { id: 'add-team-members', label: 'Add Team Members' },
+      { id: 'create-team', label: 'How to Create a Technician Group' },
+      { id: 'add-team-members', label: 'Add Technician Group Members' },
       { id: 'change-user-roles', label: 'Change User Roles' },
       { id: 'deactivate-user', label: 'Deactivate a User' },
     ],
@@ -103,7 +103,7 @@ const content: Record<string, React.ReactNode> = {
     <article className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
       <h2>Platform Overview</h2>
       <p>
-        Citykart Desk is an internal service management platform that connects employees with the teams
+        Citykart Desk is an internal service management platform that connects employees with the technician groups
         that support them — IT, HR, Finance, Legal, and beyond. It provides a unified portal for
         submitting requests, a workbench for agents to resolve them, and an admin layer for
         configuring services, SLAs, and workflows.
@@ -151,13 +151,13 @@ const content: Record<string, React.ReactNode> = {
       </p>
       <h3>Technician</h3>
       <p>
-        Technicians are support staff. They see the full request queue for their assigned teams, can
+        Technicians are support staff. They see the full request queue for their assigned technician groups, can
         update statuses, add internal notes, manage tasks, and run SLA actions. They cannot change
         platform configuration.
       </p>
       <h3>Manager</h3>
       <p>
-        Managers have all technician capabilities plus read access to admin reports, team management,
+        Managers have all technician capabilities plus read access to admin reports, technician group management,
         and approval flow configuration. They can assign technicians but cannot change global platform
         settings.
       </p>
@@ -197,13 +197,13 @@ const content: Record<string, React.ReactNode> = {
         </li>
         <li>
           If you are an agent, confirm with your admin that you have been added to the correct
-          team(s) — this determines which requests appear in your queue.
+          technician group(s) — this determines which requests appear in your queue.
         </li>
       </ol>
       <div className="not-prose rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/40">
         <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Tip</p>
         <p className="mt-1 text-sm text-blue-700 dark:text-blue-400">
-          If your account was created by an admin before your first login, your role and team
+          If your account was created by an admin before your first login, your role and technician group
           assignment will already be set when you arrive.
         </p>
       </div>
@@ -229,7 +229,7 @@ const content: Record<string, React.ReactNode> = {
         </li>
         <li>
           Set the <strong>Visibility</strong>:{' '}
-          <code>Public</code> (all employees) or <code>Restricted</code> (specific teams/groups).
+          <code>Public</code> (all employees) or <code>Restricted</code> (specific technician groups).
         </li>
         <li>
           Optionally add a <strong>Custom Form</strong> by attaching field definitions. These
@@ -313,12 +313,12 @@ const content: Record<string, React.ReactNode> = {
 
   'assign-owners': (
     <article className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
-      <h2>Assign Owners and Teams to a Service</h2>
+      <h2>Assign Owners and Technician Groups to a Service</h2>
       <ol>
         <li>Open the service in <strong>Admin → Services</strong>.</li>
         <li>Click the <strong>Ownership</strong> tab.</li>
         <li>
-          In <strong>Owning Team</strong>, select the team responsible for fulfilling requests
+          In <strong>Owning Technician Group</strong>, select the technician group responsible for fulfilling requests
           under this service.
         </li>
         <li>
@@ -328,7 +328,7 @@ const content: Record<string, React.ReactNode> = {
         <li>Save.</li>
       </ol>
       <p>
-        When a request is submitted, it is automatically routed to the owning team&apos;s queue unless a
+        When a request is submitted, it is automatically routed to the owning technician group&apos;s queue unless a
         more specific routing rule overrides it.
       </p>
     </article>
@@ -388,14 +388,14 @@ const content: Record<string, React.ReactNode> = {
           Choose the <strong>Approver Type</strong>:
           <ul>
             <li><code>Specific User</code> — name a single approver.</li>
-            <li><code>Team</code> — any member of a team can approve.</li>
+            <li><code>Technician Group</code> — any member of a technician group can approve.</li>
             <li><code>Manager</code> — the requester&apos;s direct manager is resolved at runtime.</li>
             <li><code>Role</code> — any user with the given role can approve.</li>
           </ul>
         </li>
         <li>
           Set <strong>Approval Threshold</strong>:{' '}
-          <code>Any One</code> or <code>All Approvers</code> (for team/role approvers).
+          <code>Any One</code> or <code>All Approvers</code> (for technician group/role approvers).
         </li>
         <li>
           Set a <strong>Due In</strong> window — how long an approver has before the step escalates.
@@ -447,7 +447,7 @@ const content: Record<string, React.ReactNode> = {
           <ul>
             <li>Service, Service Group, or Service Sub Group is…</li>
             <li>Priority or Status is…</li>
-            <li>Team or Requester is…</li>
+            <li>Technician Group or Requester is…</li>
             <li>Title/Description contains…</li>
           </ul>
         </li>
@@ -466,7 +466,7 @@ const content: Record<string, React.ReactNode> = {
         <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">
           Every active rule whose conditions match runs, in ascending execution order — not just
           the first match. If no rule assigns the request, it&apos;s left unassigned for the
-          owning team to pick up.
+          owning technician group to pick up.
         </p>
       </div>
     </article>
@@ -574,17 +574,17 @@ const content: Record<string, React.ReactNode> = {
 
   'create-team': (
     <article className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
-      <h2>How to Create a Team</h2>
+      <h2>How to Create a Technician Group</h2>
       <ol>
-        <li>Go to <strong>Admin → Teams</strong>.</li>
-        <li>Click <strong>New Team</strong>.</li>
-        <li>Enter a <strong>Team Name</strong> (e.g. &quot;IT Support&quot;, &quot;HR Ops&quot;).</li>
-        <li>Select a <strong>Team Lead</strong> from the user list.</li>
+        <li>Go to <strong>Admin → Technician Groups</strong>.</li>
+        <li>Click <strong>New Technician Group</strong>.</li>
+        <li>Enter a <strong>Technician Group Name</strong> (e.g. &quot;IT Support&quot;, &quot;HR Ops&quot;).</li>
+        <li>Select a <strong>Technician Group Lead</strong> from the user list.</li>
         <li>Optionally add a <strong>Description</strong> and a <strong>Colour</strong> for UI labelling.</li>
         <li>Save.</li>
       </ol>
       <p>
-        The team is now available to be assigned to services and routing rules, and to be used as
+        The technician group is now available to be assigned to services and routing rules, and to be used as
         an approver group in workflows.
       </p>
     </article>
@@ -592,17 +592,17 @@ const content: Record<string, React.ReactNode> = {
 
   'add-team-members': (
     <article className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
-      <h2>Add Team Members</h2>
+      <h2>Add Technician Group Members</h2>
       <ol>
-        <li>Go to <strong>Admin → Teams</strong> and open the team.</li>
+        <li>Go to <strong>Admin → Technician Groups</strong> and open the technician group.</li>
         <li>Click the <strong>Members</strong> tab.</li>
         <li>Click <strong>Add Member</strong>.</li>
         <li>Search for the user by name or email and select them.</li>
         <li>Click <strong>Add</strong>.</li>
       </ol>
       <p>
-        Members immediately gain access to the team&apos;s request queue. There is no limit on the
-        number of members per team.
+        Members immediately gain access to the technician group&apos;s request queue. There is no limit on the
+        number of members per technician group.
       </p>
     </article>
   ),
@@ -665,7 +665,7 @@ const content: Record<string, React.ReactNode> = {
           <ul>
             <li>Title</li>
             <li>Optional description</li>
-            <li>Default assignee (team or role)</li>
+            <li>Default assignee (technician group or role)</li>
             <li>Default due offset (e.g. &quot;+2 business days from request creation&quot;)</li>
           </ul>
         </li>
@@ -716,7 +716,7 @@ const content: Record<string, React.ReactNode> = {
       <ol>
         <li>Go to <strong>Admin → Reports</strong>.</li>
         <li>Select the report type: <em>Requests</em>, <em>SLA Performance</em>, or <em>Technician Activity</em>.</li>
-        <li>Apply date range and any filters (service, team, status, priority).</li>
+        <li>Apply date range and any filters (service, technician group, status, priority).</li>
         <li>
           Click <strong>Export CSV</strong>. The file downloads immediately in your browser.
         </li>

@@ -123,7 +123,7 @@ export default async function ProfilePage() {
         <div className="rounded-2xl border border-border bg-card shadow-sm">
           <div className="flex items-center gap-2 border-b border-border px-5 py-3.5">
             <Users className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold text-foreground">Teams</h2>
+            <h2 className="text-sm font-semibold text-foreground">Technician Groups</h2>
           </div>
           <div className="divide-y divide-border px-5">
             {profile.team_members.map((tm) => (
@@ -136,7 +136,7 @@ export default async function ProfilePage() {
                 </div>
                 {tm.is_lead && (
                   <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                    Team Lead
+                    Technician Group Lead
                   </span>
                 )}
               </div>

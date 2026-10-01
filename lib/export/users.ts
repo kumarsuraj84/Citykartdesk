@@ -17,7 +17,7 @@ export const USER_EXPORT_COLUMNS: { key: string; label: string }[] = [
   { key: 'whatsapp_enabled', label: 'whatsapp_enabled' },
   // reference-only
   { key: 'status', label: 'status' },
-  { key: 'teams', label: 'teams' },
+  { key: 'teams', label: 'technician_groups' },
   { key: 'all_mobile_numbers', label: 'all_mobile_numbers' },
   { key: 'job_function', label: 'job_function' },
   { key: 'designation', label: 'designation' },

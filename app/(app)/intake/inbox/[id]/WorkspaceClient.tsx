@@ -110,7 +110,7 @@ export function WorkspaceClient({
     if (!convertType) return
     if (!workTitle.trim()) { toast.error('Title is required.'); return }
     if ((convertType === 'request' || convertType === 'approval') && !workServiceId) { toast.error('Select a service.'); return }
-    if (!workTeamId) { toast.error('Select a team.'); return }
+    if (!workTeamId) { toast.error('Select a technician group.'); return }
 
     const payload: WorkPayload =
       convertType === 'task'
@@ -349,7 +349,7 @@ export function WorkspaceClient({
             )}
             <select value={workTeamId} onChange={e => setWorkTeamId(e.target.value)} className={iCls}>
               {teams.length === 0
-                ? <option value="">No teams</option>
+                ? <option value="">No technician groups</option>
                 : teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)
               }
             </select>
@@ -370,7 +370,7 @@ export function WorkspaceClient({
           <div className="border-b border-border bg-amber-50/50 px-4 py-3 space-y-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Internal note</p>
             <textarea value={noteBody} onChange={e => setNoteBody(e.target.value)} rows={3}
-              placeholder="Visible only to your team…" className={`${iCls} bg-white`} />
+              placeholder="Visible only to your technician group…" className={`${iCls} bg-white`} />
             <div className="flex gap-2">
               <button onClick={handleAddNote} disabled={isPending || !noteBody.trim()}
                 className="rounded-lg bg-amber-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50">

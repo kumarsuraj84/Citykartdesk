@@ -282,7 +282,7 @@ export function NewTaskPanel({ profiles, onCreated, allProjects = [], defaultPro
                     className="rounded border border-border bg-transparent px-2 py-0.5 text-xs text-muted-foreground focus:outline-none focus:ring-0 cursor-pointer"
                   >
                     <option value="personal">Personal</option>
-                    <option value="team">Team</option>
+                    <option value="team">Technician Group</option>
                   </select>
 
                   {/* Project (fixed by context when defaultProjectId is set) */}

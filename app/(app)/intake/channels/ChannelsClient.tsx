@@ -311,7 +311,7 @@ export function ChannelsClient({
               </div>
             )}
             <div>
-              <label className="mb-1 block text-xs font-medium text-foreground">Default team (optional)</label>
+              <label className="mb-1 block text-xs font-medium text-foreground">Default technician group (optional)</label>
               <select
                 value={teamId}
                 onChange={(e) => setTeamId(e.target.value)}
@@ -633,7 +633,7 @@ function EditChannelForm({
           </div>
         )}
         <div>
-          <label className="mb-1 block text-xs font-medium text-foreground">Default team</label>
+          <label className="mb-1 block text-xs font-medium text-foreground">Default technician group</label>
           <select value={teamId} onChange={(e) => setTeamId(e.target.value)}
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
             <option value="">— None —</option>

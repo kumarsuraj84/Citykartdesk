@@ -24,13 +24,13 @@ export interface PaginatedTasks {
 export async function getTasks(opts: {
   userId: string
   filter?: 'my_tasks' | 'assigned_me' | 'created_by_me' | 'team' | 'all' | 'due_today' | 'overdue' | 'done_week' | 'team_overdue'
-  teamId?: string
+  teamIds?: string[]
   status?: string
   page?: number
   pageSize?: number
 }): Promise<PaginatedTasks> {
   const supabase = await createClient()
-  const { userId, filter = 'my_tasks', teamId, status } = opts
+  const { userId, filter = 'my_tasks', teamIds, status } = opts
   const pg = opts.page ?? 1
   const size = opts.pageSize ?? 50
   const from = (pg - 1) * size
@@ -57,8 +57,8 @@ export async function getTasks(opts: {
     query = query.eq('assignee_id', userId)
   } else if (filter === 'created_by_me') {
     query = query.eq('created_by', userId)
-  } else if (filter === 'team' && teamId) {
-    query = query.eq('team_id', teamId)
+  } else if (filter === 'team' && teamIds?.length) {
+    query = query.in('team_id', teamIds)
   } else if (filter === 'due_today') {
     query = query
       .eq('assignee_id', userId)
@@ -75,10 +75,10 @@ export async function getTasks(opts: {
       .eq('assignee_id', userId)
       .eq('status', 'done')
       .gte('updated_at', sevenDaysAgo)
-  } else if (filter === 'team_overdue' && teamId) {
-    // Team-wide overdue: tasks in the team past due and not completed
+  } else if (filter === 'team_overdue' && teamIds?.length) {
+    // Team-wide overdue: tasks in any of the user's teams, past due and not completed
     query = query
-      .eq('team_id', teamId)
+      .in('team_id', teamIds)
       .lt('due_date', todayStart)
       .not('status', 'in', '("done","cancelled")')
   }
@@ -360,13 +360,14 @@ import { createAdminClient } from '@/lib/supabase/admin'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (table: string) => any }
 
-export async function getCustomFields(teamId: string): Promise<import('@/types').CustomField[]> {
+export async function getCustomFields(teamIds: string[]): Promise<import('@/types').CustomField[]> {
+  if (!teamIds.length) return []
   // Admin client: custom fields schema is config-level, not RLS-scoped per user
   const admin = createAdminClient() as unknown as AnyClient
   const { data } = await admin
     .from('task_custom_fields')
     .select('*')
-    .eq('team_id', teamId)
+    .in('team_id', teamIds)
     .order('position', { ascending: true })
   return (data ?? []) as import('@/types').CustomField[]
 }

@@ -83,7 +83,7 @@ const REQUEST_FIELD_OPTIONS: { value: RuleConditionField; label: string }[] = [
   { value: 'category_id', label: 'Category' },
   { value: 'sub_category_id', label: 'Sub Category' },
   { value: 'template_id', label: 'Template' },
-  { value: 'team_id', label: 'Team' },
+  { value: 'team_id', label: 'Technician Group' },
   { value: 'project_id', label: 'Project' },
   { value: 'assigned_to', label: 'Technician' },
   { value: 'title', label: 'Title' },
@@ -133,7 +133,7 @@ const ACTION_TYPE_LABELS: Record<RuleAction['type'], string> = {
   assign: 'Assign to',
   set_priority: 'Set priority',
   set_status: 'Set status',
-  set_team: 'Route to team',
+  set_team: 'Route to technician group',
   notify: 'Notify',
 }
 
@@ -477,13 +477,13 @@ function ActionRow({
             onChange={(e) => onChange({ type: 'set_team', params: { teamId: e.target.value } })}
             className={selectCls}
           >
-            <option value="" disabled>Select a team…</option>
+            <option value="" disabled>Select a technician group…</option>
             {refs.teams.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
           <p className="text-[11px] text-muted-foreground">
-            Moves the ticket to this Team without changing its Service — for splitting one Service&apos;s tickets across several sub-teams by Category (e.g. via a Sub Category condition above), so only that sub-team sees it in their Team Queue.
+            Moves the ticket to this Technician Group without changing its Service — for splitting one Service&apos;s tickets across several sub-groups by Category (e.g. via a Sub Category condition above), so only that sub-group sees it in their Technician Group Queue.
           </p>
         </div>
       )}

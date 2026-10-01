@@ -96,7 +96,7 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
       <div className="flex items-start justify-between gap-4">
         <PageHeader
           title="Approvals"
-          description={isManager ? 'Review and action approval requests from your team' : 'Approvals sent to you for review'}
+          description={isManager ? 'Review and action approval requests from your technician group' : 'Approvals sent to you for review'}
         />
         {/* exportApprovals() is an org-wide admin-bypass export — kept
             manager+ only even though the page itself no longer is. */}

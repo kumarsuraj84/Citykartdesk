@@ -10,10 +10,10 @@ const FILTERS = [
   { value: 'created_by_me', label: 'Created by Me',      group: 'Me' },
   { value: 'due_today',     label: 'Due Today',          group: 'Me' },
   { value: 'overdue',       label: 'Overdue',            group: 'Me' },
-  { value: 'team',          label: 'Team Tasks',         group: 'Team' },
-  { value: 'team_overdue',  label: 'Team Overdue',       group: 'Team' },
-  { value: 'done_week',     label: 'Completed This Week',group: 'Team' },
-  { value: 'all',           label: 'All Tasks',          group: 'Team' },
+  { value: 'team',          label: 'Technician Group Tasks',   group: 'Technician Group' },
+  { value: 'team_overdue',  label: 'Technician Group Overdue', group: 'Technician Group' },
+  { value: 'done_week',     label: 'Completed This Week',      group: 'Technician Group' },
+  { value: 'all',           label: 'All Tasks',                group: 'Technician Group' },
 ]
 
 export function FilterDropdown({ basePath = '/tasks' }: { basePath?: string } = {}) {
@@ -42,7 +42,7 @@ export function FilterDropdown({ basePath = '/tasks' }: { basePath?: string } = 
     setOpen(false)
   }
 
-  const groups = ['Me', 'Team']
+  const groups = ['Me', 'Technician Group']
 
   return (
     <div ref={ref} className="relative">

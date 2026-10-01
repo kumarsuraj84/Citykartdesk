@@ -371,15 +371,15 @@ export function AnalyticsDashboard({ data, technicianWorkload }: { data: Analyti
         </div>
 
         {/* ── Row 4: Team Performance ──────────────────────────────────────── */}
-        <Section title="Team Performance" icon={Users}>
+        <Section title="Technician Group Performance" icon={Users}>
           {data.byTeam.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No team data available</p>
+            <p className="text-xs text-muted-foreground">No technician group data available</p>
           ) : (
             <div className="overflow-x-auto -mx-1">
               <table className="w-full text-sm min-w-[500px]">
                 <thead>
                   <tr className="border-b border-border text-left">
-                    {['Team', 'Volume', 'Resolved', 'SLA %', 'Avg TAT', 'Open Now'].map((h) => (
+                    {['Group', 'Volume', 'Resolved', 'SLA %', 'Avg TAT', 'Open Now'].map((h) => (
                       <th key={h} className="pb-2 pr-4 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground last:pr-0">
                         {h}
                       </th>

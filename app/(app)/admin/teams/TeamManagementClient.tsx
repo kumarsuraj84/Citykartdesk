@@ -51,7 +51,7 @@ function MemberRow({
         onClick={handleRemove}
         disabled={isPending}
         className="rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-50 transition-all disabled:opacity-40"
-        title="Remove from team"
+        title="Remove from technician group"
       >
         <UserMinus className="h-3.5 w-3.5" />
       </button>
@@ -139,7 +139,7 @@ function AddMemberDropdown({
                   key={u.id}
                   onClick={() => handleAdd(u)}
                   disabled={isPending}
-                  title={u.existing_team_names.length > 0 ? `Already in ${u.existing_team_names.join(', ')} — this adds a second team, it does not move them.` : undefined}
+                  title={u.existing_team_names.length > 0 ? `Already in ${u.existing_team_names.join(', ')} — this adds a second technician group, it does not move them.` : undefined}
                   className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors disabled:opacity-40"
                 >
                   <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
@@ -195,7 +195,7 @@ function TeamCard({
   }
 
   function handleDelete() {
-    if (!confirm(`Delete team "${name}"? This cannot be undone.`)) return
+    if (!confirm(`Delete technician group "${name}"? This cannot be undone.`)) return
     start(async () => {
       const result = await deleteTeam(team.id)
       if (result.error) { setError(result.error); return }
@@ -251,7 +251,7 @@ function TeamCard({
           onClick={handleDelete}
           disabled={isPending}
           className="rounded-lg p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
-          title="Delete team"
+          title="Delete technician group"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -369,7 +369,7 @@ export function TeamManagementClient({
                 if (e.key === 'Enter') handleCreate()
                 if (e.key === 'Escape') { setShowForm(false); setNewName(''); setFormError(null) }
               }}
-              placeholder="Team name (e.g. IT Support)"
+              placeholder="Technician group name (e.g. IT Support)"
               className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
             />
             <button
@@ -396,16 +396,16 @@ export function TeamManagementClient({
           className="flex items-center gap-2 rounded-xl border border-dashed border-border bg-background px-4 py-3 text-sm text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors w-full"
         >
           <Plus className="h-4 w-4" />
-          New Team
+          New Technician Group
         </button>
       )}
 
       {/* Team list */}
       {teams.length === 0 ? (
         <div className="py-12 text-center rounded-xl border border-border bg-card">
-          <p className="text-sm font-medium text-muted-foreground">No teams yet</p>
+          <p className="text-sm font-medium text-muted-foreground">No technician groups yet</p>
           <p className="mt-1 text-xs text-muted-foreground/60">
-            Create a team to start assigning members and services.
+            Create a technician group to start assigning members and services.
           </p>
         </div>
       ) : (

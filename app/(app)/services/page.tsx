@@ -80,7 +80,7 @@ export default async function ServicesPage({ searchParams }: PageProps) {
     <div className="space-y-3">
       <PageHeader
         title="Service Catalog"
-        description="Browse and request services from your teams"
+        description="Browse and request services from your technician groups"
       />
 
       <form className="relative max-w-sm">

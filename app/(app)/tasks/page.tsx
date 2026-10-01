@@ -28,12 +28,17 @@ export default async function TasksPage({ searchParams }: PageProps) {
   const rawPageSize = parseInt(params.pageSize ?? '50', 10)
   const pageSize = [25, 50, 100].includes(rawPageSize) ? rawPageSize : 50
 
-  const teamId = profile.team_members[0]?.team_id ?? null
+  // A technician can belong to several teams — tasks/custom fields for the
+  // "team" views should come from all of them, not just the first. A single
+  // "primary" team is still needed for CustomColumnManager, which creates a
+  // new custom field against exactly one team.
+  const teamIds = profile.team_members.map(tm => tm.team_id)
+  const primaryTeamId = teamIds[0] ?? null
 
   const [taskResult, profiles, customFields, allProjects] = await Promise.all([
-    getTasks({ userId: profile.id, filter, teamId: teamId ?? undefined, page, pageSize }),
+    getTasks({ userId: profile.id, filter, teamIds, page, pageSize }),
     getAllProfiles(),
-    teamId ? getCustomFields(teamId) : Promise.resolve([]),
+    getCustomFields(teamIds),
     getAllProjectsMini(),
   ])
 
@@ -51,7 +56,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
         currentUserId={profile.id}
         currentUserName={profile.full_name ?? 'You'}
         initialTaskId={params.task}
-        teamId={teamId}
+        teamId={primaryTeamId}
         initialCustomFields={customFields}
         initialCustomFieldValues={customFieldValues}
         allProjects={allProjects}

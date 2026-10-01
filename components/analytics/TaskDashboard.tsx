@@ -235,12 +235,12 @@ export function TaskDashboard({ data }: { data: TaskAnalyticsData }) {
             {/* Task type split */}
             <div className="grid grid-cols-2 gap-3 text-center">
               <ClickRow
-                onClick={() => setDrawer({ title: 'Team Tasks', taskType: 'team', _module: 'tasks' })}
+                onClick={() => setDrawer({ title: 'Technician Group Tasks', taskType: 'team', _module: 'tasks' })}
                 className="rounded-lg bg-muted/50 p-3"
               >
                 <Users className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
                 <p className="font-bold text-lg">{data.byType.find((t) => t.type === 'team')?.count ?? 0}</p>
-                <p className="text-[11px] text-muted-foreground">Team Tasks</p>
+                <p className="text-[11px] text-muted-foreground">Technician Group Tasks</p>
               </ClickRow>
               <ClickRow
                 onClick={() => setDrawer({ title: 'Personal Tasks', taskType: 'personal', _module: 'tasks' })}
@@ -276,12 +276,12 @@ export function TaskDashboard({ data }: { data: TaskAnalyticsData }) {
 
         {/* ── Row 4: Team Performance ────────────────────────────────────────── */}
         {data.byTeam.length > 0 && (
-          <Section title="Team Performance" icon={Users}>
+          <Section title="Technician Group Performance" icon={Users}>
             <div className="overflow-x-auto -mx-1">
               <table className="w-full text-sm min-w-[480px]">
                 <thead>
                   <tr className="border-b border-border text-left">
-                    {['Team', 'Total', 'Done', 'Overdue', 'Open Now', 'Avg Time'].map((h) => (
+                    {['Group', 'Total', 'Done', 'Overdue', 'Open Now', 'Avg Time'].map((h) => (
                       <th key={h} className="pb-2 pr-4 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground last:pr-0">{h}</th>
                     ))}
                   </tr>
