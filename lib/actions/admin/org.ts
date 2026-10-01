@@ -412,7 +412,11 @@ export async function importStores(
       oemId = found
     }
 
-    const { error } = await admin.from('stores').insert({
+    // Upsert on (org_id, code): a code that already exists re-imports as an
+    // update (e.g. to correct OEM/address in bulk) rather than being skipped
+    // as a duplicate — the sheet's values become the store's values going
+    // forward, same as editing it by hand field-by-field.
+    const { error } = await admin.from('stores').upsert({
       org_id: orgId,
       code,
       name,
@@ -422,10 +426,10 @@ export async function importStores(
       pincode: rows[i].pincode?.trim() || null,
       oem_id: oemId,
       is_active: isActiveValue(rows[i].active),
-    })
+    }, { onConflict: 'org_id,code' })
 
     if (error) {
-      errors.push(`${rowLabel}: ${error.code === '23505' ? `store code "${code}" already exists` : sanitizeError(error, { route: 'org.ts#importStores' })}, skipped.`)
+      errors.push(`${rowLabel}: ${sanitizeError(error, { route: 'org.ts#importStores' })}, skipped.`)
       continue
     }
     imported++
