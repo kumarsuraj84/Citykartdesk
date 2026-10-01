@@ -805,11 +805,21 @@ export function RequestSidebarPanel({
   // switch to the Details tab to see what was actually submitted. File-type
   // fields are skipped (those are attachments, not form_data values); editing
   // still happens from the Details tab's "Submitted Information" panel.
-  const submittedFields: FormField[] = (
+  const allSubmittedFields: FormField[] =
     formSections.length > 0
       ? [...formSections].sort((a, b) => a.order - b.order).flatMap((s) => [...s.fields].sort((a, b) => a.order - b.order))
       : [...formSchema].sort((a, b) => a.order - b.order)
-  ).filter((f) => f.type !== 'file')
+  // The description (the first textarea field — same convention
+  // create-request-core.ts uses to find "the" description) is excluded
+  // here too: it's long-form by nature and now shown at the top of
+  // Conversations instead, where it reads properly, rather than squeezed
+  // into this single-line property list. Only the first textarea is
+  // skipped, not every one, in case a template ever has a second
+  // multi-line field that isn't meant to be hidden the same way.
+  const descriptionFieldId = allSubmittedFields.find((f) => f.type === 'textarea')?.id
+  const submittedFields: FormField[] = allSubmittedFields.filter(
+    (f) => f.type !== 'file' && f.id !== descriptionFieldId
+  )
 
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">

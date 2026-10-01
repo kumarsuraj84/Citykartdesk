@@ -70,6 +70,15 @@ export function SubmittedDataPanel({ requestId, sections, legacySchema, data, ca
   const allFields: FormField[] = hasSections
     ? [...sections].sort((a, b) => a.order - b.order).flatMap((s) => [...s.fields].sort((a, b) => a.order - b.order))
     : [...legacySchema].sort((a, b) => a.order - b.order)
+  // The ticket's free-text description (the first textarea field, same
+  // convention create-request-core.ts and the request detail page's
+  // Conversations tab both use to find "the" description) is hidden from
+  // this read-only display — it now shows at the top of Conversations
+  // instead, so showing it here too was just the same text twice. Still
+  // included in allFields/editableFields above, so Edit mode is unaffected
+  // (not that it matters much: a requester-set field like this is already
+  // excluded from editableFields by requesterCanSet() in the common case).
+  const descriptionFieldId = allFields.find((f) => f.type === 'textarea')?.id
   // A technician may only correct fields the requester never filled in
   // themselves (technician-only/mandatory fields) — everything the requester
   // actually submitted (Subject, Description, Phone Number, …) is locked
@@ -179,6 +188,7 @@ export function SubmittedDataPanel({ requestId, sections, legacySchema, data, ca
         <div className="space-y-3">
           {[...sections]
             .sort((a, b) => a.order - b.order)
+            .map((section) => ({ ...section, fields: section.fields.filter((f) => f.id !== descriptionFieldId) }))
             .filter((s) => s.fields.length > 0)
             .map((section) => (
               <div key={section.id} className="rounded-lg border border-border">
@@ -204,6 +214,7 @@ export function SubmittedDataPanel({ requestId, sections, legacySchema, data, ca
         // ── Legacy flat display ───────────────────────────────────────────────
         <dl className="rounded-lg border border-border divide-y divide-border">
           {[...legacySchema]
+            .filter((f) => f.id !== descriptionFieldId)
             .sort((a, b) => a.order - b.order)
             .map((field) => (
               <FieldRow key={field.id} field={field} data={data} />

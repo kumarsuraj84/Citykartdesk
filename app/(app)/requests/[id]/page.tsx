@@ -415,6 +415,18 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
   const formSchema   = isAgent ? formSchemaRaw   : filterFlatFieldsForRequester(formSchemaRaw)
   const formSections = isAgent ? formSectionsRaw : filterFieldsForRequester(formSectionsRaw)
   const formData = (request.form_data ?? {}) as Record<string, unknown>
+  // The Description a requester actually fills in lives in form_data as a
+  // template textarea field, not requests.description (that column is only
+  // ever set by Email Intake — see create-request-core.ts). Surfaced here so
+  // the original ask shows in Conversations too, not just the Details panel —
+  // same "find the textarea field" convention create-request-core.ts uses.
+  // form_schema_snapshot is copied from the service's legacy flat form_fields
+  // column (create-request-core.ts), which a section-builder-based service
+  // (the Field Library-backed kind every service here actually uses) never
+  // populates — so that snapshot comes out empty. The real per-field data is
+  // in form_sections_snapshot, nested under each section's `fields`, flattened here instead.
+  const descriptionField = formSections.flatMap((s) => s.fields).find((f) => f.type === 'textarea')
+  const originalDescriptionText = descriptionField ? String(formData[descriptionField.id] ?? '').trim() : ''
 
   // Server-side time calculations (server component — Date.now() is intentional)
   // eslint-disable-next-line react-hooks/purity
@@ -473,7 +485,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
           </div>
         )}
 
-        {conversationEvents.length === 0 && submissionAttachments.length === 0 ? (
+        {conversationEvents.length === 0 && submissionAttachments.length === 0 && !originalDescriptionText ? (
           <div className="py-10 text-center">
             <p className="text-sm text-muted-foreground">No messages yet.</p>
             {!isTerminal && (
@@ -497,16 +509,48 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
                 <ApprovalEventCard key={event.item.id} item={event.item} />
               )
             )}
-            {submissionAttachments.length > 0 && (
+            {/* The ticket's original ask — oldest event, so it always sits last
+                in this newest-first thread. Rendered here rather than sorted
+                into conversationEvents since it isn't a real comment row;
+                the description itself still also shows in the Details panel,
+                nothing here is moved, just also surfaced where the rest of
+                the conversation already is. */}
+            {(originalDescriptionText || submissionAttachments.length > 0) && (
               <div className="rounded-xl border border-border bg-muted/20 p-4">
-                <p className="mb-2 text-xs font-semibold text-muted-foreground">
-                  Attached when the request was submitted
-                </p>
-                <AttachmentChips
-                  attachments={submissionAttachments}
-                  currentUserId={profile.id}
-                  canManageAll={isAgent}
-                />
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-bold text-muted-foreground">
+                    {request.requester.full_name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-sm font-semibold text-foreground">
+                        {request.requester.full_name}
+                      </span>
+                      <span className="shrink-0 text-[11px] text-muted-foreground/70">
+                        {formatDateTime(request.created_at)}
+                      </span>
+                    </div>
+                    <div className="mt-0.5">
+                      <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
+                        Original Request
+                      </span>
+                    </div>
+                    {originalDescriptionText && (
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                        {originalDescriptionText}
+                      </p>
+                    )}
+                    {submissionAttachments.length > 0 && (
+                      <div className="mt-2">
+                        <AttachmentChips
+                          attachments={submissionAttachments}
+                          currentUserId={profile.id}
+                          canManageAll={isAgent}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </div>
