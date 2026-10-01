@@ -15,20 +15,29 @@ import {
 import {
   GripVertical, X, Loader2, Table2, LayoutGrid, Download,
   ChevronUp, ChevronDown, RotateCcw, AlertTriangle, Search, CalendarRange,
+  Save, Trash2, BookmarkPlus,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
-import { getReportFields, getReportData } from '@/lib/actions/reporting'
+import {
+  getReportFields, getReportData,
+  listSavedReports, createSavedReport, updateSavedReport, deleteSavedReport,
+} from '@/lib/actions/reporting'
 import { exportReportXlsx, type ReportExportConfig } from '@/lib/actions/reportExport'
 import { downloadXlsxBase64 } from '@/lib/export/xlsx'
-import { computePivot, toFlatTable, type PivotConfig, type ValueFieldConfig, type FieldFilter, type AggFunc, type FilterOp } from '@/lib/reporting/pivot-engine'
+import {
+  computePivot, toFlatTable,
+  type PivotConfig, type ValueFieldConfig, type FieldFilter, type AggFunc, type FilterOp,
+  type DatePreset, type SavedReportConfig,
+} from '@/lib/reporting/pivot-engine'
 import {
   REPORT_ENTITIES, aggregationsForType,
   type EntityKey, type ReportField,
 } from '@/lib/reporting/field-registry'
 import type { ReportRow } from '@/lib/queries/reporting'
+import type { SavedReport } from '@/types'
 import { PivotTableView } from './PivotTableView'
 import { FlatTableView } from './FlatTableView'
 
@@ -49,11 +58,11 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-const DATE_PRESETS: { label: string; from: () => string; to: () => string }[] = [
-  { label: 'Today', from: () => isoDate(new Date()), to: () => isoDate(new Date()) },
-  { label: 'Last 7 days', from: () => isoDate(new Date(Date.now() - 6 * 86_400_000)), to: () => isoDate(new Date()) },
-  { label: 'Last 30 days', from: () => isoDate(new Date(Date.now() - 29 * 86_400_000)), to: () => isoDate(new Date()) },
-  { label: 'This month', from: () => { const d = new Date(); return isoDate(new Date(d.getFullYear(), d.getMonth(), 1)) }, to: () => isoDate(new Date()) },
+const DATE_PRESETS: { key: NonNullable<DatePreset>; label: string; from: () => string; to: () => string }[] = [
+  { key: 'today', label: 'Today', from: () => isoDate(new Date()), to: () => isoDate(new Date()) },
+  { key: 'last7', label: 'Last 7 days', from: () => isoDate(new Date(Date.now() - 6 * 86_400_000)), to: () => isoDate(new Date()) },
+  { key: 'last30', label: 'Last 30 days', from: () => isoDate(new Date(Date.now() - 29 * 86_400_000)), to: () => isoDate(new Date()) },
+  { key: 'thisMonth', label: 'This month', from: () => { const d = new Date(); return isoDate(new Date(d.getFullYear(), d.getMonth(), 1)) }, to: () => isoDate(new Date()) },
 ]
 
 function defaultFilterFor(field: ReportField): FieldFilter {
@@ -83,9 +92,15 @@ export function PivotBuilder() {
   const [valueFields, setValueFields] = useState<ValueFieldConfig[]>([{ field: '__count__', agg: 'count' }])
   const [filters, setFilters] = useState<FieldFilter[]>([])
   const [dateRangeField, setDateRangeField] = useState<string>('')
+  const [datePreset, setDatePreset] = useState<DatePreset>(null)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [fieldSearch, setFieldSearch] = useState('')
+
+  const [savedReports, setSavedReports] = useState<SavedReport[]>([])
+  const [selectedReportId, setSelectedReportId] = useState<string>('')
+  const [saveModal, setSaveModal] = useState<{ mode: 'new' | 'update'; name: string } | null>(null)
+  const [savePending, startSaveTransition] = useTransition()
 
   // getReportFields already prepends the synthetic Record Count field server-side.
   const allFields = fields
@@ -97,7 +112,7 @@ export function PivotBuilder() {
     startLoading(async () => {
       setLoadError(null)
       try {
-        const [fRes, dRes] = await Promise.all([getReportFields(entity), getReportData(entity)])
+        const [fRes, dRes, srRes] = await Promise.all([getReportFields(entity), getReportData(entity), listSavedReports(entity)])
         if (fRes.error || dRes.error) {
           const msg = fRes.error || dRes.error || 'Failed to load report data.'
           setLoadError(msg)
@@ -115,9 +130,12 @@ export function PivotBuilder() {
         setFilters([])
         const dateFieldKeys = loadedFields.filter((f) => f.type === 'date').map((f) => f.key)
         setDateRangeField(dateFieldKeys.includes('created_at') ? 'created_at' : (dateFieldKeys[0] ?? ''))
+        setDatePreset(null)
         setDateFrom('')
         setDateTo('')
         setFieldSearch('')
+        setSavedReports(srRes.data ?? [])
+        setSelectedReportId('')
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to load report data.'
         setLoadError(msg)
@@ -160,8 +178,88 @@ export function PivotBuilder() {
     setFilters([])
     const dateFieldKeys = fields.filter((f) => f.type === 'date').map((f) => f.key)
     setDateRangeField(dateFieldKeys.includes('created_at') ? 'created_at' : (dateFieldKeys[0] ?? ''))
+    setDatePreset(null)
     setDateFrom('')
     setDateTo('')
+    setSelectedReportId('')
+  }
+
+  function pickDatePreset(key: NonNullable<DatePreset>, from: string, to: string) {
+    setDatePreset(key)
+    setDateFrom(from)
+    setDateTo(to)
+  }
+
+  /** Captures the builder's current layout as a plain, serializable config — the
+   *  exact shape saved_reports.config stores and loadSavedReport restores from. */
+  function buildCurrentConfig(): SavedReportConfig {
+    return { mode, columns, rowFields, colFields, valueFields, filters, dateRangeField, datePreset, dateFrom, dateTo }
+  }
+
+  function applyConfig(config: SavedReportConfig) {
+    setMode(config.mode)
+    setColumns(config.columns)
+    setRowFields(config.rowFields)
+    setColFields(config.colFields)
+    setValueFields(config.valueFields.length ? config.valueFields : [{ field: '__count__', agg: 'count' }])
+    setFilters(config.filters)
+    setDateRangeField(config.dateRangeField)
+    setDatePreset(config.datePreset)
+    if (config.datePreset) {
+      // Recompute fresh rather than trust stored dates — "Today" saved last week
+      // must mean today now, not the day it was saved.
+      const preset = DATE_PRESETS.find((p) => p.key === config.datePreset)
+      setDateFrom(preset ? preset.from() : config.dateFrom)
+      setDateTo(preset ? preset.to() : config.dateTo)
+    } else {
+      setDateFrom(config.dateFrom)
+      setDateTo(config.dateTo)
+    }
+  }
+
+  function loadSavedReport(id: string) {
+    setSelectedReportId(id)
+    if (!id) return
+    const report = savedReports.find((r) => r.id === id)
+    if (!report) return
+    applyConfig(report.config as unknown as SavedReportConfig)
+  }
+
+  function openSaveModal() {
+    const current = savedReports.find((r) => r.id === selectedReportId)
+    setSaveModal({ mode: current ? 'update' : 'new', name: current?.name ?? '' })
+  }
+
+  function submitSave(name: string, mode: 'new' | 'update') {
+    startSaveTransition(async () => {
+      const config = buildCurrentConfig()
+      if (mode === 'update' && selectedReportId) {
+        const result = await updateSavedReport(selectedReportId, { name, config })
+        if (result.error) { toast.error(result.error); return }
+        setSavedReports((prev) => prev.map((r) => (r.id === selectedReportId ? { ...r, name, config: config as never } : r)))
+        toast.success('Report updated.')
+      } else {
+        const result = await createSavedReport(entity, name, config)
+        if (result.error || !result.data) { toast.error(result.error ?? 'Failed to save the report.'); return }
+        setSavedReports((prev) => [...prev, result.data!].sort((a, b) => a.name.localeCompare(b.name)))
+        setSelectedReportId(result.data.id)
+        toast.success('Report saved.')
+      }
+      setSaveModal(null)
+    })
+  }
+
+  function handleDeleteSavedReport() {
+    const report = savedReports.find((r) => r.id === selectedReportId)
+    if (!report) return
+    if (!confirm(`Delete the saved report "${report.name}"?`)) return
+    startSaveTransition(async () => {
+      const result = await deleteSavedReport(report.id)
+      if (result.error) { toast.error(result.error); return }
+      setSavedReports((prev) => prev.filter((r) => r.id !== report.id))
+      setSelectedReportId('')
+      toast.success('Saved report deleted.')
+    })
   }
 
   const dateFieldOptions = useMemo(() => allFields.filter((f) => f.type === 'date'), [allFields])
@@ -219,6 +317,39 @@ export function PivotBuilder() {
             ))}
           </select>
 
+          <select
+            value={selectedReportId}
+            onChange={(e) => loadSavedReport(e.target.value)}
+            className="min-w-[160px] rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">Saved reports…</option>
+            {savedReports.map((r) => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={openSaveModal}
+            disabled={savePending}
+            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+          >
+            {selectedReportId ? <Save className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
+            {selectedReportId ? 'Update' : 'Save'}
+          </button>
+
+          {selectedReportId && (
+            <button
+              type="button"
+              title="Delete this saved report"
+              onClick={handleDeleteSavedReport}
+              disabled={savePending}
+              className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-2 text-xs font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+
           <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 gap-0.5">
             <button
               type="button"
@@ -272,7 +403,7 @@ export function PivotBuilder() {
         </div>
       ) : (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)] gap-3">
             {/* Available fields */}
             <div className="space-y-2 rounded-xl border border-border bg-card p-3">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-1">Fields</div>
@@ -384,17 +515,21 @@ export function PivotBuilder() {
                     ) : (
                       <span className="text-xs font-medium text-foreground">{dateFieldOptions[0]?.label}</span>
                     )}
-                    <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={inputCls} />
+                    <input type="date" value={dateFrom} onChange={(e) => { setDatePreset(null); setDateFrom(e.target.value) }} className={inputCls} />
                     <span className="text-xs text-muted-foreground">to</span>
-                    <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={inputCls} />
+                    <input type="date" value={dateTo} onChange={(e) => { setDatePreset(null); setDateTo(e.target.value) }} className={inputCls} />
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {DATE_PRESETS.map((p) => (
                       <button
-                        key={p.label}
+                        key={p.key}
                         type="button"
-                        onClick={() => { setDateFrom(p.from()); setDateTo(p.to()) }}
-                        className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                        onClick={() => pickDatePreset(p.key, p.from(), p.to())}
+                        className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                          datePreset === p.key
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`}
                       >
                         {p.label}
                       </button>
@@ -402,7 +537,7 @@ export function PivotBuilder() {
                     {(dateFrom || dateTo) && (
                       <button
                         type="button"
-                        onClick={() => { setDateFrom(''); setDateTo('') }}
+                        onClick={() => { setDatePreset(null); setDateFrom(''); setDateTo('') }}
                         className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                       >
                         Clear
@@ -451,11 +586,87 @@ export function PivotBuilder() {
           </DragOverlay>
         </DndContext>
       )}
+
+      {saveModal && (
+        <SaveReportModal
+          mode={saveModal.mode}
+          initialName={saveModal.name}
+          pending={savePending}
+          onCancel={() => setSaveModal(null)}
+          onSubmit={(name) => submitSave(name, saveModal.mode)}
+          onSaveAsNew={saveModal.mode === 'update' ? (name) => submitSave(name, 'new') : undefined}
+        />
+      )}
     </div>
   )
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
+
+function SaveReportModal({
+  mode, initialName, pending, onCancel, onSubmit, onSaveAsNew,
+}: {
+  mode: 'new' | 'update'
+  initialName: string
+  pending: boolean
+  onCancel: () => void
+  onSubmit: (name: string) => void
+  onSaveAsNew?: (name: string) => void
+}) {
+  const [name, setName] = useState(initialName)
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!name.trim()) return
+    onSubmit(name)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-card shadow-xl">
+        <div className="border-b border-border px-4 py-3">
+          <h2 className="text-base font-semibold text-foreground">
+            {mode === 'update' ? 'Update saved report' : 'Save this report'}
+          </h2>
+        </div>
+        <form onSubmit={submit} className="space-y-3 px-4 py-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Report name</label>
+            <input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              placeholder="e.g. AC Issues — This Month"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Saves the current fields, filters, and date range — visible to everyone with Report Builder access.
+            </p>
+          </div>
+          <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
+            <button type="button" onClick={onCancel} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted">
+              Cancel
+            </button>
+            {onSaveAsNew && (
+              <button
+                type="button"
+                disabled={pending || !name.trim()}
+                onClick={() => onSaveAsNew(name)}
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
+              >
+                Save as new
+              </button>
+            )}
+            <button type="submit" disabled={pending || !name.trim()} className="btn-gradient px-3 py-1.5 text-xs disabled:opacity-50">
+              {pending ? 'Saving…' : mode === 'update' ? 'Update' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 function FieldChip({ field, mode, onAdd }: { field: ReportField; mode: Mode; onAdd: (well: Well, key: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `field:${field.key}` })

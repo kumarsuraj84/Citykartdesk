@@ -23,6 +23,7 @@ export type Task = Tables<'tasks'>
 export type Notification = Tables<'notifications'>
 export type NotificationPreference = Tables<'notification_preferences'>
 export type RequestAttachment = Tables<'request_attachments'>
+export type SavedReport = Tables<'saved_reports'>
 export type AppSetting = Tables<'app_settings'>
 export type Project = Tables<'projects'>
 export type ProjectActivity = Tables<'project_activity'>
