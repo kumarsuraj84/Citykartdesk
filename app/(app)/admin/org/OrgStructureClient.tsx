@@ -10,8 +10,10 @@ import {
   createStore, updateStore, deleteStore, importStores,
 } from '@/lib/actions/admin/org'
 import { createOem, updateOem, deleteOem, setOemStores } from '@/lib/actions/admin/oems'
+import { exportStores } from '@/lib/actions/export'
 import { planStoreAssignment } from '@/lib/oems/store-assignment'
 import { ImportModal } from '@/components/ui/ImportModal'
+import { ExportButton } from '@/components/requests/ExportButton'
 import type { DepartmentRow, LocationRow, CostCenterRow, JobFunctionRow, DesignationRow, UserOption, OemRow, StoreRow } from './page'
 
 type Tab = 'departments' | 'locations' | 'cost_centers' | 'job_functions' | 'designations' | 'oems' | 'stores'
@@ -1155,6 +1157,7 @@ function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
   return (
     <div className="space-y-4">
       <div className="flex justify-end gap-2">
+        <ExportButton action={exportStores} filename="stores.csv" label="Export" />
         <button onClick={() => setShowImport(true)} className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted/40 transition-colors">
           Import
         </button>

@@ -6,6 +6,7 @@ import {
   exportTasksCSV,
   exportApprovalsCSV,
   exportProjectsCSV,
+  exportStoresCSV,
   type ExportFilters,
 } from '@/lib/export/reports'
 
@@ -44,4 +45,12 @@ export async function exportProjects(): Promise<string> {
   const isOrgWide = ['admin', 'manager', 'platform_owner'].includes(profile.role)
   const teamIds = isOrgWide ? undefined : profile.team_members.map((tm) => tm.team_id)
   return exportProjectsCSV(profile.org_id, teamIds)
+}
+
+export async function exportStores(): Promise<string> {
+  const profile = await getCurrentProfile()
+  if (!profile) throw new Error('Not authenticated.')
+  if (!['admin', 'manager', 'platform_owner'].includes(profile.role)) throw new Error('Not authorized.')
+  if (!profile.org_id) throw new Error('No organization.')
+  return exportStoresCSV(profile.org_id)
 }

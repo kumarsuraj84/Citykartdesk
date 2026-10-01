@@ -276,6 +276,55 @@ export async function exportProjectsCSV(orgId: string, teamIds?: string[]): Prom
   return toCSV(rows, columns)
 }
 
+export async function exportStoresCSV(orgId: string): Promise<string> {
+  const admin = createAdminClient() as unknown as AnyClient
+
+  const { data, error } = await admin
+    .from('stores')
+    .select('code,name,address,city,state,pincode,is_active,oem:oems(name)')
+    .eq('org_id', orgId)
+    .order('code', { ascending: true })
+    .limit(MAX_EXPORT_ROWS + 1)
+
+  if (error) throw new Error(error.message)
+
+  if ((data ?? []).length > MAX_EXPORT_ROWS) {
+    throw new Error(
+      `Export exceeds the ${MAX_EXPORT_ROWS.toLocaleString()} row limit. Please apply filters to narrow the result.`
+    )
+  }
+
+  type StoreExportRow = {
+    code: string; name: string; address: string | null; city: string | null
+    state: string | null; pincode: string | null; is_active: boolean
+    oem: { name: string } | null
+  }
+
+  const rows = ((data ?? []) as StoreExportRow[]).map((s) => ({
+    code: s.code,
+    name: s.name,
+    address: s.address ?? '',
+    city: s.city ?? '',
+    state: s.state ?? '',
+    pincode: s.pincode ?? '',
+    oem: s.oem?.name ?? '',
+    active: s.is_active ? 'Yes' : 'No',
+  }))
+
+  const columns = [
+    { key: 'code',    label: 'Code' },
+    { key: 'name',    label: 'Name' },
+    { key: 'address', label: 'Address' },
+    { key: 'city',    label: 'City' },
+    { key: 'state',   label: 'State' },
+    { key: 'pincode', label: 'Pincode' },
+    { key: 'oem',     label: 'OEM' },
+    { key: 'active',  label: 'Active' },
+  ]
+
+  return toCSV(rows, columns)
+}
+
 // One row per approval, org-scoped via the related request (approvals has no org_id).
 // Service-role client (needed by the scheduled-report path) so the org filter is explicit.
 export async function exportApprovalsCSV(orgId: string, f?: ExportFilters): Promise<string> {
