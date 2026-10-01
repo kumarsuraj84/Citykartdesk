@@ -283,10 +283,26 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId }: {
       {
         id: 'status-distribution',
         span: 'half',
-        node: (
+        node: (() => {
+          // Fixed set, always shown (even at 0) rather than whichever statuses
+          // happen to have a ticket right now — a period with no cancellations,
+          // say, shouldn't make "Cancelled" disappear from the chart entirely.
+          // "Assigned" and "Closed" are deliberately left out here (folded
+          // conceptually into "Open"/"In Progress" and "Resolved" for this
+          // summary view) — that's a product decision, not an oversight.
+          const countByStatus = new Map(data.byStatus.map((s) => [s.status, s.count]))
+          const STATUS_DISTRIBUTION_ORDER = [
+            'open', 'in_progress', 'waiting_user', 'hold_purchase_ho', 'pending_approval', 'resolved', 'cancelled',
+          ] as const
+          const statusRows = STATUS_DISTRIBUTION_ORDER.map((status) => ({
+            status, count: countByStatus.get(status) ?? 0,
+          }))
+          const statusTotal = statusRows.reduce((sum, s) => sum + s.count, 0)
+
+          return (
           <Section title="Status Distribution" icon={Inbox}>
             <DonutChart
-              data={data.byStatus.map((s) => ({
+              data={statusRows.map((s) => ({
                 label: STATUS_LABELS[s.status] ?? s.status,
                 value: s.count,
                 color: STATUS_COLORS[s.status],
@@ -298,7 +314,7 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId }: {
               }))}
             />
             <div className="space-y-0.5 mt-1">
-              {data.byStatus.map((s) => (
+              {statusRows.map((s) => (
                 <ClickableRow
                   key={s.status}
                   onClick={() => setDrawer({
@@ -316,7 +332,7 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId }: {
                     <div className="flex items-center gap-2">
                       <span className="font-semibold">{s.count}</span>
                       <span className="text-muted-foreground w-8 text-right">
-                        {Math.round((s.count / (data.totalOpenNow || 1)) * 100)}%
+                        {statusTotal > 0 ? Math.round((s.count / statusTotal) * 100) : 0}%
                       </span>
                     </div>
                   </div>
@@ -324,7 +340,8 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId }: {
               ))}
             </div>
           </Section>
-        ),
+          )
+        })(),
       },
       {
         id: 'sla-performance',

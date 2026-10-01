@@ -22,6 +22,7 @@ const STATUS_COLORS: Record<string, string> = {
   assigned:          'color-mix(in oklab, var(--primary) 55%, var(--info))',
   in_progress:       'var(--info)',
   waiting_user:      'var(--warning)',
+  hold_purchase_ho:  'color-mix(in oklab, var(--warning) 70%, var(--primary))',
   pending_approval:  'color-mix(in oklab, var(--warning) 60%, var(--destructive))',
   resolved:          'var(--success)',
   closed:            'var(--muted-foreground)',
@@ -33,6 +34,7 @@ const STATUS_LABELS: Record<string, string> = {
   assigned:         'Assigned',
   in_progress:      'In Progress',
   waiting_user:     'Waiting on User',
+  hold_purchase_ho: 'Hold due to Purchase from HO',
   pending_approval: 'Pending Approval',
   resolved:         'Resolved',
   closed:           'Closed',
@@ -304,6 +306,25 @@ export function selectXAxisLabelIndices(length: number): number[] {
   return nearLastAlreadyIncluded ? stepIndices : [...stepIndices, lastIdx]
 }
 
+/** Picks up to `maxTicks` evenly-spaced, whole-number gridline values from 0
+ *  to maxVal, snapped to a "nice" step (1, 2, 5, 10, 20, 50, 100, …) instead
+ *  of naively rounding maxVal's quarters — which, for a small maxVal (e.g.
+ *  1 or 2, common on a quiet day/week), rounds several distinct fractional
+ *  positions to the same integer and shows duplicate labels like "1 1 1 0". */
+export function niceAxisTicks(maxVal: number, maxTicks = 5): number[] {
+  if (maxVal <= 0) return [0]
+  if (maxVal <= maxTicks - 1) {
+    return Array.from({ length: maxVal + 1 }, (_, i) => i)
+  }
+  const roughStep = maxVal / (maxTicks - 1)
+  const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)))
+  const normalized = roughStep / magnitude
+  const niceStep = (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10) * magnitude
+  const ticks: number[] = []
+  for (let v = 0; v <= maxVal + niceStep * 0.001; v += niceStep) ticks.push(Math.round(v))
+  return ticks
+}
+
 export function LineAreaChart({
   data,
   height = 160,
@@ -346,11 +367,9 @@ export function LineAreaChart({
   // X-axis labels — sample to avoid overlap (see selectXAxisLabelIndices).
   const xLabels = selectXAxisLabelIndices(data.length).map((i) => ({ i, label: String(data[i]?.date ?? '').slice(5) })) // MM-DD
 
-  // Y-axis gridlines
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((pct) => ({
-    v: Math.round(maxVal * pct),
-    y: yScale(maxVal * pct),
-  }))
+  // Y-axis gridlines — "nice" whole-number steps, not naive quarters of maxVal
+  // (see niceAxisTicks for why: quarters of a small maxVal round to duplicates).
+  const yTicks = niceAxisTicks(maxVal).map((v) => ({ v, y: yScale(v) }))
 
   if (!data.length) return <div className="flex items-center justify-center text-xs text-muted-foreground" style={{ height }}>No data</div>
 
