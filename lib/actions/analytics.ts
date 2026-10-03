@@ -1,7 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { authorizeReportAccess } from '@/lib/reporting/access'
+import { authorizeReportAccess, agentScopeOrFilter } from '@/lib/reporting/access'
 import { resolvePeriodParam, type PeriodParam } from '@/lib/queries/analytics'
 import { applyCurrentlyBreachedFilter } from '@/lib/sla/breach'
 import type { Database } from '@/types/database'
@@ -119,7 +119,7 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
     // viewer's own resolved scope — a user/agent passing someone else's
     // teamId/assignedTo must not be able to see outside their own data.
     if (scope.kind === 'own')        q = q.eq('requester_id', scope.userId)
-    else if (scope.kind === 'agent') q = q.or(`assigned_to.eq.${scope.userId},requester_id.eq.${scope.userId}`)
+    else if (scope.kind === 'agent') q = q.or(agentScopeOrFilter(scope))
     else if (scope.kind === 'team')  q = q.in('team_id', scope.teamIds)
 
     if (filter.status?.length)   q = q.in('status', filter.status as RequestStatus[])

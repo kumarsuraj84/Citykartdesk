@@ -10,8 +10,14 @@ import type { ProfileWithTeams } from '@/types'
 export type ReportViewerScope =
   | { kind: 'all' }
   | { kind: 'own'; userId: string }
-  | { kind: 'agent'; userId: string }
+  | { kind: 'agent'; userId: string; teamIds: string[] }
   | { kind: 'team'; teamIds: string[] }
+
+/** PostgREST `or()` filter for an agent: their own tickets plus every technician group they belong to. */
+export function agentScopeOrFilter(scope: Extract<ReportViewerScope, { kind: 'agent' }>): string {
+  const own = `assigned_to.eq.${scope.userId},requester_id.eq.${scope.userId}`
+  return scope.teamIds.length > 0 ? `${own},team_id.in.(${scope.teamIds.join(',')})` : own
+}
 
 export function resolveReportAccess(
   profile: ProfileWithTeams,
@@ -30,7 +36,7 @@ export function resolveReportAccess(
     case 'manager':
       return { scope: { kind: 'team', teamIds: profile.team_members.map((tm) => tm.team_id) } }
     case 'agent':
-      return { scope: { kind: 'agent', userId: profile.id } }
+      return { scope: { kind: 'agent', userId: profile.id, teamIds: profile.team_members.map((tm) => tm.team_id) } }
     case 'user':
       return { scope: { kind: 'own', userId: profile.id } }
     default:

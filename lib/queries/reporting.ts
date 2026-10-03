@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getEntityFields, RECORD_COUNT_FIELD, type EntityKey, type ReportField } from '@/lib/reporting/field-registry'
-import type { ReportViewerScope } from '@/lib/reporting/access'
+import { agentScopeOrFilter, type ReportViewerScope } from '@/lib/reporting/access'
 import { getServiceFormFieldsForOrg, type ServiceFormFieldRef } from '@/lib/forms/sections'
 import { flattenLeafOptions } from '@/lib/forms/options'
 import { sourceChannelOf } from '@/lib/sources'
@@ -200,7 +200,7 @@ async function fetchRequestRows(
     .eq('org_id', orgId)
 
   if (scope.kind === 'own') query = query.eq('requester_id', scope.userId)
-  else if (scope.kind === 'agent') query = query.or(`assigned_to.eq.${scope.userId},requester_id.eq.${scope.userId}`)
+  else if (scope.kind === 'agent') query = query.or(agentScopeOrFilter(scope))
   else if (scope.kind === 'team') query = query.in('team_id', scope.teamIds)
 
   const { data } = await query.limit(MAX_REPORT_ROWS + 1)

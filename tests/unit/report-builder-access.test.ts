@@ -22,7 +22,7 @@
  * page reaches it), so it gets the most thorough per-role coverage here.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { resolveReportAccess } from '@/lib/reporting/access'
+import { resolveReportAccess, agentScopeOrFilter } from '@/lib/reporting/access'
 import type { ProfileWithTeams } from '@/types'
 
 function profileWith(role: ProfileWithTeams['role'], overrides: Partial<ProfileWithTeams> = {}): ProfileWithTeams {
@@ -41,9 +41,16 @@ describe('resolveReportAccess() — requests entity is scoped per role, not admi
     expect(result).toEqual({ scope: { kind: 'own', userId: 'user-1' } })
   })
 
-  it('agent sees their own + assigned scope', () => {
+  it('agent sees their own + assigned + technician-group scope', () => {
     const result = resolveReportAccess(profileWith('agent'), 'requests')
-    expect(result).toEqual({ scope: { kind: 'agent', userId: 'user-1' } })
+    expect(result).toEqual({ scope: { kind: 'agent', userId: 'user-1', teamIds: ['team-1'] } })
+  })
+
+  it('agent filter covers own tickets and every technician group they belong to', () => {
+    expect(agentScopeOrFilter({ kind: 'agent', userId: 'u1', teamIds: ['t1', 't2'] }))
+      .toBe('assigned_to.eq.u1,requester_id.eq.u1,team_id.in.(t1,t2)')
+    expect(agentScopeOrFilter({ kind: 'agent', userId: 'u1', teamIds: [] }))
+      .toBe('assigned_to.eq.u1,requester_id.eq.u1')
   })
 
   it('manager sees their team scope', () => {
