@@ -274,7 +274,7 @@ function sanitizeQuery(q: string): string {
  * Scoped by the same ReportViewerScope the Report Builder/drill-down drawer
  * use (lib/reporting/access.ts), so "who sees whose workload" is defined in
  * one place: platform_owner/admin see the whole org, a manager sees their own
- * team(s), an agent sees only their own row. Uses the admin client with
+ * team(s), an agent sees their own work plus their technician groups'. Uses the admin client with
  * explicit scoping (not RLS) for the same reason getAnalytics() does — this
  * now lives on the Analytics Dashboard, alongside org-wide aggregates RLS was
  * never designed to hand back in one shot.
@@ -293,7 +293,12 @@ export async function getTechnicianWorkloadBoard(orgId: string, scope: ReportVie
     .in('status', ACTIVE_TECH_STATUSES)
 
   if (scope.kind === 'team') query = query.in('team_id', scope.teamIds)
-  else if (scope.kind === 'agent') query = query.eq('assigned_to', scope.userId)
+  else if (scope.kind === 'agent') {
+    // Their own work plus their technician groups' — same groups they can already see tickets for.
+    query = scope.teamIds.length > 0
+      ? query.or(`assigned_to.eq.${scope.userId},team_id.in.(${scope.teamIds.join(',')})`)
+      : query.eq('assigned_to', scope.userId)
+  }
   else if (scope.kind === 'own') return [] // requesters don't do technician work — nothing to show
 
   const { data } = await query

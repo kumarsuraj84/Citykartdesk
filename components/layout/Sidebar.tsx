@@ -66,16 +66,15 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
     {
       key: 'analytics',
       label: 'Analytics',
-      // Dashboards now also opens for Technicians (their own daily activity +
-      // their own row of the workload table — a stripped-down view, see
-      // app/(app)/admin/reports/page.tsx's agent branch); Audit Logs stays
+      // Dashboards also opens for Technicians, at /dashboards (a stripped-down view
+      // outside /admin, whose layout turns technicians away); Audit Logs stays
       // manager/admin-only. Report Builder is scoped per-role by the data
-      // layer instead (Requester → own tickets, Technician → own+assigned,
+      // layer instead (Requester → own tickets, Technician → own+assigned+groups,
       // Manager → team, Admin/Owner → everything),
       // so it's available to every role that has the Requests module enabled.
       show: isManager || isAdmin || has('requests'),
       items: [
-        ...(isAgent || isManager || isAdmin ? [{ label: 'Dashboards', href: '/admin/reports', icon: BarChart3 }] : []),
+        ...(isAgent || isManager || isAdmin ? [{ label: 'Dashboards', href: isManager || isAdmin ? '/admin/reports' : '/dashboards', icon: BarChart3 }] : []),
         ...(has('requests') ? [{ label: 'Report Builder', href: '/reports/pivot', icon: Table2 }] : []),
         ...(isManager || isAdmin ? [{ label: 'Audit Logs', href: '/admin/audit',    icon: Activity  }] : []),
         ...(isAdmin ? [{ label: 'Event Log', href: '/admin/event-log', icon: Activity }] : []),

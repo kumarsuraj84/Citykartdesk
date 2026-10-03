@@ -5,7 +5,6 @@ import { AnalyticsDashboard } from './AnalyticsDashboard'
 import { SLADashboard } from './SLADashboard'
 import { WorkloadDashboard } from './WorkloadDashboard'
 import { ProjectsDashboard } from './ProjectsDashboard'
-import { TechnicianDashboard } from './TechnicianDashboard'
 import { TaskDashboard } from '@/components/analytics/TaskDashboard'
 import { ReportsClient } from './ReportsClient'
 import { ScheduledReportsClient } from './ScheduledReportsClient'
@@ -39,28 +38,10 @@ export default async function ReportsPage({
 }) {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
-  // Technicians get a separate, stripped-down view below (TechnicianDashboard
-  // — their own daily activity + their own row of the workload table only,
-  // none of this page's other Manager+ information); everyone below agent
-  // still has no access to "Dashboards" at all.
-  if (!['admin', 'manager', 'platform_owner', 'agent'].includes(profile.role)) redirect('/home')
+  // Technicians have their own stripped-down Dashboards page at /dashboards.
+  if (profile.role === 'agent') redirect('/dashboards')
+  if (!['admin', 'manager', 'platform_owner'].includes(profile.role)) redirect('/home')
   if (!profile.org_id) redirect('/home')
-
-  if (profile.role === 'agent') {
-    const scope = resolveReportAccess(profile, 'requests')
-    if ('error' in scope) redirect('/home')
-    const [analytics, workload] = await Promise.all([
-      getAnalytics(profile.org_id, '30d'),
-      getTechnicianWorkloadBoard(profile.org_id, scope.scope),
-    ])
-    return (
-      <TechnicianDashboard
-        dailyActivity={analytics.dailyActivity}
-        backlogAging={analytics.backlogAging}
-        rows={workload}
-      />
-    )
-  }
 
   // Projects is Admin/Owner-only for now (see components/layout/Sidebar.tsx) —
   // a plain manager can still see this Projects tab (module-gated, not

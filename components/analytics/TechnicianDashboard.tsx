@@ -10,10 +10,10 @@ import type { DailyActivity, BacklogAging } from '@/lib/queries/analytics'
  * agent's workload/leaderboard, approval analytics, Export, Scheduled
  * reports) are Manager+ information; a plain technician gets just their own
  * activity pulse (org-wide counts, no names attached) and their own row of
- * the workload table. See app/(app)/admin/reports/page.tsx for how the two
- * views are chosen, and lib/reporting/access.ts for the scope that already
- * narrows `rows` down to this viewer's own requests before it ever reaches
- * this component.
+ * the workload table. Served at /dashboards (outside /admin, whose layout
+ * turns technicians away); managers/admins use app/(app)/admin/reports/page.tsx.
+ * lib/reporting/access.ts scopes `rows` to this viewer's own requests plus
+ * their technician groups' before it ever reaches this component.
  */
 export function TechnicianDashboard({ dailyActivity, backlogAging, rows }: {
   dailyActivity: DailyActivity
