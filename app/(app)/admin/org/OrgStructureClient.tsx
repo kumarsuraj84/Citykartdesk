@@ -14,6 +14,12 @@ import { exportStores } from '@/lib/actions/export'
 import { planStoreAssignment } from '@/lib/oems/store-assignment'
 import { ImportModal } from '@/components/ui/ImportModal'
 import { ExportButton } from '@/components/requests/ExportButton'
+import dynamic from 'next/dynamic'
+
+const RichEmailEditor = dynamic(() => import('@/components/admin/RichEmailEditor'), {
+  ssr: false,
+  loading: () => <div className="min-h-[300px] rounded-lg border border-border bg-muted/20 p-4 text-xs text-muted-foreground">Loading editor…</div>,
+})
 import type { DepartmentRow, LocationRow, CostCenterRow, JobFunctionRow, DesignationRow, UserOption, OemRow, StoreRow } from './page'
 
 type Tab = 'departments' | 'locations' | 'cost_centers' | 'job_functions' | 'designations' | 'oems' | 'stores'
@@ -792,16 +798,14 @@ function OemForm({ f, setF, onSubmit, onCancel, submitLabel, pending }: {
         value={f.emails}
         onChange={v => setF({ ...f, emails: v })}
         placeholder={'one address per line, e.g.\nservice@voltas.com\nescalation@voltas.com'}
-        hint="One email per line (or comma-separated). All of these get CC'd every time a ticket routes to this OEM."
+        hint="One email per line (or comma-separated). Every time a ticket routes to this OEM, one email goes to all of these addresses together."
       />
       <FormInput label="Email Subject Template" value={f.email_subject_template} onChange={v => setF({ ...f, email_subject_template: v })} placeholder={`New AC Issue — {{ticket_no}}`} />
-      <FormTextarea
+      <RichEmailEditor
         label="Email Body Template"
         value={f.email_body_template}
         onChange={v => setF({ ...f, email_body_template: v })}
-        rows={5}
-        placeholder={'A new AC issue ticket has been raised.\n\nTicket: {{ticket_no}}\nSubject: {{subject}}\nDescription: {{description}}\n\nRequester: {{requester_name}} ({{requester_email}}, {{requester_phone}})\nStore Address: {{store_address}}'}
-        hint={`Available placeholders: ${OEM_TEMPLATE_PLACEHOLDERS}`}
+        hint={`Format it like a Word document — add a table, bold text or colours. Click a detail below (or type it) to fill in ticket information: ${OEM_TEMPLATE_PLACEHOLDERS}`}
       />
       <div className="flex items-center gap-2">
         <input type="checkbox" checked={f.is_active} onChange={e => setF({ ...f, is_active: e.target.checked })} className="rounded" />

@@ -9,6 +9,8 @@ import { sendEmail } from '@/lib/email/send'
 import { pickTitleField, subjectToTitle } from '@/lib/requests/title-field'
 import { notifyRequesterTicketLogged } from '@/lib/requests/notify-requester'
 import { escapeHtml } from '@/lib/email/escape'
+import { isHtmlTemplate, renderHtmlEmail } from '@/lib/email/oem-template'
+import { sanitizeTemplateHtml } from '@/lib/email/sanitize-template'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import type { FormField, RequestPriority } from '@/types'
 import type { Json } from '@/types/database'
@@ -44,7 +46,7 @@ function sanitizeTrustedTitle(raw: string | undefined): string | null {
 // human actor at ticket-creation time. Channel-agnostic already — moved here
 // unchanged from lib/actions/requests.ts as part of the createRequestCore()
 // extraction (Stage 1).
-async function runOemAutoRouting(params: {
+export async function runOemAutoRouting(params: {
   admin: ReturnType<typeof createAdminClient>
   actorId: string
   orgId: string
@@ -84,21 +86,29 @@ async function runOemAutoRouting(params: {
   const render = (tpl: string) => tpl.replace(/\{\{(\w+)\}\}/g, (_m, key: string) => vars[key] ?? '')
 
   const subject = render(oem.email_subject_template || 'New AC Issue Ticket — {{ticket_no}}')
-  const bodyText = render(
-    oem.email_body_template ||
-      'A new AC issue ticket has been raised.\n\nTicket: {{ticket_no}}\nSubject: {{subject}}\nDescription: {{description}}\n\nRequester: {{requester_name}} ({{requester_email}}, {{requester_phone}})\nStore Address: {{store_address}}'
-  )
-  // D-05: bodyText is built from a {{var}}-substituted template — ticket
-  // subject/description/requester fields are all user-controlled — so the
-  // HTML rendering (not the parallel plain-text `text` field below) must
-  // escape each line before wrapping it in a tag.
-  const bodyHtml = bodyText.split('\n').map((line) => `<p>${line ? escapeHtml(line) : '&nbsp;'}</p>`).join('')
-
-  await Promise.all(
-    (oem.emails as string[]).map((to) =>
-      sendEmail({ to, subject, html: bodyHtml, text: bodyText, threadRequestNo: request.request_no })
+  let bodyText: string
+  let bodyHtml: string
+  if (isHtmlTemplate(oem.email_body_template)) {
+    // Rich template from the editor: re-sanitized here too (it was also cleaned on save), then
+    // every placeholder value is escaped as it is filled in.
+    const rendered = renderHtmlEmail(sanitizeTemplateHtml(oem.email_body_template as string), vars)
+    bodyText = rendered.text
+    bodyHtml = rendered.html
+  } else {
+    bodyText = render(
+      oem.email_body_template ||
+        'A new AC issue ticket has been raised.\n\nTicket: {{ticket_no}}\nSubject: {{subject}}\nDescription: {{description}}\n\nRequester: {{requester_name}} ({{requester_email}}, {{requester_phone}})\nStore Address: {{store_address}}'
     )
-  )
+    // D-05: bodyText is built from a {{var}}-substituted template — ticket
+    // subject/description/requester fields are all user-controlled — so the
+    // HTML rendering (not the parallel plain-text `text` field below) must
+    // escape each line before wrapping it in a tag.
+    bodyHtml = bodyText.split('\n').map((line) => `<p>${line ? escapeHtml(line) : '&nbsp;'}</p>`).join('')
+  }
+
+  // ONE email addressed to every OEM contact — not one email per address — so the OEM's
+  // team gets a single message they can all see and reply-all to.
+  await sendEmail({ to: oem.emails as string[], subject, html: bodyHtml, text: bodyText, threadRequestNo: request.request_no })
 
   await admin.from('request_comments').insert({
     request_id: request.id,

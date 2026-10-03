@@ -3,7 +3,8 @@ import { getEmailFrom, getEmailSetup, RESEND_API_KEY, type EmailSetup, type Smtp
 import { withSubjectTag, isGmailHost, taggedReplyAddress } from './thread-tag'
 
 export interface EmailPayload {
-  to: string
+  /** One address, or several to send ONE message to all of them (they see each other, reply-all works). */
+  to: string | string[]
   subject: string
   html: string
   text?: string
@@ -44,6 +45,10 @@ function getTransporter(c: SmtpConfig): Transporter {
   })
   cached = { key, transporter }
   return transporter
+}
+
+function recipientsLabel(to: string | string[]): string {
+  return Array.isArray(to) ? to.join(', ') : to
 }
 
 /** threadRequestNo -> the actual subject/replyTo to send with (SMTP-provider-specific: only
@@ -102,7 +107,7 @@ export async function sendEmail(p: EmailPayload): Promise<{ error?: string }> {
   try {
     const setup = await getEmailSetup()
     if (!setup.provider) {
-      console.log('[EMAIL DISABLED] To:', p.to, ' Subject:', p.subject)
+      console.log('[EMAIL DISABLED] To:', recipientsLabel(p.to), ' Subject:', p.subject)
       return {}
     }
     const result = setup.provider === 'smtp' ? await sendViaSmtp(p, setup) : await sendViaResend(p, setup)
@@ -120,7 +125,7 @@ async function logEmailAttempt(p: EmailPayload, error?: string): Promise<void> {
   try {
     const { recordEvents } = await import('@/lib/events/record')
     await recordEvents(
-      [{ kind: error ? 'server_error' : 'system', target: p.to, message: error ? `Email FAILED: ${p.subject} — ${error}` : `Email sent: ${p.subject}` }],
+      [{ kind: error ? 'server_error' : 'system', target: recipientsLabel(p.to), message: error ? `Email FAILED: ${p.subject} — ${error}` : `Email sent: ${p.subject}` }],
       { orgId: null, userId: null },
     )
   } catch { /* logging must never affect sending */ }

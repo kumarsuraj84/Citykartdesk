@@ -5,6 +5,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logAdminAudit } from './audit'
 import { planStoreAssignment } from '@/lib/oems/store-assignment'
+import { isHtmlTemplate } from '@/lib/email/oem-template'
+import { sanitizeTemplateHtml } from '@/lib/email/sanitize-template'
 import type { Database } from '@/types/database'
 
 type ActionResult<T = undefined> = { error?: string; data?: T }
@@ -31,6 +33,13 @@ export type OemInput = {
   is_active?: boolean
 }
 
+// A body saved from the rich editor is HTML and gets sanitized; a plain-text body is kept as typed.
+function cleanBodyTemplate(body: string | null | undefined): string | null {
+  const trimmed = body?.trim()
+  if (!trimmed) return null
+  return isHtmlTemplate(trimmed) ? sanitizeTemplateHtml(trimmed) : trimmed
+}
+
 function cleanEmails(emails: string[]): string[] {
   return [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))]
 }
@@ -48,7 +57,7 @@ export async function createOem(fields: OemInput): Promise<ActionResult<{ id: st
       name: fields.name.trim(),
       emails: cleanEmails(fields.emails),
       email_subject_template: fields.email_subject_template?.trim() || null,
-      email_body_template: fields.email_body_template?.trim() || null,
+      email_body_template: cleanBodyTemplate(fields.email_body_template),
       is_active: fields.is_active ?? true,
     })
     .select('id')
@@ -72,7 +81,7 @@ export async function updateOem(id: string, fields: Partial<OemInput>): Promise<
   if (fields.name !== undefined) update.name = fields.name.trim()
   if (fields.emails !== undefined) update.emails = cleanEmails(fields.emails)
   if ('email_subject_template' in fields) update.email_subject_template = fields.email_subject_template?.trim() || null
-  if ('email_body_template' in fields) update.email_body_template = fields.email_body_template?.trim() || null
+  if ('email_body_template' in fields) update.email_body_template = cleanBodyTemplate(fields.email_body_template)
   if (fields.is_active !== undefined) update.is_active = fields.is_active
 
   const { error } = await admin.from('oems').update(update).eq('id', id).eq('org_id', guard.profile!.org_id!)
