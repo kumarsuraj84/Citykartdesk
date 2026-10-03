@@ -307,6 +307,19 @@ export function getEntityFields(entity: EntityKey, extra: ReportField[] = []): R
   return [...builtIn, ...disambiguated]
 }
 
+/**
+ * The columns a new report starts with. The native `description` column is only filled for
+ * email-intake tickets; a requester's typed description lives in the service form's
+ * Description field (labelled "Description (Custom Field)" above), so that one is the default.
+ */
+export function defaultReportColumnKeys(fields: ReportField[]): string[] {
+  const customDescription = fields.find((f) => f.isCustomField && f.label.toLowerCase() === 'description (custom field)')
+  return fields
+    .filter((f) => f.key !== '__count__')
+    .slice(0, 6)
+    .map((f) => (f.key === 'description' && customDescription ? customDescription.key : f.key))
+}
+
 /** Turns a raw enum value into its display label — the single place every
  * rendering path (pivot groups, flat table cells, xlsx export) resolves an
  * enum field's value to human text, so they can never drift from each other. */

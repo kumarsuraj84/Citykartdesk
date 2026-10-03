@@ -28,6 +28,9 @@ function formatValue(v: string | number | boolean | null, field?: ReportField): 
   if (v === null || v === undefined || v === '') return ''
   if (typeof v === 'number') return v
   if (field?.type === 'boolean') return v === true || v === 'true' ? 'Yes' : 'No'
+  // Same date-only trim the on-screen table applies (FlatTableView.formatCell); the time
+  // of day lives in the companion "<Label> Time" column.
+  if (field?.type === 'date') return String(v).slice(0, 10)
   if (field?.type === 'enum') return labelForFieldValue(field, v)
   return String(v)
 }

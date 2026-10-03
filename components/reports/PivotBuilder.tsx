@@ -33,7 +33,7 @@ import {
   type DatePreset, type SavedReportConfig,
 } from '@/lib/reporting/pivot-engine'
 import {
-  REPORT_ENTITIES, aggregationsForType,
+  REPORT_ENTITIES, aggregationsForType, defaultReportColumnKeys,
   type EntityKey, type ReportField,
 } from '@/lib/reporting/field-registry'
 import type { ReportRow } from '@/lib/queries/reporting'
@@ -123,7 +123,7 @@ export function PivotBuilder() {
         setFields(loadedFields)
         setRows(dRes.data?.rows ?? [])
         setTruncated(dRes.data?.truncated ?? false)
-        setColumns(loadedFields.filter((f) => f.key !== '__count__').slice(0, 6).map((f) => f.key))
+        setColumns(defaultReportColumnKeys(loadedFields))
         setRowFields([])
         setColFields([])
         setValueFields([{ field: '__count__', agg: 'count' }])
@@ -171,7 +171,7 @@ export function PivotBuilder() {
   }
 
   function resetLayout() {
-    setColumns(fields.slice(0, 6).map((f) => f.key))
+    setColumns(defaultReportColumnKeys(fields))
     setRowFields([])
     setColFields([])
     setValueFields([{ field: '__count__', agg: 'count' }])
