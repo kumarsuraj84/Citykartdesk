@@ -156,6 +156,7 @@ export const REPORT_ENTITIES: Record<EntityKey, ReportEntityDef> = {
       { key: 'responded_at_time', label: 'First Responded Time', type: 'string' },
       { key: 'resolved_at', label: 'Resolved', type: 'date' },
       { key: 'resolved_at_time', label: 'Resolved Time', type: 'string' },
+      { key: 'resolution_remark', label: 'Resolution Remark', type: 'string', groupable: false },
       { key: 'closed_at', label: 'Closed', type: 'date' },
       { key: 'closed_at_time', label: 'Closed Time', type: 'string' },
       { key: 'resolution_due_at', label: 'Resolution Due', type: 'date' },

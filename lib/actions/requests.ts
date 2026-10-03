@@ -581,7 +581,7 @@ export async function updateRequestStatus(
     requestId,
     actorId: profile.id,
     action: 'status_changed',
-    metadata: { from: currentStatus, to: newStatus },
+    metadata: { from: currentStatus, to: newStatus, ...(comment?.trim() ? { remark: comment.trim() } : {}) },
   })
   if (activityResult.error) {
     return { error: activityResult.error }

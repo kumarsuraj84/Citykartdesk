@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getEntityFields, RECORD_COUNT_FIELD, type EntityKey, type ReportField } from '@/lib/reporting/field-registry'
 import { agentScopeOrFilter, type ReportViewerScope } from '@/lib/reporting/access'
+import { latestResolveActivities, resolutionRemarks, type StatusActivity, type RemarkComment } from '@/lib/reporting/resolution-remark'
 import { getServiceFormFieldsForOrg, type ServiceFormFieldRef } from '@/lib/forms/sections'
 import { flattenLeafOptions } from '@/lib/forms/options'
 import { sourceChannelOf } from '@/lib/sources'
@@ -222,13 +223,15 @@ async function fetchRequestRows(
   const pageRows = all.slice(0, MAX_REPORT_ROWS)
   const requestIds = pageRows.map((r) => r.id)
 
-  const [collabCounts, attachmentCounts, commentCounts, timeMinutes, csatRatings, approvalSummaries] = await Promise.all([
+  const resolvedIds = pageRows.filter((r) => r.resolved_at).map((r) => r.id)
+  const [collabCounts, attachmentCounts, commentCounts, timeMinutes, csatRatings, approvalSummaries, resolutionRemarkByRequest] = await Promise.all([
     countByRequestId(admin, 'request_collaborators', requestIds),
     countByRequestId(admin, 'request_attachments', requestIds, (q) => q.is('deleted_at', null)),
     countByRequestId(admin, 'request_comments', requestIds),
     sumTimeTrackedMinutes(admin, requestIds),
     getCsatRatings(admin, requestIds),
     getApprovalSummaryByRequestId(admin, requestIds),
+    getResolutionRemarks(admin, resolvedIds),
   ])
 
   // The web/portal channel never writes requests.description — the requester's
@@ -301,6 +304,7 @@ async function fetchRequestRows(
       responded_at_time: timeOf(r.responded_at),
       resolved_at: r.resolved_at,
       resolved_at_time: timeOf(r.resolved_at),
+      resolution_remark: resolutionRemarkByRequest.get(r.id) ?? '',
       closed_at: r.closed_at,
       closed_at_time: timeOf(r.closed_at),
       resolution_due_at: r.resolution_due_at,
@@ -397,6 +401,21 @@ async function sumTimeTrackedMinutes(admin: AnyClient, requestIds: string[]): Pr
     minutes.set(e.request_id, (minutes.get(e.request_id) ?? 0) + Math.max(0, mins))
   }
   return minutes
+}
+
+/** The remark a technician typed when resolving each request (only those currently resolved). */
+async function getResolutionRemarks(admin: AnyClient, requestIds: string[]): Promise<Map<string, string>> {
+  const activities = await selectInBatches<StatusActivity>(
+    admin, 'request_activity', 'request_id, actor_id, created_at, metadata', requestIds,
+    (q) => q.eq('action', 'status_changed')
+  )
+  const latest = latestResolveActivities(activities)
+  const needComment = [...latest.entries()].filter(([, a]) => !a.metadata?.remark?.trim()).map(([id]) => id)
+  const comments = await selectInBatches<RemarkComment>(
+    admin, 'request_comments', 'request_id, author_id, created_at, body', needComment,
+    (q) => q.eq('is_internal', false)
+  )
+  return resolutionRemarks(latest, comments)
 }
 
 async function getCsatRatings(admin: AnyClient, requestIds: string[]): Promise<Map<string, number>> {
