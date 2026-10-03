@@ -1,14 +1,23 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { TechnicianDashboard } from '@/components/analytics/TechnicianDashboard'
-import { getAnalytics } from '@/lib/queries/analytics'
+import { AnalyticsDashboard } from '@/app/(app)/admin/reports/AnalyticsDashboard'
+import { getAnalytics, type Period } from '@/lib/queries/analytics'
 import { getTechnicianWorkloadBoard } from '@/lib/queries/requests'
-import { getCurrentProfile } from '@/lib/queries/profiles'
+import { getCurrentProfile, getEnabledModules } from '@/lib/queries/profiles'
 import { resolveReportAccess } from '@/lib/reporting/access'
 
-// The Technician-tier "Dashboards" page. It lives outside /admin because
-// app/(app)/admin/layout.tsx redirects every role but admin/manager/platform_owner
-// to /home — which is what made the sidebar's Dashboards link bounce technicians.
-export default async function TechnicianDashboardPage() {
+const PERIODS: Period[] = ['7d', '30d', '90d']
+
+// The Technician-tier "Dashboards" page: the same widgets as the admin analytics
+// dashboard, limited to the technician's own technician groups. It lives outside
+// /admin because app/(app)/admin/layout.tsx redirects every role but
+// admin/manager/platform_owner to /home — which is what made the sidebar's
+// Dashboards link bounce technicians.
+export default async function TechnicianDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string>>
+}) {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
   if (!profile.org_id) redirect('/home')
@@ -17,16 +26,38 @@ export default async function TechnicianDashboardPage() {
 
   const access = resolveReportAccess(profile, 'requests')
   if ('error' in access) redirect('/home')
+  if (!(await getEnabledModules()).includes('requests')) redirect('/home')
+
+  const sp = await searchParams
+  const period = (PERIODS as string[]).includes(sp.period) ? (sp.period as Period) : '30d'
 
   const [analytics, workload] = await Promise.all([
-    getAnalytics(profile.org_id, '30d'),
+    getAnalytics(profile.org_id, period, access.scope),
     getTechnicianWorkloadBoard(profile.org_id, access.scope),
   ])
+
   return (
-    <TechnicianDashboard
-      dailyActivity={analytics.dailyActivity}
-      backlogAging={analytics.backlogAging}
-      rows={workload}
-    />
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Activity and performance for your technician groups.</p>
+        </div>
+        <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 gap-0.5">
+          {PERIODS.map((p) => (
+            <Link
+              key={p}
+              href={`?period=${p}`}
+              className={`rounded-md px-4 py-1.5 text-xs font-semibold transition-all ${
+                period === p ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {p}
+            </Link>
+          ))}
+        </div>
+      </div>
+      <AnalyticsDashboard data={analytics} technicianWorkload={workload} userId={profile.id} />
+    </div>
   )
 }

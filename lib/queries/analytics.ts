@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import type { ReportViewerScope } from '@/lib/reporting/access'
 import { isCurrentlyBreached } from '@/lib/sla/breach'
 import { AGE_BUCKETS, ageBucketFor } from '@/lib/reporting/aging'
 
@@ -187,7 +188,23 @@ export type RequestFlow = { inflow: RollingStat; outflow: RollingStat }
 
 // ── Main query ─────────────────────────────────────────────────────────────────
 
-export async function getAnalytics(orgId: string, period: PeriodParam): Promise<AnalyticsData> {
+// A viewer who isn't org-wide only sees their own technician groups' data; no groups → nothing.
+const NO_TEAM_ID = '00000000-0000-0000-0000-000000000000'
+
+function scopeTeamIds(scope: ReportViewerScope): string[] | null {
+  if (scope.kind === 'all') return null
+  if (scope.kind === 'team' || scope.kind === 'agent') return scope.teamIds.length > 0 ? scope.teamIds : [NO_TEAM_ID]
+  return [NO_TEAM_ID]
+}
+
+export async function getAnalytics(
+  orgId: string,
+  period: PeriodParam,
+  scope: ReportViewerScope = { kind: 'all' }
+): Promise<AnalyticsData> {
+  const teamScope = scopeTeamIds(scope)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const inScope = (q: any) => (teamScope ? q.in('team_id', teamScope) : q)
   const admin = createAdminClient() as unknown as AnyClient
   const { start: startDate, end: endDate, label: periodLabel, days } = resolvePeriodParam(period)
   const start = startDate.toISOString()
@@ -199,7 +216,7 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
   // RLS, so this org boundary must be enforced here explicitly, not left to
   // the DB). Not period-windowed: an approval/decision inside the reporting
   // window can reference a request created well before it.
-  const { data: orgRequestIdRows } = await admin.from('requests').select('id').eq('org_id', orgId)
+  const { data: orgRequestIdRows } = await inScope(admin.from('requests').select('id').eq('org_id', orgId))
   const orgRequestIds = (orgRequestIdRows ?? []).map((r: { id: string }) => r.id)
   const { data: orgApprovalIdRows } = orgRequestIds.length > 0
     ? await admin.from('approvals').select('id').in('request_id', orgRequestIds)
@@ -247,20 +264,20 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
     { data: dailyAssignedRows },
   ] = await Promise.all([
     // Requests created in period
-    admin
+    inScope(admin
       .from('requests')
       .select('id, status, priority, team_id, service_id, assigned_to, created_at, resolved_at, responded_at, closed_at, resolution_due_at, response_due_at')
       .eq('org_id', orgId)
       .gte('created_at', start)
-      .lte('created_at', end)
+      .lte('created_at', end))
       .order('created_at', { ascending: true }),
 
     // All currently open requests (for backlog aging + SLA breached)
-    admin
+    inScope(admin
       .from('requests')
       .select('id, status, priority, team_id, assigned_to, created_at, resolution_due_at, response_due_at, responded_at')
       .eq('org_id', orgId)
-      .not('status', 'in', '("resolved","closed","cancelled")'),
+      .not('status', 'in', '("resolved","closed","cancelled")')),
 
     // Approval decisions in period
     orgApprovalIds.length > 0
@@ -292,16 +309,16 @@ export async function getAnalytics(orgId: string, period: PeriodParam): Promise<
     admin.from('profiles').select('id, full_name, role').eq('org_id', orgId),
 
     // Tasks
-    admin
+    inScope(admin
       .from('tasks')
       .select('id, status, priority, due_date, assignee_id, team_id, created_at, updated_at')
-      .eq('org_id', orgId),
+      .eq('org_id', orgId)),
 
     // Daily Activity (today/yesterday) + Req. Inflow/Outflow (24h/7d/30d) both
     // bucket off these same rows — fetched back to the widest window either
     // needs (30 days) so there's one created/closed query, not two.
-    admin.from('requests').select('created_at').eq('org_id', orgId).gte('created_at', last30dStartIso),
-    admin.from('requests').select('closed_at').eq('org_id', orgId).not('closed_at', 'is', null).gte('closed_at', last30dStartIso),
+    inScope(admin.from('requests').select('created_at').eq('org_id', orgId).gte('created_at', last30dStartIso)),
+    inScope(admin.from('requests').select('closed_at').eq('org_id', orgId).not('closed_at', 'is', null).gte('closed_at', last30dStartIso)),
     orgRequestIds.length > 0
       ? admin.from('request_activity').select('created_at').eq('action', 'assigned').in('request_id', orgRequestIds).gte('created_at', yesterdayStartIso)
       : Promise.resolve({ data: [] }),

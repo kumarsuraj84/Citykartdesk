@@ -91,7 +91,7 @@ export default async function ReportsPage({
     { data: scheduledReports = [] },
     technicianWorkload,
   ] = await Promise.all([
-    (tab === 'requests' || tab === 'sla') && hasRequests ? getAnalytics(profile.org_id, periodParam) : Promise.resolve(null),
+    (tab === 'requests' || tab === 'sla') && hasRequests ? getAnalytics(profile.org_id, periodParam, viewerScope) : Promise.resolve(null),
     tab === 'tasks'    && hasTasks    ? getTaskAnalytics(profile.org_id, periodParam) : Promise.resolve(null),
     hasRequests || hasTasks ? getWorkloadReport(profile.org_id) : Promise.resolve([]),
     tab === 'projects' && hasProjects ? getProjectAnalytics(profile.org_id) : Promise.resolve(null),
