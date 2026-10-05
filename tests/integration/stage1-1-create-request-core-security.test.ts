@@ -265,7 +265,7 @@ describe('Stage 1.1 Task 2 — createRequestCore() cross-tenant hardening', () =
       teamIdOverride: fx.teamBId, // belongs to Org B
     })
     expect(result.requestId).toBeUndefined()
-    expect(result.error).toBe('Selected team not found.')
+    expect(result.error).toBe('Selected technician group not found.')
     expect(await requestCount(fx.serviceAId)).toBe(before)
   })
 

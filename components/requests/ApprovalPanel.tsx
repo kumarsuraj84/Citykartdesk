@@ -84,9 +84,6 @@ export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: App
     })
   }
 
-  const approvedCount = approval.decisions.filter((d) => d.decision === 'approved').length
-  const totalSteps    = approval.steps.length
-
   return (
     <div className="space-y-3">
 
@@ -110,22 +107,11 @@ export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: App
 
         {/* Progress summary */}
         {isParallel && (
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">All must approve to release</span>
-              <span className="font-semibold text-foreground">{approvedCount}/{totalSteps}</span>
-            </div>
-            {totalSteps > 0 && (
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    approvedCount === totalSteps ? 'bg-emerald-500' : 'bg-amber-400'
-                  }`}
-                  style={{ width: `${(approvedCount / totalSteps) * 100}%` }}
-                />
-              </div>
-            )}
-          </div>
+          <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+            {approval.status === 'pending'
+              ? 'The first person to respond decides — their approval or rejection is final.'
+              : 'Settled by the first approver to respond.'}
+          </p>
         )}
       </div>
 

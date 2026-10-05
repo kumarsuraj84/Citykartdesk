@@ -108,9 +108,28 @@ async function archiveApprovalNotifications(requestId: string, opts: { onlyUserI
   await q
 }
 
+// Verify every selected approver exists, is active, and is in the request's org — without this,
+// an approver id from another tenant would get an approval_workflow_steps row, and RLS's
+// is_request_approver() grants read access purely off that row, with no separate org check of
+// its own: this is the only gate standing between a cross-org approver_user_id and a
+// cross-tenant data leak.
+async function loadValidApprovers(
+  admin: ReturnType<typeof createAdminClient>,
+  orgId: string,
+  approverIds: string[]
+): Promise<{ id: string; full_name: string }[] | null> {
+  const { data } = await admin
+    .from('profiles')
+    .select('id, full_name')
+    .in('id', approverIds)
+    .eq('is_active', true)
+    .eq('org_id', orgId)
+  return data && data.length === approverIds.length ? data : null
+}
+
 // Send a request to multiple users for parallel ad-hoc approval.
-// current_step = 0 signals "parallel mode" — all approvers act independently.
-// Request releases from hold only when ALL have approved.
+// current_step = 0 signals "parallel mode" — all approvers act independently, and the FIRST
+// decision (approve or reject) is final: the request resumes or is cancelled right then.
 export async function sendAdHocApproval(
   requestId: string,
   approverIds: string[]
@@ -142,21 +161,8 @@ export async function sendAdHocApproval(
 
   if (!req.org_id) return { error: 'Request has no organization.' }
 
-  // Verify all approvers exist, are active, and are in the same org as the
-  // request — without this, an approver id from another tenant (never
-  // reachable via searchManagersForApproval's own org_id filter, but not
-  // blocked here either) would get an approval_workflow_steps row, and RLS's
-  // is_request_approver() grants read access purely off that row, with no
-  // separate org check of its own — this is the only gate standing between
-  // a cross-org approver_user_id and a cross-tenant data leak.
-  const { data: approvers } = await admin
-    .from('profiles')
-    .select('id, full_name')
-    .in('id', approverIds)
-    .eq('is_active', true)
-    .eq('org_id', req.org_id)
-  if (!approvers || approvers.length !== approverIds.length)
-    return { error: 'One or more selected users were not found.' }
+  const approvers = await loadValidApprovers(admin, req.org_id, approverIds)
+  if (!approvers) return { error: 'One or more selected users were not found.' }
 
   // Block if an approval is already open
   const { data: existing } = await admin
@@ -262,6 +268,89 @@ export async function sendAdHocApproval(
   return {}
 }
 
+// Add more people to an approval that is already pending (e.g. Banking was asked, and now Ankur
+// should be asked too). Only for ad-hoc approvals sent to several people at once — the first
+// person to respond still decides. A fixed multi-step workflow can't take extra approvers.
+export async function addAdHocApprovers(
+  requestId: string,
+  approverIds: string[]
+): Promise<ActionResult> {
+  if (!approverIds.length) return { error: 'Select at least one approver.' }
+
+  const profile = await getCurrentProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+
+  const supabase = await createClient()
+  const admin = createAdminClient()
+
+  const { data: req } = await supabase
+    .from('requests')
+    .select('id, title, status, team_id, requester_id, org_id')
+    .eq('id', requestId)
+    .single()
+  if (!req) return { error: 'Request not found.' }
+
+  const onTeam = profile.role === 'agent' && profile.team_members.some((m) => m.team_id === req.team_id)
+  if (!['manager', 'admin', 'platform_owner'].includes(profile.role) && !onTeam)
+    return { error: 'Unauthorized.' }
+  if (!req.org_id) return { error: 'Request has no organization.' }
+
+  const { data: approval } = await admin
+    .from('approvals')
+    .select('id, workflow_id, current_step')
+    .eq('request_id', requestId)
+    .eq('status', 'pending')
+    .maybeSingle()
+  if (!approval) return { error: 'There is no pending approval to add people to.' }
+  if (approval.current_step !== 0)
+    return { error: 'This approval follows a fixed set of steps, so extra approvers cannot be added to it.' }
+
+  const approvers = await loadValidApprovers(admin, req.org_id, approverIds)
+  if (!approvers) return { error: 'One or more selected users were not found.' }
+
+  const { data: existingSteps } = await admin
+    .from('approval_workflow_steps')
+    .select('step_order, approver_user_id')
+    .eq('workflow_id', approval.workflow_id)
+  const already = new Set((existingSteps ?? []).map((s) => s.approver_user_id))
+  const fresh = approvers.filter((a) => !already.has(a.id))
+  if (fresh.length === 0) return { error: 'Everyone you selected is already an approver on this request.' }
+
+  const nextOrder = Math.max(0, ...(existingSteps ?? []).map((s) => s.step_order)) + 1
+  const { error: stepErr } = await admin.from('approval_workflow_steps').insert(
+    fresh.map((a, i) => ({
+      workflow_id: approval.workflow_id,
+      step_order: nextOrder + i,
+      approver_type: 'specific_user' as const,
+      approver_user_id: a.id,
+    }))
+  )
+  if (stepErr) return { error: sanitizeError(stepErr, { route: 'approvals.ts#addAdHocApprovers', fallback: 'Failed to add approvers.' }) }
+
+  await logActivity({
+    requestId,
+    actorId: profile.id,
+    action: 'approval_requested',
+    metadata: { approver_names: fresh.map((a) => a.full_name), added_to_pending: true },
+  }).catch(() => {})
+
+  for (const a of fresh) {
+    notify({
+      recipientId: a.id,
+      actorId: profile.id,
+      type: 'approval_requested',
+      title: 'Approval required',
+      body: `"${req.title}" has been sent to you for approval.`,
+      requestId,
+      link: `/requests/${requestId}?tab=approvals`,
+    }).catch(() => {})
+  }
+
+  revalidatePath(`/requests/${requestId}`)
+  revalidatePath('/approvals')
+  return {}
+}
+
 // ── Shared: verify the caller is the correct approver for the current step ────
 
 async function resolveApprovalContext(approvalId: string) {
@@ -328,7 +417,7 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
   const ctx = await resolveApprovalContext(approvalId)
   if ('error' in ctx) return { error: ctx.error }
 
-  const { approval, steps, currentStep, profile, isParallel, decidedSteps } = ctx
+  const { approval, steps, currentStep, profile, isParallel } = ctx
   const admin = createAdminClient()
 
   // Record the decision
@@ -344,13 +433,12 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
   // This is now decided for the acting approver — their notification is done.
   await archiveApprovalNotifications(approval.request_id, { onlyUserId: profile.id })
 
-  // For parallel: done when all steps now have an approved decision
-  const nowApprovedSteps = new Set([...decidedSteps, currentStep.step_order])
-  const allApproved = isParallel
-    ? steps.every((s) => nowApprovedSteps.has(s.step_order))
+  // Parallel (ad-hoc, several people asked at once): whoever responds first decides — one
+  // approval settles it, exactly as one rejection already does. Sequential workflows still
+  // need every step approved in order.
+  const isLastStep = isParallel
+    ? true
     : currentStep.step_order >= Math.max(...steps.map((s) => s.step_order))
-
-  const isLastStep = allApproved
 
   if (isLastStep) {
     // All steps approved — move approval to approved + unblock the request.

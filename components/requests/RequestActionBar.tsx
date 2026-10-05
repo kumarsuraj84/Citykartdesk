@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { Loader2, UserCheck, ChevronDown, GitMerge, CheckCircle2, Search, X } from 'lucide-react'
 import { assignRequest, updateRequestStatus } from '@/lib/actions/requests'
-import { sendAdHocApproval, searchManagersForApproval } from '@/lib/actions/approvals'
+import { sendAdHocApproval, addAdHocApprovers, searchManagersForApproval } from '@/lib/actions/approvals'
 import { SLACountdownClocks } from './SLACountdownClocks'
 import type { RequestStatus } from '@/types'
 import { ROLE_LABELS } from '@/lib/constants/roles'
@@ -78,6 +78,8 @@ export function RequestActionBar({
   // Start Working is mandatory before a request can go for approval — it
   // can't be sent while it's still sitting unstarted in open/assigned.
   const canSendForApproval = !canStartWorking
+  // While an approval is already open the menu adds people to it instead of starting a second one.
+  const isPendingApproval = localStatus === 'pending_approval'
 
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -96,7 +98,7 @@ export function RequestActionBar({
     if (isError) {
       if (flashErrorTimer.current) clearTimeout(flashErrorTimer.current)
       setActionError(msg)
-      flashErrorTimer.current = setTimeout(() => setActionError(null), 4000)
+      flashErrorTimer.current = setTimeout(() => setActionError(null), 10000)
     } else {
       if (flashSuccessTimer.current) clearTimeout(flashSuccessTimer.current)
       setActionSuccess(msg)
@@ -186,9 +188,10 @@ export function RequestActionBar({
     setShowApprovalPicker(false)
     const names = selectedApprovers.map((a) => a.full_name).join(', ')
     actTransition(async () => {
-      const result = await sendAdHocApproval(requestId, selectedApprovers.map((a) => a.id))
+      const ids = selectedApprovers.map((a) => a.id)
+      const result = isPendingApproval ? await addAdHocApprovers(requestId, ids) : await sendAdHocApproval(requestId, ids)
       if (result.error) { flash(result.error, true); return }
-      flash(`Sent to ${names} for approval`)
+      flash(isPendingApproval ? `Added ${names} to the approval` : `Sent to ${names} for approval`)
       setApprovalSearch('')
       setApprovalResults([])
       setSelectedApprovers([])
@@ -260,7 +263,7 @@ export function RequestActionBar({
                     className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <GitMerge className="h-4 w-4 text-violet-500" />
-                    Send for Approval
+                    {isPendingApproval ? 'Add Another Approver' : 'Send for Approval'}
                     <ChevronDown className={`ml-auto h-3.5 w-3.5 text-muted-foreground transition-transform ${showApprovalPicker ? 'rotate-180' : ''}`} />
                   </button>
                   {!canSendForApproval && (
@@ -270,7 +273,11 @@ export function RequestActionBar({
                   {/* Inline approval picker */}
                   {showApprovalPicker && canSendForApproval && (
                     <div className="mx-1 mb-1 mt-0.5 rounded-lg border border-border bg-muted/40 p-2 space-y-2">
-                      <p className="text-[11px] text-muted-foreground">Add one or more people. All must approve before the request resumes.</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {isPendingApproval
+                          ? 'Add people to the approval already open. Whoever responds first decides — approve or reject is final.'
+                          : 'Add one or more people. Whoever responds first decides — approve or reject is final.'}
+                      </p>
 
                       {/* Selected approver chips */}
                       {selectedApprovers.length > 0 && (
@@ -328,7 +335,7 @@ export function RequestActionBar({
                       >
                         {isActing
                           ? <Loader2 className="mx-auto h-3.5 w-3.5 animate-spin" />
-                          : `Send to ${selectedApprovers.length || ''} ${selectedApprovers.length === 1 ? 'person' : 'people'} →`}
+                          : `${isPendingApproval ? 'Add' : 'Send to'} ${selectedApprovers.length || ''} ${selectedApprovers.length === 1 ? 'person' : 'people'} →`}
                       </button>
                     </div>
                   )}

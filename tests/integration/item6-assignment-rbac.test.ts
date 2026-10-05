@@ -75,7 +75,7 @@ describe('Item 6: assignRequest() RBAC', () => {
 
     actAs(fx.agentA)
     const result = await assignRequest(req.id, fx.agentB.id)
-    expect(result.error).toBe('You can only assign this ticket to a teammate on the same team.')
+    expect(result.error).toBe('You can only assign this ticket to a member of the same technician group.')
 
     const { data: after } = await admin.from('requests').select('assigned_to').eq('id', req.id).single()
     expect(after?.assigned_to).toBeNull()
@@ -86,7 +86,7 @@ describe('Item 6: assignRequest() RBAC', () => {
 
     actAs(fx.agentA)
     const result = await assignRequest(req.id, null)
-    expect(result.error).toBe('Technicians cannot unassign a ticket — assign it to a teammate instead.')
+    expect(result.error).toBe('Technicians cannot unassign a ticket — assign it to a technician group member instead.')
   })
 
   it('requester cannot assign a ticket', async () => {
