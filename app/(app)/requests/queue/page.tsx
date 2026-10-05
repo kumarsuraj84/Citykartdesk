@@ -13,6 +13,7 @@ import { RequestBoardView } from '@/components/requests/RequestBoardView'
 import { Pagination } from '@/components/ui/Pagination'
 import type { RequestStatus, RequestPriority } from '@/types'
 import type { AssignedToFilter } from '@/lib/queries/requests'
+import { resolveQueueStatusFilter } from '@/lib/requests/queue-status-filter'
 
 // ── Agent Requests — a page for working tickets, not raising them ──────────────
 // Deliberately separate from /requests (which is purely "what did I raise as a
@@ -96,8 +97,8 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
   const sortCol = SORT_COLUMNS.includes(params.sort ?? '') ? params.sort! : 'updated_at'
   const sortDir: 'asc' | 'desc' = params.dir === 'asc' ? 'asc' : 'desc'
 
-  const statusFilter: RequestStatus | 'active' | 'unresolved' | undefined =
-    rawStatus === 'all' ? undefined : !rawStatus ? 'active' : (rawStatus as RequestStatus | 'unresolved')
+  // Technicians see only unresolved work by default; Resolved/Closed/All are explicit choices.
+  const statusFilter = resolveQueueStatusFilter(rawStatus)
 
   const assignedTo: AssignedToFilter | undefined = rawAssigned || undefined
   const priorityFilter = PRIORITY_OPTIONS.some((p) => p.value === rawPriority) ? (rawPriority as RequestPriority) : undefined
