@@ -147,8 +147,8 @@ function SortableWidget({ id, span, children }: { id: string; span: WidgetSpan; 
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-export function AnalyticsDashboard({ data, technicianWorkload, userId }: {
-  data: AnalyticsData; technicianWorkload: TechnicianWorkloadRow[]; userId: string
+export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds }: {
+  data: AnalyticsData; technicianWorkload: TechnicianWorkloadRow[]; userId: string; groupIds?: string[]
 }) {
   const [drawer, setDrawer] = useState<DrawerFilter | null>(null)
   const close = useCallback(() => setDrawer(null), [])
@@ -763,7 +763,7 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId }: {
 
   return (
     <>
-      <DetailDrawer filter={drawer} onClose={close} />
+      <DetailDrawer filter={drawer} onClose={close} groupIds={groupIds} />
 
       <div className="space-y-4">
 

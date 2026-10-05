@@ -21,22 +21,26 @@ export type WorkloadRow = {
  *  agentLeaderboard in analytics.ts/taskAnalytics.ts, this is a right-now snapshot
  *  (capacity is about current load, not historical throughput) and covers every
  *  agent with open work, not just the top 10 by resolved/done count. */
-export async function getWorkloadReport(orgId: string): Promise<WorkloadRow[]> {
+export async function getWorkloadReport(orgId: string, teamIds: string[] | null = null): Promise<WorkloadRow[]> {
+  // null = every group; an empty list = none (a viewer in no group sees no workload).
+  if (teamIds && teamIds.length === 0) return []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const inGroups = (q: any) => (teamIds ? q.in('team_id', teamIds) : q)
   const admin = createAdminClient() as unknown as AnyClient
   const now = new Date()
 
   // Admin client bypasses RLS — every query below scopes to orgId explicitly.
   const [{ data: openRequests }, { data: openTasks }, { data: profiles }] = await Promise.all([
-    admin.from('requests')
+    inGroups(admin.from('requests')
       .select('assigned_to,resolution_due_at')
       .eq('org_id', orgId)
       .not('status', 'in', '("resolved","closed","cancelled")')
-      .not('assigned_to', 'is', null),
-    admin.from('tasks')
+      .not('assigned_to', 'is', null)),
+    inGroups(admin.from('tasks')
       .select('assignee_id,due_date')
       .eq('org_id', orgId)
       .not('status', 'in', '("done","cancelled")')
-      .not('assignee_id', 'is', null),
+      .not('assignee_id', 'is', null)),
     admin.from('profiles').select('id,full_name').eq('org_id', orgId),
   ])
 

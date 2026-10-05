@@ -55,6 +55,27 @@ describe('/dashboards — the technician dashboard route', () => {
     expect(workloadMock).toHaveBeenCalledWith('org-1', scope)
   })
 
+  it('a technician in several groups can pick some: analytics and workload are limited to the picked groups', async () => {
+    const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    const C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+    const team_members = [A, B, C].map((id, i) => ({ team_id: id, team: { id, name: 'Group ' + i } }))
+    getCurrentProfileMock.mockResolvedValue(profileWith('agent', { team_members }))
+    await callPage({ groups: A + ',' + B })
+    const scope = { kind: 'agent', userId: 'u1', teamIds: [A, B] }
+    expect(getAnalyticsMock).toHaveBeenCalledWith('org-1', '30d', scope)
+    expect(workloadMock).toHaveBeenCalledWith('org-1', scope)
+  })
+
+  it('a group the technician is not in is ignored, never widening what they see', async () => {
+    const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    const team_members = [A, B].map((id, i) => ({ team_id: id, team: { id, name: 'Group ' + i } }))
+    getCurrentProfileMock.mockResolvedValue(profileWith('agent', { team_members }))
+    await callPage({ groups: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' })
+    expect(getAnalyticsMock).toHaveBeenCalledWith('org-1', '30d', { kind: 'agent', userId: 'u1', teamIds: [A, B] })
+  })
+
   it('honours the period selector', async () => {
     getCurrentProfileMock.mockResolvedValue(profileWith('agent'))
     await callPage({ period: '7d' })

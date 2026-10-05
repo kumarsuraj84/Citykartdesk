@@ -90,9 +90,11 @@ function RequestRow({ r }: { r: DrawerRequest }) {
 interface Props {
   filter: DrawerFilter | null
   onClose: () => void
+  /** Technician groups picked on the dashboard, so the list matches the card that was clicked. */
+  groupIds?: string[]
 }
 
-export function DetailDrawer({ filter, onClose }: Props) {
+export function DetailDrawer({ filter, onClose, groupIds }: Props) {
   const [isPending, startTransition] = useTransition()
   const [data, setData]  = useState<DrawerRequest[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -105,16 +107,16 @@ export function DetailDrawer({ filter, onClose }: Props) {
     // clearing stale results when the filter is removed is part of that external sync.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!filter) { setData(null); setError(null); return }
-    const key = JSON.stringify(filter)
+    const key = JSON.stringify({ filter, groupIds })
     if (key === prevFilterRef.current) return
     prevFilterRef.current = key
     setData(null); setError(null)
     startTransition(async () => {
-      const res = await getFilteredRequests(filter)
+      const res = await getFilteredRequests(groupIds?.length ? { ...filter, groupIds } : filter)
       if (res.error) setError(res.error)
       else setData(res.data)
     })
-  }, [filter])
+  }, [filter, groupIds])
 
   // Escape to close
   useEffect(() => {

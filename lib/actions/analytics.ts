@@ -22,6 +22,8 @@ export type DrawerFilter = {
   status?: string[]
   priority?: string
   teamId?: string
+  /** Technician groups picked on the dashboard — narrows further, never past the viewer's own scope. */
+  groupIds?: string[]
   assignedTo?: string
   slaBreached?: boolean
   frtBreached?: boolean
@@ -125,6 +127,7 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
     if (filter.status?.length)   q = q.in('status', filter.status as RequestStatus[])
     if (filter.priority)         q = q.eq('priority', filter.priority as RequestPriority)
     if (filter.teamId)           q = q.eq('team_id', filter.teamId)
+    if (filter.groupIds?.length) q = q.in('team_id', filter.groupIds)
     if (filter.assignedTo)       q = q.eq('assigned_to', filter.assignedTo)
 
     if (filter.slaBreached) {
