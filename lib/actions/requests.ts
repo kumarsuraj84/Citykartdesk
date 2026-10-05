@@ -19,6 +19,7 @@ import { mapWithConcurrency } from '@/lib/async/concurrency'
 import { createRequestCore } from '@/lib/requests/create-request-core'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { logger } from '@/lib/observability/logger'
+import { buildFirstResponseMessage } from '@/lib/requests/first-response'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus } from '@/types'
 import type { Database, Json } from '@/types/database'
 
@@ -169,15 +170,17 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
 export async function updateRequestStatus(
   requestId: string,
   newStatus: RequestStatus,
-  comment?: string
+  commentInput?: string
 ): Promise<ActionResult> {
+  // Reassigned below for a first "Start Working", which posts an automatic first-response message.
+  let comment = commentInput
   const supabase = await createClient()
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, status, priority, requester_id, team_id, assigned_to, responded_at, waiting_since, response_due_at, resolution_due_at, resolved_at, form_data, form_sections_snapshot, form_schema_snapshot, cancellation_reason, reopen_deadline_at, reopen_count, paused_ms_total')
+    .select('id, request_no, status, priority, requester_id, team_id, assigned_to, responded_at, waiting_since, response_due_at, resolution_due_at, resolved_at, form_data, form_sections_snapshot, form_schema_snapshot, cancellation_reason, reopen_deadline_at, reopen_count, paused_ms_total')
     .eq('id', requestId)
     .single()
 
@@ -287,12 +290,22 @@ export async function updateRequestStatus(
   }
 
   // Starting work (open/assigned -> in_progress) for the very first time IS
-  // the response — mandatory because it's also the first message the
-  // requester actually sees from a technician, not just a status flip.
-  // Re-entering in_progress later (e.g. from waiting_user) isn't gated —
+  // the response — it's also the first message the requester actually sees from a
+  // technician, not just a status flip. The technician doesn't have to type it: if they
+  // didn't supply one, an automatic message is posted to the conversation in their name.
+  // Re-entering in_progress later (e.g. from waiting_user) isn't affected —
   // responded_at is already set by then.
   if (agentInitiated && newStatus === 'in_progress' && !request.responded_at && !comment?.trim()) {
-    return { error: 'Please add an initial response message before starting work.' }
+    const { data: requesterProfile } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', request.requester_id)
+      .maybeSingle()
+    comment = buildFirstResponseMessage({
+      requesterName: requesterProfile?.full_name,
+      technicianName: profile.full_name,
+      requestNo: request.request_no,
+    })
   }
 
   // Waiting on User and Resolved are both messages the requester actually
