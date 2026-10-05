@@ -2,12 +2,15 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { AnalyticsDashboard } from '@/app/(app)/admin/reports/AnalyticsDashboard'
 import { GroupFilter } from '@/components/analytics/GroupFilter'
+import { CapacityBanner } from '@/components/analytics/CapacityBanner'
+import { highestOpenAgents } from '@/lib/analytics/highest-open'
+import { getWorkloadReport } from '@/lib/queries/workload'
 import { getAnalytics, type Period } from '@/lib/queries/analytics'
 import { getTechnicianWorkloadBoard } from '@/lib/queries/requests'
 import { getCurrentProfile, getEnabledModules } from '@/lib/queries/profiles'
 import { getSelectableGroups } from '@/lib/queries/dashboardGroups'
 import { resolveReportAccess } from '@/lib/reporting/access'
-import { parseGroupsParam, narrowScopeToGroups } from '@/lib/analytics/group-filter'
+import { parseGroupsParam, narrowScopeToGroups, teamIdsForScope } from '@/lib/analytics/group-filter'
 
 const PERIODS: Period[] = ['7d', '30d', '90d']
 
@@ -39,10 +42,13 @@ export default async function TechnicianDashboardPage({
   const { scope, selected } = narrowScopeToGroups(access.scope, parseGroupsParam(sp.groups), groups.map((g) => g.id))
   const groupsQS = selected.length ? `&groups=${selected.join(',')}` : ''
 
-  const [analytics, workload] = await Promise.all([
+  const [analytics, workload, workloadRows] = await Promise.all([
     getAnalytics(profile.org_id, period, scope),
     getTechnicianWorkloadBoard(profile.org_id, scope),
+    // Who carries the biggest backlog in the technician's own groups — same banner managers see.
+    getWorkloadReport(profile.org_id, teamIdsForScope(scope)),
   ])
+  const topOpenAgents = highestOpenAgents(workloadRows)
 
   return (
     <div className="space-y-4">
@@ -68,6 +74,7 @@ export default async function TechnicianDashboardPage({
           </div>
         </div>
       </div>
+      {topOpenAgents.length > 0 && <CapacityBanner agents={topOpenAgents} />}
       <AnalyticsDashboard data={analytics} technicianWorkload={workload} userId={profile.id} groupIds={selected} />
     </div>
   )

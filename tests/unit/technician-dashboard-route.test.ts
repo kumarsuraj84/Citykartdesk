@@ -6,7 +6,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { getCurrentProfileMock, getEnabledModulesMock, getAnalyticsMock, workloadMock } = vi.hoisted(() => ({
+const { getCurrentProfileMock, getEnabledModulesMock, getAnalyticsMock, workloadMock, workloadReportMock } = vi.hoisted(() => ({
+  workloadReportMock: vi.fn(),
   getCurrentProfileMock: vi.fn(),
   getEnabledModulesMock: vi.fn(),
   getAnalyticsMock: vi.fn(),
@@ -15,6 +16,7 @@ const { getCurrentProfileMock, getEnabledModulesMock, getAnalyticsMock, workload
 vi.mock('@/lib/queries/profiles', () => ({ getCurrentProfile: getCurrentProfileMock, getEnabledModules: getEnabledModulesMock }))
 vi.mock('@/lib/queries/analytics', () => ({ getAnalytics: getAnalyticsMock }))
 vi.mock('@/lib/queries/requests', () => ({ getTechnicianWorkloadBoard: workloadMock }))
+vi.mock('@/lib/queries/workload', () => ({ getWorkloadReport: workloadReportMock }))
 vi.mock('@/app/(app)/admin/reports/AnalyticsDashboard', () => ({ AnalyticsDashboard: () => null }))
 
 class RedirectSignal extends Error {
@@ -26,6 +28,19 @@ vi.mock('next/navigation', () => ({
 
 function profileWith(role: string, overrides: Record<string, unknown> = {}) {
   return { id: 'u1', org_id: 'org-1', role, team_members: [{ team_id: 'bd' }, { team_id: 'admin-group' }], ...overrides }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function hasComponent(node: any, name: string): boolean {
+  if (!node || typeof node !== 'object') return false
+  if (Array.isArray(node)) return node.some((n) => hasComponent(n, name))
+  if (typeof node.type === 'function' && node.type.name === name) return true
+  return hasComponent(node.props?.children, name)
+}
+
+async function renderTree(searchParams: Record<string, string> = {}) {
+  const { default: Page } = await import('@/app/(app)/dashboards/page')
+  return Page({ searchParams: Promise.resolve(searchParams) })
 }
 
 async function callPage(searchParams: Record<string, string> = {}) {
@@ -45,6 +60,7 @@ describe('/dashboards — the technician dashboard route', () => {
     getEnabledModulesMock.mockReset().mockResolvedValue(['requests'])
     getAnalyticsMock.mockReset().mockResolvedValue({})
     workloadMock.mockReset().mockResolvedValue([])
+    workloadReportMock.mockReset().mockResolvedValue([])
   })
 
   it('a technician reaches it, and analytics + workload are scoped to their own work plus their groups', async () => {
@@ -74,6 +90,21 @@ describe('/dashboards — the technician dashboard route', () => {
     getCurrentProfileMock.mockResolvedValue(profileWith('agent', { team_members }))
     await callPage({ groups: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' })
     expect(getAnalyticsMock).toHaveBeenCalledWith('org-1', '30d', { kind: 'agent', userId: 'u1', teamIds: [A, B] })
+  })
+
+  it('a technician with a SINGLE group still sees the backlog banner (and no picker is needed)', async () => {
+    const G = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    getCurrentProfileMock.mockResolvedValue(profileWith('agent', { team_members: [{ team_id: G, team: { id: G, name: 'IT Group' } }] }))
+    workloadReportMock.mockResolvedValue([{ agentId: 'a1', agentName: 'Aakankasha Gupta', totalOpen: 6 }, { agentId: 'a2', agentName: 'Kapil Dev', totalOpen: 6 }])
+    const tree = await renderTree()
+    expect(workloadReportMock).toHaveBeenCalledWith('org-1', [G])
+    expect(hasComponent(tree, 'CapacityBanner')).toBe(true)
+  })
+
+  it('shows no banner when nobody in the technician groups has an open ticket', async () => {
+    getCurrentProfileMock.mockResolvedValue(profileWith('agent'))
+    workloadReportMock.mockResolvedValue([])
+    expect(hasComponent(await renderTree(), 'CapacityBanner')).toBe(false)
   })
 
   it('honours the period selector', async () => {
