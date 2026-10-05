@@ -14,7 +14,7 @@ export function CapacityBanner({ agents }: { agents: WorkloadRow[] }) {
       <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
       <div className="flex-1 text-sm">
         <p>
-          <strong>Highest open tickets</strong> — {agents.length > 1 ? 'technicians' : 'technician'} carrying the most work right now:
+          <strong>Highest open tickets</strong> — Backlog of technicians as of now:
         </p>
         <p className="mt-1 flex flex-wrap gap-x-1.5">
           {agents.map((a, i) => (

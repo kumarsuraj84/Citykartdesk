@@ -33,14 +33,14 @@ describe('CapacityBanner', () => {
   it('shows one technician with their count', () => {
     render(<CapacityBanner agents={[row('Nisha Negi', 30)]} />)
     expect(screen.getByText('Nisha Negi (30)')).toBeTruthy()
-    expect(screen.getByText(/technician carrying the most work/)).toBeTruthy()
+    expect(screen.getByText(/Backlog of technicians as of now/)).toBeTruthy()
   })
 
   it('shows two technicians when two are tied', () => {
     render(<CapacityBanner agents={[row('Ajay Kumar', 12), row('Nisha Negi', 12)]} />)
     expect(screen.getByText('Ajay Kumar (12),')).toBeTruthy()
     expect(screen.getByText('Nisha Negi (12)')).toBeTruthy()
-    expect(screen.getByText(/technicians carrying the most work/)).toBeTruthy()
+    expect(screen.getByText(/Backlog of technicians as of now/)).toBeTruthy()
   })
 
   it('renders nothing for an empty list', () => {
