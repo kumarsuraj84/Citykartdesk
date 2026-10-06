@@ -9,6 +9,7 @@ import { ThemeSwitcher } from './ThemeSwitcher'
 import { BrandLogo } from './BrandLogo'
 import { AutoRefresh } from './AutoRefresh'
 import { AutoPushPrompt } from './AutoPushPrompt'
+import { NewVersionBanner } from './NewVersionBanner'
 import { ROLE_LABELS } from '@/lib/constants/roles'
 import type { ProfileWithTeams, NavVisibility, NotificationWithActor } from '@/types'
 import type { NavCounts } from '@/lib/queries/profiles'
@@ -110,6 +111,7 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <AutoRefresh />
       <AutoPushPrompt />
+      <NewVersionBanner />
 
       {/* ── Dark top bar (full width) ─────────────────────────────────────── */}
       <header className="flex h-16 shrink-0 items-center gap-4 px-4 border-b border-black/10 bg-[image:var(--gradient-nav)] z-40">

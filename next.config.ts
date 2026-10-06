@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
 
+// One stamp per production build, set ONCE by scripts/windows/build-for-deploy.ps1 (reading the clock here would
+// give each of Next's build processes a different value). Every open page compares it with the server's
+// current one (/api/version) to tell people when to refresh after a deployment. "dev" = local development.
+const BUILD_ID = process.env.CK_BUILD_ID || 'dev'
+
 const nextConfig: NextConfig = {
+  env: { NEXT_PUBLIC_BUILD_ID: BUILD_ID },
+  generateBuildId: async () => BUILD_ID,
   // Emits a self-contained .next/standalone server (only the node_modules it
   // actually needs) — the Dockerfile copies just that output, not the full
   // repo + node_modules, into the runtime image. See docs/RAILWAY-DEPLOYMENT.md.

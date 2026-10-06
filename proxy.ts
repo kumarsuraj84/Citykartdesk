@@ -33,6 +33,7 @@ export async function proxy(request: NextRequest) {
   // real deployment, independent of every other external prerequisite.
   const PUBLIC_API_ROUTES = new Set([
     '/api/health',
+    '/api/version',
     '/api/alerts/run',
     '/api/business-rules/run',
     '/api/desktime/sync',

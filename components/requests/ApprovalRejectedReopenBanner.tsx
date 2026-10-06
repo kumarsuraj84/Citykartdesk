@@ -59,7 +59,7 @@ export function ApprovalRejectedReopenBanner({
         {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-3">
-        <span className="flex items-center gap-1 text-[11px] text-violet-700/80 dark:text-violet-400/80">
+        <span className="flex items-center gap-1 text-[11px] text-violet-700/80 dark:text-violet-400/80" suppressHydrationWarning>
           <Clock className="h-3 w-3" />
           {formatCountdown(remaining)} left to reopen
         </span>

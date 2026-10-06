@@ -91,7 +91,7 @@ export function ResolvedReopenBanner({
         </div>
         {!showForm && (
           <div className="flex shrink-0 items-center gap-3">
-            <span className="flex items-center gap-1 text-[11px] text-amber-700/80 dark:text-amber-400/80">
+            <span className="flex items-center gap-1 text-[11px] text-amber-700/80 dark:text-amber-400/80" suppressHydrationWarning>
               <Clock className="h-3 w-3" />
               {formatCountdown(remaining)} left
             </span>
@@ -133,7 +133,7 @@ export function ResolvedReopenBanner({
             >
               Cancel
             </button>
-            <span className="ml-auto flex items-center gap-1 text-[11px] text-amber-700/80 dark:text-amber-400/80">
+            <span className="ml-auto flex items-center gap-1 text-[11px] text-amber-700/80 dark:text-amber-400/80" suppressHydrationWarning>
               <Clock className="h-3 w-3" />
               {formatCountdown(remaining)} left
             </span>

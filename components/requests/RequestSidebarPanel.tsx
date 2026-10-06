@@ -923,7 +923,7 @@ export function RequestSidebarPanel({
         {/* Read-only: Created */}
         <PropRow label="Created">
           <span className="text-xs text-muted-foreground" suppressHydrationWarning>
-            {formatDateTime(createdAt)} <span className="text-muted-foreground/60">({formatRelativeTime(createdAt).replace(/ ago$/, '')})</span>
+            {formatDateTime(createdAt)} <span className="text-muted-foreground/60" suppressHydrationWarning>({formatRelativeTime(createdAt).replace(/ ago$/, '')})</span>
           </span>
         </PropRow>
 

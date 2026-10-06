@@ -14,6 +14,8 @@ $env:NEXT_PUBLIC_SUPABASE_URL = $SupabaseUrl
 $env:NEXT_PUBLIC_APP_URL = $AppUrl
 $env:NEXT_PUBLIC_SUPABASE_ANON_KEY = $SupabaseAnonKey
 $env:NEXT_DIST_DIR = '.next-deploy'
+# One version stamp for this whole build — see next.config.ts (BUILD_ID) and /api/version.
+$env:CK_BUILD_ID = (Get-Date -Format 'yyyyMMdd-HHmmss')
 
 if (Test-Path .next-deploy) { Remove-Item .next-deploy -Recurse -Force }
 # --webpack, not the (default-since-Next-16) Turbopack: Turbopack's standalone output has a
