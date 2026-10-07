@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useTransition } from 'react'
 import { ChevronDown, Loader2 } from 'lucide-react'
+import { CopyButton } from '@/components/ui/CopyButton'
 import { FieldRenderer } from '@/components/forms/FieldRenderer'
 import { getDefaultValue } from '@/components/forms/DynamicForm'
 import type { FieldValue } from '@/components/forms/DynamicForm'
@@ -83,25 +84,32 @@ export function SubmittedFieldRow({ requestId, field, value, canEdit }: Submitte
     })
   }
 
+  const shown = displayFieldValue(field, cur)
+
   return (
-    <div className="flex items-center justify-between gap-3 py-2 border-b border-border/50 last:border-0">
+    <div className="group flex items-center justify-between gap-3 py-2 border-b border-border/50 last:border-0">
       <span className="shrink-0 text-[11px] text-muted-foreground w-20">
         {isTechnicianMandatory(field) && <span className="mr-0.5 text-destructive">*</span>}
         {field.label}
       </span>
-      <div ref={ref} className="relative min-w-0">
-        <button
-          type="button"
-          onClick={() => canEdit && (open ? setOpen(false) : openEditor())}
-          className={`flex items-center gap-1 ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
-          title={error ?? undefined}
-        >
-          <span className={`text-xs text-right ${error ? 'text-destructive' : 'text-foreground'}`}>
-            {displayFieldValue(field, cur)}
-          </span>
-          {canEdit && !isPending && <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />}
-          {isPending && <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />}
-        </button>
+      <div ref={ref} className="relative flex min-w-0 items-center">
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={() => (open ? setOpen(false) : openEditor())}
+            className="flex items-center gap-1 cursor-pointer hover:opacity-80"
+            title={error ?? undefined}
+          >
+            <span className={`text-xs text-right ${error ? 'text-destructive' : 'text-foreground'}`}>{shown}</span>
+            {!isPending && <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />}
+            {isPending && <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />}
+          </button>
+        ) : (
+          // Plain text, not a button: text inside a <button> cannot be selected by dragging, and a
+          // value the technician can't edit is exactly the one they want to select and copy.
+          <span className="cursor-text select-text break-words whitespace-pre-wrap text-right text-xs text-foreground">{shown}</span>
+        )}
+        <CopyButton value={shown} label={field.label} />
 
         {open && (
           <div className="absolute right-0 top-full z-50 mt-1 w-64 space-y-2 rounded-xl border border-border bg-card p-2.5 shadow-xl">

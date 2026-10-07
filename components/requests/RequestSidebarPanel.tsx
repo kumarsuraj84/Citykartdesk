@@ -4,6 +4,7 @@ import { useState, useTransition, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Loader2, UserPlus, X, ChevronDown, History } from 'lucide-react'
+import { CopyButton } from '@/components/ui/CopyButton'
 import {
   updateRequestStatus,
   assignRequest,
@@ -69,11 +70,14 @@ function Avatar({ name, size = 'sm' }: { name: string; size?: 'sm' | 'md' }) {
 }
 
 // A single property row: label on left, interactive value on right
-function PropRow({ label, children }: { label: string; children: React.ReactNode }) {
+function PropRow({ label, children, copyValue }: { label: string; children: React.ReactNode; copyValue?: string | null }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-2 border-b border-border/50 last:border-0">
+    <div className="group flex items-center justify-between gap-3 py-2 border-b border-border/50 last:border-0">
       <span className="shrink-0 text-[11px] text-muted-foreground w-20">{label}</span>
-      <div className="min-w-0 flex items-center justify-end">{children}</div>
+      <div className="min-w-0 flex items-center justify-end">
+        {children}
+        {copyValue ? <CopyButton value={copyValue} label={label} /> : null}
+      </div>
     </div>
   )
 }
@@ -361,7 +365,7 @@ function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMember
   }
 
   return (
-    <PropRow label="Technician">
+    <PropRow label="Technician" copyValue={curName}>
       <div ref={ref} className="relative">
         <button
           onClick={() => isAgent && !isPending && setOpen(v => !v)}
@@ -473,7 +477,7 @@ function ServiceRow({ requestId, serviceId, serviceName, isAgent, options }: {
   }
 
   return (
-    <PropRow label="Service">
+    <PropRow label="Service" copyValue={cur.name}>
       <div ref={ref} className="relative">
         <button
           onClick={() => isAgent && setOpen((v) => !v)}
@@ -602,7 +606,7 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
 
   return (
     <>
-      <PropRow label="Category">
+      <PropRow label="Category" copyValue={pendingCategoryName}>
         <div ref={catRef} className="relative">
           <button
             onClick={() => canEdit && !isPending && setCatOpen((v) => !v)}
@@ -630,7 +634,7 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
         </div>
       </PropRow>
       {pendingCategoryId && (
-        <PropRow label="Sub Category">
+        <PropRow label="Sub Category" copyValue={cur.name}>
           <div ref={subRef} className="relative">
             <button
               onClick={() => canEdit && !isPending && setSubOpen((v) => !v)}
@@ -853,7 +857,7 @@ export function RequestSidebarPanel({
         )}
 
         {/* Read-only: Requester */}
-        <PropRow label="Requester">
+        <PropRow label="Requester" copyValue={requesterName}>
           <div className="flex items-center gap-1.5">
             <Avatar name={requesterName} />
             <span className="text-xs font-medium text-foreground">{requesterName}</span>
@@ -863,7 +867,7 @@ export function RequestSidebarPanel({
         {/* Read-only: Technician — agents get the editable AssigneeRow above
             instead; a requester only needs to see who it's assigned to. */}
         {!isAgent && (
-          <PropRow label="Technician">
+          <PropRow label="Technician" copyValue={assigneeName}>
             {assigneeName ? (
               <div className="flex items-center gap-1.5">
                 <Avatar name={assigneeName} />
@@ -876,7 +880,7 @@ export function RequestSidebarPanel({
         )}
 
         {/* Read-only: Team */}
-        <PropRow label="Technician Group">
+        <PropRow label="Technician Group" copyValue={teamName}>
           <span className="text-xs text-foreground">{teamName}</span>
         </PropRow>
 
@@ -887,7 +891,7 @@ export function RequestSidebarPanel({
         {isManager ? (
           <ServiceRow requestId={requestId} serviceId={serviceId} serviceName={serviceName} isAgent={isManager} options={reclassifyOptions} />
         ) : (
-          <PropRow label="Service">
+          <PropRow label="Service" copyValue={serviceName}>
             <span className="text-xs text-foreground">{serviceName}</span>
           </PropRow>
         )}
