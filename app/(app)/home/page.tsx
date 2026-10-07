@@ -12,6 +12,8 @@ import { createClient } from '@/lib/supabase/server'
 import { StatusBadge } from '@/components/requests/RequestBadges'
 import { SLABadge } from '@/components/requests/SLABadge'
 import { getHomeProjectsSummary, type HomeProjectsSummary } from '@/lib/queries/projects'
+import { getAssignedWorkCounts } from '@/lib/queries/requests'
+import { AGENT_QUEUE_PATH, REQUESTS_PATH, ticketHref } from '@/lib/requests/origin'
 import { ProjectStatusBadge } from '@/components/projects/ProjectStatusBadge'
 import type { RequestStatus, RequestPriority } from '@/types'
 
@@ -115,7 +117,7 @@ function SectionHeader({ icon: Icon, title, count, href, accentClass }: {
 
 /* ── request row ─────────────────────────────────────────────────────────────── */
 
-function RequestRow({ req, showRequester, showService }: {
+function RequestRow({ req, showRequester, showService, origin }: {
   req: {
     id: string; request_no: string; title: string
     status: RequestStatus; priority?: RequestPriority
@@ -124,13 +126,16 @@ function RequestRow({ req, showRequester, showService }: {
     service?: { name: string; icon: string | null } | null
   }
   showRequester?: boolean; showService?: boolean
+  /** Which list this row belongs to — Agent Requests (work) or Requests (raised by me). The ticket
+   *  page uses it for the back link and the sidebar highlight. */
+  origin: string
 }) {
   const priorityColor: Record<string, string> = {
     critical: 'bg-destructive', high: 'bg-warning', medium: 'bg-warning/60', low: 'bg-muted-foreground/40',
   }
   const icon = showService ? (req.service?.icon ?? '📋') : null
   return (
-    <Link href={`/requests/${req.id}`}
+    <Link href={ticketHref(req.id, origin)}
       className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors group">
       {icon
         ? <span className="shrink-0 text-base leading-none w-5 text-center">{icon}</span>
@@ -295,6 +300,7 @@ async function DashboardBody({
   hasProjects,
   isAgent,
   isManager,
+  userId,
   tab,
 }: {
   dashPromise: Promise<HomeDashboardData | null>
@@ -304,11 +310,15 @@ async function DashboardBody({
   hasProjects: boolean
   isAgent: boolean
   isManager: boolean
+  userId: string
   tab: string
 }) {
-  const [dashData, projectsSummary] = await Promise.all([
+  const [dashData, projectsSummary, workCounts] = await Promise.all([
     dashPromise,
     projectsSummaryPromise,
+    // A technician's own work (assigned to me) is counted separately from the requests they raised
+    // themselves — see getAssignedWorkCounts.
+    isAgent && hasRequests ? getAssignedWorkCounts(userId) : Promise.resolve({ waitingOnUser: 0, resolved: 0 }),
   ])
 
   const counts         = dashData?.counts ?? {}
@@ -401,7 +411,9 @@ async function DashboardBody({
           {tab === 'requests' && hasRequests && (() => {
             const showApprovalBanner  = isManager && pendingApprovalCount > 0
             const showSlaBanner       = isAgent && slaBreachedCount > 0
-            const showAttentionBanner = !isAgent && needsAttentionCount > 0
+            // Tickets the viewer RAISED that are waiting on their reply — for every role. A technician
+            // who raises requests to other departments needs this too (it is not his assigned work).
+            const showAttentionBanner = needsAttentionCount > 0
 
             return (
               <div className="space-y-4">
@@ -409,7 +421,7 @@ async function DashboardBody({
                 {(showSlaBanner || showApprovalBanner || showAttentionBanner) && (
                   <div className="space-y-2">
                     {showSlaBanner && (
-                      <Link href="/requests?sla=breached"
+                      <Link href={`${AGENT_QUEUE_PATH}?sla=breached`}
                         className="flex items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 hover:bg-destructive/10 transition-colors">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
                           <AlertTriangle className="h-4 w-4 text-destructive" />
@@ -441,8 +453,16 @@ async function DashboardBody({
                           <Bell className="h-4 w-4 text-warning" />
                         </div>
                         <div className="flex-1">
-                          <p className="text-[12px] font-bold text-warning">{needsAttentionCount} request{needsAttentionCount > 1 ? 's' : ''} waiting for your response</p>
-                          <p className="text-[11px] text-warning/80">The technician group is waiting on you to move these forward</p>
+                          <p className="text-[12px] font-bold text-warning">
+                            {isAgent
+                              ? `${needsAttentionCount} request${needsAttentionCount > 1 ? 's' : ''} you raised ${needsAttentionCount > 1 ? 'are' : 'is'} waiting for your response`
+                              : `${needsAttentionCount} request${needsAttentionCount > 1 ? 's' : ''} waiting for your response`}
+                          </p>
+                          <p className="text-[11px] text-warning/80">
+                            {isAgent
+                              ? 'The other technician group is waiting on you — these are your own requests, not your assigned work'
+                              : 'The technician group is waiting on you to move these forward'}
+                          </p>
                         </div>
                         <ArrowRight className="h-4 w-4 text-warning/60 shrink-0" />
                       </Link>
@@ -452,15 +472,18 @@ async function DashboardBody({
 
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {isAgent ? (<>
-                    <KpiCard label="My Queue"     value={myQueue.length}      sublabel="Assigned to me"    accent="#1B2559" href="/requests?assigned=me" />
-                    <KpiCard label="Currently Breached" value={slaBreachedCount}    sublabel="Overdue resolution" accent="#EF4444" href="/requests?sla=breached" danger />
-                    <KpiCard label="Needs Reply"  value={needsAttentionCount} sublabel="Waiting on user"   accent="#F97316" href="/requests?status=waiting_user" />
-                    <KpiCard label="Resolved"     value={resolvedCount}       sublabel="All time"          accent="#10B981" href="/requests?status=resolved" />
+                    {/* These four tiles are the technician's WORK (tickets assigned to him) and open
+                        Agent Requests. Requests he raised himself are listed further down under
+                        "Requests I Raised" and open Requests. */}
+                    <KpiCard label="My Queue"     value={myQueue.length}             sublabel="Assigned to me"    accent="#1B2559" href={AGENT_QUEUE_PATH} />
+                    <KpiCard label="Currently Breached" value={slaBreachedCount}     sublabel="Overdue resolution" accent="#EF4444" href={`${AGENT_QUEUE_PATH}?sla=breached`} danger />
+                    <KpiCard label="Waiting on User" value={workCounts.waitingOnUser} sublabel="Tickets I'm working" accent="#F97316" href={`${AGENT_QUEUE_PATH}?status=waiting_user`} />
+                    <KpiCard label="Resolved"     value={workCounts.resolved}        sublabel="Assigned to me, all time" accent="#10B981" href={`${AGENT_QUEUE_PATH}?status=resolved`} />
                   </>) : isManager ? (<>
-                    <KpiCard label="Tech Group Open"  value={teamRequestsOpen}        sublabel="Active tickets"    accent="#1B2559" href="/requests" />
-                    <KpiCard label="Currently Breached"     value={teamRequestsSlaBreached} sublabel="Overdue resolution" accent="#EF4444" href="/requests?sla=breached" danger />
+                    <KpiCard label="Tech Group Open"  value={teamRequestsOpen}        sublabel="Active tickets"    accent="#1B2559" href={`${AGENT_QUEUE_PATH}?tab=team`} />
+                    <KpiCard label="Currently Breached"     value={teamRequestsSlaBreached} sublabel="Overdue resolution" accent="#EF4444" href={`${AGENT_QUEUE_PATH}?tab=team&sla=breached`} danger />
                     <KpiCard label="Pending Approval" value={pendingApprovalCount}    sublabel="Awaiting review"   accent="#8B5CF6" href="/approvals" />
-                    <KpiCard label="My Open"          value={myOpenCount}             sublabel="My requests"       accent="#10B981" href="/requests?requester=me" />
+                    <KpiCard label="My Open"          value={myOpenCount}             sublabel="My requests"       accent="#10B981" href={REQUESTS_PATH} />
                   </>) : (<>
                     <KpiCard label="Needs Attention"  value={needsAttentionCount}  sublabel="Waiting on you"   accent="#F97316" href="/requests?status=waiting_user" />
                     <KpiCard label="My Open"          value={myOpenCount}          sublabel="In progress"      accent="#1B2559" href="/requests" />
@@ -471,10 +494,10 @@ async function DashboardBody({
 
                 {isAgent && (myQueue.length > 0 || !isManager) && (
                   <div className="overflow-hidden rounded-xl border border-border bg-card">
-                    <SectionHeader icon={Inbox} title="My Queue" count={myQueue.length} href="/requests?assigned=me" />
+                    <SectionHeader icon={Inbox} title="My Queue" count={myQueue.length} href={AGENT_QUEUE_PATH} />
                     {myQueue.length > 0 ? (
                       <div className="divide-y divide-border">
-                        {myQueue.map(r => <RequestRow key={r.id} req={r} showRequester />)}
+                        {myQueue.map(r => <RequestRow key={r.id} req={r} showRequester origin={AGENT_QUEUE_PATH} />)}
                       </div>
                     ) : (
                       <InlineEmpty icon={CheckCircle2} text="Queue is clear — no requests assigned to you." />
@@ -482,26 +505,26 @@ async function DashboardBody({
                   </div>
                 )}
 
-                {!isAgent && needsAttention.length > 0 && (
+                {needsAttention.length > 0 && (
                   <div className="overflow-hidden rounded-xl border border-border bg-card">
                     <SectionHeader icon={Bell} title="Needs Your Attention" count={needsAttentionCount}
                       href="/requests?status=waiting_user" accentClass="text-warning" />
                     <div className="divide-y divide-border">
-                      {needsAttention.map(r => <RequestRow key={r.id} req={r} showService />)}
+                      {needsAttention.map(r => <RequestRow key={r.id} req={r} showService origin={REQUESTS_PATH} />)}
                     </div>
                   </div>
                 )}
 
                 <div className="overflow-hidden rounded-xl border border-border bg-card">
-                  <SectionHeader icon={FileText} title="My Requests" count={myOpenCount} href="/requests" />
+                  <SectionHeader icon={FileText} title={isAgent ? 'Requests I Raised' : 'My Requests'} count={myOpenCount} href={REQUESTS_PATH} />
                   {myRequests.length > 0 ? (
                     <div className="divide-y divide-border">
-                      {myRequests.map(r => <RequestRow key={r.id} req={r} showService />)}
+                      {myRequests.map(r => <RequestRow key={r.id} req={r} showService origin={REQUESTS_PATH} />)}
                     </div>
                   ) : (
                     <div className="px-4 py-8 text-center">
                       <Inbox className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
-                      <p className="text-[13px] font-medium text-foreground">No open requests</p>
+                      <p className="text-[13px] font-medium text-foreground">{isAgent ? 'No open requests raised by you' : 'No open requests'}</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5 mb-3">Submit a request to get help from your technician group</p>
                       <Link href="/services"
                         className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-semibold text-primary-foreground hover:opacity-90 transition-opacity">
@@ -702,9 +725,11 @@ async function DashboardBody({
                 </div>
                 <div className="space-y-1.5">
                   <QuickAction href="/services?action=new"   icon={Plus}        label="New Request"  sublabel="Raise a new request" />
-                  <QuickAction href="/requests"              icon={FileText}    label="All Requests" sublabel="View all requests" />
-                  {isAgent && (
-                    <QuickAction href="/requests?assigned=me" icon={Inbox}      label="My Queue"     sublabel="Requests assigned to you" />
+                  {isAgent ? (<>
+                    <QuickAction href={AGENT_QUEUE_PATH}     icon={Inbox}       label="My Queue"     sublabel="Tickets assigned to you" />
+                    <QuickAction href={REQUESTS_PATH}        icon={FileText}    label="My Requests"  sublabel="Requests you raised" />
+                  </>) : (
+                    <QuickAction href={REQUESTS_PATH}        icon={FileText}    label="All Requests" sublabel="View all requests" />
                   )}
                   {isManager && (
                     <QuickAction href="/approvals"           icon={ShieldCheck} label="Approvals"    sublabel="Review pending approvals" />
@@ -952,6 +977,7 @@ export default async function HomePage({
           hasProjects={hasProjects}
           isAgent={isAgent}
           isManager={isManager}
+          userId={profile.id}
           tab={tab}
         />
       </Suspense>

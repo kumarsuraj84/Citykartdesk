@@ -151,6 +151,9 @@ export interface GetRequestsOptions {
   subCategoryId?: string
   /** Agent-only: filter to show only requests from a specific requester */
   requesterId?: string
+  /** Only tickets past their resolution deadline that are still being worked (the same
+   *  definition as the Home dashboard's "Currently Breached" count). */
+  breachedOnly?: boolean
   sort?: string
   dir?: string
 }
@@ -529,6 +532,10 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
   if (categoryId) query = query.eq('category_id', categoryId)
   if (subCategoryId) query = query.eq('sub_category_id', subCategoryId)
 
+  if (opts.breachedOnly) {
+    query = query.lt('resolution_due_at', now).not('status', 'in', '("resolved","closed","cancelled")')
+  }
+
   // ── Requester filter (agent viewing specific user's history) ─────────────
 
   if (requesterId) {
@@ -570,6 +577,20 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
   }
 }
 
+
+/**
+ * Counts for the technician's Home tiles, about tickets ASSIGNED TO the viewer (their work).
+ * The Home RPC's `resolved` / `needs_attention` counts are about tickets the viewer RAISED, so
+ * they can't label the work tiles — a technician who also raises requests to other departments
+ * would otherwise see his own requests counted as his work.
+ */
+export async function getAssignedWorkCounts(userId: string): Promise<{ waitingOnUser: number; resolved: number }> {
+  const supabase = await createClient()
+  const count = (status: 'waiting_user' | 'resolved') =>
+    supabase.from('requests').select('id', { count: 'exact', head: true }).eq('assigned_to', userId).eq('status', status)
+  const [waiting, resolved] = await Promise.all([count('waiting_user'), count('resolved')])
+  return { waitingOnUser: waiting.count ?? 0, resolved: resolved.count ?? 0 }
+}
 
 export async function getRelatedRequests(requestId: string) {
   const supabase = await createClient()

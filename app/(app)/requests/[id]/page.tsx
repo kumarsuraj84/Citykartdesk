@@ -7,6 +7,7 @@ import {
   Mail,
 } from 'lucide-react'
 import { redirect } from 'next/navigation'
+import { AGENT_QUEUE_PATH, REQUESTS_PATH, safeOrigin, defaultTicketOrigin, ticketHref } from '@/lib/requests/origin'
 import { getCurrentProfile, getTeamMembers } from '@/lib/queries/profiles'
 import { getRequestById, getRequestActivity, getRequestComments, getRequestCollaborators, getRelatedRequests, getCsatSurveyForRequest } from '@/lib/queries/requests'
 import { getRequestAttachments } from '@/lib/queries/attachments'
@@ -350,8 +351,9 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
   // Agent Requests vs. My Requests) instead of always defaulting to My
   // Requests — only trust an internal relative path, never an absolute/
   // protocol-relative URL a caller could smuggle in via the query string.
-  const backHref = from && from.startsWith('/') && !from.startsWith('//') ? from : '/requests'
-  const backLabel = backHref.startsWith('/requests/queue') ? 'Agent Requests' : 'Requests'
+  const explicitOrigin = safeOrigin(from)
+  const backHref = explicitOrigin ?? REQUESTS_PATH
+  const backLabel = backHref.startsWith(AGENT_QUEUE_PATH) ? 'Agent Requests' : 'Requests'
 
   // Phase 1: everything that only needs `id` runs in parallel.
   // teamMembers and csatSurvey are gated on request data so they stay in Phase 2.
@@ -378,6 +380,21 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
     profile.role === 'platform_owner' ||
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
   const isRequester = request.requester_id === profile.id
+
+  // Opened without saying which list it came from (an email or notification link, search,
+  // approvals)? A ticket the viewer works on belongs to Agent Requests, one they raised to
+  // Requests. Re-open it with that origin so the sidebar highlight and the back link agree
+  // (a technician who also raises requests to other departments sees each in the right list).
+  if (!explicitOrigin) {
+    const origin = defaultTicketOrigin({
+      viewerId: profile.id,
+      requesterId: request.requester_id,
+      assignedTo: request.assigned_to,
+      viewerCanWork: isAgent,
+    })
+    if (origin !== REQUESTS_PATH) redirect(ticketHref(id, origin))
+  }
+
   // Only fetched when it's actually going to be shown — the requester viewing their own
   // Resolved ticket, which is the one place the reopen window/countdown appears.
   const resolvedReopenWindowHours =

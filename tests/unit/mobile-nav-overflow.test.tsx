@@ -25,7 +25,7 @@ import { MobileNav } from '@/components/layout/MobileNav'
 import type { NavVisibility, ProfileWithTeams } from '@/types'
 import type { NavCounts } from '@/lib/queries/profiles'
 
-vi.mock('next/navigation', () => ({ usePathname: () => '/home' }))
+vi.mock('next/navigation', () => ({ usePathname: () => '/home', useSearchParams: () => new URLSearchParams() }))
 
 afterEach(() => cleanup())
 

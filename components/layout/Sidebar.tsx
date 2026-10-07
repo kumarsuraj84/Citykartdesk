@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { navActivePath } from '@/lib/requests/origin'
 import {
   Home, Inbox, ListTodo, ShieldCheck, Bell, LayoutGrid, FolderKanban,
   BarChart3, Activity, Settings, Monitor, BookOpenText,
@@ -47,7 +48,10 @@ function getInitials(name: string): string {
 }
 
 export function Sidebar({ profile, navVisibility, navCounts, className, forceExpanded }: SidebarProps) {
-  const pathname = usePathname()
+  const rawPathname = usePathname()
+  // A ticket opened from Agent Requests lives at /requests/<id>, which would light up "Requests";
+  // its ?from= says which list it belongs to (see lib/requests/origin.ts).
+  const pathname = navActivePath(rawPathname, useSearchParams().get('from'))
   const { isAdmin, isManager, isAgent, enabledModules } = navVisibility
   const has = (m: string) => enabledModules.includes(m as never)
 

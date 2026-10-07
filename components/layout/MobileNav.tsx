@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { navActivePath } from '@/lib/requests/origin'
 import { Home, LayoutGrid, Inbox, ListTodo, CheckCircle, Bell, Sparkles, FolderKanban, Menu, Headset } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -23,7 +24,8 @@ type MobileNavItem = {
 }
 
 export function MobileNav({ profile, navVisibility, navCounts }: MobileNavProps) {
-  const pathname = usePathname()
+  // A ticket opened from Agent Requests lives at /requests/<id>; its ?from= says which list it belongs to.
+  const pathname = navActivePath(usePathname(), useSearchParams().get('from'))
   const { isAdmin, isManager, isAgent, enabledModules } = navVisibility
   const has = (m: string) => enabledModules.includes(m as never)
 

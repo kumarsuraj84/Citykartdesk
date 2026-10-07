@@ -29,6 +29,8 @@ interface PageProps {
     status?: string
     q?: string
     assigned?: string
+    /** 'breached' → only tickets past their resolution deadline (Home's "Currently Breached" tile) */
+    sla?: string
     priority?: string
     service?: string
     category?: string
@@ -101,6 +103,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
   const statusFilter = resolveQueueStatusFilter(rawStatus)
 
   const assignedTo: AssignedToFilter | undefined = rawAssigned || undefined
+  const breachedOnly = params.sla === 'breached'
   const priorityFilter = PRIORITY_OPTIONS.some((p) => p.value === rawPriority) ? (rawPriority as RequestPriority) : undefined
   const serviceFilter = rawService || undefined
   const categoryFilter = rawCategory || undefined
@@ -115,6 +118,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
       status: statusFilter,
       q: q || undefined,
       assignedTo,
+      breachedOnly,
       priority: priorityFilter,
       serviceId: serviceFilter,
       categoryId: categoryFilter,
@@ -145,6 +149,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
     if (rawStatus && rawStatus !== 'active') p.set('status', rawStatus)
     if (q) p.set('q', q)
     if (rawTab === 'team' && assignedTo) p.set('assigned', assignedTo)
+    if (breachedOnly) p.set('sla', 'breached')
     if (priorityFilter) p.set('priority', priorityFilter)
     if (serviceFilter) p.set('service', serviceFilter)
     if (categoryFilter) p.set('category', categoryFilter)
@@ -187,6 +192,19 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
           </Link>
         }
       />
+
+      {breachedOnly && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-[12px] text-destructive">
+          <span className="font-semibold">Showing only SLA-breached tickets</span>
+          <span className="text-destructive/80">(resolution deadline passed)</span>
+          <Link
+            href={(() => { const p = currentParams(); p.delete('sla'); p.delete('page'); const s = p.toString(); return s ? `/requests/queue?${s}` : '/requests/queue' })()}
+            className="ml-auto rounded-md border border-destructive/30 px-2 py-0.5 text-[11px] font-semibold hover:bg-destructive/10"
+          >
+            Show all
+          </Link>
+        </div>
+      )}
 
       {/* ── Tab toggle: assigned to me vs. team's full queue ── */}
       <div className="flex gap-0.5 rounded-md border border-border bg-muted/50 p-0.5 w-fit">
