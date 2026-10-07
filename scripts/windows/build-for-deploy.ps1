@@ -1,8 +1,9 @@
-# Builds the app for Main, using a separate output directory (.next-deploy) so this never
-# touches `.next` — the local dev server's own build cache — even if it's running at the
-# same time. Zips .next-deploy/standalone, ready to stage and swap onto Main.
+# Builds the app for PRODUCTION (app server 10.0.1.98; the old Main server 10.0.1.12 is retired),
+# using a separate output directory (.next-deploy) so this never touches `.next` — the local dev
+# server's own build cache — even if it's running at the same time. Zips .next-deploy/standalone,
+# ready to copy to 10.0.1.98 and swap into D:\Citykart_Applications\Citykart_Ckdesk_App\app\standalone.
 param(
-  [string]$SupabaseUrl = 'http://10.0.1.12:8443',
+  [string]$SupabaseUrl = 'http://10.0.1.98:8443',
   [string]$AppUrl = 'http://182.72.84.10:3210',
   [Parameter(Mandatory = $true)][string]$SupabaseAnonKey,
   [Parameter(Mandatory = $true)][string]$ZipPath
