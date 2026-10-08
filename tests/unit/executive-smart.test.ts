@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  emptyFilters, applyFilters, filterCount, periodWindow, quickRanges, parseDay, isoDay, joinApprovals, UNASSIGNED,
+  emptyFilters, applyFilters, filterCount, periodWindow, quickRanges, parseDay, isoDay, joinApprovals, STATUS_PRESETS, UNASSIGNED,
   type ExecTicket, type ExecApproval, type Filters,
 } from '@/lib/reporting/executive/engine'
 import { highlights } from '@/lib/reporting/executive/highlights'
@@ -34,6 +34,27 @@ describe('SLA filter has three states', () => {
   it('counts it as one active filter, but not when it is "all"', () => {
     expect(filterCount(emptyFilters())).toBe(0)
     expect(filterCount({ ...emptyFilters(), sla: 'ok' })).toBe(1)
+  })
+})
+
+describe('ticket search and status presets', () => {
+  const ts = [tk({ subject: 'Printer jam', store: 'Delhi CP' }), tk({ subject: 'AC leak', tech: 'Mohit' }), tk({ status: 'hold_purchase_ho' }), tk({ status: 'waiting_user' }), tk({ status: 'resolved', resolved: ago(1) })]
+  it('search is a filter on every number, not just the list', () => {
+    expect(applyFilters(ts, { ...emptyFilters(), q: 'printer' }, NOW)).toHaveLength(1)
+    expect(applyFilters(ts, { ...emptyFilters(), q: 'mohit' }, NOW)).toHaveLength(1)
+    expect(applyFilters(ts, { ...emptyFilters(), q: '   ' }, NOW)).toHaveLength(5)
+    expect(filterCount({ ...emptyFilters(), q: 'x' })).toBe(1)
+    expect(filterCount({ ...emptyFilters(), q: '  ' })).toBe(0)
+  })
+  it('a status filter takes several statuses at once (all on hold)', () => {
+    const hold = STATUS_PRESETS.find((p) => p.label === 'On hold')!
+    const f = { ...emptyFilters(), dims: { ...emptyFilters().dims, status: hold.statuses } }
+    expect(applyFilters(ts, f, NOW).map((t) => t.status).sort()).toEqual(['hold_purchase_ho', 'waiting_user'])
+  })
+  it('has presets for unresolved, being worked on, on hold and done', () => {
+    expect(STATUS_PRESETS.map((p) => p.label)).toEqual(['All unresolved', 'Being worked on', 'On hold', 'Resolved / closed'])
+    expect(STATUS_PRESETS[0].statuses).toContain('hold_purchase_ho')
+    expect(STATUS_PRESETS[3].statuses).toEqual(['resolved', 'closed'])
   })
 })
 
@@ -88,18 +109,21 @@ describe('priority highlights', () => {
     expect(sla.open).toMatchObject({ metric: 'breaches', stage: 1 })
   })
   it('workload concentration points at the busiest technician', () => {
-    expect(hl[1].keyStat).toBe('6 Open · Nisha')
+    expect(hl[1].keyStat).toBe('Nisha: 6')
+    expect(hl[1].headline).toBe('2 technicians hold 100% of 10 open')
     expect(hl[1].open).toMatchObject({ metric: 'backlog', stage: 3, dims: [{ dim: 'tech', value: 'Nisha' }] })
   })
   it('OEM bottleneck is based on the stores OEM brand', () => {
-    expect(hl[2].headline).toMatch(/LG & DAIKIN drive 100% of store volume/)
+    expect(hl[2].headline).toBe('LG & DAIKIN: 100% of store tickets')
+    expect(hl[2].detail).toBe('Open: LG 6 · DAIKIN 4')
     expect(hl[2].open.dims[0]).toEqual({ dim: 'brand', value: 'LG' })
   })
   it('approval bottleneck counts what is waiting, and turns calm when nothing is', () => {
-    expect(hl[3].headline).toContain('1 ADMIN GROUP request waiting on manager approval')
+    expect(hl[3].headline).toBe('1 approval waiting for a decision')
+    expect(hl[3].detail).toContain('ADMIN GROUP (1)')
     expect(hl[3].open.approvals).toBe(true)
     const calm = highlights(ts, [], f, W, NOW, true)[3]
-    expect(calm.headline).toBe('No approvals waiting for a decision')
+    expect(calm.headline).toBe('No approvals waiting')
     expect(calm.severity).toBe('info')
   })
   it('skips the people view for requesters but still says something about workload', () => {
@@ -108,7 +132,7 @@ describe('priority highlights', () => {
   })
   it('says so when nothing was created', () => {
     const r = highlights([], [], f, W, NOW, true)[0]
-    expect(r.headline).toBe('No tickets were created in this period')
+    expect(r.headline).toBe('No tickets in this period')
   })
 })
 

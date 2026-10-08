@@ -6,7 +6,7 @@ import {
   DIM_LABEL, MEASURES, PERIODS, STATUS_ORDER, applyFilters, capitalize, emptyFilters, filterCount, inWin, isoDay, joinApprovals, periodWindow,
   prevWindow, statusLabel, type CustomRange, type Dim, type ExecApproval, type ExecTicket, type Filters, type Measure, type Period, type SlaState,
 } from '@/lib/reporting/executive/engine'
-import { explorerBase, matchesSearch, ticketsToCsv } from '@/lib/reporting/executive/explorer'
+import { explorerBase, ticketsToCsv } from '@/lib/reporting/executive/explorer'
 import { highlights, type Highlight } from '@/lib/reporting/executive/highlights'
 import { kpiText, type KpiKey } from '@/lib/reporting/executive/kpi-context'
 import { dayLabelYear } from '@/lib/reporting/executive/labels'
@@ -48,7 +48,6 @@ export function ExecutiveDashboard({ level, me, now, tickets, approvals, truncat
   const [filters, setFilters] = useState<Filters>(emptyFilters)
   const [viewMode, setViewMode] = useState<ViewMode>('stream')
   const [metric, setMetric] = useState<KpiKey>('created')
-  const [search, setSearch] = useState('')
   const [drill, setDrill] = useState<(DrillContext & { id: number }) | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const seq = useRef(0)
@@ -62,14 +61,23 @@ export function ExecutiveDashboard({ level, me, now, tickets, approvals, truncat
   const inPeriod = useMemo(() => tickets.filter((t) => inWin(t.created, W)), [tickets, W])
   const matching = useMemo(() => applyFilters(tickets, filters, now).filter((t) => inWin(t.created, W)).length, [tickets, filters, now, W])
 
-  // lists for the filter drop-downs (counted over the whole period, so they stay put as you filter)
-  const options: FilterOptions = useMemo(() => ({
-    groups: toOpts(counts(inPeriod, (t) => t.group)),
-    techs: toOpts(counts(inPeriod, (t) => t.tech)),
-    brands: toOpts(counts(inPeriod, (t) => t.brand), (v) => v, ['(No OEM)']),
-    statuses: STATUS_ORDER.filter((s) => inPeriod.some((t) => t.status === s)).map((s) => ({ value: s, label: statusLabel(s), count: inPeriod.filter((t) => t.status === s).length })),
-    prios: (['urgent', 'high', 'medium', 'low'] as const).map((p) => ({ value: p, label: capitalize(p), count: inPeriod.filter((t) => t.prio === p).length })),
-  }), [inPeriod])
+  // Lists for the filter drop-downs. Each list follows every OTHER filter (pick a group and the technician list shrinks to that
+  // group's technicians; pick a technician and the group list shrinks to theirs), but never its own, so you can add more values.
+  const options: FilterOptions = useMemo(() => {
+    const within = (dim: Dim) => applyFilters(tickets, filters, now, [dim]).filter((t) => inWin(t.created, W))
+    const byGroup = within('group')
+    const byTech = within('tech')
+    const byBrand = within('brand')
+    const byStatus = within('status')
+    const byPrio = within('prio')
+    return {
+      groups: toOpts(counts(byGroup, (t) => t.group)),
+      techs: toOpts(counts(byTech, (t) => t.tech)),
+      brands: toOpts(counts(byBrand, (t) => t.brand), (v) => v, ['(No OEM)']),
+      statuses: STATUS_ORDER.filter((s) => byStatus.some((t) => t.status === s)).map((s) => ({ value: s, label: statusLabel(s), count: byStatus.filter((t) => t.status === s).length })),
+      prios: (['urgent', 'high', 'medium', 'low'] as const).map((p) => ({ value: p, label: capitalize(p), count: byPrio.filter((t) => t.prio === p).length })),
+    }
+  }, [tickets, filters, now, W])
 
   const items = useMemo(() => highlights(tickets, joined, filters, W, now, copy.showPeople), [tickets, joined, filters, W, now, copy.showPeople])
   const texts = useMemo(() => kpiText(tickets, joined, filters, W, now), [tickets, joined, filters, W, now])
@@ -102,10 +110,10 @@ export function ExecutiveDashboard({ level, me, now, tickets, approvals, truncat
       return next
     })
   }
-  const reset = () => { setFilters(emptyFilters()); setPeriod('30d'); setSearch(''); setMetric('created') }
+  const reset = () => { setFilters(emptyFilters()); setPeriod('30d'); setMetric('created') }
 
   const exportCsv = () => {
-    const list = explorerBase(tickets, joined, filters, W, now, metric).filter((t) => matchesSearch(t, search))
+    const list = explorerBase(tickets, joined, filters, W, now, metric)
     const blob = new Blob([ticketsToCsv(list, now)], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -122,6 +130,7 @@ export function ExecutiveDashboard({ level, me, now, tickets, approvals, truncat
   for (const k of Object.keys(filters.dims) as Dim[]) for (const v of filters.dims[k]) {
     pills.push({ label: `${DIM_LABEL[k]}: ${k === 'status' ? statusLabel(v) : k === 'prio' ? capitalize(v) : v}`, clear: () => setFilters((f) => ({ ...f, dims: { ...f.dims, [k]: f.dims[k].filter((x) => x !== v) } })) })
   }
+  if (filters.q.trim()) pills.push({ label: `Search: “${filters.q.trim()}”`, clear: () => setFilters((f) => ({ ...f, q: '' })) })
   if (filters.sla !== 'all') pills.push({ label: `SLA: ${filters.sla === 'breached' ? 'breached only' : 'compliant only'}`, clear: () => setFilters((f) => ({ ...f, sla: 'all' })), danger: true })
 
   const show = (...modes: ViewMode[]) => viewMode === 'stream' || modes.includes(viewMode)
@@ -162,7 +171,7 @@ export function ExecutiveDashboard({ level, me, now, tickets, approvals, truncat
       {show('velocity') && <VelocitySection d={d} baseW={W} metric={metric} onOpen={open} />}
       {show('people') && <PeopleApprovals d={d} onOpen={open} />}
       {show('matrices') && <MatricesSection d={d} onOpen={open} />}
-      {show('tickets') && <ExplorerSection d={d} metric={metric} search={search} onSearch={setSearch} onOpen={open} onReset={reset} />}
+      {show('tickets') && <ExplorerSection d={d} metric={metric} onOpen={open} onReset={reset} />}
 
       {drill && (
         <DrilldownModal

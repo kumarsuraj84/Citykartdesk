@@ -1,7 +1,7 @@
 // The list of tickets "behind the numbers": which tickets the selected number stands for, the search box, and the CSV export.
 
 import {
-  ageInDays, applyFilters, approvalRows, approvalsBehind, statusLabel, ticketsBehind,
+  ageInDays, applyFilters, approvalRows, approvalsBehind, matchesSearch, statusLabel, ticketsBehind,
   type ApprovalRow, type ExecTicket, type Filters, type Measure, type Win,
 } from './engine'
 import type { KpiKey } from './kpi-context'
@@ -18,12 +18,7 @@ export function explorerBase(tickets: ExecTicket[], approvals: ApprovalRow[], fi
   return ticketsBehind(applyFilters(tickets, filters, now), W, metric as Measure, filters.dims.age.length > 0)
 }
 
-/** Ticket number, subject, store, group, technician, OEM brand or requester contains the text. */
-export function matchesSearch(t: ExecTicket, q: string): boolean {
-  const s = q.trim().toLowerCase()
-  if (!s) return true
-  return [t.no, t.subject, t.store, t.group, t.tech, t.brand, t.req, t.cat].some((x) => x.toLowerCase().includes(s))
-}
+export { matchesSearch }
 
 const csvCell = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`
 

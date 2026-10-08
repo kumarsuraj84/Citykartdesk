@@ -1,9 +1,9 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Clock, ExternalLink, RotateCcw, Search } from 'lucide-react'
+import { Clock, ExternalLink, RotateCcw } from 'lucide-react'
 import { MEASURES, ageInDays, applyFilters, capitalize, heatmap, inWin, statusLabel, type Measure } from '@/lib/reporting/executive/engine'
-import { explorerBase, matchesSearch } from '@/lib/reporting/executive/explorer'
+import { explorerBase } from '@/lib/reporting/executive/explorer'
 import type { KpiKey } from '@/lib/reporting/executive/kpi-context'
 import { WEEKDAYS_SHORT } from '@/lib/reporting/executive/labels'
 import type { DashData, OpenDrill } from './types'
@@ -25,8 +25,8 @@ function cellClass(v: number, selected: boolean, max: number): string {
 }
 
 /** When tickets arrive (weekday × hour) and the tickets behind the selected number. */
-export function ExplorerSection({ d, metric, search, onSearch, onOpen, onReset }: {
-  d: DashData; metric: KpiKey; search: string; onSearch: (q: string) => void; onOpen: OpenDrill; onReset: () => void
+export function ExplorerSection({ d, metric, onOpen, onReset }: {
+  d: DashData; metric: KpiKey; onOpen: OpenDrill; onReset: () => void
 }) {
   const { tickets, approvals, filters, now, W } = d
   const [cell, setCell] = useState<{ day: number; hour: number; n: number } | null>(null)
@@ -57,12 +57,11 @@ export function ExplorerSection({ d, metric, search, onSearch, onOpen, onReset }
 
   const behind = useMemo(() => explorerBase(tickets, approvals, filters, W, now, metric), [tickets, approvals, filters, W, now, metric])
   const list = useMemo(() => behind.filter((t) => {
-    if (search && !matchesSearch(t, search)) return false
     if (cell) { const c = new Date(t.created); if (c.getDay() !== cell.day || c.getHours() !== cell.hour || !inWin(t.created, W)) return false }
     return true
-  }), [behind, search, cell, W])
+  }), [behind, cell, W])
   const shown = list.filter((t) => (slaTab === 'breached' ? t.breached : slaTab === 'ok' ? !t.breached : true))
-  const filtered = !!search || !!cell || slaTab !== 'all'
+  const filtered = !!cell || slaTab !== 'all'
 
   return (
     <section id="explorer-section" aria-label="Arrival heatmap and ticket explorer" className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-12">
@@ -133,16 +132,9 @@ export function ExplorerSection({ d, metric, search, onSearch, onOpen, onReset }
               }
             />
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="relative min-w-[220px] flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="text" value={search} onChange={(e) => onSearch(e.target.value)} aria-label="Search tickets"
-                  placeholder="Search by ticket number, subject, store, group, technician or OEM..."
-                  className="w-full rounded-md border border-border bg-muted/40 py-1.5 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
+              <p className="text-xs text-muted-foreground">Use the search box in the filter bar above to find a ticket by number, subject, store or technician.</p>
               {filtered && (
-                <button type="button" onClick={() => { setSlaTab('all'); setCell(null); onSearch(''); onReset() }} className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted/70">
+                <button type="button" onClick={() => { setSlaTab('all'); setCell(null); onReset() }} className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted/70">
                   <RotateCcw className="h-3 w-3" />Reset filters
                 </button>
               )}

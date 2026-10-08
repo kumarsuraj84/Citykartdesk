@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Building2, Calendar, Check, ChevronDown, Download, Layers, RotateCcw, ShieldAlert, SlidersHorizontal, User, Wrench, X } from 'lucide-react'
+import { Building2, Calendar, Check, ChevronDown, Download, Layers, RotateCcw, Search, ShieldAlert, SlidersHorizontal, User, Wrench, X } from 'lucide-react'
 import {
-  PERIODS, capitalize, emptyFilters, filterCount, isoDay, parseDay, quickRanges,
+  PERIODS, STATUS_PRESETS, capitalize, emptyFilters, filterCount, isoDay, parseDay, quickRanges,
   type CustomRange, type Dim, type Filters, type Period, type SlaState,
 } from '@/lib/reporting/executive/engine'
 import { dayLabelYear } from '@/lib/reporting/executive/labels'
@@ -48,15 +48,88 @@ interface Props {
   onExport: () => void
 }
 
-const one = (f: Filters, d: Dim) => f.dims[d][0] ?? ''
-const setOne = (f: Filters, d: Dim, v: string): Filters => ({ ...f, dims: { ...f.dims, [d]: v ? [v] : [] } })
+const setDim = (f: Filters, d: Dim, values: string[]): Filters => ({ ...f, dims: { ...f.dims, [d]: values } })
+const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
+const presetOn = (sel: string[], values: string[]) => values.length === sel.length && values.every((v) => sel.includes(v))
+
+// ── A drop-down where several values can be ticked ─────────────────────────────────────────────────
+
+function MultiSelect({ label, allLabel, options, selected, onChange, display = (v) => v, presets, searchable = false }: {
+  label: string; allLabel: string; options: Opt[]; selected: string[]; onChange: (v: string[]) => void
+  display?: (v: string) => string; presets?: { label: string; values: string[] }[]; searchable?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [open])
+
+  // a ticked value stays in the list even when the other filters would hide it
+  const all: Opt[] = [...options, ...selected.filter((s) => !options.some((o) => o.value === s)).map((v) => ({ value: v, label: display(v), count: 0 }))]
+  const shown = q ? all.filter((o) => o.label.toLowerCase().includes(q.toLowerCase())) : all
+  const text = selected.length === 0 ? `${allLabel} (${options.length})` : selected.length === 1 ? display(selected[0]) : `${display(selected[0])} +${selected.length - 1}`
+  const usable = presets?.filter((p) => p.values.some((v) => all.some((o) => o.value === v)))
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((v) => !v)}
+        className={`inline-flex max-w-[15rem] items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected.length ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-border bg-muted/40 font-medium text-foreground hover:bg-muted'}`}
+      >
+        <span className="truncate">{text}</span>
+        <ChevronDown className="h-3 w-3 shrink-0" />
+      </button>
+      {open && (
+        <div role="listbox" aria-label={`${label} choices`} aria-multiselectable className="absolute left-0 top-full z-40 mt-1.5 w-72 rounded-xl border border-border bg-card p-2 shadow-xl">
+          {usable && usable.length > 0 && (
+            <div className="flex flex-wrap gap-1 border-b border-border px-1 pb-2">
+              {usable.map((p) => (
+                <button key={p.label} type="button" onClick={() => onChange(presetOn(selected, p.values) ? [] : p.values.filter((v) => all.some((o) => o.value === v)))}
+                  className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold transition-colors ${presetOn(selected, p.values.filter((v) => all.some((o) => o.value === v))) ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-muted'}`}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {(searchable || all.length > 12) && (
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${label.toLowerCase().replace('filter by ', '')}...`} aria-label={`Search ${label}`}
+              className="mt-2 w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring" />
+          )}
+          <div className="mt-1 max-h-64 overflow-y-auto">
+            {shown.map((o) => {
+              const on = selected.includes(o.value)
+              return (
+                <label key={o.value} role="option" aria-selected={on} className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-muted ${on ? 'font-semibold text-primary' : 'text-foreground'}`}>
+                  <input type="checkbox" checked={on} onChange={() => onChange(toggle(selected, o.value))} className="h-3.5 w-3.5 rounded border-border accent-primary" />
+                  <span className="flex-1 truncate">{o.label}</span>
+                  <span className="text-[11px] tabular-nums text-muted-foreground">{o.count}</span>
+                </label>
+              )
+            })}
+            {shown.length === 0 && <p className="px-2 py-3 text-center text-xs text-muted-foreground">Nothing matches.</p>}
+          </div>
+          <div className="mt-1 flex items-center justify-between border-t border-border px-1 pt-2">
+            <button type="button" onClick={() => onChange([])} disabled={selected.length === 0} className="text-xs font-semibold text-muted-foreground hover:text-foreground disabled:opacity-40">Clear</button>
+            <button type="button" onClick={() => setOpen(false)} className="rounded-md bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary/90">Done</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function CommandBar(p: Props) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [datesOpen, setDatesOpen] = useState(false)
   const active = filterCount(p.filters)
   const customLabel = `${dayLabelYear(parseDay(p.custom.start))} - ${dayLabelYear(parseDay(p.custom.end))}`.replace(/ 20\d\d/g, '')
-  const withCount = (label: string, o: Opt[]) => [{ value: '', label }, ...o.map((x) => ({ value: x.value, label: `${x.label} (${x.count})` }))]
+  const f = p.filters
 
   return (
     <div className="space-y-3">
@@ -109,7 +182,7 @@ export function CommandBar(p: Props) {
       </div>
 
       {/* sticky filter bar + view lenses */}
-      <div className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card/95 p-2.5 shadow-sm backdrop-blur">
+      <div className="sticky top-0 z-30 space-y-2.5 rounded-xl border border-border bg-card/95 p-2.5 shadow-sm backdrop-blur">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button" onClick={() => { setFiltersOpen(true); setDatesOpen(false) }}
@@ -118,11 +191,24 @@ export function CommandBar(p: Props) {
             <SlidersHorizontal className="h-3.5 w-3.5" /> Filters
             {active > 0 && <span className="rounded bg-card px-1.5 text-[11px] font-bold tabular-nums text-primary">{active}</span>}
           </button>
-          <SelectBox label="Filter by group" value={one(p.filters, 'group')} active={!!one(p.filters, 'group')} onChange={(v) => p.onFilters(setOne(p.filters, 'group', v))} options={withCount(`All groups (${p.options.groups.length})`, p.options.groups)} />
-          {p.showPeople && <SelectBox label="Filter by technician" value={one(p.filters, 'tech')} active={!!one(p.filters, 'tech')} onChange={(v) => p.onFilters(setOne(p.filters, 'tech', v))} options={withCount(`All technicians (${p.options.techs.length})`, p.options.techs)} />}
-          {p.options.brands.length > 0 && <SelectBox label="Filter by OEM brand" value={one(p.filters, 'brand')} active={!!one(p.filters, 'brand')} onChange={(v) => p.onFilters(setOne(p.filters, 'brand', v))} options={withCount(`All OEM brands (${p.options.brands.length})`, p.options.brands)} />}
-          <SelectBox label="Filter by status" value={one(p.filters, 'status')} active={!!one(p.filters, 'status')} onChange={(v) => p.onFilters(setOne(p.filters, 'status', v))} options={withCount('All statuses', p.options.statuses)} />
-          <SelectBox label="Filter by SLA" value={p.filters.sla} active={p.filters.sla !== 'all'} tone="danger" onChange={(v) => p.onFilters({ ...p.filters, sla: v as SlaState })} options={SLA_OPTIONS} />
+
+          <div className="relative min-w-[13rem] flex-1 sm:max-w-xs">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="search" value={f.q} onChange={(e) => p.onFilters({ ...f, q: e.target.value })} aria-label="Search tickets"
+              placeholder="Search ticket no, subject, store, technician..."
+              className={`w-full rounded-lg border py-1.5 pl-8 pr-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring ${f.q.trim() ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-muted/40 text-foreground focus:bg-background'}`}
+            />
+          </div>
+
+          <MultiSelect label="Filter by group" allLabel="All groups" options={p.options.groups} selected={f.dims.group} onChange={(v) => p.onFilters(setDim(f, 'group', v))} />
+          {p.showPeople && <MultiSelect label="Filter by technician" allLabel="All technicians" options={p.options.techs} selected={f.dims.tech} onChange={(v) => p.onFilters(setDim(f, 'tech', v))} searchable />}
+          {p.options.brands.length > 0 && <MultiSelect label="Filter by OEM brand" allLabel="All OEM brands" options={p.options.brands} selected={f.dims.brand} onChange={(v) => p.onFilters(setDim(f, 'brand', v))} />}
+          <MultiSelect
+            label="Filter by status" allLabel="All statuses" options={p.options.statuses} selected={f.dims.status} onChange={(v) => p.onFilters(setDim(f, 'status', v))}
+            display={(v) => p.options.statuses.find((s) => s.value === v)?.label ?? v} presets={STATUS_PRESETS.map((s) => ({ label: s.label, values: s.statuses }))}
+          />
+          <SelectBox label="Filter by SLA" value={f.sla} active={f.sla !== 'all'} tone="danger" onChange={(v) => p.onFilters({ ...f, sla: v as SlaState })} options={SLA_OPTIONS} />
           {(active > 0 || p.period !== '30d') && (
             <button type="button" onClick={p.onReset} className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive/10">
               <RotateCcw className="h-3.5 w-3.5" /> Reset all
@@ -145,7 +231,7 @@ export function CommandBar(p: Props) {
         <FiltersModal
           now={p.now} filters={p.filters} period={p.period} custom={p.custom} options={p.options} showPeople={p.showPeople}
           onClose={() => setFiltersOpen(false)}
-          onApply={(f, per, c) => { p.onFilters(f); p.onPeriod(per); if (per === 'custom') p.onCustom(c); setFiltersOpen(false) }}
+          onApply={(nf, per, c) => { p.onFilters(nf); p.onPeriod(per); if (per === 'custom') p.onCustom(c); setFiltersOpen(false) }}
         />
       )}
     </div>
@@ -207,22 +293,28 @@ function DatesPopover({ now, custom, onApply, onClose }: { now: number; custom: 
   )
 }
 
-// ── The filters pop-up ─────────────────────────────────────────────────────────────────────────────
+// ── The filters pop-up (several values per filter) ────────────────────────────────────────────────
 
-function OptionGrid({ icon, title, all, value, options, onPick, search = false }: {
-  icon: React.ReactNode; title: string; all: string; value: string; options: Opt[]; onPick: (v: string) => void; search?: boolean
+function OptionGrid({ icon, title, all, value, options, onChange, search = false, presets }: {
+  icon: React.ReactNode; title: string; all: string; value: string[]; options: Opt[]; onChange: (v: string[]) => void; search?: boolean
+  presets?: { label: string; values: string[] }[]
 }) {
   const [q, setQ] = useState('')
   const shown = q ? options.filter((o) => o.label.toLowerCase().includes(q.toLowerCase())) : options
   const cell = (on: boolean) => `flex items-center justify-between rounded-lg border px-3 py-2 text-left text-xs transition-colors ${on ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-border text-foreground hover:bg-muted/60'}`
   return (
     <div className="space-y-2">
-      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{icon}{title}</p>
+      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{icon}{title}<span className="font-normal normal-case tracking-normal">(tick as many as you like)</span></p>
+      {presets && (
+        <div className="flex flex-wrap gap-1.5">
+          {presets.map((p) => <button key={p.label} type="button" onClick={() => onChange(presetOn(value, p.values) ? [] : p.values)} className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${presetOn(value, p.values) ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-muted'}`}>{p.label}</button>)}
+        </div>
+      )}
       {search && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${title.toLowerCase()}...`} className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring" />}
       <div className="grid max-h-56 grid-cols-2 gap-1.5 overflow-y-auto pr-1">
-        <button type="button" onClick={() => onPick('')} className={cell(value === '')}>{all}</button>
+        <button type="button" onClick={() => onChange([])} className={cell(value.length === 0)}>{all}</button>
         {shown.map((o) => (
-          <button key={o.value} type="button" onClick={() => onPick(value === o.value ? '' : o.value)} className={cell(value === o.value)}>
+          <button key={o.value} type="button" aria-pressed={value.includes(o.value)} onClick={() => onChange(toggle(value, o.value))} className={cell(value.includes(o.value))}>
             <span className="truncate">{o.label}</span><span className="ml-1 text-[11px] tabular-nums text-muted-foreground">{o.count}</span>
           </button>
         ))}
@@ -259,7 +351,7 @@ function FiltersModal({ now, filters, period, custom, options, showPeople, onClo
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground"><SlidersHorizontal className="h-4 w-4" /></div>
             <div>
               <h2 className="text-base font-bold text-foreground">Dashboard filters</h2>
-              <p className="text-xs text-muted-foreground">Combine group, technician, OEM equipment, queue status, SLA and dates</p>
+              <p className="text-xs text-muted-foreground">Combine group, technician, OEM equipment, queue status, SLA and dates. Every filter takes several values.</p>
             </div>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button>
@@ -284,32 +376,25 @@ function FiltersModal({ now, filters, period, custom, options, showPeople, onClo
             )}
           </div>
 
+          <div className="space-y-2">
+            <p className="flex items-center gap-1.5 font-semibold uppercase tracking-wider text-muted-foreground"><Search className="h-3.5 w-3.5" />Ticket search</p>
+            <input value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="Ticket number, subject, store, technician, OEM..." className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring" />
+          </div>
+
           <div className="grid gap-5 md:grid-cols-2">
-            <OptionGrid icon={<Building2 className="h-3.5 w-3.5" />} title="Technician group" all="All groups" value={one(f, 'group')} options={options.groups} onPick={(v) => setF(setOne(f, 'group', v))} />
+            <OptionGrid icon={<Building2 className="h-3.5 w-3.5" />} title="Technician group" all="All groups" value={f.dims.group} options={options.groups} onChange={(v) => setF(setDim(f, 'group', v))} />
             {options.brands.length > 0
-              ? <OptionGrid icon={<Wrench className="h-3.5 w-3.5" />} title="OEM brand (store equipment)" all="All OEM brands" value={one(f, 'brand')} options={options.brands} onPick={(v) => setF(setOne(f, 'brand', v))} />
+              ? <OptionGrid icon={<Wrench className="h-3.5 w-3.5" />} title="OEM brand (store equipment)" all="All OEM brands" value={f.dims.brand} options={options.brands} onChange={(v) => setF(setDim(f, 'brand', v))} />
               : <div />}
           </div>
 
           <div className="grid gap-5 md:grid-cols-2">
             {showPeople
-              ? <OptionGrid icon={<User className="h-3.5 w-3.5" />} title="Assigned technician" all="All technicians" value={one(f, 'tech')} options={options.techs} onPick={(v) => setF(setOne(f, 'tech', v))} search />
+              ? <OptionGrid icon={<User className="h-3.5 w-3.5" />} title="Assigned technician" all="All technicians" value={f.dims.tech} options={options.techs} onChange={(v) => setF(setDim(f, 'tech', v))} search />
               : <div />}
             <div className="space-y-4">
-              <div className="space-y-2">
-                <p className="flex items-center gap-1.5 font-semibold uppercase tracking-wider text-muted-foreground"><Layers className="h-3.5 w-3.5" />Queue status</p>
-                <div className="flex flex-wrap gap-1.5">
-                  <button type="button" onClick={() => setF(setOne(f, 'status', ''))} className={pill(one(f, 'status') === '')}>All</button>
-                  {options.statuses.map((s) => <button key={s.value} type="button" onClick={() => setF(setOne(f, 'status', one(f, 'status') === s.value ? '' : s.value))} className={pill(one(f, 'status') === s.value)}>{s.label} ({s.count})</button>)}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <p className="font-semibold uppercase tracking-wider text-muted-foreground">Priority</p>
-                <div className="flex flex-wrap gap-1.5">
-                  <button type="button" onClick={() => setF(setOne(f, 'prio', ''))} className={pill(one(f, 'prio') === '')}>All</button>
-                  {options.prios.map((s) => <button key={s.value} type="button" onClick={() => setF(setOne(f, 'prio', one(f, 'prio') === s.value ? '' : s.value))} className={pill(one(f, 'prio') === s.value)}>{s.label} ({s.count})</button>)}
-                </div>
-              </div>
+              <OptionGrid icon={<Layers className="h-3.5 w-3.5" />} title="Queue status" all="All statuses" value={f.dims.status} options={options.statuses} onChange={(v) => setF(setDim(f, 'status', v))} presets={STATUS_PRESETS.map((s) => ({ label: s.label, values: s.statuses }))} />
+              <OptionGrid icon={<span className="inline-block h-3.5 w-3.5" />} title="Priority" all="All priorities" value={f.dims.prio} options={options.prios} onChange={(v) => setF(setDim(f, 'prio', v))} />
               <div className="space-y-2">
                 <p className="flex items-center gap-1.5 font-semibold uppercase tracking-wider text-muted-foreground"><ShieldAlert className="h-3.5 w-3.5" />SLA state</p>
                 <div className="flex flex-wrap gap-1.5">
@@ -331,4 +416,3 @@ function FiltersModal({ now, filters, period, custom, options, showPeople, onClo
     </div>
   )
 }
-

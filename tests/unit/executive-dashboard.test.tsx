@@ -43,10 +43,11 @@ describe('Smart Dashboard', () => {
   it('shows the command bar, the four highlights and the two tiers of number cards', () => {
     view()
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Executive Dashboard')
-    expect(screen.getByText(/Priority intelligence/i)).toBeTruthy()
-    expect(screen.getByText('SLA RISK WATCH')).toBeTruthy()
-    expect(screen.getByText('WORKLOAD CONCENTRATION')).toBeTruthy()
-    expect(screen.getByText('DECISION BOTTLENECK')).toBeTruthy()
+    expect(screen.getByText(/Priority highlights/i)).toBeTruthy()
+    expect(screen.getByText('SLA RISK')).toBeTruthy()
+    expect(screen.getByText('WORKLOAD')).toBeTruthy()
+    expect(screen.getByText('OEM / STORE EQUIPMENT')).toBeTruthy()
+    expect(screen.getByText('APPROVALS')).toBeTruthy()
     expect(screen.getByText('OPEN BACKLOG')).toBeTruthy()
     expect(screen.getByText('SLA BREACHES')).toBeTruthy()
     expect(screen.getByText('Custom Dates')).toBeTruthy()
@@ -118,6 +119,60 @@ describe('Smart Dashboard', () => {
     expect(screen.getByText(/1 of 4 tickets match/)).toBeTruthy()
   })
 
+  it('lets several values be ticked in a filter, with their list following the other filters', () => {
+    view()
+    // pick the IT group: the technician list shrinks to that group's technicians
+    fireEvent.click(screen.getByLabelText('Filter by group'))
+    const groups = screen.getByRole('listbox', { name: 'Filter by group choices' })
+    fireEvent.click(within(groups).getByLabelText(/IT Group/))
+    fireEvent.click(within(groups).getByText('Done'))
+    fireEvent.click(screen.getByLabelText('Filter by technician'))
+    let techs = screen.getByRole('listbox', { name: 'Filter by technician choices' })
+    expect(within(techs).queryByLabelText(/Krishan/)).toBeNull()
+    expect(within(techs).getByLabelText(/Mohit/)).toBeTruthy()
+    fireEvent.click(within(techs).getByText('Done'))
+    // add the ADMIN GROUP as well: both groups' technicians are offered
+    fireEvent.click(screen.getByLabelText('Filter by group'))
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'Filter by group choices' })).getByLabelText(/ADMIN GROUP/))
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'Filter by group choices' })).getByText('Done'))
+    expect(screen.getByText('Group: IT Group ×')).toBeTruthy()
+    expect(screen.getByText('Group: ADMIN GROUP ×')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Filter by technician'))
+    techs = screen.getByRole('listbox', { name: 'Filter by technician choices' })
+    expect(within(techs).getByLabelText(/Krishan/)).toBeTruthy()
+    expect(within(techs).getByLabelText(/Mohit/)).toBeTruthy()
+  })
+
+  it('narrows the group list to the chosen technician', () => {
+    view()
+    fireEvent.click(screen.getByLabelText('Filter by technician'))
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'Filter by technician choices' })).getByLabelText(/Mohit/))
+    fireEvent.click(screen.getByLabelText('Filter by group'))
+    const groups = screen.getByRole('listbox', { name: 'Filter by group choices' })
+    expect(within(groups).getByLabelText(/IT Group/)).toBeTruthy()
+    expect(within(groups).queryByLabelText(/ADMIN GROUP/)).toBeNull()
+  })
+
+  it('picks every "on hold" status with one click', () => {
+    const held = [tk({ status: 'hold_purchase_ho' }), tk({ status: 'waiting_user' })]
+    render(<ExecutiveDashboard level="admin" me="Krishan" now={NOW} tickets={[...tickets, ...held]} approvals={[]} truncated={false} />)
+    fireEvent.click(screen.getByLabelText('Filter by status'))
+    const box = screen.getByRole('listbox', { name: 'Filter by status choices' })
+    fireEvent.click(within(box).getByText('On hold'))
+    expect(screen.getByText('Status: Waiting on User ×')).toBeTruthy()
+    expect(screen.getByText('Status: Hold - Purchase from HO ×')).toBeTruthy()
+    expect(screen.getByText(/2 of 6 tickets match/)).toBeTruthy()
+  })
+
+  it('searches tickets from the filter bar and shows it as a filter', () => {
+    view()
+    fireEvent.change(screen.getByLabelText('Search tickets'), { target: { value: 'printer' } })
+    expect(screen.getByText('Search: “printer” ×')).toBeTruthy()
+    expect(screen.getByText(/1 of 4 tickets match/)).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Remove Search: “printer”'))
+    expect(screen.queryByText('Search: “printer” ×')).toBeNull()
+  })
+
   it('applies a custom date range from the pop-over', () => {
     view()
     fireEvent.click(screen.getByText('Custom Dates').closest('button')!)
@@ -152,7 +207,7 @@ describe('Smart Dashboard', () => {
   it('titles the page for each level and hides people views from requesters', () => {
     const { unmount } = view('requester')
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('My Requests Dashboard')
-    expect(screen.queryByText('WORKLOAD CONCENTRATION')).toBeNull()
+    expect(screen.queryByText('WORKLOAD')).toBeNull()
     expect(screen.queryByLabelText('Filter by technician')).toBeNull()
     unmount()
     view('technician')

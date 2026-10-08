@@ -48,6 +48,7 @@ export function VelocitySection({ d, baseW, metric, onOpen }: { d: DashData; bas
   const rawMax = Math.max(0, ...vals.filter((x): x is number => x !== null), ...(pvals ?? []).filter((x): x is number => x !== null))
   const yMax = !isApprovals && m === 'sla' ? 100 : niceMax(rawMax)
   const ticks = [yMax, yMax * 0.75, yMax * 0.5, yMax * 0.25, 0]
+  const labelEvery = Math.max(1, Math.ceil(buckets.length / 8))
   const title = isApprovals ? 'Approvals waiting' : MEASURES[m].label
 
   // velocity insight
@@ -125,7 +126,7 @@ export function VelocitySection({ d, baseW, metric, onOpen }: { d: DashData; bas
             <div className="flex w-10 select-none flex-col justify-between pb-6 pr-2 text-right text-[11px] tabular-nums text-muted-foreground">
               {ticks.map((t, i) => <span key={i}>{fmt(t)}</span>)}
             </div>
-            <div className="relative flex flex-1 flex-col justify-between pb-6">
+            <div className="relative flex min-w-0 flex-1 flex-col justify-between overflow-hidden pb-6">
               <div className="pointer-events-none absolute inset-x-0 bottom-6 top-0 flex flex-col justify-between">
                 {ticks.map((_, i) => <div key={i} className="w-full border-b border-border/70" />)}
               </div>
@@ -137,20 +138,24 @@ export function VelocitySection({ d, baseW, metric, onOpen }: { d: DashData; bas
                   />
                 </svg>
               )}
-              <div className="relative z-20 flex flex-1 items-end justify-between gap-2 px-2 pt-2">
+              <div className={`relative z-20 flex min-w-0 flex-1 items-end justify-between px-2 pt-2 ${buckets.length > 14 ? 'gap-0.5' : 'gap-2'}`}>
                 {buckets.map((b, i) => {
                   const v = vals[i]
                   const h = Math.max(v && v > 0 ? 6 : 1.5, Math.min(100, ((v ?? 0) / yMax) * 100))
                   return (
-                    <button key={b.start} type="button" onClick={() => openBucket(i)} title={`${bucketLabel(b)}: ${fmt(v)} - click to drill down`} className="group flex h-full flex-1 flex-col items-center justify-end focus-visible:outline-none">
-                      <span className={`mb-1 text-[11px] font-semibold tabular-nums ${v ? 'text-foreground' : 'text-muted-foreground opacity-0 group-hover:opacity-100'}`}>{fmt(v)}</span>
+                    <button key={b.start} type="button" onClick={() => openBucket(i)} title={`${bucketLabel(b)}: ${fmt(v)} - click to drill down`} className="group flex h-full min-w-0 flex-1 flex-col items-center justify-end focus-visible:outline-none">
+                      <span className={`mb-1 whitespace-nowrap text-[11px] font-semibold tabular-nums ${buckets.length > 14 ? 'hidden group-hover:block' : v ? 'text-foreground' : 'text-muted-foreground opacity-0 group-hover:opacity-100'}`}>{fmt(v)}</span>
                       <div className={`w-full max-w-[38px] rounded-t-md transition-all duration-150 group-focus-visible:ring-2 group-focus-visible:ring-ring ${barColor(v)}`} style={{ height: `${h}%` }} />
                     </button>
                   )
                 })}
               </div>
-              <div className="flex h-6 items-center justify-between gap-2 border-t border-border px-2 pt-2">
-                {buckets.map((b, i) => <div key={b.start} className="flex-1 truncate text-center text-[11px] tabular-nums text-muted-foreground">{buckets.length > 14 && i % 2 === 1 ? '' : dayLabel(b.start)}</div>)}
+              <div className={`flex h-6 items-center justify-between border-t border-border px-2 pt-2 ${buckets.length > 14 ? 'gap-0.5' : 'gap-2'}`}>
+                {buckets.map((b, i) => (
+                  <div key={b.start} className="relative h-4 min-w-0 flex-1">
+                    {i % labelEvery === 0 && <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">{dayLabel(b.start)}</span>}
+                  </div>
+                ))}
               </div>
             </div>
           </div>

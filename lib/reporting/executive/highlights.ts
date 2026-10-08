@@ -23,7 +23,6 @@ export interface Highlight {
 
 const NO_OEM = '(No OEM)'
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0)
-const list = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`)
 
 function groupBy<T>(items: T[], key: (t: T) => string): Map<string, T[]> {
   const m = new Map<string, T[]>()
@@ -41,30 +40,23 @@ export function highlights(
   {
     const created = measure(base, W, 'created') ?? 0
     const breached = measure(base, W, 'breaches') ?? 0
-    const sla = measure(base, W, 'sla')
     if (created === 0) {
       out.push({
-        id: 'sla', category: 'SLA RISK WATCH', severity: 'info', headline: 'No tickets were created in this period', keyStat: '-',
-        detail: 'Pick a longer period to see SLA risk.', actionLabel: 'Open the breakdown', open: { metric: 'breaches', dims: [], stage: 1 },
+        id: 'sla', category: 'SLA RISK', severity: 'info', headline: 'No tickets in this period', keyStat: '-',
+        detail: 'Pick a longer period.', actionLabel: 'Open the breakdown', open: { metric: 'breaches', dims: [], stage: 1 },
       })
     } else {
       const rate = pct(breached, created)
       const byGroup = [...groupBy(base, (t) => t.group)]
-        .map(([g, ts]) => ({ g, breaches: measure(ts, W, 'breaches') ?? 0, sla: measure(ts, W, 'sla') }))
+        .map(([g, ts]) => ({ g, breaches: measure(ts, W, 'breaches') ?? 0 }))
         .filter((x) => x.breaches > 0)
         .sort((a, b) => b.breaches - a.breaches)
       const top = byGroup.slice(0, 2)
-      const topShare = pct(top.reduce((n, x) => n + x.breaches, 0), breached)
-      const slaText = (x: { sla: number | null; breaches: number }) => `${x.sla === null ? 'no resolved tickets yet' : `${x.sla.toFixed(0)}% SLA`} · ${x.breaches} breach${x.breaches === 1 ? '' : 'es'}`
       out.push({
-        id: 'sla', category: 'SLA RISK WATCH', severity: rate >= 40 ? 'critical' : rate >= 15 ? 'warning' : 'info',
-        headline: `${breached} of ${created} tickets breached SLA${sla === null ? '' : ` (${sla.toFixed(0)}% compliance)`}`,
-        keyStat: `${rate}% Breach Rate`,
-        detail: top.length === 0
-          ? 'No ticket has breached its SLA in this period.'
-          : top.length === 1
-            ? `${top[0].g} (${slaText(top[0])}) accounts for every breach.`
-            : `${top.map((x) => `${x.g} (${slaText(x)})`).join(' and ')} drive ${topShare}% of all breaches.`,
+        id: 'sla', category: 'SLA RISK', severity: rate >= 40 ? 'critical' : rate >= 15 ? 'warning' : 'info',
+        headline: `${breached} of ${created} tickets breached SLA`,
+        keyStat: `${rate}% breach rate`,
+        detail: top.length === 0 ? 'No breaches in this period' : `Worst: ${top.map((x) => `${x.g} (${x.breaches})`).join(' · ')}`,
         actionLabel: `Inspect ${breached} breached ticket${breached === 1 ? '' : 's'}`,
         open: { metric: 'breaches', dims: [], stage: 1 },
       })
@@ -77,24 +69,23 @@ export function highlights(
     const perTech = [...groupBy(open.filter((t) => t.tech !== UNASSIGNED), (t) => t.tech)].map(([n, ts]) => ({ n, open: ts.length })).sort((a, b) => b.open - a.open)
     const resolvedBy = [...groupBy(base.filter((t) => t.resolved !== null && inWin(t.resolved, W) && t.tech !== UNASSIGNED), (t) => t.tech)]
       .map(([n, ts]) => ({ n, r: ts.length })).sort((a, b) => b.r - a.r)
-    const totalResolved = resolvedBy.reduce((n, x) => n + x.r, 0)
     const top3 = perTech.slice(0, 3)
     if (open.length >= 3 && top3.length > 0) {
       const share = pct(top3.reduce((n, x) => n + x.open, 0), open.length)
       const lead = top3[0]
       const best = resolvedBy[0]
       out.push({
-        id: 'workload', category: 'WORKLOAD CONCENTRATION', severity: share >= 60 ? 'warning' : 'info',
-        headline: `${top3.length} technician${top3.length === 1 ? '' : 's'} hold ${share}% of the ${open.length} open tickets`,
-        keyStat: `${lead.open} Open · ${lead.n}`,
-        detail: `${lead.n} carries the highest open queue (${lead.open} tickets)${best ? `, while ${best.n} resolved ${best.r} (${pct(best.r, totalResolved)}% of all resolutions)` : ''}.`,
+        id: 'workload', category: 'WORKLOAD', severity: share >= 60 ? 'warning' : 'info',
+        headline: `${top3.length} technician${top3.length === 1 ? '' : 's'} hold ${share}% of ${open.length} open`,
+        keyStat: `${lead.n}: ${lead.open}`,
+        detail: `Most open: ${lead.n} (${lead.open})${best ? ` · Most resolved: ${best.n} (${best.r})` : ''}`,
         actionLabel: `Open ${lead.n}'s queue`,
         open: { metric: 'backlog', dims: [{ dim: 'tech', value: lead.n }], stage: 3 },
       })
     } else {
       out.push({
-        id: 'workload', category: 'WORKLOAD CONCENTRATION', severity: 'info', headline: open.length === 0 ? 'No open tickets right now' : 'Open workload is spread evenly',
-        keyStat: `${open.length} Open`, detail: 'No technician is carrying a concentrated queue.', actionLabel: 'Open the backlog', open: { metric: 'backlog', dims: [], stage: 1 },
+        id: 'workload', category: 'WORKLOAD', severity: 'info', headline: open.length === 0 ? 'No open tickets' : 'Workload is evenly spread',
+        keyStat: `${open.length} open`, detail: 'No technician is overloaded', actionLabel: 'Open the backlog', open: { metric: 'backlog', dims: [], stage: 1 },
       })
     }
   }
@@ -108,21 +99,18 @@ export function highlights(
     if (brands.length > 0) {
       const top = brands.slice(0, 2)
       const topTotal = top.reduce((n, x) => n + x.created, 0)
-      const text = (x: (typeof brands)[number]) => `${x.b} (${x.created} created, ${x.backlog} backlog${x.sla === null ? '' : `, ${x.sla.toFixed(0)}% SLA`})`
       out.push({
-        id: 'oem', category: 'STORE EQUIPMENT / OEM BOTTLENECK', severity: 'info',
-        headline: top.length === 1
-          ? `${top[0].b} accounts for all ${top[0].created} OEM tickets`
-          : `${top[0].b} & ${top[1].b} drive ${pct(topTotal, oemTickets.length)}% of store volume (${topTotal} tickets)`,
-        keyStat: `${top.reduce((n, x) => n + x.breaches, 0)} Breaches`,
-        detail: top.length === 1 ? `${text(top[0])} is the only OEM with tickets in this period.` : `${list(top.map(text))} represent the main store maintenance load.`,
+        id: 'oem', category: 'OEM / STORE EQUIPMENT', severity: 'info',
+        headline: top.length === 1 ? `${top[0].b}: all ${top[0].created} OEM tickets` : `${top[0].b} & ${top[1].b}: ${pct(topTotal, oemTickets.length)}% of store tickets`,
+        keyStat: `${top.reduce((n, x) => n + x.breaches, 0)} breaches`,
+        detail: `Open: ${top.map((x) => `${x.b} ${x.backlog}`).join(' · ')}`,
         actionLabel: `View ${top[0].b} breakdown`,
         open: { metric: 'created', dims: [{ dim: 'brand', value: top[0].b }], stage: 2 },
       })
     } else {
       out.push({
-        id: 'oem', category: 'STORE EQUIPMENT / OEM BOTTLENECK', severity: 'info', headline: 'No OEM-linked tickets in this period', keyStat: '-',
-        detail: 'Tickets raised by stores that have an OEM show up here.', actionLabel: 'Open the breakdown', open: { metric: 'created', dims: [], stage: 1 },
+        id: 'oem', category: 'OEM / STORE EQUIPMENT', severity: 'info', headline: 'No OEM tickets in this period', keyStat: '-',
+        detail: 'Stores with an OEM show up here', actionLabel: 'Open the breakdown', open: { metric: 'created', dims: [], stage: 1 },
       })
     }
   }
@@ -139,18 +127,18 @@ export function highlights(
       const byGroup = [...groupBy(waiting, (a) => a.t.group)].map(([g, xs]) => ({ g, n: xs.length })).sort((a, b) => b.n - a.n)
       const avgWait = waiting.reduce((n, a) => n + (Math.min(W.end, now) - a.requested) / 3_600_000, 0) / waiting.length
       out.push({
-        id: 'approvals', category: 'DECISION BOTTLENECK', severity: 'action',
-        headline: byGroup.length === 1 ? `${pending} ${byGroup[0].g} request${pending === 1 ? '' : 's'} waiting on manager approval` : `${pending} requests waiting on manager approval (${byGroup[0].g} has ${byGroup[0].n})`,
-        keyStat: `${formatMeasure('tat', avgWait)} Avg Wait`,
-        detail: `${rate === null ? 'No decisions yet' : `${formatApproval('rate', rate)} approval rate (${approved} approved, ${rejected} rejected)`}; the ${pending} pending decision${pending === 1 ? ' has' : 's have'} waited ${formatMeasure('tat', avgWait)} on average.`,
+        id: 'approvals', category: 'APPROVALS', severity: 'action',
+        headline: `${pending} approval${pending === 1 ? '' : 's'} waiting for a decision`,
+        keyStat: `avg ${formatMeasure('tat', avgWait)}`,
+        detail: `Most: ${byGroup[0].g} (${byGroup[0].n})${rate === null ? '' : ` · ${formatApproval('rate', rate)} approved`}`,
         actionLabel: `Review ${pending} waiting approval${pending === 1 ? '' : 's'}`,
         open: { metric: 'created', dims: [], stage: 3, approvals: true },
       })
     } else {
       out.push({
-        id: 'approvals', category: 'DECISION BOTTLENECK', severity: 'info', headline: 'No approvals waiting for a decision',
+        id: 'approvals', category: 'APPROVALS', severity: 'info', headline: 'No approvals waiting',
         keyStat: rate === null ? '-' : `${formatApproval('rate', rate)} approved`,
-        detail: approved + rejected === 0 ? 'No approval was decided in this period.' : `${approved} approved and ${rejected} rejected in this period.`,
+        detail: approved + rejected === 0 ? 'None decided in this period' : `${approved} approved · ${rejected} rejected`,
         actionLabel: 'Open approvals', open: { metric: 'created', dims: [], stage: 1, approvals: true },
       })
     }

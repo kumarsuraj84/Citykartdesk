@@ -83,14 +83,16 @@ export const DIM_LABEL: Record<Dim, string> = {
 }
 export type DimFilters = Record<Dim, string[]>
 export type SlaState = 'all' | 'breached' | 'ok'
-export interface Filters { dims: DimFilters; sla: SlaState }
-export type Skip = Dim | 'sla'
+/** `q` is the ticket search box: ticket number, subject, store, group, technician, OEM, requester or category contains the text. */
+export interface Filters { dims: DimFilters; sla: SlaState; q: string }
+export type Skip = Dim | 'sla' | 'q'
 
 export const emptyFilters = (): Filters => ({
   dims: Object.fromEntries(DIMS.map((d) => [d, [] as string[]])) as DimFilters,
   sla: 'all',
+  q: '',
 })
-export const filterCount = (f: Filters) => DIMS.reduce((n, d) => n + f.dims[d].length, 0) + (f.sla !== 'all' ? 1 : 0)
+export const filterCount = (f: Filters) => DIMS.reduce((n, d) => n + f.dims[d].length, 0) + (f.sla !== 'all' ? 1 : 0) + (f.q.trim() ? 1 : 0)
 
 /** Adds the value to a dimension's filter, or removes it when already there (click again to undo). */
 export function toggleFilter(f: Filters, dim: Dim, value: string): Filters {
@@ -120,7 +122,23 @@ export function keyOf(dim: Dim, t: ExecTicket, now: number): string {
   return t[dim]
 }
 
+/** Ticket number, subject, store, group, technician, OEM brand, requester or category contains the text (empty text matches everything). */
+export function matchesSearch(t: ExecTicket, q: string): boolean {
+  const s = q.trim().toLowerCase()
+  if (!s) return true
+  return [t.no, t.subject, t.store, t.group, t.tech, t.brand, t.req, t.cat].some((x) => x.toLowerCase().includes(s))
+}
+
+/** One-click groups of statuses for the status filter ("see everything on hold"). */
+export const STATUS_PRESETS: { label: string; statuses: string[] }[] = [
+  { label: 'All unresolved', statuses: ['open', 'assigned', 'in_progress', 'waiting_user', 'hold_purchase_ho', 'pending_approval'] },
+  { label: 'Being worked on', statuses: ['open', 'assigned', 'in_progress'] },
+  { label: 'On hold', statuses: ['waiting_user', 'hold_purchase_ho'] },
+  { label: 'Resolved / closed', statuses: ['resolved', 'closed'] },
+]
+
 export function matches(t: ExecTicket, f: Filters, now: number, skip: readonly Skip[] = []): boolean {
+  if (f.q && !skip.includes('q') && !matchesSearch(t, f.q)) return false
   for (const d of DIMS) {
     const wanted = f.dims[d]
     if (wanted.length === 0 || skip.includes(d)) continue
