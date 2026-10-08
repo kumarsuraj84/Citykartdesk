@@ -28,6 +28,7 @@ export function TrendChart({ measure, buckets, current, previous, selectedStart,
   const mx = Math.max(1, ...all) * 1.12
   const bw = (w - left - 6) / Math.max(1, buckets.length)
   const every = Math.ceil(buckets.length / 10)
+  const barW = Math.min(bw * 0.76, 54)
   const plotH = h - top - bottom
 
   const prevPts: string[] = []
@@ -53,7 +54,7 @@ export function TrendChart({ measure, buckets, current, previous, selectedStart,
             <g key={buckets[i].start} onClick={() => onPick(i)} style={{ cursor: 'pointer' }} role="button" aria-label={`Zoom to ${bucketLabel(buckets[i])}`}>
               <rect x={x} y={top} width={bw} height={plotH} fill="transparent" />
               <rect
-                x={x + bw * 0.12} y={h - bottom - hh} width={bw * 0.76} height={Math.max(hh, 0)} rx={3}
+                x={x + (bw - barW) / 2} y={h - bottom - hh} width={barW} height={Math.max(hh, 0)} rx={4}
                 fill={sel ? 'var(--primary)' : selectedStart !== null ? 'color-mix(in srgb, var(--muted-foreground) 30%, transparent)' : 'color-mix(in srgb, var(--primary) 55%, transparent)'}
               >
                 <title>{`${bucketLabel(buckets[i])}: ${fmt(v)}`}</title>

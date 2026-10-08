@@ -46,7 +46,7 @@ export function ApprovalsCard({ approvals, filters, now, W, P, compareOn, select
                   <span className="block text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground">{APPROVAL_MEASURES[m].label}</span>
                   <span className="flex items-end justify-between gap-1">
                     <span className="text-2xl font-extrabold">{formatApproval(m, cur)}</span>
-                    <Spark values={approvalSeries(rows, W, m)} />
+                    <span className="w-14"><Spark values={approvalSeries(rows, W, m)} /></span>
                   </span>
                   <span className="block min-h-[16px]">{compareOn && <DeltaBadge d={compareApproval(m, cur, approvalMeasure(rows, P, m))} />}</span>
                 </button>

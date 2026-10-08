@@ -80,7 +80,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
       items: [
         ...(isAgent || isManager || isAdmin ? [{ label: 'Dashboards', href: isManager || isAdmin ? '/admin/reports' : '/dashboards', icon: BarChart3, exactMatch: true }] : []),
         // Click-through dashboard for every level (Requester → own requests, Technician / Manager → their groups, Admin / Owner → everything).
-        ...(has('requests') ? [{ label: 'Interactive Dashboard', href: '/dashboards/executive', icon: LayoutDashboard }] : []),
+        ...(has('requests') ? [{ label: 'Smart Dashboard', href: '/dashboards/executive', icon: LayoutDashboard }] : []),
         ...(has('requests') ? [{ label: 'Report Builder', href: '/reports/pivot', icon: Table2 }] : []),
         // Ready-made, fixed reports per technician group (Report Builder is for building your own).
         // Requesters have no technician group, so they never see it.

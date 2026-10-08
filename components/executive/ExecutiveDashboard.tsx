@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import {
+  approvalMeasure, approvalRows, approvalSeries, compareApproval, formatApproval,
   AGE_BUCKET_LABELS, DIM_LABEL, MEASURES, MEASURE_ORDER, PERIODS, RESOLVED_BUCKET, STATUS_LABEL,
   ageBucketOf, applyFilters, compare, emptyFilters, filterCount, formatMeasure, insights, joinApprovals, measure, openAt, periodWindow,
   prevWindow, rankItems, series, statusLabel, timeBuckets, toggleFilter, inWin,
@@ -60,6 +61,10 @@ export function ExecutiveDashboard({ level, me, now, tickets, approvals, truncat
   }
 
   // ── numbers ──
+  const apRows = approvalRows(joined, filters, now)
+  const apPending = approvalMeasure(apRows, W, 'pending')
+  const apPendingPrev = approvalMeasure(apRows, P, 'pending')
+  const apSpark = approvalSeries(apRows, baseW, 'pending')
   const kpis = MEASURE_ORDER.map((k) => ({ k, cur: measure(T, W, k), prev: measure(T, P, k), spark: series(T, baseW, k) }))
 
   const trendBuckets = useMemo(() => timeBuckets(baseW), [baseW])
@@ -174,24 +179,30 @@ export function ExecutiveDashboard({ level, me, now, tickets, approvals, truncat
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-9">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {kpis.map(({ k, cur, prev, spark }) => {
           const selected = m === k
           return (
-            <div key={k} className={`relative rounded-xl border bg-card p-3 shadow-sm transition-colors ${selected ? 'border-primary ring-2 ring-primary' : 'border-border hover:border-primary/60'}`}>
-              {selected && <span className="absolute right-2.5 top-2.5 rounded bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">SHOWING</span>}
+            <div key={k} className={`flex min-w-0 flex-col rounded-xl border p-3.5 shadow-sm transition-colors ${selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border bg-card hover:border-primary/50'}`}>
               <button type="button" onClick={() => setM(k)} aria-pressed={selected} className="block w-full text-left">
-                <span className="block text-[11.5px] font-bold uppercase tracking-wide text-muted-foreground">{MEASURES[k].label}</span>
-                <span className="block text-[28px] font-extrabold leading-tight tracking-tight">{formatMeasure(k, cur)}</span>
+                <span className={`block truncate text-[11px] font-bold uppercase tracking-wide ${selected ? 'text-primary' : 'text-muted-foreground'}`}>{MEASURES[k].label}</span>
+                <span className="mt-0.5 block text-[26px] font-extrabold leading-tight tracking-tight">{formatMeasure(k, cur)}</span>
                 <span className="block min-h-[18px]">{compareOn && <DeltaBadge d={compare(k, cur, prev)} />}</span>
               </button>
-              <div className="mt-1 flex items-end justify-between gap-2">
-                <button type="button" onClick={() => openDrill('tickets', [], { measure: k })} className="text-[11.5px] font-bold text-primary underline underline-offset-2">Breakdown ▸</button>
-                <Spark values={spark} />
-              </div>
+              <div className="mt-1.5"><Spark values={spark} /></div>
+              <button type="button" onClick={() => openDrill('tickets', [], { measure: k })} className="mt-1.5 self-start whitespace-nowrap text-[11.5px] font-bold text-primary hover:underline">Breakdown ▸</button>
             </div>
           )
         })}
+        <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-3.5 shadow-sm transition-colors hover:border-primary/50">
+          <button type="button" onClick={() => openDrill('approvals', [], { approval: 'pending' })} className="block w-full text-left">
+            <span className="block truncate text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Approvals waiting</span>
+            <span className="mt-0.5 block text-[26px] font-extrabold leading-tight tracking-tight">{formatApproval('pending', apPending)}</span>
+            <span className="block min-h-[18px]">{compareOn && <DeltaBadge d={compareApproval('pending', apPending, apPendingPrev)} />}</span>
+          </button>
+          <div className="mt-1.5"><Spark values={apSpark} /></div>
+          <button type="button" onClick={() => openDrill('approvals', [], { approval: 'pending' })} className="mt-1.5 self-start whitespace-nowrap text-[11.5px] font-bold text-primary hover:underline">Breakdown ▸</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-12 gap-3">

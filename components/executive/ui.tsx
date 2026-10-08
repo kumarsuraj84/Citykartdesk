@@ -10,21 +10,22 @@ export function DeltaBadge({ d, className = '' }: { d: Delta | null; className?:
   return <span className={`whitespace-nowrap text-[11px] font-bold ${tone} ${className}`}>{arrow} {d.text}</span>
 }
 
-export function Spark({ values }: { values: (number | null)[] }) {
+/** A small trend line that stretches to the width of its container (never wider than it). */
+export function Spark({ values, className = 'h-7 w-full' }: { values: (number | null)[]; className?: string }) {
   const v = values.filter((x): x is number => x !== null)
-  if (v.length < 2) return null
+  if (v.length < 2) return <div className={className} aria-hidden />
   const mx = Math.max(...v)
   const mn = Math.min(...v)
-  const w = 64
-  const h = 26
+  const w = 100
+  const h = 28
   const pts: string[] = []
   values.forEach((x, i) => {
     if (x === null) return
-    pts.push(`${((i / (values.length - 1)) * w).toFixed(1)},${(h - 2 - (mx === mn ? 0.5 : (x - mn) / (mx - mn)) * (h - 4)).toFixed(1)}`)
+    pts.push(`${((i / (values.length - 1)) * w).toFixed(1)},${(h - 3 - (mx === mn ? 0.5 : (x - mn) / (mx - mn)) * (h - 6)).toFixed(1)}`)
   })
   return (
-    <svg width={w} height={h} aria-hidden className="shrink-0">
-      <polyline points={pts.join(' ')} fill="none" stroke="var(--primary)" strokeWidth="1.8" strokeLinejoin="round" />
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-hidden className={`block overflow-hidden ${className}`}>
+      <polyline points={pts.join(' ')} fill="none" stroke="var(--primary)" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
     </svg>
   )
 }
