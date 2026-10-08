@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  emptyFilters, applyFilters, filterCount, periodWindow, quickRanges, parseDay, isoDay, joinApprovals, STATUS_PRESETS, UNASSIGNED,
+  emptyFilters, applyFilters, filterCount, isOpen, measure, periodWindow, quickRanges, parseDay, isoDay, joinApprovals, STATUS_PRESETS, UNASSIGNED,
   type ExecTicket, type ExecApproval, type Filters,
 } from '@/lib/reporting/executive/engine'
 import { highlights } from '@/lib/reporting/executive/highlights'
@@ -15,12 +15,18 @@ const HOUR = 3_600_000
 const NOW = new Date(2026, 9, 8, 17, 0, 0).getTime()
 const ago = (d: number, h = 0) => NOW - d * DAY - h * HOUR
 
+// The engine judges SLA from the due time, so a fixture marked breached gets a due time that has passed (or was missed when it resolved)
+const withDue = (t: ExecTicket, o: Partial<ExecTicket>): ExecTicket => {
+  if (o.due !== undefined) return t
+  const due = t.resolved !== null ? (t.breached ? t.resolved - HOUR : t.resolved + HOUR) : (t.breached ? t.created + HOUR : NOW + DAY)
+  return { ...t, due }
+}
 let n = 0
-const tk = (o: Partial<ExecTicket> = {}): ExecTicket => ({
+const tk = (o: Partial<ExecTicket> = {}): ExecTicket => withDue({
   id: `id${++n}`, no: `CKSD-${2000 + n}`, subject: 'AC not cooling', group: 'ADMIN GROUP', tech: 'Krishan', cat: 'AC ISSUE', sub: 'COOLING', svc: 'Admin repair',
   req: 'Store A', dept: 'Stores', loc: 'STORES', store: 'Store A', state: 'Delhi', oem: 'LG OEM - ALL', brand: 'LG', src: 'Portal',
-  prio: 'medium', status: 'in_progress', created: ago(2), resolved: null, tatH: null, breached: false, csat: null, reo: [], frH: 1, ...o,
-})
+  prio: 'medium', status: 'in_progress', created: ago(2), resolved: null, due: null, tatH: null, breached: false, csat: null, reo: [], frH: 1, ...o,
+}, o)
 const done = (created: number, tatH: number, o: Partial<ExecTicket> = {}) => tk({ created, resolved: created + tatH * HOUR, tatH, status: 'resolved', ...o })
 const W = periodWindow('30d', NOW)
 
@@ -103,7 +109,7 @@ describe('priority highlights', () => {
   })
   it('SLA risk names the groups behind the breaches and opens the breaches cohort', () => {
     const sla = hl[0]
-    expect(sla.headline).toMatch(/^7 of 14 tickets breached SLA/)
+    expect(sla.headline).toMatch(/^6 of 14 tickets breached SLA/)
     expect(sla.severity).toBe('critical')
     expect(sla.detail).toContain('ADMIN GROUP')
     expect(sla.open).toMatchObject({ metric: 'breaches', stage: 1 })
@@ -224,5 +230,27 @@ describe('ticket list and export', () => {
     const csv = ticketsToCsv([tk({ subject: 'He said "hi", twice' })], NOW)
     expect(csv.split('\n')[0]).toContain('"Ticket","Subject"')
     expect(csv).toContain('"He said ""hi"", twice"')
+  })
+})
+
+describe('matches the normal dashboard\'s numbers', () => {
+  it('"30 days" is today plus the 29 days before it (midnight start), the same window the normal Dashboards page uses', () => {
+    const w = periodWindow('30d', NOW)
+    const normalStart = new Date(NOW); normalStart.setDate(normalStart.getDate() - 29); normalStart.setHours(0, 0, 0, 0)
+    expect(w.start).toBe(normalStart.getTime())
+    expect(w.end).toBe(NOW)
+    const w60 = periodWindow('60d', NOW)
+    const start60 = new Date(NOW); start60.setDate(start60.getDate() - 59); start60.setHours(0, 0, 0, 0)
+    expect(w60.start).toBe(start60.getTime())
+  })
+  it('counts a cancelled ticket as created but never as open work', () => {
+    const cancelled = tk({ status: 'cancelled', created: ago(2) })
+    const open = tk({ created: ago(3) })
+    expect(measure([cancelled, open], W, 'created')).toBe(2)
+    expect(measure([cancelled, open], W, 'backlog')).toBe(1)
+    expect(measure([cancelled, open], W, 'resolved')).toBe(0)
+    expect(isOpen(cancelled)).toBe(false)
+    expect(isOpen(open)).toBe(true)
+    expect(kpiText([cancelled, open], [], emptyFilters(), W, NOW).created.context).toBe('50% still open (1) · 0% resolved or closed (0) · 1 cancelled')
   })
 })

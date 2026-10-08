@@ -29,6 +29,7 @@ const JOB_PATHS = {
   'desktime-sync': '/api/desktime/sync',
   'intake-classify': '/api/intake/cron/classify',
   'email-reply-sync': '/api/email/inbound-sync',
+  csat: '/api/csat/run',
 }
 
 const secret = process.env.CRON_SECRET

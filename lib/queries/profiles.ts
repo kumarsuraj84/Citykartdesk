@@ -1,6 +1,7 @@
 import { cache } from 'react'
 import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
+import { OPEN_REQUEST_STATUSES } from '@/lib/constants/requests'
 import type { ModuleSlug, ProfileWithTeams } from '@/types'
 
 export const getCurrentProfile = cache(async function (): Promise<ProfileWithTeams | null> {
@@ -264,7 +265,7 @@ export const getNavCounts = cache(async function (userId: string): Promise<NavCo
       .from('requests')
       .select('*', { count: 'exact', head: true })
       .eq('requester_id', userId)
-      .in('status', ['open', 'in_progress', 'pending_approval']),
+      .in('status', [...OPEN_REQUEST_STATUSES]),
     supabase
       .from('tasks')
       .select('*', { count: 'exact', head: true })

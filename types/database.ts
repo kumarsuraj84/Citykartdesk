@@ -711,6 +711,7 @@ export type Database = {
           rating: number | null
           request_id: string
           requester_id: string
+          reminder_sent_at: string | null
           sent_at: string
           submitted_at: string | null
         }
@@ -721,6 +722,7 @@ export type Database = {
           rating?: number | null
           request_id: string
           requester_id: string
+          reminder_sent_at?: string | null
           sent_at?: string
           submitted_at?: string | null
         }
@@ -731,6 +733,7 @@ export type Database = {
           rating?: number | null
           request_id?: string
           requester_id?: string
+          reminder_sent_at?: string | null
           sent_at?: string
           submitted_at?: string | null
         }
@@ -5752,6 +5755,7 @@ export type Database = {
         | "task_overdue"
         | "daily_digest"
         | "business_rule_notification"
+        | "csat_low_rating"
       org_status: "trial" | "active" | "suspended" | "cancelled"
       project_priority: "P1" | "P2" | "P3"
       project_status:
@@ -6041,6 +6045,7 @@ export const Constants = {
         "task_overdue",
         "daily_digest",
         "business_rule_notification",
+        "csat_low_rating",
       ],
       org_status: ["trial", "active", "suspended", "cancelled"],
       project_priority: ["P1", "P2", "P3"],

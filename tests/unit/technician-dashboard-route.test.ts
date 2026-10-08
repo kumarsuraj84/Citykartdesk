@@ -14,7 +14,7 @@ const { getCurrentProfileMock, getEnabledModulesMock, getAnalyticsMock, workload
   workloadMock: vi.fn(),
 }))
 vi.mock('@/lib/queries/profiles', () => ({ getCurrentProfile: getCurrentProfileMock, getEnabledModules: getEnabledModulesMock }))
-vi.mock('@/lib/queries/analytics', () => ({ getAnalytics: getAnalyticsMock }))
+vi.mock('@/lib/queries/analytics', async () => { const real = await vi.importActual<typeof import('@/lib/queries/analytics')>('@/lib/queries/analytics'); return { getAnalytics: getAnalyticsMock, isPeriod: real.isPeriod, PERIOD_OPTIONS: real.PERIOD_OPTIONS } })
 vi.mock('@/lib/queries/requests', () => ({ getTechnicianWorkloadBoard: workloadMock }))
 vi.mock('@/lib/queries/workload', () => ({ getWorkloadReport: workloadReportMock }))
 vi.mock('@/app/(app)/admin/reports/AnalyticsDashboard', () => ({ AnalyticsDashboard: () => null }))
@@ -109,8 +109,8 @@ describe('/dashboards — the technician dashboard route', () => {
 
   it('honours the period selector', async () => {
     getCurrentProfileMock.mockResolvedValue(profileWith('agent'))
-    await callPage({ period: '7d' })
-    expect(getAnalyticsMock.mock.calls[0][1]).toBe('7d')
+    await callPage({ period: '60d' })
+    expect(getAnalyticsMock.mock.calls[0][1]).toBe('60d')
   })
 
   it.each(['admin', 'manager', 'platform_owner'])('%s is sent to the full dashboard', async (role) => {

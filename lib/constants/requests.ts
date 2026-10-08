@@ -2,6 +2,9 @@ import type { RequestStatus } from '@/types'
 
 // ── Status ────────────────────────────────────────────────────────────────────
 
+/** Every status that still means work to do (what "Open now" counts on the dashboards and Home). */
+export const OPEN_REQUEST_STATUSES = ['open', 'assigned', 'in_progress', 'waiting_user', 'hold_purchase_ho', 'pending_approval'] as const
+
 export const STATUS_LABELS: Record<RequestStatus, string> = {
   open:             'Open',
   assigned:         'Assigned',

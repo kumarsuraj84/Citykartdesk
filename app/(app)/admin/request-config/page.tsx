@@ -5,6 +5,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { FieldSlaMatrixClient } from './FieldSlaMatrixClient'
 import { getFieldSlaMatrix } from '@/lib/sla/matrix'
 import { AppSettingsClient } from './AppSettingsClient'
+import { CsatSettingsClient } from './CsatSettingsClient'
 import { BusinessHoursClient } from './BusinessHoursClient'
 import { HolidayCalendarClient } from './HolidayCalendarClient'
 import { AlertRulesClient } from './AlertRulesClient'
@@ -65,6 +66,14 @@ export default async function RequestConfigPage({
     : { data: null }
   // '3' matches getResolvedReopenWindowHours()'s own fallback (lib/settings/reopenWindow.ts) — keep in sync.
   const autoCloseDays = parseInt((autoCloseRow as { value?: string } | null)?.value ?? '3', 10)
+
+  const { data: csatRows } = tab === 'general'
+    ? await supabase.from('app_settings').select('key, value').in('key', ['csat_enabled', 'csat_reminder_days'])
+    : { data: null }
+  const csatMap = new Map(((csatRows ?? []) as { key: string; value: string }[]).map((r) => [r.key, r.value]))
+  const csatDays = parseInt(csatMap.get('csat_reminder_days') ?? '', 10)
+  const csatEnabled = csatMap.get('csat_enabled') !== 'false'
+  const csatReminderDays = Number.isFinite(csatDays) && csatDays >= 0 ? csatDays : 2
 
   const statuses = Object.keys(STATUS_LABELS) as RequestStatus[]
 
@@ -267,6 +276,11 @@ export default async function RequestConfigPage({
             </p>
           </div>
           <AppSettingsClient autoCloseDays={autoCloseDays} />
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Customer satisfaction (CSAT)</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">The rating the requester is asked for when a request is resolved.</p>
+          </div>
+          <CsatSettingsClient enabled={csatEnabled} reminderDays={csatReminderDays} />
         </div>
       )}
     </div>

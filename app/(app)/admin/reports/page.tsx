@@ -21,13 +21,9 @@ import { getProjectAnalytics } from '@/lib/queries/projectAnalytics'
 import { getTechnicianWorkloadBoard } from '@/lib/queries/requests'
 import { getEnabledModules, getCurrentProfile } from '@/lib/queries/profiles'
 import { resolveReportAccess } from '@/lib/reporting/access'
-import type { Period, PeriodParam } from '@/lib/queries/analytics'
+import { PERIOD_OPTIONS, isPeriod, type Period, type PeriodParam } from '@/lib/queries/analytics'
 
-const PERIODS: { value: Period; label: string }[] = [
-  { value: '7d',  label: '7d' },
-  { value: '30d', label: '30d' },
-  { value: '90d', label: '90d' },
-]
+const PERIODS = PERIOD_OPTIONS
 
 type Tab = 'requests' | 'sla' | 'tasks' | 'workload' | 'projects' | 'export' | 'scheduled'
 
@@ -62,7 +58,7 @@ export default async function ReportsPage({
     viewerScope, parseGroupsParam(sp.groups), selectableGroups.map((g) => g.id)
   )
   const groupsQS = selectedGroups.length ? `&groups=${selectedGroups.join(',')}` : ''
-  const period       = (['7d','30d','90d'].includes(sp.period) ? sp.period : '30d') as Period
+  const period       = (isPeriod(sp.period) ? sp.period : '30d') as Period
   const hasCustomRange = isValidISODate(sp.from) && isValidISODate(sp.to) && sp.from <= sp.to
   const periodParam: PeriodParam = hasCustomRange ? { from: sp.from, to: sp.to } : period
   // Preserves whichever date-window is active (preset or custom) across tab/period links.
@@ -143,7 +139,7 @@ export default async function ReportsPage({
                 <Link
                   key={p.value}
                   href={`?tab=${tab}&period=${p.value}${groupsQS}`}
-                  className={`rounded-md px-4 py-1.5 text-xs font-semibold transition-all ${
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
                     !hasCustomRange && period === p.value
                       ? 'bg-background shadow-sm text-foreground'
                       : 'text-muted-foreground hover:text-foreground'

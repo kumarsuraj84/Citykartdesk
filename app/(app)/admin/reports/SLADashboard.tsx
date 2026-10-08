@@ -43,18 +43,17 @@ export function SLADashboard({ data }: SLADashboardProps) {
     .sort((a, b) => (b.slaRate ?? 0) - (a.slaRate ?? 0))
     .map((t) => ({ label: t.teamName, value: t.slaRate ?? 0 }))
 
-  // Compliance is "of resolved tickets in this priority, how many met their
-  // due date" — matching the org-wide slaComplianceRate and per-team slaRate
-  // calculations upstream (both divide by resolved count, not total count
-  // including still-open tickets). Dividing by `p.count` here previously
+  // Compliance is "of the tickets resolved in the period in this priority that had a due date, how many met it" — the same rule
+  // as the org-wide slaComplianceRate and the per-team slaRate upstream (none of them divide by tickets with no deadline, or by
+  // still-open tickets). Dividing by `p.count` here previously
   // diluted the rate with unresolved tickets that haven't had a chance to
   // breach or meet SLA yet, producing an artificially low, non-percentage-
   // shaped number (e.g. "17" instead of a sensible "%").
   const prioritySlaData = data.byPriority
-    .filter((p) => p.resolved > 0)
+    .filter((p) => p.slaBase > 0)
     .map((p) => ({
       label: p.priority.charAt(0).toUpperCase() + p.priority.slice(1),
-      value: Math.round((p.slaCompliant / p.resolved) * 100),
+      value: Math.round((p.slaCompliant / p.slaBase) * 100),
     }))
 
   return (

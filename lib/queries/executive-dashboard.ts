@@ -49,6 +49,7 @@ interface Raw {
   closed_at: string | null
   responded_at: string | null
   resolution_due_at: string | null
+  updated_at: string
   reopen_count: number
   source_metadata: { created_via?: string } | null
   team: { name: string } | null
@@ -68,7 +69,7 @@ interface Raw {
 }
 
 const SELECT = [
-  'id, request_no, title, status, priority, created_at, resolved_at, closed_at, responded_at, resolution_due_at, reopen_count, source_metadata',
+  'id, request_no, title, status, priority, created_at, updated_at, resolved_at, closed_at, responded_at, resolution_due_at, reopen_count, source_metadata',
   'team:teams(name)',
   'assignee:profiles!requests_assigned_to_fkey(full_name)',
   'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), location:locations(name), store:stores(name, state, oem:oems(name)))',
@@ -92,10 +93,11 @@ export function oemBrand(oemName: string): string {
 
 export function toExecTicket(r: Raw, now: number): ExecTicket {
   const created = new Date(r.created_at).getTime()
-  const doneIso = r.resolved_at ?? r.closed_at
+  // resolved time: resolved_at, else closed_at; a ticket whose status says resolved/closed but has neither stamp falls back to its last update
+  const doneIso = r.resolved_at ?? r.closed_at ?? (r.status === 'resolved' || r.status === 'closed' ? r.updated_at : null)
   const resolved = doneIso ? new Date(doneIso).getTime() : null
   const due = r.resolution_due_at ? new Date(r.resolution_due_at).getTime() : null
-  const breached = due === null ? false : (resolved ?? now) > due
+  const breached = due === null || r.status === 'cancelled' ? false : (resolved ?? now) > due
   const tat = resolved !== null ? (resolved - created) / 3_600_000 : null
   const rating = (Array.isArray(r.csat) ? r.csat : r.csat ? [r.csat] : []).map((c) => c.rating).filter((x): x is number => typeof x === 'number')
   const oem = r.requester?.store?.oem?.name ?? ''
@@ -122,6 +124,7 @@ export function toExecTicket(r: Raw, now: number): ExecTicket {
     status: r.status,
     created,
     resolved,
+    due,
     tatH: tat !== null && Number.isFinite(tat) && tat >= 0 ? tat : null,
     breached,
     csat: rating.length ? rating[rating.length - 1] : null,
@@ -157,9 +160,10 @@ export async function loadExecutiveData(profile: ProfileWithTeams): Promise<Exec
   const since = new Date(now - LOOKBACK_DAYS * 86_400_000).toISOString()
 
   const { rows, truncated } = await fetchAll<Raw>((from, to) => {
-    const q = admin.from('requests').select(SELECT).eq('org_id', profile.org_id).neq('status', 'cancelled')
+    // Cancelled tickets are loaded too (the normal dashboard counts them as created); they only come from inside the look-back.
+    const q = admin.from('requests').select(SELECT).eq('org_id', profile.org_id)
       .eq('reopens.action', 'reopened')
-      .or(`created_at.gte.${since},and(resolved_at.is.null,closed_at.is.null)`)
+      .or(`created_at.gte.${since},and(resolved_at.is.null,closed_at.is.null,status.neq.cancelled)`)
     return applyScope(q, scope, '').order('created_at', { ascending: false }).order('id', { ascending: true }).range(from, to)
   })
   const tickets = rows.map((r) => toExecTicket(r, now))

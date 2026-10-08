@@ -2,7 +2,7 @@
 // "benchmark" line), written from the real tickets so every card says something useful at a glance.
 
 import {
-  applyFilters, approvalMeasure, approvalRows, formatApproval, formatMeasure, inWin, measure, openAt, statusLabel, timeBuckets, ageBucketOf, UNASSIGNED,
+  applyFilters, approvalMeasure, approvalRows, formatApproval, formatMeasure, inWin, isOpen, measure, openAt, statusLabel, timeBuckets, ageBucketOf, UNASSIGNED,
   type ApprovalRow, type ExecTicket, type Filters, type Measure, type Win,
 } from './engine'
 import { bucketLabel } from './labels'
@@ -40,7 +40,10 @@ export function kpiText(tickets: ExecTicket[], approvals: ApprovalRow[], filters
   }
 
   const created = base.filter((t) => inWin(t.created, W))
-  const stillOpen = created.filter((t) => t.resolved === null).length
+  const stillOpen = created.filter(isOpen).length
+  const cancelledN = created.filter((t) => t.status === 'cancelled').length
+  // the normal Dashboards page counts "resolved" among the tickets created in the period; this card counts resolutions that happened in the period
+  const createdAndResolved = created.filter((t) => t.resolved !== null).length
   const resolvedIn = base.filter((t) => t.resolved !== null && inWin(t.resolved, W))
   const openNow = base.filter((t) => openAt(t, W.end))
   const peakCreated = peak('created')
@@ -85,12 +88,12 @@ export function kpiText(tickets: ExecTicket[], approvals: ApprovalRow[], filters
 
   return {
     created: {
-      context: created.length === 0 ? 'No tickets were created in this period' : `${pct(stillOpen, created.length)}% still open (${stillOpen}) · ${pct(created.length - stillOpen, created.length)}% resolved or closed (${created.length - stillOpen})`,
+      context: created.length === 0 ? 'No tickets were created in this period' : `${pct(stillOpen, created.length)}% still open (${stillOpen}) · ${pct(created.length - stillOpen - cancelledN, created.length)}% resolved or closed (${created.length - stillOpen - cancelledN})${cancelledN ? ` · ${cancelledN} cancelled` : ''}`,
       benchmark: peakCreated ? `Busiest ${word}: ${peakCreated.label} (${peakCreated.n} tickets)` : none,
     },
     resolved: {
       context: resolvedIn.length === 0 ? 'Nothing was resolved in this period' : `${resolvedOnly} Resolved + ${resolvedIn.length - resolvedOnly} Closed${topResolver ? ` · ${pct(topResolver.n, resolvedIn.length)}% handled by ${topResolver.g} (${topResolver.n})` : ''}`,
-      benchmark: peakResolved ? `Most resolved in a ${word}: ${peakResolved.label} (${peakResolved.n})` : none,
+      benchmark: resolvedIn.length === 0 ? none : `Counts everything resolved in the period, whenever it was raised (${createdAndResolved} of the ${created.length} created in it)${peakResolved ? ` · busiest ${word}: ${peakResolved.label} (${peakResolved.n})` : ''}`,
     },
     backlog: {
       context: openNow.length === 0 ? 'No open tickets' : ageCounts.slice(0, 2).map((a) => `${a.n} aged ${a.b} (${pct(a.n, openNow.length)}%)`).join(' · '),

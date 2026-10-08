@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import { AlertCircle, CheckCircle2, ChevronRight } from 'lucide-react'
 import {
   MEASURES, applyFilters, approvalMeasure, approvalRows, approvalSeries, compare, compareApproval, formatApproval, formatMeasure, inWin, measure,
-  openAt, ageBucketOf, prevWindow, series, type Measure, type Win,
+  isOpen, openAt, ageBucketOf, prevWindow, series, type Measure, type Win,
 } from '@/lib/reporting/executive/engine'
 import { SLA_TARGET, kpiText, type KpiKey } from '@/lib/reporting/executive/kpi-context'
 import type { DashData } from './types'
@@ -48,7 +48,8 @@ export function KpiScorecard({ d, baseW, active, onOpen }: { d: DashData; baseW:
 
   // proportional bars for the four big cards
   const created = base.filter((t) => inWin(t.created, W))
-  const stillOpen = created.filter((t) => t.resolved === null).length
+  const cancelledN = created.filter((t) => t.status === 'cancelled').length
+  const stillOpen = created.filter(isOpen).length
   const resolvedIn = base.filter((t) => t.resolved !== null && inWin(t.resolved, W))
   const byGroupResolved = (() => {
     const m = new Map<string, number>()
@@ -66,7 +67,7 @@ export function KpiScorecard({ d, baseW, active, onOpen }: { d: DashData; baseW:
   const AGE_COLORS = ['bg-primary', 'bg-warning', 'bg-destructive']
 
   const bars: Record<string, React.ReactNode> = {
-    created: <SplitBar parts={[{ pct: pct(created.length - stillOpen, created.length), className: 'bg-success', title: `Resolved or closed: ${created.length - stillOpen}` }, { pct: pct(stillOpen, created.length), className: 'bg-warning', title: `Still open: ${stillOpen}` }]} />,
+    created: <SplitBar parts={[{ pct: pct(created.length - stillOpen - cancelledN, created.length), className: 'bg-success', title: `Resolved or closed: ${created.length - stillOpen - cancelledN}` }, { pct: pct(stillOpen, created.length), className: 'bg-warning', title: `Still open: ${stillOpen}` }, { pct: pct(cancelledN, created.length), className: 'bg-muted-foreground/40', title: `Cancelled: ${cancelledN}` }]} />,
     resolved: <SplitBar parts={byGroupResolved.map(([g, n], i) => ({ pct: pct(n, resolvedIn.length), className: BAR_COLORS[i], title: `${g}: ${n}` }))} />,
     backlog: <SplitBar parts={ageSplit.map(([b, n], i) => ({ pct: pct(n, openNow.length), className: AGE_COLORS[i], title: `${b}: ${n}` }))} />,
     sla: <SplitBar parts={[{ pct: pct(resolvedIn.length - slaBreachedRes, resolvedIn.length), className: 'bg-success', title: 'Within SLA' }, { pct: pct(slaBreachedRes, resolvedIn.length), className: 'bg-destructive', title: `Breached: ${slaBreachedRes}` }]} />,

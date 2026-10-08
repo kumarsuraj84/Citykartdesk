@@ -12,12 +12,18 @@ const HOUR = 3_600_000
 const NOW = new Date(2026, 9, 8, 17, 0, 0).getTime()
 const ago = (d: number, h = 0) => NOW - d * DAY - h * HOUR
 
+// The engine judges SLA from the due time, so a fixture marked breached gets a due time that has passed (or was missed when it resolved)
+const withDue = (t: ExecTicket, o: Partial<ExecTicket>): ExecTicket => {
+  if (o.due !== undefined) return t
+  const due = t.resolved !== null ? (t.breached ? t.resolved - HOUR : t.resolved + HOUR) : (t.breached ? t.created + HOUR : NOW + DAY)
+  return { ...t, due }
+}
 let n = 0
-const tk = (o: Partial<ExecTicket> = {}): ExecTicket => ({
+const tk = (o: Partial<ExecTicket> = {}): ExecTicket => withDue({
   id: `id${++n}`, no: `CKSD-${1000 + n}`, subject: 'AC not cooling', group: 'ADMIN GROUP', tech: 'Krishan', cat: 'AC ISSUE', sub: 'COOLING', svc: 'Admin repair',
   req: 'Store A', dept: 'Stores', loc: 'STORES', store: 'Store A', state: 'Delhi', oem: 'BLUE STAR OEM - DL', brand: 'BLUE STAR', src: 'Portal',
-  prio: 'medium', status: 'in_progress', created: ago(2), resolved: null, tatH: null, breached: false, csat: null, reo: [], frH: 1, ...o,
-})
+  prio: 'medium', status: 'in_progress', created: ago(2), resolved: null, due: null, tatH: null, breached: false, csat: null, reo: [], frH: 1, ...o,
+}, o)
 const done = (created: number, tatH: number, o: Partial<ExecTicket> = {}) => tk({ created, resolved: created + tatH * HOUR, tatH, status: 'resolved', ...o })
 
 describe('measures', () => {
@@ -38,7 +44,7 @@ describe('measures', () => {
     expect(measure(ts, W, 'sla')).toBe(50)
     expect(measure(ts, W, 'tat')).toBe(20)
     expect(measure(ts, W, 'csat')).toBe(4)
-    expect(measure(ts, W, 'breaches')).toBe(2)
+    expect(measure(ts, W, 'breaches')).toBe(1) // only the still-open overdue ticket; the late resolved one is a missed SLA, not a live breach
   })
 
   it('returns null instead of 0% when nothing was resolved, and respects a minimum sample', () => {
@@ -81,7 +87,7 @@ describe('time windows', () => {
     expect(new Date(periodWindow('fy', new Date(2026, 1, 10).getTime()).start)).toEqual(new Date(2025, 3, 1))
   })
   it('compares with an equally long window just before', () => {
-    const W = periodWindow('7d', NOW)
+    const W = periodWindow('60d', NOW)
     const P = prevWindow(W)
     expect(P.end).toBe(W.start - 1)
     expect(W.end - W.start).toBe(P.end - P.start + (W.end - W.start) - (P.end - P.start))
@@ -199,7 +205,7 @@ describe('levels and the data rows', () => {
   it('builds a ticket row: OEM from the store, breach from the due time, CSAT whether sent as object or list', () => {
     const base = {
       id: 'x', request_no: 'CKSD-1', title: 'AC', status: 'resolved', priority: 'high' as const,
-      created_at: new Date(ago(5)).toISOString(), resolved_at: new Date(ago(4)).toISOString(), closed_at: null,
+      created_at: new Date(ago(5)).toISOString(), resolved_at: new Date(ago(4)).toISOString(), closed_at: null, updated_at: new Date(ago(4)).toISOString(),
       responded_at: new Date(ago(5, -2)).toISOString(), resolution_due_at: new Date(ago(4, 5)).toISOString(), reopen_count: 0,
       source_metadata: { created_via: 'whatsapp' }, team: { name: 'ADMIN GROUP' }, assignee: null,
       requester: { full_name: 'Store A', department: null, location: { name: 'STORES' }, store: { name: 'Store A', state: 'Delhi', oem: { name: 'BLUE STAR OEM - DL' } } },

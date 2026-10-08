@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Building2, ChevronRight, SlidersHorizontal, Store, User, Wrench, X } from 'lucide-react'
 import {
-  MEASURES, UNASSIGNED, ageInDays, applyFilters, approvalsBehind, capitalize, formatMeasure, keyOf, measure, statusLabel, ticketsBehind,
+  MEASURES, UNASSIGNED, ageInDays, isOpen, applyFilters, approvalsBehind, capitalize, formatMeasure, keyOf, measure, statusLabel, ticketsBehind,
   type ApprovalRow, type Dim, type ExecTicket, type Filters, type SlaState, type Win,
 } from '@/lib/reporting/executive/engine'
 import { dateTimeLabel } from '@/lib/reporting/executive/labels'
@@ -187,7 +187,7 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
                       <button key={b} type="button" onClick={() => pick({ brand: b }, 2)} className={row}>
                         <div><div className="font-semibold text-foreground">{b}</div><div className="text-[11px] text-muted-foreground">Top stores: {groupCount(ts, (t) => t.store).slice(0, 2).map((x) => x[0]).join(', ')}</div></div>
                         <div className="flex items-center gap-3 tabular-nums">
-                          <div className="text-right"><div className="font-bold text-foreground">{ts.length} total</div><div className="text-[11px] text-warning">{ts.filter((t) => t.resolved === null).length} open{slaOf(ts) !== null ? ` · ${slaOf(ts)}% SLA` : ''}</div></div>
+                          <div className="text-right"><div className="font-bold text-foreground">{ts.length} total</div><div className="text-[11px] text-warning">{ts.filter(isOpen).length} open{slaOf(ts) !== null ? ` · ${slaOf(ts)}% SLA` : ''}</div></div>
                           <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
                         </div>
                       </button>
@@ -214,7 +214,7 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
                         <div className="truncate text-[11px] text-muted-foreground">{[ts[0].state !== '(No state)' ? ts[0].state : '', ts[0].oem !== '(No OEM)' ? `OEM: ${ts[0].oem}` : '', ts[0].dept !== '(No department)' ? ts[0].dept : ''].filter(Boolean).join(' · ') || 'Store details not set'}</div>
                       </div>
                       <div className="flex shrink-0 items-center gap-3 tabular-nums">
-                        <div className="text-right"><div className="font-bold text-foreground">{ts.length} ticket{ts.length === 1 ? '' : 's'}</div><div className="text-[11px] text-destructive">{ts.filter((t) => t.breached).length} breached · {ts.filter((t) => t.resolved === null).length} open</div></div>
+                        <div className="text-right"><div className="font-bold text-foreground">{ts.length} ticket{ts.length === 1 ? '' : 's'}</div><div className="text-[11px] text-destructive">{ts.filter((t) => t.breached).length} breached · {ts.filter(isOpen).length} open</div></div>
                         <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
                       </div>
                     </button>
@@ -229,7 +229,7 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
                 <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
                   {techs.length === 0 && <p className="py-4 text-center text-xs text-muted-foreground">No technicians in this slice.</p>}
                   {techs.map(([n, ts]) => {
-                    const open = ts.filter((t) => t.resolved === null).length
+                    const open = ts.filter(isOpen).length
                     return (
                       <button key={n} type="button" onClick={() => pick({ tech: n }, 3)} className={`${row} p-3 ${sel.tech === n ? 'border-primary bg-primary/5' : ''}`}>
                         <div className="min-w-0 text-left"><div className="truncate font-semibold text-foreground">{n}</div><div className="truncate text-[11px] text-muted-foreground">{groupCount(ts, (t) => t.group)[0]?.[0]}</div></div>

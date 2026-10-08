@@ -27,6 +27,8 @@ export type NotifyInput = {
   taskId?: string
   link?: string
   metadata?: Record<string, unknown>
+  /** Show in the bell only, never e-mail (used when a better e-mail already went out, e.g. the resolved + rating e-mail). */
+  skipEmail?: boolean
 }
 
 // ── notify() ──────────────────────────────────────────────────────────────────
@@ -146,7 +148,7 @@ export async function notify(inputs: NotifyInput | NotifyInput[]): Promise<void>
   // Email — a team-broadcast notification (e.g. "new request in the queue" sent to every
   // team member) is deliberately in-app only, regardless of the Notification Rules toggle;
   // see the audience: 'team' callers.
-  const emailTargets = active.filter((r) => channelsFor(r).email && (r.metadata as { audience?: string } | undefined)?.audience !== 'team')
+  const emailTargets = active.filter((r) => !r.skipEmail && channelsFor(r).email && (r.metadata as { audience?: string } | undefined)?.audience !== 'team')
   if (emailTargets.length > 0) {
     ;(async () => { try {
       const { createAdminClient } = await import('@/lib/supabase/admin')

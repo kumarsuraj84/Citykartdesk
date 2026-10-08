@@ -6,7 +6,30 @@ import { AGE_BUCKETS, ageBucketFor } from '@/lib/reporting/aging'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
 
-export type Period = '7d' | '30d' | '90d'
+export type Period = '30d' | '60d' | '90d' | '120d' | 'fy'
+
+/** The period buttons every dashboard offers, in order. "This FY" runs from 1 April of the current financial year to now. */
+export const PERIOD_OPTIONS: { value: Period; label: string }[] = [
+  { value: '30d', label: '30d' },
+  { value: '60d', label: '60d' },
+  { value: '90d', label: '90d' },
+  { value: '120d', label: '120d' },
+  { value: 'fy', label: 'This FY' },
+]
+export const isPeriod = (v: unknown): v is Period => PERIOD_OPTIONS.some((p) => p.value === v)
+
+/** Start of the current financial year (1 April). */
+function fyStart(now = new Date()): Date {
+  const year = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+  return new Date(year, 3, 1)
+}
+function periodDays(p: Period): number {
+  if (p === 'fy') {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    return Math.round((today.getTime() - fyStart().getTime()) / 86_400_000) + 1
+  }
+  return Number.parseInt(p, 10)
+}
 
 /** Explicit start/end date range (YYYY-MM-DD), for "custom" report windows. */
 export type DateRange = { from: string; to: string }
@@ -18,9 +41,11 @@ export function isDateRange(p: PeriodParam): p is DateRange {
 }
 
 export function periodStart(p: Period): Date {
+  if (p === 'fy') return fyStart()
   const d = new Date()
-  const days = p === '7d' ? 7 : p === '30d' ? 30 : 90
-  d.setDate(d.getDate() - days)
+  const days = periodDays(p)
+  // N calendar days including today: today and the N-1 days before it (it used to start N days back, which is N+1 days)
+  d.setDate(d.getDate() - (days - 1))
   d.setHours(0, 0, 0, 0)
   return d
 }
@@ -37,8 +62,8 @@ export function resolvePeriodParam(p: PeriodParam): { start: Date; end: Date; la
     const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1)
     return { start, end, label: `${shortDate(start)} – ${shortDate(end)}`, days }
   }
-  const days = p === '7d' ? 7 : p === '30d' ? 30 : 90
-  const label = p === '7d' ? 'last 7 days' : p === '30d' ? 'last 30 days' : 'last 90 days'
+  const days = periodDays(p)
+  const label = p === 'fy' ? 'this financial year' : `last ${days} days`
   return { start: periodStart(p), end: new Date(), label, days }
 }
 
@@ -93,6 +118,8 @@ export type PriorityRow = {
   priority: string
   count: number
   resolved: number
+  /** of the tickets resolved in the period, those that had an SLA deadline (the base of the rate) */
+  slaBase: number
   slaCompliant: number
   avgTatHours: number | null
 }
@@ -211,17 +238,20 @@ export async function getAnalytics(
   const end = endDate.toISOString()
   const now = new Date()
 
-  // approvals/approval_decisions have no org_id column of their own — scoped
-  // via requests.org_id, resolved as id sets up front (admin client bypasses
-  // RLS, so this org boundary must be enforced here explicitly, not left to
-  // the DB). Not period-windowed: an approval/decision inside the reporting
-  // window can reference a request created well before it.
-  const { data: orgRequestIdRows } = await inScope(admin.from('requests').select('id').eq('org_id', orgId))
-  const orgRequestIds = (orgRequestIdRows ?? []).map((r: { id: string }) => r.id)
-  const { data: orgApprovalIdRows } = orgRequestIds.length > 0
-    ? await admin.from('approvals').select('id').in('request_id', orgRequestIds)
-    : { data: [] as { id: string }[] }
-  const orgApprovalIds = (orgApprovalIdRows ?? []).map((a: { id: string }) => a.id)
+  // Reads every page of a query: PostgREST returns at most 1000 rows per request, and a bigger window used to be cut off silently.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pageAll = async (build: (from: number, to: number) => any): Promise<{ data: any[] }> => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows: any[] = []
+    for (let o = 0; ; o += 1000) {
+      const { data, error } = await build(o, o + 999)
+      if (error || !data) break
+      rows.push(...data)
+      if (data.length < 1000) break
+    }
+    return { data: rows }
+  }
+  const withinScope = (q: any, col: string) => (teamScope ? q.in(col, teamScope) : q) // eslint-disable-line @typescript-eslint/no-explicit-any
 
   // Today/yesterday window for the Daily Activity widget -- always the last
   // two calendar days regardless of the dashboard's own 7d/30d/90d/custom
@@ -253,8 +283,8 @@ export async function getAnalytics(
   const [
     { data: periodRequests },
     { data: allOpen },
-    { data: approvalDecisions },
-    { data: approvals },
+    { data: resolvedPeriod },
+    { data: approvalRowsRaw },
     { data: teams },
     { data: services },
     { data: profiles },
@@ -264,40 +294,37 @@ export async function getAnalytics(
     { data: dailyAssignedRows },
   ] = await Promise.all([
     // Requests created in period
-    inScope(admin
+    pageAll((from, to) => inScope(admin
       .from('requests')
       .select('id, status, priority, team_id, service_id, assigned_to, created_at, resolved_at, responded_at, closed_at, resolution_due_at, response_due_at')
       .eq('org_id', orgId)
       .gte('created_at', start)
       .lte('created_at', end))
-      .order('created_at', { ascending: true }),
+      .order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to)),
 
     // All currently open requests (for backlog aging + SLA breached)
-    inScope(admin
+    pageAll((from, to) => inScope(admin
       .from('requests')
       .select('id, status, priority, team_id, assigned_to, created_at, resolution_due_at, response_due_at, responded_at')
       .eq('org_id', orgId)
-      .not('status', 'in', '("resolved","closed","cancelled")')),
+      .not('status', 'in', '("resolved","closed","cancelled")'))
+      .order('id', { ascending: true }).range(from, to)),
 
-    // Approval decisions in period
-    orgApprovalIds.length > 0
-      ? admin
-          .from('approval_decisions')
-          .select('id, approval_id, decision, decided_at')
-          .in('approval_id', orgApprovalIds)
-          .gte('decided_at', start)
-          .lte('decided_at', end)
-      : Promise.resolve({ data: [] }),
+    // Requests RESOLVED in the period, whenever they were created (resolved_at, else closed_at, else — for a ticket whose status says
+    // resolved/closed but carries neither stamp — its last update). Resolved, SLA compliance and resolution time are counted over these.
+    pageAll((from, to) => inScope(admin
+      .from('requests')
+      .select('id, status, priority, team_id, assigned_to, created_at, resolved_at, closed_at, updated_at, resolution_due_at')
+      .eq('org_id', orgId)
+      .or(`and(resolved_at.gte.${start},resolved_at.lte.${end}),and(resolved_at.is.null,closed_at.gte.${start},closed_at.lte.${end}),and(resolved_at.is.null,closed_at.is.null,status.in.(resolved,closed),updated_at.gte.${start},updated_at.lte.${end})`))
+      .order('id', { ascending: true }).range(from, to)),
 
-    // All approvals
-    orgRequestIds.length > 0
-      ? admin
-          .from('approvals')
-          .select('id, status, created_at, request_id')
-          .in('request_id', orgRequestIds)
-          .gte('created_at', start)
-          .lte('created_at', end)
-      : Promise.resolve({ data: [] }),
+    // Every approval request of the organisation (and its decisions) — whole-life, so "waiting" is what is pending right now
+    pageAll((from, to) => withinScope(admin
+      .from('approvals')
+      .select('id, status, created_at, request_id, decisions:approval_decisions(decision, decided_at), request:requests!inner(org_id, team_id)')
+      .eq('request.org_id', orgId), 'request.team_id')
+      .order('id', { ascending: true }).range(from, to)),
 
     // Teams lookup
     admin.from('teams').select('id, name').eq('org_id', orgId),
@@ -319,9 +346,13 @@ export async function getAnalytics(
     // needs (30 days) so there's one created/closed query, not two.
     inScope(admin.from('requests').select('created_at').eq('org_id', orgId).gte('created_at', last30dStartIso)),
     inScope(admin.from('requests').select('closed_at').eq('org_id', orgId).not('closed_at', 'is', null).gte('closed_at', last30dStartIso)),
-    orgRequestIds.length > 0
-      ? admin.from('request_activity').select('created_at').eq('action', 'assigned').in('request_id', orgRequestIds).gte('created_at', yesterdayStartIso)
-      : Promise.resolve({ data: [] }),
+    pageAll((from, to) => withinScope(admin
+      .from('request_activity')
+      .select('created_at, request:requests!inner(org_id, team_id)')
+      .eq('action', 'assigned')
+      .eq('request.org_id', orgId)
+      .gte('created_at', yesterdayStartIso), 'request.team_id')
+      .order('created_at', { ascending: true }).range(from, to)),
   ])
 
   const reqs = (periodRequests ?? []) as Array<{
@@ -332,8 +363,11 @@ export async function getAnalytics(
   }>
 
   const open = (allOpen ?? []) as typeof reqs
-  const decisions = (approvalDecisions ?? []) as Array<{ id: string; approval_id: string; decision: string; decided_at: string }>
-  const approvalsArr = (approvals ?? []) as Array<{ id: string; status: string; created_at: string; request_id: string }>
+  // when a ticket was resolved: resolved_at, else closed_at, else (status says so) its last update
+  type ResolvedRow = { id: string; status: string; priority: string; team_id: string; assigned_to: string | null; created_at: string; resolved_at: string | null; closed_at: string | null; updated_at: string; resolution_due_at: string | null }
+  const resolvedIn = ((resolvedPeriod ?? []) as ResolvedRow[]).map((r) => ({ ...r, doneAt: (r.resolved_at ?? r.closed_at ?? r.updated_at) as string }))
+  type ApprovalRaw = { id: string; status: string; created_at: string; request_id: string; decisions: { decision: string; decided_at: string }[] | null }
+  const approvalsAll = (approvalRowsRaw ?? []) as ApprovalRaw[]
   const teamsArr = (teams ?? []) as Array<{ id: string; name: string }>
   const servicesArr = (services ?? []) as Array<{ id: string; name: string }>
   const profilesArr = (profiles ?? []) as Array<{ id: string; full_name: string; role: string }>
@@ -342,23 +376,20 @@ export async function getAnalytics(
   const teamMap = Object.fromEntries(teamsArr.map((t) => [t.id, t.name]))
   const serviceMap = Object.fromEntries(servicesArr.map((s) => [s.id, s.name]))
   const profileMap = Object.fromEntries(profilesArr.map((p) => [p.id, p.full_name]))
-  const approvalMap = Object.fromEntries(approvalsArr.map((a) => [a.id, a]))
 
   // ── Volume ────────────────────────────────────────────────────────────────
 
   const totalCreated = reqs.length
-  const resolved = reqs.filter((r) => r.resolved_at || r.status === 'resolved' || r.status === 'closed')
-  const totalResolved = resolved.length
-  const totalClosed = reqs.filter((r) => r.status === 'closed').length
+  const totalResolved = resolvedIn.length
+  const totalClosed = resolvedIn.filter((r) => r.status === 'closed').length
   const totalOpenNow = open.length
   const netFlux = totalResolved - totalCreated
 
   // ── SLA ───────────────────────────────────────────────────────────────────
+  // Of the tickets resolved in the period that had a deadline, the share resolved on or before it.
 
-  const resolvedWithSla = resolved.filter((r) => r.resolution_due_at && r.resolved_at)
-  const slaCompliant = resolvedWithSla.filter(
-    (r) => new Date(r.resolved_at!) <= new Date(r.resolution_due_at!)
-  )
+  const resolvedWithSla = resolvedIn.filter((r) => r.resolution_due_at)
+  const slaCompliant = resolvedWithSla.filter((r) => new Date(r.doneAt) <= new Date(r.resolution_due_at!))
   const slaComplianceRate = resolvedWithSla.length
     ? Math.round((slaCompliant.length / resolvedWithSla.length) * 100)
     : null
@@ -383,7 +414,9 @@ export async function getAnalytics(
 
   // ── TAT ───────────────────────────────────────────────────────────────────
 
-  const { values: resolutionTatHours, anomalies: negativeResolutionDurationCount } = computeTatHours(resolved)
+  const { values: resolutionTatHours, anomalies: negativeResolutionDurationCount } = computeTatHours(
+    resolvedIn.map((r) => ({ created_at: r.created_at, resolved_at: r.doneAt }))
+  )
 
   const frtHours = reqs
     .filter((r) => r.responded_at)
@@ -407,53 +440,53 @@ export async function getAnalytics(
   const PRIORITY_ORDER = ['urgent', 'high', 'medium', 'low']
   const byPriority: PriorityRow[] = PRIORITY_ORDER.map((priority) => {
     const group = reqs.filter((r) => r.priority === priority)
-    const groupResolved = group.filter((r) => r.resolved_at)
-    const groupSlaOk = groupResolved.filter(
-      (r) => r.resolution_due_at && new Date(r.resolved_at!) <= new Date(r.resolution_due_at!)
-    )
-    const { values: groupTat } = computeTatHours(groupResolved)
+    const groupResolved = resolvedIn.filter((r) => r.priority === priority)
+    const groupWithSla = groupResolved.filter((r) => r.resolution_due_at)
+    const groupSlaOk = groupWithSla.filter((r) => new Date(r.doneAt) <= new Date(r.resolution_due_at!))
+    const { values: groupTat } = computeTatHours(groupResolved.map((r) => ({ created_at: r.created_at, resolved_at: r.doneAt })))
     return {
       priority,
       count: group.length,
       resolved: groupResolved.length,
+      slaBase: groupWithSla.length,
       slaCompliant: groupSlaOk.length,
       avgTatHours: avg(groupTat),
     }
-  }).filter((r) => r.count > 0)
+  }).filter((r) => r.count > 0 || r.resolved > 0)
 
   // ── By team ───────────────────────────────────────────────────────────────
 
-  const teamIds = [...new Set(reqs.map((r) => r.team_id))]
+  const teamIds = [...new Set([...reqs.map((r) => r.team_id), ...resolvedIn.map((r) => r.team_id)])]
   const byTeam: TeamRow[] = teamIds.map((teamId) => {
     const group = reqs.filter((r) => r.team_id === teamId)
-    const groupResolved = group.filter((r) => r.resolved_at)
-    const groupSlaOk = groupResolved.filter(
-      (r) => r.resolution_due_at && new Date(r.resolved_at!) <= new Date(r.resolution_due_at!)
-    )
-    const { values: groupTat } = computeTatHours(groupResolved)
+    const groupResolved = resolvedIn.filter((r) => r.team_id === teamId)
+    const groupWithSla = groupResolved.filter((r) => r.resolution_due_at)
+    const groupSlaOk = groupWithSla.filter((r) => new Date(r.doneAt) <= new Date(r.resolution_due_at!))
+    const { values: groupTat } = computeTatHours(groupResolved.map((r) => ({ created_at: r.created_at, resolved_at: r.doneAt })))
     const openNow = open.filter((r) => r.team_id === teamId).length
     return {
       teamId,
       teamName: teamMap[teamId] ?? teamId,
       volume: group.length,
       resolved: groupResolved.length,
-      slaRate: groupResolved.length ? Math.round((groupSlaOk.length / groupResolved.length) * 100) : null,
+      slaRate: groupWithSla.length ? Math.round((groupSlaOk.length / groupWithSla.length) * 100) : null,
       avgTatHours: avg(groupTat),
       openNow,
     }
-  }).sort((a, b) => b.volume - a.volume)
+  }).sort((a, b) => b.volume - a.volume || b.resolved - a.resolved)
 
   // ── Agent leaderboard ─────────────────────────────────────────────────────
 
   const agentIds = [...new Set([
     ...reqs.filter((r) => r.assigned_to).map((r) => r.assigned_to!),
     ...open.filter((r) => r.assigned_to).map((r) => r.assigned_to!),
+    ...resolvedIn.filter((r) => r.assigned_to).map((r) => r.assigned_to!),
   ])]
 
   const agentLeaderboard: AgentRow[] = agentIds
     .map((agentId) => {
-      const groupResolved = resolved.filter((r) => r.assigned_to === agentId && r.resolved_at)
-      const { values: groupTat } = computeTatHours(groupResolved)
+      const groupResolved = resolvedIn.filter((r) => r.assigned_to === agentId)
+      const { values: groupTat } = computeTatHours(groupResolved.map((r) => ({ created_at: r.created_at, resolved_at: r.doneAt })))
       const openNow = open.filter((r) => r.assigned_to === agentId).length
       return {
         agentId,
@@ -480,16 +513,21 @@ export async function getAnalytics(
 
   // ── Approval analytics ────────────────────────────────────────────────────
 
-  const approvalsApproved = decisions.filter((d) => d.decision === 'approved').length
-  const approvalsRejected = decisions.filter((d) => d.decision === 'rejected').length
-  const approvalsPending = approvalsArr.filter((a) => a.status === 'pending').length
+  // Counted per approval REQUEST (an approval with several steps counts once): waiting = pending right now; approved / rejected =
+  // requests whose final decision fell in the period; rate = approved share of those; decision time = request → final decision.
+  const finalOf = (a: ApprovalRaw) => {
+    const last = [...(a.decisions ?? [])].sort((x, y) => new Date(x.decided_at).getTime() - new Date(y.decided_at).getTime()).pop()
+    return a.status === 'pending' ? null : (last?.decided_at ?? a.created_at)
+  }
+  const decidedInPeriod = approvalsAll
+    .map((a) => ({ a, at: finalOf(a) }))
+    .filter((x): x is { a: ApprovalRaw; at: string } => x.at !== null && x.at >= start && x.at <= end && (x.a.status === 'approved' || x.a.status === 'rejected'))
+  const approvalsApproved = decidedInPeriod.filter((x) => x.a.status === 'approved').length
+  const approvalsRejected = decidedInPeriod.filter((x) => x.a.status === 'rejected').length
+  const approvalsPending = approvalsAll.filter((a) => a.status === 'pending' && a.created_at <= end).length
   const totalDecided = approvalsApproved + approvalsRejected
   const approvalRate = totalDecided ? Math.round((approvalsApproved / totalDecided) * 100) : null
-
-  const cycleTimes = decisions
-    .filter((d) => approvalMap[d.approval_id])
-    .map((d) => hours(approvalMap[d.approval_id].created_at, d.decided_at))
-  const avgApprovalCycleHours = avg(cycleTimes)
+  const avgApprovalCycleHours = avg(decidedInPeriod.map((x) => hours(x.a.created_at, x.at)))
 
   // ── Volume trend ──────────────────────────────────────────────────────────
   // Bucket by day for short windows, by week once the range gets long enough
@@ -513,10 +551,10 @@ export async function getAnalytics(
   reqs.forEach((r) => {
     const day = bucketKey(new Date(r.created_at))
     if (trendMap[day]) trendMap[day].created++
-    if (r.resolved_at) {
-      const rday = bucketKey(new Date(r.resolved_at))
-      if (trendMap[rday]) trendMap[rday].resolved++
-    }
+  })
+  resolvedIn.forEach((r) => {
+    const rday = bucketKey(new Date(r.doneAt))
+    if (trendMap[rday]) trendMap[rday].resolved++
   })
   const trend: TrendPoint[] = Object.entries(trendMap)
     .sort(([a], [b]) => a.localeCompare(b))

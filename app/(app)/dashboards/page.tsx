@@ -5,14 +5,13 @@ import { GroupFilter } from '@/components/analytics/GroupFilter'
 import { CapacityBanner } from '@/components/analytics/CapacityBanner'
 import { highestOpenAgents } from '@/lib/analytics/highest-open'
 import { getWorkloadReport } from '@/lib/queries/workload'
-import { getAnalytics, type Period } from '@/lib/queries/analytics'
+import { getAnalytics, isPeriod, PERIOD_OPTIONS, type Period } from '@/lib/queries/analytics'
 import { getTechnicianWorkloadBoard } from '@/lib/queries/requests'
 import { getCurrentProfile, getEnabledModules } from '@/lib/queries/profiles'
 import { getSelectableGroups } from '@/lib/queries/dashboardGroups'
 import { resolveReportAccess } from '@/lib/reporting/access'
 import { parseGroupsParam, narrowScopeToGroups, teamIdsForScope } from '@/lib/analytics/group-filter'
 
-const PERIODS: Period[] = ['7d', '30d', '90d']
 
 // The Technician-tier "Dashboards" page: the same widgets as the admin analytics
 // dashboard, limited to the technician's own technician groups. It lives outside
@@ -35,7 +34,7 @@ export default async function TechnicianDashboardPage({
   if (!(await getEnabledModules()).includes('requests')) redirect('/home')
 
   const sp = await searchParams
-  const period = (PERIODS as string[]).includes(sp.period) ? (sp.period as Period) : '30d'
+  const period = isPeriod(sp.period) ? (sp.period as Period) : '30d'
 
   // A technician in several groups can pick which of them the dashboard shows.
   const groups = await getSelectableGroups(profile, access.scope)
@@ -60,15 +59,15 @@ export default async function TechnicianDashboardPage({
         <div className="flex flex-wrap items-center gap-2">
           <GroupFilter groups={groups} selected={selected} />
           <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 gap-0.5">
-            {PERIODS.map((p) => (
+            {PERIOD_OPTIONS.map((o) => (
               <Link
-                key={p}
-                href={`?period=${p}${groupsQS}`}
-                className={`rounded-md px-4 py-1.5 text-xs font-semibold transition-all ${
-                  period === p ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                key={o.value}
+                href={`?period=${o.value}${groupsQS}`}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
+                  period === o.value ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {p}
+                {o.label}
               </Link>
             ))}
           </div>

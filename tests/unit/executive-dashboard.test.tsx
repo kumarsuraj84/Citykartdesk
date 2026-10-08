@@ -27,7 +27,7 @@ let n = 0
 const tk = (o: Partial<ExecTicket>): ExecTicket => ({
   id: `t${++n}`, no: `CKSD-${2000 + n}`, subject: 'AC not cooling', group: 'ADMIN GROUP', tech: 'Krishan', cat: 'AC ISSUE', sub: 'COOLING', svc: 'Admin repair',
   req: 'Store A', dept: 'Stores', loc: 'STORES', store: 'Store A', state: 'Delhi', oem: 'LG OEM - ALL', brand: 'LG', src: 'Portal',
-  prio: 'medium', status: 'in_progress', created: NOW - 3 * DAY, resolved: null, tatH: null, breached: false, csat: null, reo: [], frH: 1, ...o,
+  prio: 'medium', status: 'in_progress', created: NOW - 3 * DAY, resolved: null, due: null, tatH: null, breached: false, csat: null, reo: [], frH: 1, ...o,
 })
 const tickets = [
   tk({ breached: true }), tk({}), tk({ tech: 'Mohit', group: 'IT Group', store: 'Store B', brand: 'DAIKIN', oem: 'DAIKIN OEM - ALL', created: NOW - 5 * DAY, subject: 'Printer jam' }),

@@ -44,6 +44,7 @@ export const NOTIFICATION_RULE_GROUPS: NotificationRuleGroup[] = [
       // in the live value at render time instead.
       { type: 'request_auto_closed', label: 'Auto-closed after no reply', hint: 'The "not satisfied? reopen it" window elapsed' },
       { type: 'priority_changed', label: 'Priority changed' },
+      { type: 'csat_low_rating', label: 'Low CSAT rating', hint: 'A requester rated a resolved request 1 or 2 stars (sent to the technician and group lead)' },
     ],
   },
   {

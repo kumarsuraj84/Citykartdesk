@@ -284,15 +284,21 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
 
   await admin.from('requests').update(update).eq('id', request.id)
 
-  // CSAT: same as updateRequestStatus() — a rule-resolved ticket needs a
-  // survey record too, or the requester never gets asked to rate it.
-  // Upsert-ignore dedupes against UNIQUE(request_id) for a reopen->resolve cycle.
+  // CSAT: same as updateRequestStatus() — a rule-resolved ticket gets a survey and the same
+  // "resolved + how did we do?" e-mail, or the requester never hears about it or gets asked to rate it.
   if (status === 'resolved' && request.requester_id && request.org_id) {
-    const { error: csatError } = await admin.from('csat_surveys').upsert(
-      { org_id: request.org_id, request_id: request.id, requester_id: request.requester_id, sent_at: nowIso },
-      { onConflict: 'request_id', ignoreDuplicates: true }
-    )
-    if (csatError) console.error('[business-rules] CSAT survey creation failed', csatError)
+    try {
+      const { data: titleRow } = await admin.from('requests').select('title, request_no, reopen_count').eq('id', request.id).maybeSingle()
+      const { issueCsat } = await import('@/lib/csat/issue')
+      await issueCsat(admin as never, {
+        id: request.id, requestNo: titleRow?.request_no ?? '', title: titleRow?.title ?? '', orgId: request.org_id, requesterId: request.requester_id,
+      }, {
+        resolutionNote: '', resolverName: ctx.ruleName ? `Business rule: ${ctx.ruleName}` : 'an automatic rule',
+        reopenDeadlineIso: (update.reopen_deadline_at as string | null | undefined) ?? null, wasReopened: (titleRow?.reopen_count ?? 0) > 0, nowIso,
+      })
+    } catch (e) {
+      console.error('[business-rules] CSAT survey creation failed', e)
+    }
   }
 
   // Auto time-tracking: a rule-driven status change away from in_progress must

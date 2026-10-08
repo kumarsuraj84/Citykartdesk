@@ -25,6 +25,7 @@ const SIMPLE_REQUEST_EVENTS: Record<string, string> = {
   request_closed: 'Request closed',
   request_cancelled: 'Request cancelled',
   request_auto_closed: 'Request closed automatically',
+  csat_low_rating: 'Low CSAT rating',
   priority_changed: 'Priority changed',
 }
 

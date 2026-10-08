@@ -1,6 +1,6 @@
 import { escapeEmailFields } from './escape'
 
-function layout(body: string): string {
+export function layout(body: string): string {
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#ffffff;font-family:sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:32px;">
   <div style="font-size:24px;font-weight:bold;color:#2563eb;margin-bottom:16px;">Citykart Desk</div>
@@ -11,7 +11,7 @@ function layout(body: string): string {
 </body></html>`
 }
 
-function btn(url: string, label: string): string {
+export function btn(url: string, label: string): string {
   return `<a href="${url}" style="display:inline-block;background:#2563eb;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;margin-top:16px;">${label}</a>`
 }
 

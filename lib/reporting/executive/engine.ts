@@ -2,7 +2,7 @@
 // ticket (see lib/queries/executive-dashboard.ts) and these functions work out every number, ranking, trend and
 // comparison in the browser, so a click on any bar or name re-filters the whole page instantly.
 
-import { AGE_BUCKETS, ageBucketLabel } from '@/lib/reporting/aging'
+import { AGE_BUCKETS, ageBucketFor } from '@/lib/reporting/aging'
 
 export const UNASSIGNED = 'Unassigned'
 export const NO_CATEGORY = '(No category)'
@@ -42,9 +42,11 @@ export interface ExecTicket {
   created: number
   /** resolved (or, failing that, closed) time — null while the ticket is still open */
   resolved: number | null
-  /** hours from created to resolved; null when open or when the dates are inconsistent */
+  /** resolution due time, or null when the ticket has no SLA deadline */
+  due: number | null
+  /** hours from created to resolved; null when not resolved or when the dates are inconsistent */
   tatH: number | null
-  /** resolved after its resolution due time, or still open past it */
+  /** resolved after its resolution due time, or still open past it (used for the row marks and the SLA state filter) */
   breached: boolean
   csat: number | null
   /** times the ticket was re-opened */
@@ -61,7 +63,7 @@ export const MEASURES: Record<Measure, { label: string; short: string; good: 'up
   created:  { label: 'Created',         short: 'Created',    good: 'neutral' },
   resolved: { label: 'Resolved',        short: 'Resolved',   good: 'up' },
   backlog:  { label: 'Open backlog',    short: 'Backlog',    good: 'down' },
-  breaches: { label: 'SLA breaches',    short: 'Breaches',   good: 'down' },
+  breaches: { label: 'Currently breached', short: 'Breached', good: 'down' },
   sla:      { label: 'SLA compliance',  short: 'SLA',        good: 'up' },
   tat:      { label: 'Avg resolution',  short: 'Resolution', good: 'down' },
   csat:     { label: 'CSAT (out of 5)', short: 'CSAT',       good: 'up' },
@@ -102,18 +104,21 @@ export function toggleFilter(f: Filters, dim: Dim, value: string): Filters {
 
 export const STATUS_LABEL: Record<string, string> = {
   open: 'Open', assigned: 'Assigned', in_progress: 'In Progress', waiting_user: 'Waiting on User',
-  hold_purchase_ho: 'Hold - Purchase from HO', pending_approval: 'Pending Approval', resolved: 'Resolved', closed: 'Closed',
+  hold_purchase_ho: 'Hold - Purchase from HO', pending_approval: 'Pending Approval', resolved: 'Resolved', closed: 'Closed', cancelled: 'Cancelled',
 }
 export const STATUS_ORDER = Object.keys(STATUS_LABEL)
 export const statusLabel = (s: string) => STATUS_LABEL[s] ?? s
 export const capitalize = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s)
 
-export const isOpen = (t: ExecTicket) => t.resolved === null
-export const openAt = (t: ExecTicket, at: number) => t.created <= at && (t.resolved === null || t.resolved > at)
+/** Still being worked on: the status is not resolved, closed or cancelled (a cancelled ticket was created but is no work to do). */
+export const isOpen = (t: ExecTicket) => t.status !== 'resolved' && t.status !== 'closed' && t.status !== 'cancelled'
+export const openAt = (t: ExecTicket, at: number) => t.status !== 'cancelled' && t.created <= at && (t.resolved === null || t.resolved > at)
+/** Open and past its resolution deadline at that moment ("Currently breached" on the normal dashboard). */
+export const breachedAt = (t: ExecTicket, at: number) => openAt(t, at) && t.due !== null && t.due < at
 
-/** Backlog-age bucket of a still-open ticket (same buckets as every other aging report). */
+/** Backlog-age bucket of a still-open ticket: the same buckets and the same fractional-day age as the normal dashboard's Backlog Aging. */
 export function ageBucketOf(t: ExecTicket, now: number): string {
-  return ageBucketLabel(Math.max(0, Math.round((now - t.created) / DAY)))
+  return ageBucketFor((now - t.created) / DAY).label
 }
 export const AGE_BUCKET_LABELS = [...AGE_BUCKETS.map((b) => b.label), RESOLVED_BUCKET]
 
@@ -156,11 +161,12 @@ export const applyFilters = (ts: ExecTicket[], f: Filters, now: number, skip: re
 
 // ── Time windows ──────────────────────────────────────────────────────────────────────────────────
 
-export type Period = '7d' | '30d' | '90d' | 'fy' | 'custom'
+export type Period = '30d' | '60d' | '90d' | '120d' | 'fy' | 'custom'
 export const PERIODS: { value: Exclude<Period, 'custom'>; short: string; label: string }[] = [
-  { value: '7d', short: '7d', label: 'last 7 days' },
   { value: '30d', short: '30d', label: 'last 30 days' },
+  { value: '60d', short: '60d', label: 'last 60 days' },
   { value: '90d', short: '90d', label: 'last 90 days' },
+  { value: '120d', short: '120d', label: 'last 120 days' },
   { value: 'fy', short: 'This FY', label: 'this financial year' },
 ]
 /** A chosen date range, as yyyy-mm-dd (both days included). */
@@ -200,7 +206,8 @@ export function periodWindow(period: Period, now: number, custom?: CustomRange):
     const year = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1
     return { start: new Date(year, 3, 1).getTime(), end: now }
   }
-  const n = period === '7d' ? 7 : period === '90d' ? 90 : 30
+  // "Last N days" = N calendar days including today (so 30 days is today and the 29 days before it).
+  const n = period === '60d' ? 60 : period === '90d' ? 90 : period === '120d' ? 120 : 30
   return { start: addDays(startOfDay(now), -(n - 1)), end: now }
 }
 
@@ -247,25 +254,49 @@ export function timeBuckets(w: Win): TimeBucket[] {
 
 const avg = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null)
 
-/** The value of one measure for some tickets over a window. null = nothing to measure (e.g. no resolved tickets). */
+const createdIn = (ts: ExecTicket[], w: Win) => ts.filter((t) => inWin(t.created, w))
+/** Tickets that were resolved (or closed) inside the window, whenever they were created. */
+export const resolvedIn = (ts: ExecTicket[], w: Win) => ts.filter((t) => t.resolved !== null && inWin(t.resolved, w))
+/** Of those, the ones with an SLA deadline: the base of the SLA compliance rate. */
+export const slaBase = (ts: ExecTicket[], w: Win) => resolvedIn(ts, w).filter((t) => t.due !== null)
+export const slaMet = (t: ExecTicket) => t.resolved !== null && t.due !== null && t.resolved <= t.due
+
+/**
+ * The value of one measure for some tickets over a window. null = nothing to measure (e.g. nothing was resolved).
+ *  - created   : tickets created in the window (every status, cancelled included)
+ *  - resolved  : tickets resolved (or closed) in the window
+ *  - backlog   : tickets open at the end of the window (not resolved, closed or cancelled)
+ *  - breaches  : open at the end of the window and already past their resolution deadline
+ *  - sla       : of the tickets resolved in the window that have a deadline, the share resolved on or before it
+ *  - tat       : average hours from created to resolved, over the tickets resolved in the window
+ *  - frt       : average hours to the first response, over the tickets created in the window that have one
+ *  - csat      : average rating of the tickets resolved in the window that were rated
+ *  - reopened  : times a ticket was re-opened in the window
+ */
 export function measure(ts: ExecTicket[], w: Win, m: Measure, minN = 1): number | null {
   switch (m) {
-    case 'created': return ts.filter((t) => inWin(t.created, w)).length
-    case 'resolved': return ts.filter((t) => t.resolved !== null && inWin(t.resolved, w)).length
+    case 'created': return createdIn(ts, w).length
+    case 'resolved': return resolvedIn(ts, w).length
     case 'backlog': return ts.filter((t) => openAt(t, w.end)).length
-    case 'breaches': return ts.filter((t) => inWin(t.created, w) && t.breached).length
+    case 'breaches': return ts.filter((t) => breachedAt(t, w.end)).length
     case 'reopened': return ts.reduce((n, t) => n + t.reo.filter((r) => inWin(r, w)).length, 0)
     case 'frt': {
-      const answered = ts.filter((t) => t.frH !== null && inWin(t.created, w))
+      const answered = createdIn(ts, w).filter((t) => t.frH !== null)
       return answered.length >= minN ? avg(answered.map((t) => t.frH as number)) : null
     }
+    case 'sla': {
+      const base = slaBase(ts, w)
+      return base.length >= minN && base.length > 0 ? (100 * base.filter(slaMet).length) / base.length : null
+    }
+    case 'tat': {
+      const base = resolvedIn(ts, w).filter((t) => t.tatH !== null)
+      return base.length >= minN ? avg(base.map((t) => t.tatH as number)) : null
+    }
+    case 'csat': {
+      const rated = resolvedIn(ts, w).filter((t) => t.csat !== null).map((t) => t.csat as number)
+      return rated.length >= Math.min(minN, 3) ? avg(rated) : null
+    }
   }
-  const done = ts.filter((t) => t.resolved !== null && inWin(t.resolved, w))
-  if (done.length < minN) return null
-  if (m === 'sla') return done.length ? (100 * done.filter((t) => !t.breached).length) / done.length : null
-  if (m === 'tat') return avg(done.filter((t) => t.tatH !== null).map((t) => t.tatH as number))
-  const rated = done.filter((t) => t.csat !== null).map((t) => t.csat as number)
-  return rated.length >= Math.min(minN, 3) ? avg(rated) : null
 }
 
 export function series(ts: ExecTicket[], w: Win, m: Measure): (number | null)[] {
@@ -365,13 +396,16 @@ export function heatmap(ts: ExecTicket[], w: Win): { cells: Map<string, number>;
 export function ticketsBehind(ts: ExecTicket[], w: Win, m: Measure, onlyOpen = false): ExecTicket[] {
   let out: ExecTicket[]
   if (onlyOpen) out = ts.filter(isOpen)
-  else if (m === 'frt') out = ts.filter((t) => t.frH !== null && inWin(t.created, w))
-  else if (m === 'resolved' || needsSample(m)) out = ts.filter((t) => t.resolved !== null && inWin(t.resolved, w))
+  else if (m === 'frt') out = createdIn(ts, w).filter((t) => t.frH !== null)
+  else if (m === 'resolved') out = resolvedIn(ts, w)
+  else if (m === 'sla') out = slaBase(ts, w)
+  else if (m === 'tat') out = resolvedIn(ts, w).filter((t) => t.tatH !== null)
+  else if (m === 'csat') out = resolvedIn(ts, w).filter((t) => t.csat !== null)
   else if (m === 'backlog') out = ts.filter((t) => openAt(t, w.end))
-  else if (m === 'breaches') out = ts.filter((t) => inWin(t.created, w) && t.breached)
+  else if (m === 'breaches') out = ts.filter((t) => breachedAt(t, w.end))
   else if (m === 'reopened') out = ts.filter((t) => t.reo.some((r) => inWin(r, w)))
-  else out = ts.filter((t) => inWin(t.created, w))
-  const oldestFirst = m === 'backlog' || onlyOpen
+  else out = createdIn(ts, w)
+  const oldestFirst = m === 'backlog' || m === 'breaches' || onlyOpen
   return out.sort((a, b) => (oldestFirst ? a.created - b.created : b.created - a.created))
 }
 
@@ -387,6 +421,7 @@ export interface ExecApproval {
   /** the ticket the approval belongs to */
   reqId: string
   status: 'pending' | 'approved' | 'rejected'
+  /** when the approval was requested (created) */
   requested: number
   /** when the final decision was made; null while pending */
   decided: number | null
@@ -417,6 +452,11 @@ const TICKET_ONLY: Skip[] = ['status', 'age', 'sla']
 export const approvalRows = (as: ApprovalRow[], f: Filters, now: number, skip: readonly Skip[] = []) =>
   as.filter((a) => matches(a.t, f, now, [...TICKET_ONLY, ...skip]))
 
+/**
+ * Counted per approval REQUEST (an approval with several steps counts once): "waiting" = still pending at the end of the window;
+ * approved / rejected = requests whose final decision fell in the window; rate = approved share of those; decision time =
+ * request → final decision.
+ */
 export function approvalMeasure(as: ApprovalRow[], w: Win, m: ApprovalMeasure): number | null {
   const decidedIn = (st?: string) => as.filter((a) => a.decided !== null && inWin(a.decided, w) && (!st || a.status === st))
   switch (m) {

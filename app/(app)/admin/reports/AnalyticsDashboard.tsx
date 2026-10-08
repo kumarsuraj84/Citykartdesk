@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
+import { OPEN_REQUEST_STATUSES } from '@/lib/constants/requests'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core'
@@ -548,7 +549,7 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds 
                 onClick={() => setDrawer({
                   title: 'All Open Requests',
                   description: 'Currently open requests by age',
-                  status: ['open', 'in_progress', 'pending_approval'],
+                  status: [...OPEN_REQUEST_STATUSES],
                 })}
                 className="py-2"
               >
@@ -777,7 +778,7 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds 
             onClick={() => setDrawer({
               title: 'Open Requests',
               description: 'All currently open requests',
-              status: ['open', 'in_progress', 'pending_approval'],
+              status: [...OPEN_REQUEST_STATUSES],
             })}
           />
           <KpiCard

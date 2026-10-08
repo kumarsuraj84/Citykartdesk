@@ -141,7 +141,10 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
     }
     if (filter.resolvedInPeriod && filter.period) {
       const { start, end } = resolvePeriodParam(filter.period)
-      q = q.gte('resolved_at', start.toISOString()).lte('resolved_at', end.toISOString()).not('resolved_at', 'is', null)
+      // same rule as the Resolved card: resolved_at, else closed_at, else (status says resolved/closed) the last update
+      const a = start.toISOString()
+      const b = end.toISOString()
+      q = q.or(`and(resolved_at.gte.${a},resolved_at.lte.${b}),and(resolved_at.is.null,closed_at.gte.${a},closed_at.lte.${b}),and(resolved_at.is.null,closed_at.is.null,status.in.(resolved,closed),updated_at.gte.${a},updated_at.lte.${b})`)
     }
     if (filter.createdInPeriod && filter.period) {
       const { start, end } = resolvePeriodParam(filter.period)

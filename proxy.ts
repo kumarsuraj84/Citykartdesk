@@ -42,8 +42,13 @@ export async function proxy(request: NextRequest) {
     '/api/intake/webhook/outlook',
     '/api/intake/webhook/whatsapp',
     '/api/email/inbound-sync',
+    '/api/csat/run',
   ])
   if (PUBLIC_API_ROUTES.has(pathname)) return NextResponse.next({ request })
+
+  // The rating / reopen page opened from the CSAT e-mail: the signed link in the URL is the proof of who the requester is,
+  // so it works without a login (store users often share a mailbox and are not signed in when they click).
+  if (pathname.startsWith('/csat/')) return NextResponse.next({ request })
 
   let supabaseResponse = NextResponse.next({ request })
   let sessionRefreshed = false
