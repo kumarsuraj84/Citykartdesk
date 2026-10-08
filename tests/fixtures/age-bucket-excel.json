@@ -1,0 +1,462 @@
+{
+ "tickets": [
+  {
+   "no": "CKSD-000060",
+   "responsible": "Mukesh",
+   "category": "STORE PAINT",
+   "service": "BD",
+   "status": "Open",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000020",
+   "responsible": "Mukesh",
+   "category": "STAIR DAMAGE",
+   "service": "BD",
+   "status": "Open",
+   "ageDays": 2,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000061",
+   "responsible": "Mukesh",
+   "category": "SEEPAGE",
+   "service": "BD",
+   "status": "Open",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000068",
+   "responsible": "Krishan",
+   "category": "ADMIN AC ISSUE",
+   "service": "ADMIN - AC",
+   "status": "Open",
+   "ageDays": 0,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000045",
+   "responsible": "Shivanshu",
+   "category": "CIVIL WORK",
+   "service": "ADMIN REPAIR",
+   "status": "Open",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000018",
+   "responsible": "Shivanshu",
+   "category": "OTHER REPAIR",
+   "service": "ADMIN REPAIR",
+   "status": "In Progress",
+   "ageDays": 2,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000019",
+   "responsible": "Shivanshu",
+   "category": "OTHER REPAIR",
+   "service": "ADMIN REPAIR",
+   "status": "Waiting on User",
+   "ageDays": 2,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000057",
+   "responsible": "Shivanshu",
+   "category": "OTHER REPAIR",
+   "service": "ADMIN REPAIR",
+   "status": "Open",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000065",
+   "responsible": "Shivanshu",
+   "category": "OTHER REPAIR",
+   "service": "ADMIN REPAIR",
+   "status": "Open",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000039",
+   "responsible": "Arun Das",
+   "category": "BASKET",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000032",
+   "responsible": "Shivanshu",
+   "category": "CIVIL WORK",
+   "service": "ADMIN REPAIR",
+   "status": "Open",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000027",
+   "responsible": "Krishan",
+   "category": "ADMIN AC ISSUE",
+   "service": "ADMIN - AC",
+   "status": "In Progress",
+   "ageDays": 2,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000067",
+   "responsible": "Krishan",
+   "category": "ADMIN AC ISSUE",
+   "service": "ADMIN - AC",
+   "status": "Open",
+   "ageDays": 0,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000028",
+   "responsible": "Krishan",
+   "category": "ADMIN AC ISSUE",
+   "service": "ADMIN - AC",
+   "status": "In Progress",
+   "ageDays": 2,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000010",
+   "responsible": "Shivanshu",
+   "category": "ELECTRICAL PROBLEM",
+   "service": "ADMIN REPAIR",
+   "status": "Open",
+   "ageDays": 2,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000058",
+   "responsible": "Shivanshu",
+   "category": "FAN",
+   "service": "ADMIN REPAIR",
+   "status": "Open",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000052",
+   "responsible": "Shivanshu",
+   "category": "RO-PURIFIER ISSUE",
+   "service": "ADMIN REPAIR",
+   "status": "Open",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000017",
+   "responsible": "Shivanshu",
+   "category": "FAN",
+   "service": "ADMIN REPAIR",
+   "status": "Open",
+   "ageDays": 2,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000016",
+   "responsible": "Shivanshu",
+   "category": "LETTER ISSUE",
+   "service": "ADMIN REPAIR",
+   "status": "Open",
+   "ageDays": 2,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000023",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 2,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000073",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 0,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000077",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 0,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000055",
+   "responsible": "Arun Das",
+   "category": "HANGERS",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000076",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 0,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000005",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 2,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000022",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 2,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000036",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000053",
+   "responsible": "Arun Das",
+   "category": "HANGERS",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000074",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 0,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000021",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 2,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000037",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000040",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000042",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000075",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 0,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000014",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 2,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000046",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "In Progress",
+   "ageDays": 1,
+   "bucket": "0–5 days"
+  },
+  {
+   "no": "CKSD-000012",
+   "responsible": "Arun Das",
+   "category": "STATIONARY",
+   "service": "ADMIN - REQUIREMENTS (NON TRADING)",
+   "status": "Cancelled",
+   "ageDays": 2,
+   "bucket": "0–5 days"
+  }
+ ],
+ "expected": {
+  "bd": [
+   {
+    "kind": "cat",
+    "tech": "Mukesh",
+    "category": "SEEPAGE",
+    "count": 1,
+    "total": 1
+   },
+   {
+    "kind": "cat",
+    "tech": "Mukesh",
+    "category": "STAIR DAMAGE",
+    "count": 1,
+    "total": 1
+   },
+   {
+    "kind": "cat",
+    "tech": "Mukesh",
+    "category": "STORE PAINT",
+    "count": 1,
+    "total": 1
+   },
+   {
+    "kind": "techTotal",
+    "tech": "Mukesh",
+    "total": 3
+   },
+   {
+    "kind": "grand",
+    "total": 3
+   }
+  ],
+  "admin": [
+   {
+    "kind": "cat",
+    "tech": "Arun Das",
+    "category": "BASKET",
+    "count": 1,
+    "total": 1
+   },
+   {
+    "kind": "cat",
+    "tech": "Arun Das",
+    "category": "HANGERS",
+    "count": 2,
+    "total": 2
+   },
+   {
+    "kind": "cat",
+    "tech": "Arun Das",
+    "category": "STATIONARY",
+    "count": 15,
+    "total": 15
+   },
+   {
+    "kind": "techTotal",
+    "tech": "Arun Das",
+    "total": 18
+   },
+   {
+    "kind": "cat",
+    "tech": "Krishan",
+    "category": "ADMIN AC ISSUE",
+    "count": 4,
+    "total": 4
+   },
+   {
+    "kind": "techTotal",
+    "tech": "Krishan",
+    "total": 4
+   },
+   {
+    "kind": "cat",
+    "tech": "Shivanshu",
+    "category": "CIVIL WORK",
+    "count": 2,
+    "total": 2
+   },
+   {
+    "kind": "cat",
+    "tech": "Shivanshu",
+    "category": "ELECTRICAL PROBLEM",
+    "count": 1,
+    "total": 1
+   },
+   {
+    "kind": "cat",
+    "tech": "Shivanshu",
+    "category": "FAN",
+    "count": 2,
+    "total": 2
+   },
+   {
+    "kind": "cat",
+    "tech": "Shivanshu",
+    "category": "LETTER ISSUE",
+    "count": 1,
+    "total": 1
+   },
+   {
+    "kind": "cat",
+    "tech": "Shivanshu",
+    "category": "OTHER REPAIR",
+    "count": 4,
+    "total": 4
+   },
+   {
+    "kind": "cat",
+    "tech": "Shivanshu",
+    "category": "RO-PURIFIER ISSUE",
+    "count": 1,
+    "total": 1
+   },
+   {
+    "kind": "techTotal",
+    "tech": "Shivanshu",
+    "total": 11
+   },
+   {
+    "kind": "grand",
+    "total": 33
+   }
+  ]
+ }
+}

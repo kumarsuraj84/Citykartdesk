@@ -9,7 +9,7 @@ import {
   BarChart3, Activity, Settings, Monitor, BookOpenText,
   Users, Tag, GitBranch, Building2, Database, Workflow,
   LogOut, BookOpen, KeyRound, ChevronDown, Sparkles, Filter,
-  PanelLeftClose, PanelLeftOpen, Table2, Zap, Headset, FileText, Clock, Library,
+  PanelLeftClose, PanelLeftOpen, Table2, Zap, Headset, FileText, Clock, Library, FileBarChart,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/actions/auth'
@@ -80,6 +80,9 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
       items: [
         ...(isAgent || isManager || isAdmin ? [{ label: 'Dashboards', href: isManager || isAdmin ? '/admin/reports' : '/dashboards', icon: BarChart3 }] : []),
         ...(has('requests') ? [{ label: 'Report Builder', href: '/reports/pivot', icon: Table2 }] : []),
+        // Ready-made, fixed reports per technician group (Report Builder is for building your own).
+        // Requesters have no technician group, so they never see it.
+        ...(has('requests') && (isAgent || isManager || isAdmin) ? [{ label: 'Report Analytics', href: '/reports/analytics', icon: FileBarChart }] : []),
         ...(isManager || isAdmin ? [{ label: 'Audit Logs', href: '/admin/audit',    icon: Activity  }] : []),
         ...(isAdmin ? [{ label: 'Event Log', href: '/admin/event-log', icon: Activity }] : []),
       ],
