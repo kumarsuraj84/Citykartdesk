@@ -9,7 +9,7 @@ import {
   BarChart3, Activity, Settings, Monitor, BookOpenText,
   Users, Tag, GitBranch, Building2, Database, Workflow,
   LogOut, BookOpen, KeyRound, ChevronDown, Sparkles, Filter,
-  PanelLeftClose, PanelLeftOpen, Table2, Zap, Headset, FileText, Clock, Library, FileBarChart,
+  PanelLeftClose, PanelLeftOpen, Table2, Zap, Headset, FileText, Clock, Library, FileBarChart, LayoutDashboard,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/actions/auth'
@@ -78,7 +78,9 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
       // so it's available to every role that has the Requests module enabled.
       show: isManager || isAdmin || has('requests'),
       items: [
-        ...(isAgent || isManager || isAdmin ? [{ label: 'Dashboards', href: isManager || isAdmin ? '/admin/reports' : '/dashboards', icon: BarChart3 }] : []),
+        ...(isAgent || isManager || isAdmin ? [{ label: 'Dashboards', href: isManager || isAdmin ? '/admin/reports' : '/dashboards', icon: BarChart3, exactMatch: true }] : []),
+        // Click-through dashboard for every level (Requester → own requests, Technician / Manager → their groups, Admin / Owner → everything).
+        ...(has('requests') ? [{ label: 'Interactive Dashboard', href: '/dashboards/executive', icon: LayoutDashboard }] : []),
         ...(has('requests') ? [{ label: 'Report Builder', href: '/reports/pivot', icon: Table2 }] : []),
         // Ready-made, fixed reports per technician group (Report Builder is for building your own).
         // Requesters have no technician group, so they never see it.
