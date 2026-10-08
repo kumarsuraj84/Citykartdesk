@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   emptyFilters, toggleFilter, applyFilters, measure, compare, periodWindow, prevWindow, timeBuckets, rankItems, compareRows,
-  approvalMeasure, joinApprovals, approvalRows, approvalsBehind, ticketsBehind, formatMeasure, insights, heatmap, UNASSIGNED,
+  approvalMeasure, joinApprovals, approvalRows, approvalsBehind, ticketsBehind, formatMeasure, heatmap, UNASSIGNED,
   type ExecTicket, type ExecApproval,
 } from '@/lib/reporting/executive/engine'
 import { levelFor, dimsForLevel } from '@/lib/reporting/executive/levels'
@@ -167,7 +167,7 @@ describe('approvals', () => {
   })
 })
 
-describe('lists, heatmap and insights', () => {
+describe('lists and heatmap', () => {
   const W = periodWindow('30d', NOW)
   it('lists the oldest open tickets first for the backlog and the newest first otherwise', () => {
     const a = tk({ created: ago(10) }); const b = tk({ created: ago(2) })
@@ -178,15 +178,6 @@ describe('lists, heatmap and insights', () => {
     const { cells, max } = heatmap([tk({ created: new Date(2026, 9, 7, 10, 30).getTime() }), tk({ created: new Date(2026, 9, 7, 10, 5).getTime() })], W)
     expect(cells.get('3_10')).toBe(2)
     expect(max).toBe(2)
-  })
-  it('names the biggest mover and the weakest group', () => {
-    const ts = [
-      ...Array.from({ length: 9 }, (_, i) => tk({ group: 'IT', created: ago(2 + i) })), tk({ group: 'HR', created: ago(40) }),
-      ...Array.from({ length: 5 }, (_, i) => done(ago(5 + i), 10, { group: 'HR', breached: i < 3 })),
-    ]
-    const notes = insights(ts, emptyFilters(), W, prevWindow(W), NOW, 'the previous 30d')
-    expect(notes.find((x) => x.kind === 'Volume')?.value).toBe('IT')
-    expect(notes.find((x) => x.kind === 'SLA watch')?.value).toBe('HR')
   })
 })
 

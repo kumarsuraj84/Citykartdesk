@@ -41,6 +41,13 @@ export interface ExecTicketDetail {
   responseDue: number | null
   reopenCount: number
   csat: { rating: number | null; comment: string } | null
+  /** how the ticket was raised (Portal, Email, WhatsApp ...) */
+  source: string
+  storeState: string
+  closed: number | null
+  /** first time the ticket was handed to a technician */
+  assignedAt: number | null
+  approval: { status: 'pending' | 'approved' | 'rejected'; requested: number; decided: number | null; by: string } | null
   events: ExecTicketEvent[]
 }
 
@@ -80,7 +87,8 @@ export async function getExecutiveTicketDetail(id: string): Promise<{ error: str
     'id, request_no, title, description, status, priority, created_at, resolved_at, closed_at, responded_at, resolution_due_at, response_due_at, reopen_count',
     'team:teams(name)',
     'assignee:profiles!requests_assigned_to_fkey(full_name)',
-    'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), store:stores(name, oem:oems(name)))',
+    'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), store:stores(name, state, oem:oems(name)))',
+    'source_metadata',
     'service:services(name)',
     'category:service_categories(name)',
     'sub_category:service_sub_categories(name)',
@@ -96,6 +104,18 @@ export async function getExecutiveTicketDetail(id: string): Promise<{ error: str
     .select('action, created_at, metadata, actor:profiles!request_activity_actor_id_fkey(full_name)')
     .eq('request_id', id).order('created_at', { ascending: true }).limit(60)
 
+  const { data: apData } = await admin
+    .from('approvals')
+    .select('status, created_at, decisions:approval_decisions(decided_at, decider:profiles!approval_decisions_decided_by_fkey(full_name))')
+    .eq('request_id', id).order('created_at', { ascending: false }).limit(1)
+  const ap = (apData ?? [])[0] as { status: string; created_at: string; decisions: { decided_at: string; decider: { full_name: string } | null }[] | null } | undefined
+  const lastDecision = ap ? [...(ap.decisions ?? [])].sort((x, y) => new Date(x.decided_at).getTime() - new Date(y.decided_at).getTime()).pop() : undefined
+  const approval: ExecTicketDetail['approval'] = ap && (ap.status === 'pending' || ap.status === 'approved' || ap.status === 'rejected')
+    ? { status: ap.status, requested: new Date(ap.created_at).getTime(), decided: ap.status === 'pending' ? null : lastDecision ? new Date(lastDecision.decided_at).getTime() : new Date(ap.created_at).getTime(), by: lastDecision?.decider?.full_name ?? '' }
+    : null
+  const activity = (acts ?? []) as { action: string; created_at: string; metadata: Record<string, unknown> | null; actor: { full_name: string } | null }[]
+  const firstAssigned = activity.find((a) => a.action === 'assigned' && a.metadata?.assigned_to)
+  const via = (data.source_metadata as { created_via?: string } | null)?.created_via
   const oem: string = data.requester?.store?.oem?.name ?? ''
   const surveyRaw = data.csat as { rating: number | null; comment: string | null } | { rating: number | null; comment: string | null }[] | null
   const survey = Array.isArray(surveyRaw) ? surveyRaw[0] : surveyRaw ?? undefined
@@ -123,7 +143,12 @@ export async function getExecutiveTicketDetail(id: string): Promise<{ error: str
     responseDue: ms(data.response_due_at),
     reopenCount: data.reopen_count ?? 0,
     csat: survey && survey.rating !== null ? { rating: survey.rating, comment: survey.comment ?? '' } : null,
-    events: ((acts ?? []) as { action: string; created_at: string; metadata: Record<string, unknown> | null; actor: { full_name: string } | null }[]).map((a) => {
+    source: via ? via.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Portal',
+    storeState: data.requester?.store?.state ?? '',
+    closed: ms(data.closed_at),
+    assignedAt: firstAssigned ? new Date(firstAssigned.created_at).getTime() : null,
+    approval,
+    events: activity.map((a) => {
       const d = describe(a.action, a.metadata ?? {})
       return { at: new Date(a.created_at).getTime(), label: d.label, by: a.actor?.full_name ?? 'System', note: d.note }
     }),

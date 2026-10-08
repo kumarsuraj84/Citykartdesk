@@ -5,15 +5,15 @@ import { render, screen, fireEvent, cleanup, within } from '@testing-library/rea
 vi.mock('@/lib/actions/executiveDashboard', () => ({
   getExecutiveTicketDetail: vi.fn(async (id: string) => ({
     detail: {
-      id, no: 'CKSD-1001', subject: 'AC not cooling', description: '', status: 'in_progress', priority: 'high', group: 'ADMIN GROUP', technician: 'Krishan',
+      id, no: 'CKSD-2001', subject: 'AC not cooling', description: '', status: 'in_progress', priority: 'high', group: 'ADMIN GROUP', technician: 'Krishan',
       requester: 'Store A', department: '', store: 'Store A', oem: 'LG OEM - ALL', brand: 'LG', service: 'Admin repair', category: 'AC', subCategory: 'COOLING',
-      created: 1, responded: null, resolved: null, resolutionDue: null, responseDue: null, reopenCount: 0, csat: null,
-      events: [{ at: 1, label: 'Ticket raised', by: 'Store A', note: '' }],
+      created: 1_000_000, responded: 1_000_000 + 3_600_000, resolved: null, resolutionDue: 1_000_000 + 86_400_000, responseDue: 1_000_000 + 4 * 3_600_000, reopenCount: 0,
+      csat: null, source: 'Portal', storeState: 'Delhi', closed: null, assignedAt: 1_000_000 + 1_800_000, approval: null,
+      events: [{ at: 1_000_000, label: 'Ticket raised', by: 'Store A', note: '' }],
     },
   })),
   exportTicketDetailReportXlsx: vi.fn(),
 }))
-vi.mock('@/lib/actions/analyticsReportExport', () => ({ exportAgeBucketReportXlsx: vi.fn(), exportTicketDetailReportXlsx: vi.fn() }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
 import { ExecutiveDashboard } from '@/components/executive/ExecutiveDashboard'
@@ -25,78 +25,145 @@ const DAY = 86_400_000
 const NOW = new Date(2026, 9, 8, 17, 0, 0).getTime()
 let n = 0
 const tk = (o: Partial<ExecTicket>): ExecTicket => ({
-  id: `t${++n}`, no: `CKSD-${1000 + n}`, subject: 'AC not cooling', group: 'ADMIN GROUP', tech: 'Krishan', cat: 'AC ISSUE', sub: 'COOLING', svc: 'Admin repair',
+  id: `t${++n}`, no: `CKSD-${2000 + n}`, subject: 'AC not cooling', group: 'ADMIN GROUP', tech: 'Krishan', cat: 'AC ISSUE', sub: 'COOLING', svc: 'Admin repair',
   req: 'Store A', dept: 'Stores', loc: 'STORES', store: 'Store A', state: 'Delhi', oem: 'LG OEM - ALL', brand: 'LG', src: 'Portal',
   prio: 'medium', status: 'in_progress', created: NOW - 3 * DAY, resolved: null, tatH: null, breached: false, csat: null, reo: [], frH: 1, ...o,
 })
 const tickets = [
-  tk({}), tk({}), tk({ tech: 'Mohit', brand: 'DAIKIN', oem: 'DAIKIN OEM - ALL', created: NOW - 5 * DAY }),
+  tk({ breached: true }), tk({}), tk({ tech: 'Mohit', group: 'IT Group', store: 'Store B', brand: 'DAIKIN', oem: 'DAIKIN OEM - ALL', created: NOW - 5 * DAY, subject: 'Printer jam' }),
   tk({ created: NOW - 6 * DAY, resolved: NOW - 5 * DAY, tatH: 24, status: 'resolved' }),
 ]
 
 const view = (level: 'admin' | 'requester' | 'technician' = 'admin') =>
   render(<ExecutiveDashboard level={level} me="Krishan" now={NOW} tickets={tickets} approvals={[]} truncated={false} />)
+// the number cards are clickable <div role="button">s
+const kpi = (name: RegExp) => Array.from(document.querySelectorAll<HTMLElement>('#kpi-scorecard [role="button"]')).find((e) => name.test(e.textContent ?? ''))!
 
-describe('Executive Dashboard', () => {
-  it('shows the numbers and the OEM-wise table', () => {
+describe('Smart Dashboard', () => {
+  it('shows the command bar, the four highlights and the two tiers of number cards', () => {
     view()
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Executive Dashboard')
-    expect(screen.getByText('OEM-wise tickets')).toBeTruthy()
-    expect(screen.getAllByText('LG').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('DAIKIN').length).toBeGreaterThan(0)
+    expect(screen.getByText(/Priority intelligence/i)).toBeTruthy()
+    expect(screen.getByText('SLA RISK WATCH')).toBeTruthy()
+    expect(screen.getByText('WORKLOAD CONCENTRATION')).toBeTruthy()
+    expect(screen.getByText('DECISION BOTTLENECK')).toBeTruthy()
+    expect(screen.getByText('OPEN BACKLOG')).toBeTruthy()
+    expect(screen.getByText('SLA BREACHES')).toBeTruthy()
+    expect(screen.getByText('Custom Dates')).toBeTruthy()
   })
 
-  it('narrows every number when a name is clicked, and shows a chip that undoes it', () => {
+  it('opens the drill-down pop-up when a number is clicked, instead of filtering', () => {
     view()
-    const oem = screen.getByText('OEM-wise tickets').closest('section') as HTMLElement
-    fireEvent.click(within(oem).getByText('DAIKIN'))
-    expect(screen.getByText('OEM brand: DAIKIN')).toBeTruthy()
-    expect(screen.getByText(/1 tickets created in this period match your selection/)).toBeTruthy()
-    fireEvent.click(screen.getByLabelText('Remove OEM brand: DAIKIN'))
-    expect(screen.queryByText('OEM brand: DAIKIN')).toBeNull()
-    expect(screen.getByText(/4 tickets created in this period match your selection/)).toBeTruthy()
-  })
-
-  it('opens the drill-down, goes a level deeper, and reaches one ticket', async () => {
-    view()
-    fireEvent.click(screen.getAllByText('Breakdown ▸')[0])
+    fireEvent.click(kpi(/OPEN BACKLOG/))
     const dlg = screen.getByRole('dialog')
-    expect(within(dlg).getByRole('button', { name: 'Group' })).toBeTruthy()
-    fireEvent.click(within(dlg).getByText('ADMIN GROUP'))
-    expect(within(dlg).getByText(/Group: ADMIN GROUP/)).toBeTruthy()
-    fireEvent.click(within(dlg).getByText('Individual tickets'))
-    fireEvent.click(within(dlg).getAllByText(/CKSD-/)[0])
-    expect(await within(dlg).findByText('Ticket raised', { exact: false })).toBeTruthy()
+    expect(within(dlg).getByText(/Leg 1 of 4/)).toBeTruthy()
+    expect(screen.queryByText(/Active filters:/)).toBeNull()
+  })
+
+  it('goes cohort → stores & technicians → tickets → last leg', async () => {
+    view()
+    fireEvent.click(kpi(/CREATED/))
+    let dlg = screen.getByRole('dialog')
+    fireEvent.click(within(dlg).getByText('ADMIN GROUP').closest('button')!)
+    expect(within(dlg).getByText(/Leg 2 of 4/)).toBeTruthy()
+    expect(within(dlg).getByText(/Impacted stores/)).toBeTruthy()
+    fireEvent.click(within(dlg).getByText('Store A').closest('button')!)
+    expect(within(dlg).getByText(/Leg 3 of 4/)).toBeTruthy()
+    fireEvent.click(within(dlg).getAllByText(/CKSD-/)[0].closest('tr')!)
+    dlg = screen.getByRole('dialog')
+    expect(within(dlg).getByText(/Leg 4 of 4/)).toBeTruthy()
+    expect(await within(dlg).findByText('End-to-end ticket lifecycle audit')).toBeTruthy()
+    expect(within(dlg).getByText('Store intake')).toBeTruthy()
+    expect(within(dlg).getByText('First response')).toBeTruthy()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('applies a drill-down selection to the whole dashboard', () => {
+  it('can jump straight to the ticket register and step back with the arrow', () => {
     view()
-    fireEvent.click(screen.getAllByText('Breakdown ▸')[0])
+    fireEvent.click(kpi(/CREATED/))
     const dlg = screen.getByRole('dialog')
-    fireEvent.click(within(dlg).getByText('ADMIN GROUP'))
-    fireEvent.click(within(dlg).getByText('Apply this selection to the dashboard'))
-    expect(screen.queryByRole('dialog')).toBeNull()
-    expect(screen.getByText('Group: ADMIN GROUP')).toBeTruthy()
+    fireEvent.click(within(dlg).getByText(/View 4 tickets/).closest('button')!)
+    expect(within(dlg).getByText(/Leg 3 of 4/)).toBeTruthy()
+    fireEvent.click(within(dlg).getByLabelText('Go back one leg'))
+    expect(within(dlg).getByText(/Leg 2 of 4/)).toBeTruthy()
   })
 
-  it('gives a requester their own titled view without the people insights', () => {
-    view('requester')
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('My Requests Dashboard')
-    expect(screen.queryByText('Workload')).toBeNull()
-    expect(screen.queryByText('Only my tickets')).toBeNull()
-  })
-
-  it('gives a technician an "only my tickets" shortcut', () => {
-    view('technician')
-    fireEvent.click(screen.getByText('Only my tickets'))
-    expect(screen.getByText('Technician: Krishan')).toBeTruthy()
-  })
-
-  it('switches what the trend, rankings and list show when another number is clicked', () => {
+  it('copies the slice picked in the pop-up into the dashboard filters', () => {
     view()
-    fireEvent.click(screen.getByText('Open backlog'))
+    fireEvent.click(kpi(/CREATED/))
+    const dlg = screen.getByRole('dialog')
+    fireEvent.click(within(dlg).getByText('IT Group').closest('button')!)
+    fireEvent.click(within(dlg).getByText('Apply this slice to the dashboard filters'))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByText('Group: IT Group ×')).toBeTruthy()
+    expect(screen.getByText(/1 of 4 tickets match/)).toBeTruthy()
+  })
+
+  it('filters from the Filters pop-up and removes the pill again', () => {
+    view()
+    fireEvent.click(screen.getByText('Filters').closest('button')!)
+    const modal = screen.getByRole('dialog', { name: 'Dashboard filters' })
+    fireEvent.click(within(modal).getByText('DAIKIN').closest('button')!)
+    fireEvent.click(within(modal).getByText('Apply filters'))
+    expect(screen.getByText('OEM brand: DAIKIN ×')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Remove OEM brand: DAIKIN'))
+    expect(screen.queryByText('OEM brand: DAIKIN ×')).toBeNull()
+  })
+
+  it('filters from the quick drop-downs, including SLA state', () => {
+    view()
+    fireEvent.change(screen.getByLabelText('Filter by SLA'), { target: { value: 'breached' } })
+    expect(screen.getByText('SLA: breached only ×')).toBeTruthy()
+    expect(screen.getByText(/1 of 4 tickets match/)).toBeTruthy()
+  })
+
+  it('applies a custom date range from the pop-over', () => {
+    view()
+    fireEvent.click(screen.getByText('Custom Dates').closest('button')!)
+    const pop = screen.getByRole('dialog', { name: 'Select a custom date range' })
+    fireEvent.click(within(pop).getByText(/Last 14 days/).closest('button')!)
+    fireEvent.click(within(pop).getByText('Apply custom dates'))
+    expect(screen.getByText(/Custom dates: 2026-09-25 to 2026-10-08/)).toBeTruthy()
+  })
+
+  it('shows only the chosen lens when a view tab is picked', () => {
+    view()
+    expect(document.getElementById('velocity-section')).toBeTruthy()
+    fireEvent.click(screen.getByText('Heatmap & Tickets'))
+    expect(document.getElementById('velocity-section')).toBeNull()
+    expect(document.getElementById('explorer-section')).toBeTruthy()
+    expect(document.getElementById('kpi-scorecard')).toBeTruthy()
+    fireEvent.click(screen.getByText('Full Executive Flow'))
+    expect(document.getElementById('velocity-section')).toBeTruthy()
+  })
+
+  it('searches the ticket list and opens a ticket straight at the last leg', async () => {
+    view()
+    fireEvent.click(screen.getByText('Heatmap & Tickets'))
+    fireEvent.change(screen.getByLabelText('Search tickets'), { target: { value: 'printer' } })
+    const list = document.getElementById('explorer-section')!
+    fireEvent.click(within(list).getByText('Printer jam').closest('tr')!)
+    const dlg = screen.getByRole('dialog')
+    expect(within(dlg).getByText(/Leg 4 of 4/)).toBeTruthy()
+    expect(await within(dlg).findByText('Store intake')).toBeTruthy()
+  })
+
+  it('titles the page for each level and hides people views from requesters', () => {
+    const { unmount } = view('requester')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('My Requests Dashboard')
+    expect(screen.queryByText('WORKLOAD CONCENTRATION')).toBeNull()
+    expect(screen.queryByLabelText('Filter by technician')).toBeNull()
+    unmount()
+    view('technician')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Technician Dashboard')
+    expect(screen.getByLabelText('Filter by technician')).toBeTruthy()
+  })
+
+  it('switches the chart to the number that was clicked', () => {
+    view()
+    fireEvent.click(kpi(/OPEN BACKLOG/))
+    fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.getByText(/Open backlog - by day/)).toBeTruthy()
   })
 })

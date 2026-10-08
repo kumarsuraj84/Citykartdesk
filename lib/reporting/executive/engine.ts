@@ -82,14 +82,15 @@ export const DIM_LABEL: Record<Dim, string> = {
   prio: 'Priority', status: 'Status', age: 'Backlog age',
 }
 export type DimFilters = Record<Dim, string[]>
-export interface Filters { dims: DimFilters; sla: boolean }
+export type SlaState = 'all' | 'breached' | 'ok'
+export interface Filters { dims: DimFilters; sla: SlaState }
 export type Skip = Dim | 'sla'
 
 export const emptyFilters = (): Filters => ({
   dims: Object.fromEntries(DIMS.map((d) => [d, [] as string[]])) as DimFilters,
-  sla: false,
+  sla: 'all',
 })
-export const filterCount = (f: Filters) => DIMS.reduce((n, d) => n + f.dims[d].length, 0) + (f.sla ? 1 : 0)
+export const filterCount = (f: Filters) => DIMS.reduce((n, d) => n + f.dims[d].length, 0) + (f.sla !== 'all' ? 1 : 0)
 
 /** Adds the value to a dimension's filter, or removes it when already there (click again to undo). */
 export function toggleFilter(f: Filters, dim: Dim, value: string): Filters {
@@ -101,7 +102,9 @@ export const STATUS_LABEL: Record<string, string> = {
   open: 'Open', assigned: 'Assigned', in_progress: 'In Progress', waiting_user: 'Waiting on User',
   hold_purchase_ho: 'Hold - Purchase from HO', pending_approval: 'Pending Approval', resolved: 'Resolved', closed: 'Closed',
 }
+export const STATUS_ORDER = Object.keys(STATUS_LABEL)
 export const statusLabel = (s: string) => STATUS_LABEL[s] ?? s
+export const capitalize = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s)
 
 export const isOpen = (t: ExecTicket) => t.resolved === null
 export const openAt = (t: ExecTicket, at: number) => t.created <= at && (t.resolved === null || t.resolved > at)
@@ -124,7 +127,10 @@ export function matches(t: ExecTicket, f: Filters, now: number, skip: readonly S
     if (d === 'age') { if (!isOpen(t) || !wanted.includes(ageBucketOf(t, now))) return false }
     else if (!wanted.includes(t[d])) return false
   }
-  if (f.sla && !skip.includes('sla') && !t.breached) return false
+  if (!skip.includes('sla')) {
+    if (f.sla === 'breached' && !t.breached) return false
+    if (f.sla === 'ok' && t.breached) return false
+  }
   return true
 }
 export const applyFilters = (ts: ExecTicket[], f: Filters, now: number, skip: readonly Skip[] = []) =>
@@ -132,13 +138,15 @@ export const applyFilters = (ts: ExecTicket[], f: Filters, now: number, skip: re
 
 // ── Time windows ──────────────────────────────────────────────────────────────────────────────────
 
-export type Period = '7d' | '30d' | '90d' | 'fy'
-export const PERIODS: { value: Period; short: string; label: string }[] = [
+export type Period = '7d' | '30d' | '90d' | 'fy' | 'custom'
+export const PERIODS: { value: Exclude<Period, 'custom'>; short: string; label: string }[] = [
   { value: '7d', short: '7d', label: 'last 7 days' },
   { value: '30d', short: '30d', label: 'last 30 days' },
   { value: '90d', short: '90d', label: 'last 90 days' },
   { value: 'fy', short: 'This FY', label: 'this financial year' },
 ]
+/** A chosen date range, as yyyy-mm-dd (both days included). */
+export interface CustomRange { start: string; end: string }
 export interface Win { start: number; end: number }
 export const inWin = (ms: number, w: Win) => ms >= w.start && ms <= w.end
 
@@ -149,16 +157,58 @@ export function startOfDay(ms: number): number {
 }
 const addDays = (ms: number, n: number) => { const d = new Date(ms); d.setDate(d.getDate() + n); return d.getTime() }
 
-/** The window a period covers, ending now. A financial year starts on 1 April. */
-export function periodWindow(period: Period, now: number): Win {
+/** yyyy-mm-dd → local midnight, or NaN when it is not a real date. */
+export function parseDay(iso: string): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!m) return NaN
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return d.getFullYear() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3]) ? d.getTime() : NaN
+}
+export function isoDay(ms: number): string {
+  const d = new Date(ms)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** The window a period covers, ending now (a chosen date range ends at the end of its last day, but never in the future). A financial year starts on 1 April. */
+export function periodWindow(period: Period, now: number, custom?: CustomRange): Win {
+  if (period === 'custom' && custom) {
+    const start = parseDay(custom.start)
+    const end = parseDay(custom.end)
+    if (!Number.isNaN(start) && !Number.isNaN(end) && end >= start) return { start, end: Math.min(addDays(end, 1) - 1, now) }
+    period = '30d'
+  }
   if (period === 'fy') {
     const d = new Date(now)
     const year = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1
     return { start: new Date(year, 3, 1).getTime(), end: now }
   }
-  const n = period === '7d' ? 7 : period === '30d' ? 30 : 90
+  const n = period === '7d' ? 7 : period === '90d' ? 90 : 30
   return { start: addDays(startOfDay(now), -(n - 1)), end: now }
 }
+
+/** Ready-made date ranges for the custom-date pop-up, worked out from today. */
+export function quickRanges(now: number): { label: string; start: string; end: string }[] {
+  const d = new Date(now)
+  const today = isoDay(now)
+  const monthStart = new Date(d.getFullYear(), d.getMonth(), 1)
+  const lastMonthStart = new Date(d.getFullYear(), d.getMonth() - 1, 1)
+  const lastMonthEnd = new Date(d.getFullYear(), d.getMonth(), 0)
+  const fyYear = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1
+  const qStartMonth = Math.floor(((d.getMonth() + 9) % 12) / 3) * 3 // months since April, in steps of 3
+  const quarterStart = new Date(fyYear, 3 + qStartMonth, 1)
+  const prevQuarterStart = new Date(fyYear, 3 + qStartMonth - 3, 1)
+  const prevQuarterEnd = new Date(quarterStart.getTime() - DAY)
+  return [
+    { label: 'Last 14 days', start: isoDay(addDays(startOfDay(now), -13)), end: today },
+    { label: 'This month', start: isoDay(monthStart.getTime()), end: today },
+    { label: 'Last month', start: isoDay(lastMonthStart.getTime()), end: isoDay(lastMonthEnd.getTime()) },
+    { label: 'This financial quarter', start: isoDay(quarterStart.getTime()), end: today },
+    { label: 'Last financial quarter', start: isoDay(prevQuarterStart.getTime()), end: isoDay(prevQuarterEnd.getTime()) },
+    { label: 'This financial year', start: isoDay(new Date(fyYear, 3, 1).getTime()), end: today },
+    { label: 'Last financial year', start: isoDay(new Date(fyYear - 1, 3, 1).getTime()), end: isoDay(new Date(fyYear, 2, 31).getTime()) },
+  ]
+}
+
 /** The equally long window just before this one. */
 export function prevWindow(w: Win): Win {
   const len = w.end - w.start + 1
@@ -311,69 +361,6 @@ export function ageInDays(t: ExecTicket, now: number): number {
   return Math.floor(((t.resolved ?? now) - t.created) / DAY)
 }
 export const hoursTaken = (t: ExecTicket, now: number) => ((t.resolved ?? now) - t.created) / HOUR
-
-export interface Insight {
-  kind: 'Volume' | 'Workload' | 'SLA watch'
-  parts: { text: string; bold?: boolean }[]
-  dim: Dim
-  value: string
-}
-
-/** A few plain-language highlights that also work as shortcuts (click = filter). */
-export function insights(ts: ExecTicket[], f: Filters, w: Win, p: Win, now: number, periodWord: string): Insight[] {
-  const base = applyFilters(ts, f, now)
-  const out: Insight[] = []
-
-  const cur = measure(base, w, 'created') ?? 0
-  const prev = measure(base, p, 'created') ?? 0
-  if (prev > 0) {
-    const change = ((cur - prev) / prev) * 100
-    const groups = [...new Set(base.map((t) => t.group))]
-      .map((g) => {
-        const gt = base.filter((t) => t.group === g)
-        return { g, d: (measure(gt, w, 'created') ?? 0) - (measure(gt, p, 'created') ?? 0) }
-      })
-      .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))
-    const top = groups[0]
-    if (top) {
-      out.push({
-        kind: 'Volume', dim: 'group', value: top.g,
-        parts: [
-          { text: `${cur} tickets`, bold: true }, { text: ` created, ${change >= 0 ? 'up' : 'down'} ${Math.abs(change).toFixed(0)}% vs ${periodWord}. Biggest mover: ` },
-          { text: top.g, bold: true }, { text: ` (${top.d >= 0 ? '+' : ''}${top.d}).` },
-        ],
-      })
-    }
-  }
-
-  const open = base.filter((t) => openAt(t, w.end))
-  const per = new Map<string, number>()
-  for (const t of open) if (t.tech !== UNASSIGNED) per.set(t.tech, (per.get(t.tech) ?? 0) + 1)
-  const top3 = [...per].sort((a, b) => b[1] - a[1]).slice(0, 3)
-  if (open.length >= 6 && top3.length > 0) {
-    const share = Math.round((top3.reduce((n, x) => n + x[1], 0) / open.length) * 100)
-    out.push({
-      kind: 'Workload', dim: 'tech', value: top3[0][0],
-      parts: [
-        { text: `${top3.length} technicians`, bold: true }, { text: ' hold ' }, { text: `${share}%`, bold: true },
-        { text: ` of the ${open.length} open tickets - ${top3[0][0]} has the most (${top3[0][1]}).` },
-      ],
-    })
-  }
-
-  let worst: { g: string; v: number } | null = null
-  for (const g of new Set(base.map((t) => t.group))) {
-    const v = measure(base.filter((t) => t.group === g), w, 'sla', 5)
-    if (v !== null && (!worst || v < worst.v)) worst = { g, v }
-  }
-  if (worst) {
-    out.push({
-      kind: 'SLA watch', dim: 'group', value: worst.g,
-      parts: [{ text: worst.g, bold: true }, { text: ' has the lowest SLA compliance at ' }, { text: `${worst.v.toFixed(0)}%`, bold: true }, { text: '. Click to look at their tickets.' }],
-    })
-  }
-  return out
-}
 
 // ── Approvals ─────────────────────────────────────────────────────────────────────────────────────
 

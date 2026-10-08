@@ -34,3 +34,16 @@ ticket's detail and timeline). The existing dashboards (`/admin/reports`, `/dash
 
 ## Out of scope for this first version
 The Report Analytics reports (tried inside the dashboard and removed at the user's request; they stay on their own pages), saved views, scheduled e-mail of the dashboard, tasks / projects / approvals panels (the existing dashboards still cover those).
+
+## Revision 2 (2026-10-08, evening): rebuilt to the user's "Smart Dashboard" design
+The user supplied a prototype (`citykart-desk-—-executive-analytics-dashboard.zip`, an AI Studio app on made-up data) and asked for the
+dashboard to be built "like this". The page is now laid out and behaves like the prototype, on real data:
+* **Click = pop-up, not filter.** Every highlight, number card, bar and row opens a 4-leg pop-up (cohort → stores & technicians → ticket
+  register → last-leg lifecycle). Filters are changed only from the top command bar (Filters pop-up, quick drop-downs, custom dates) or with
+  "Apply this slice to the dashboard filters" inside the pop-up.
+* Command bar: custom date range with ready-made windows, compare toggle, CSV export, sticky filters, five view lenses.
+* Four priority highlights (SLA risk, workload concentration, OEM bottleneck, approval bottleneck), two tiers of number cards (4 + 6),
+  velocity chart with status / priority / backlog age, leaderboard with approvals panel, group and OEM matrices, arrival heatmap and ticket explorer.
+* Left out on purpose because they were invented in the prototype: asset serial numbers, vendor references, root-cause text, and the
+  "reassign / approve / escalate / nudge" buttons (they would need real server actions and a separate decision).
+* The Report Analytics reports are not embedded (removed earlier at the user's request); they stay on their own pages.
