@@ -92,7 +92,7 @@ async function fetchGroupTickets(
 }
 
 /**
- * Tickets of the group that were created, resolved or closed on the reference day — whatever their
+ * Tickets of the group that were created or resolved on the reference day — whatever their
  * status now, so "resolved today" works even though resolved tickets are hidden by the default Status filter.
  */
 async function fetchDayActivity(orgId: string, teamId: string, day: ReferenceDay, serviceIds: string[] | null): Promise<DayInputRow[]> {
@@ -101,7 +101,7 @@ async function fetchDayActivity(orgId: string, teamId: string, day: ReferenceDay
   const b = day.end.toISOString()
   const { rows } = await fetchAll((from, to) => {
     let q = admin.from('requests').select(SELECT).eq('org_id', orgId).eq('team_id', teamId)
-      .or(`and(created_at.gte.${a},created_at.lte.${b}),and(resolved_at.gte.${a},resolved_at.lte.${b}),and(closed_at.gte.${a},closed_at.lte.${b})`)
+      .or(`and(created_at.gte.${a},created_at.lte.${b}),and(resolved_at.gte.${a},resolved_at.lte.${b})`)
     if (serviceIds) q = q.in('service_id', serviceIds)
     return q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to)
   })
@@ -112,7 +112,6 @@ async function fetchDayActivity(orgId: string, teamId: string, day: ReferenceDay
     subCategory: r.sub_category?.name ?? null,
     created: within(r.created_at),
     resolved: within(r.resolved_at),
-    closed: within(r.closed_at),
   }))
 }
 
@@ -126,7 +125,7 @@ export interface AgeBucketReportResult {
   services: GroupService[]
   selectedServiceIds: string[]
   range: ResolvedRange
-  /** The day the "created / resolved / closed that day" columns are about. */
+  /** The day the "created / resolved that day" columns are about. */
   day: ReferenceDay
   statuses: RequestStatus[]
   summary: AgeSummary

@@ -1,6 +1,6 @@
 // Builds the "Tickets Summary — age bucket wise" table: for each technician → category → sub category,
 // how many tickets fall in each age bucket (the same buckets the dashboard and Report Builder use),
-// plus three "that day" counts: tickets created, resolved and closed on the reference day (the end of
+// plus two "that day" counts: tickets created and resolved on the reference day (the end of
 // the chosen date range — normally today).
 // Same shape as the Excel pivot it replaces, with a "<Technician> Total" row after each technician and a
 // Grand Total row at the end.
@@ -14,17 +14,16 @@ export interface SummaryInputRow {
   ageDays: number
 }
 
-/** A ticket that had activity on the reference day (created, resolved and/or closed that day). */
+/** A ticket that had activity on the reference day (created and/or resolved that day). */
 export interface DayInputRow {
   technician: string | null
   category: string | null
   subCategory?: string | null
   created: boolean
   resolved: boolean
-  closed: boolean
 }
 
-export interface DayCounts { created: number; resolved: number; closed: number }
+export interface DayCounts { created: number; resolved: number }
 export interface SummarySubCategory { name: string; counts: Record<string, number>; total: number; day: DayCounts }
 export interface SummaryCategory { name: string; subCategories: SummarySubCategory[]; counts: Record<string, number>; total: number; day: DayCounts }
 export interface SummaryTechnician { name: string; categories: SummaryCategory[]; counts: Record<string, number>; total: number; day: DayCounts }
@@ -40,9 +39,9 @@ export const NO_CATEGORY = '(No category)'
 export const NO_SUB_CATEGORY = '(No sub category)'
 
 const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' })
-const newDay = (): DayCounts => ({ created: 0, resolved: 0, closed: 0 })
+const newDay = (): DayCounts => ({ created: 0, resolved: 0 })
 const addCounts = (into: Record<string, number>, from: Record<string, number>) => { for (const [k, v] of Object.entries(from)) into[k] = (into[k] ?? 0) + v }
-const addDay = (into: DayCounts, from: DayCounts) => { into.created += from.created; into.resolved += from.resolved; into.closed += from.closed }
+const addDay = (into: DayCounts, from: DayCounts) => { into.created += from.created; into.resolved += from.resolved }
 const sum = (c: Record<string, number>) => Object.values(c).reduce((a, b) => a + b, 0)
 
 interface Cell { counts: Record<string, number>; day: DayCounts }
@@ -72,7 +71,6 @@ export function buildAgeSummary(rows: SummaryInputRow[], dayRows: DayInputRow[] 
     const cell = cellFor(d.technician, d.category, d.subCategory)
     if (d.created) cell.day.created++
     if (d.resolved) cell.day.resolved++
-    if (d.closed) cell.day.closed++
   }
 
   const grandCounts: Record<string, number> = {}

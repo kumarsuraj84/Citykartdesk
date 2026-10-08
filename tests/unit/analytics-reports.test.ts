@@ -70,7 +70,7 @@ describe('age-bucket summary rules', () => {
     expect(s.technicians[0].counts).toEqual({ '6–10 days': 1, '0–5 days': 2 })
   })
   it('an empty report has no rows and no buckets', () => {
-    expect(buildAgeSummary([])).toEqual({ buckets: [], technicians: [], grand: { counts: {}, total: 0, day: { created: 0, resolved: 0, closed: 0 } } })
+    expect(buildAgeSummary([])).toEqual({ buckets: [], technicians: [], grand: { counts: {}, total: 0, day: { created: 0, resolved: 0 } } })
   })
 })
 
@@ -94,29 +94,29 @@ describe('sub categories', () => {
   })
 })
 
-describe('created / resolved / closed on the reference day', () => {
+describe('created / resolved on the reference day', () => {
   // The example from the request: Suraj has 2 tickets in the 0–5 bucket under IT SUPPORT, and 1 of them was created today.
   const rows = [
     { technician: 'Suraj', category: 'IT SUPPORT', ageDays: 0 },
     { technician: 'Suraj', category: 'IT SUPPORT', ageDays: 3 },
   ]
   it('shows the day counts next to the bucket counts and does not change them', () => {
-    const s = buildAgeSummary(rows, [{ technician: 'Suraj', category: 'IT SUPPORT', created: true, resolved: false, closed: false }])
+    const s = buildAgeSummary(rows, [{ technician: 'Suraj', category: 'IT SUPPORT', created: true, resolved: false }])
     const sub = s.technicians[0].categories[0].subCategories[0]
     expect(sub.counts).toEqual({ '0–5 days': 2 })
     expect(sub.total).toBe(2)
-    expect(sub.day).toEqual({ created: 1, resolved: 0, closed: 0 })
+    expect(sub.day).toEqual({ created: 1, resolved: 0 })
   })
-  it('counts resolved and closed separately, and one ticket can be created and resolved the same day', () => {
+  it('counts created and resolved separately, and one ticket can be both on the same day', () => {
     const s = buildAgeSummary([], [
-      { technician: 'Amy', category: 'HR', created: true, resolved: true, closed: false },
-      { technician: 'Amy', category: 'HR', created: false, resolved: true, closed: true },
+      { technician: 'Amy', category: 'HR', created: true, resolved: true },
+      { technician: 'Amy', category: 'HR', created: false, resolved: true },
     ])
-    expect(s.technicians[0].day).toEqual({ created: 1, resolved: 2, closed: 1 })
-    expect(s.grand.day).toEqual({ created: 1, resolved: 2, closed: 1 })
+    expect(s.technicians[0].day).toEqual({ created: 1, resolved: 2 })
+    expect(s.grand.day).toEqual({ created: 1, resolved: 2 })
   })
   it('a technician who only resolved tickets that day still gets a row (with no age-bucket tickets)', () => {
-    const s = buildAgeSummary([{ technician: 'Zed', category: 'X', ageDays: 2 }], [{ technician: 'Amy', category: 'HR', created: false, resolved: true, closed: false }])
+    const s = buildAgeSummary([{ technician: 'Zed', category: 'X', ageDays: 2 }], [{ technician: 'Amy', category: 'HR', created: false, resolved: true }])
     expect(s.technicians.map((t) => t.name)).toEqual(['Amy', 'Zed'])
     expect(s.technicians[0].total).toBe(0)
     expect(s.technicians[0].day.resolved).toBe(1)
@@ -124,8 +124,8 @@ describe('created / resolved / closed on the reference day', () => {
   })
   it('totals the day counts over technicians', () => {
     const s = buildAgeSummary([], [
-      { technician: 'A', category: 'X', created: true, resolved: false, closed: false },
-      { technician: 'B', category: 'Y', created: true, resolved: false, closed: false },
+      { technician: 'A', category: 'X', created: true, resolved: false },
+      { technician: 'B', category: 'Y', created: true, resolved: false },
     ])
     expect(s.grand.day.created).toBe(2)
   })
@@ -300,7 +300,7 @@ describe('status filter', () => {
 })
 
 describe('Excel export of a predefined report', () => {
-  it('has the same layout as the on-screen table: sub category column and the three "that day" columns', async () => {
+  it('has the same layout as the on-screen table: sub category column and the two "that day" columns', async () => {
     const { buildAgeBucketWorkbook, HEADER_ROW } = await import('@/lib/reporting/analytics/age-summary-xlsx')
     const ExcelJS = (await import('exceljs')).default
     const summary = buildAgeSummary(
@@ -310,7 +310,7 @@ describe('Excel export of a predefined report', () => {
         { technician: 'Mukesh', category: 'STAIR DAMAGE', subCategory: 'INTERNAL', ageDays: 9 },
         { technician: 'Arun', category: 'BASKET', subCategory: null, ageDays: 3 },
       ],
-      [{ technician: 'Mukesh', category: 'STAIR DAMAGE', subCategory: 'INTERNAL', created: true, resolved: false, closed: false }]
+      [{ technician: 'Mukesh', category: 'STAIR DAMAGE', subCategory: 'INTERNAL', created: true, resolved: false }]
     )
     const wb = buildAgeBucketWorkbook({
       title: 'Admin Tickets Summary Report Age bucket wise', teamName: 'ADMIN GROUP', rangeLabel: 'All dates',
@@ -325,20 +325,20 @@ describe('Excel export of a predefined report', () => {
     expect(String(row(2)[0])).toContain('Services: All services')
     expect(String(row(3)[0])).toContain('Status: Open, In Progress')
     expect(String(row(3)[0])).toContain('Tickets: 4')
-    expect(row(HEADER_ROW)).toEqual(['Responsible', 'Category', 'Sub Category', '0–5 days', '6–10 days', 'Grand Total', 'Created today', 'Resolved today', 'Closed today'])
-    expect(row(HEADER_ROW + 1)).toEqual(['Arun', 'BASKET', '(No sub category)', 1, '', 1, '', '', ''])
-    expect(row(HEADER_ROW + 2)).toEqual(['Arun Total', '', '', 1, '', 1, '', '', ''])
-    expect(row(HEADER_ROW + 3)).toEqual(['Mukesh', 'SEEPAGE', 'WALL', 1, '', 1, '', '', ''])
-    expect(row(HEADER_ROW + 4)).toEqual(['', 'STAIR DAMAGE', 'INTERNAL', 1, 1, 2, 1, '', ''])
-    expect(row(HEADER_ROW + 5)).toEqual(['Mukesh Total', '', '', 2, 1, 3, 1, '', ''])
-    expect(row(HEADER_ROW + 6)).toEqual(['Grand Total', '', '', 3, 1, 4, 1, '', ''])
+    expect(row(HEADER_ROW)).toEqual(['Responsible', 'Category', 'Sub Category', '0–5 days', '6–10 days', 'Grand Total', 'Created today', 'Resolved today'])
+    expect(row(HEADER_ROW + 1)).toEqual(['Arun', 'BASKET', '(No sub category)', 1, '', 1, '', ''])
+    expect(row(HEADER_ROW + 2)).toEqual(['Arun Total', '', '', 1, '', 1, '', ''])
+    expect(row(HEADER_ROW + 3)).toEqual(['Mukesh', 'SEEPAGE', 'WALL', 1, '', 1, '', ''])
+    expect(row(HEADER_ROW + 4)).toEqual(['', 'STAIR DAMAGE', 'INTERNAL', 1, 1, 2, 1, ''])
+    expect(row(HEADER_ROW + 5)).toEqual(['Mukesh Total', '', '', 2, 1, 3, 1, ''])
+    expect(row(HEADER_ROW + 6)).toEqual(['Grand Total', '', '', 3, 1, 4, 1, ''])
   })
 
   it('names the day in the headings when it is not today', async () => {
     const { buildAgeBucketWorkbook, HEADER_ROW } = await import('@/lib/reporting/analytics/age-summary-xlsx')
     const wb = buildAgeBucketWorkbook({ title: 'T', teamName: 'G', rangeLabel: 'x', statusLabels: ['Open'], servicesLabel: 'IT', dayWord: 'on 30 Sep 2026', ticketCount: 1, summary: buildAgeSummary([{ technician: 'A', category: 'B', ageDays: 1 }]) })
     const headers = (wb.getWorksheet('Summary')!.getRow(HEADER_ROW).values as unknown[]).slice(1)
-    expect(headers.slice(-3)).toEqual(['Created on 30 Sep 2026', 'Resolved on 30 Sep 2026', 'Closed on 30 Sep 2026'])
+    expect(headers.slice(-2)).toEqual(['Created on 30 Sep 2026', 'Resolved on 30 Sep 2026'])
   })
 
   it('says so when nothing matches', async () => {

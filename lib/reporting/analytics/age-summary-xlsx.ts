@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs'
 import type { AgeSummary } from './age-summary'
+import { flattenSummary, NOTHING_COLLAPSED, type Collapsed } from './summary-rows'
 
 const HEADER_FILL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } }
 const DAY_HEADER_FILL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3A6EA5' } }
@@ -21,10 +22,12 @@ export function buildAgeBucketWorkbook(p: {
   statusLabels: string[]
   /** "All services" or the chosen service names. */
   servicesLabel: string
-  /** "today" or "on 7 Oct 2026" — appears in the last three column headings. */
+  /** "today" or "on 7 Oct 2026" — appears in the last two column headings. */
   dayWord: string
   ticketCount: number
   summary: AgeSummary
+  /** Technicians / categories collapsed on screen; the file shows them collapsed too. */
+  collapsed?: Collapsed
   generatedAt?: Date
 }): ExcelJS.Workbook {
   const { summary } = p
@@ -33,7 +36,7 @@ export function buildAgeBucketWorkbook(p: {
   workbook.created = new Date()
   const sheet = workbook.addWorksheet('Summary', { views: [{ state: 'frozen', ySplit: HEADER_ROW }] })
   const bucketCols = summary.buckets.length
-  const dayStart = 3 + bucketCols + 2 // first of the three "that day" columns (1-based)
+  const dayStart = 3 + bucketCols + 2 // first of the two "that day" columns (1-based)
 
   sheet.addRow([p.title]).font = { bold: true, size: 14, color: { argb: 'FF1F2A44' } }
   sheet.addRow([`Technician group: ${p.teamName}   |   Services: ${p.servicesLabel}`]).font = { size: 10, color: { argb: 'FF555555' } }
@@ -42,7 +45,7 @@ export function buildAgeBucketWorkbook(p: {
 
   const header = sheet.addRow([
     'Responsible', 'Category', 'Sub Category', ...summary.buckets, 'Grand Total',
-    `Created ${p.dayWord}`, `Resolved ${p.dayWord}`, `Closed ${p.dayWord}`,
+    `Created ${p.dayWord}`, `Resolved ${p.dayWord}`,
   ])
   header.eachCell((cell, col) => {
     cell.fill = col >= dayStart ? DAY_HEADER_FILL : HEADER_FILL
@@ -52,19 +55,20 @@ export function buildAgeBucketWorkbook(p: {
   })
 
   const num = (v: number | undefined) => v || ''
-  const dayVals = (d: { created: number; resolved: number; closed: number }) => [num(d.created), num(d.resolved), num(d.closed)]
-  for (const t of summary.technicians) {
-    let first = true
-    for (const c of t.categories) {
-      c.subCategories.forEach((s, si) => {
-        const row = sheet.addRow([first ? t.name : '', si === 0 ? c.name : '', s.name, ...summary.buckets.map((b) => num(s.counts[b])), s.total || '', ...dayVals(s.day)])
-        first = false
-        row.eachCell({ includeEmpty: true }, (cell) => { cell.border = THIN })
-        row.getCell(1).font = { bold: true }
-      })
+  const dayVals = (d: { created: number; resolved: number }) => [num(d.created), num(d.resolved)]
+  // Same rows as on screen, so collapsed technicians / categories are collapsed in the file too.
+  for (const r of flattenSummary(summary, p.collapsed ?? NOTHING_COLLAPSED)) {
+    if (r.kind === 'techTotal') {
+      const sub = sheet.addRow([r.techLabel, '', '', ...summary.buckets.map((b) => num(r.counts[b])), r.total, ...dayVals(r.day)])
+      sub.eachCell({ includeEmpty: true }, (cell) => { cell.fill = SUBTOTAL_FILL; cell.font = { bold: true }; cell.border = THIN })
+      continue
     }
-    const sub = sheet.addRow([`${t.name} Total`, '', '', ...summary.buckets.map((b) => num(t.counts[b])), t.total, ...dayVals(t.day)])
-    sub.eachCell({ includeEmpty: true }, (cell) => { cell.fill = SUBTOTAL_FILL; cell.font = { bold: true }; cell.border = THIN })
+    const row = sheet.addRow([r.techLabel, r.catLabel, r.subLabel, ...summary.buckets.map((b) => num(r.counts[b])), r.total || '', ...dayVals(r.day)])
+    row.eachCell({ includeEmpty: true }, (cell) => { cell.border = THIN })
+    row.getCell(1).font = { bold: true }
+    // a technician or category folded into one line of totals
+    if (r.kind === 'tech' || r.kind === 'cat') row.eachCell({ includeEmpty: true }, (cell) => { cell.fill = SUBTOTAL_FILL })
+    if (r.kind === 'tech') row.eachCell({ includeEmpty: true }, (cell) => { cell.font = { bold: true } })
   }
   if (summary.technicians.length === 0) {
     sheet.addRow(['No tickets match these filters.']).font = { italic: true }
@@ -76,7 +80,7 @@ export function buildAgeBucketWorkbook(p: {
   sheet.getColumn(1).width = 24
   sheet.getColumn(2).width = 30
   sheet.getColumn(3).width = 30
-  const lastCol = dayStart + 2
+  const lastCol = dayStart + 1
   for (let i = 4; i <= lastCol; i++) { sheet.getColumn(i).width = i >= dayStart ? 16 : 14; sheet.getColumn(i).alignment = { horizontal: 'center' } }
   sheet.getRow(HEADER_ROW).height = 30
   return workbook

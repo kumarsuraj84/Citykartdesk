@@ -9,7 +9,11 @@ import { STATUS_LABELS } from '@/lib/constants/requests'
 /** Excel file for a predefined age-bucket report, built from exactly what the viewer is allowed to see on screen. */
 export async function exportAgeBucketReportXlsx(
   slug: string,
-  filters: { group?: string; service?: string[]; preset?: string; from?: string; to?: string; status?: string[] }
+  filters: {
+    group?: string; service?: string[]; preset?: string; from?: string; to?: string; status?: string[]
+    /** Technicians / categories the viewer collapsed on screen (see lib/reporting/analytics/summary-rows.ts). */
+    collapsedTech?: string[]; collapsedCat?: string[]
+  }
 ): Promise<{ data?: string; filename?: string; error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Unauthorized.' }
@@ -30,6 +34,7 @@ export async function exportAgeBucketReportXlsx(
     dayWord: res.day.word,
     ticketCount: res.ticketCount,
     summary: res.summary,
+    collapsed: { tech: new Set(filters.collapsedTech ?? []), cat: new Set(filters.collapsedCat ?? []) },
   })
   const buffer = await workbook.xlsx.writeBuffer()
   const stamp = new Date().toISOString().slice(0, 10)

@@ -6,10 +6,13 @@ import { toast } from 'sonner'
 import { exportAgeBucketReportXlsx } from '@/lib/actions/analyticsReportExport'
 import { downloadXlsxBase64 } from '@/lib/export/xlsx'
 
-export function ExportAgeBucketButton({ slug, group, services, preset, from, to, statuses }: {
+export function ExportAgeBucketButton({ slug, group, services, preset, from, to, statuses, collapsedTech, collapsedCat }: {
   slug: string
   group: string
   services: string[]
+  /** What the viewer has collapsed on screen — the Excel file follows it. */
+  collapsedTech: string[]
+  collapsedCat: string[]
   preset: string
   from: string
   to: string
@@ -21,7 +24,7 @@ export function ExportAgeBucketButton({ slug, group, services, preset, from, to,
       type="button"
       disabled={pending}
       onClick={() => start(async () => {
-        const res = await exportAgeBucketReportXlsx(slug, { group, service: services, preset, from, to, status: statuses })
+        const res = await exportAgeBucketReportXlsx(slug, { group, service: services, preset, from, to, status: statuses, collapsedTech, collapsedCat })
         if (res.error || !res.data || !res.filename) { toast.error(res.error || 'Export failed.'); return }
         downloadXlsxBase64(res.filename, res.data)
         toast.success('Report exported.')

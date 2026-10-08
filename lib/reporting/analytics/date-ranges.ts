@@ -107,7 +107,7 @@ export interface ReferenceDay {
 }
 
 /**
- * The day the "created / resolved / closed that day" columns are about: the end of the chosen date range,
+ * The day the "created / resolved that day" columns are about: the end of the chosen date range,
  * or today when the range has no end (or ends in the future). Looking at last month → its last day;
  * a custom range → its To date.
  */

@@ -4,9 +4,8 @@ import { ArrowLeft } from 'lucide-react'
 import { getCurrentProfile, getEnabledModules } from '@/lib/queries/profiles'
 import { loadAgeBucketReport } from '@/lib/queries/report-analytics'
 import { canUseReportAnalytics, parseStatuses, reportTitleForGroup } from '@/lib/reporting/analytics/catalog'
-import { AgeSummaryTable } from '@/components/reports/analytics/AgeSummaryTable'
+import { AgeSummaryView } from '@/components/reports/analytics/AgeSummaryView'
 import { AnalyticsFilters } from '@/components/reports/analytics/AnalyticsFilters'
-import { ExportAgeBucketButton } from '@/components/reports/analytics/ExportAgeBucketButton'
 import { STATUS_LABELS } from '@/lib/constants/requests'
 
 type SP = { group?: string; service?: string | string[]; range?: string; from?: string; to?: string; status?: string | string[] }
@@ -64,7 +63,6 @@ export default async function AnalyticsReportPage({
           <h1 className="text-xl font-bold tracking-tight text-foreground">{title}</h1>
           <p className="text-sm text-muted-foreground">{def.description}</p>
         </div>
-        <ExportAgeBucketButton slug={def.slug} group={team.id} services={selectedServiceIds} preset={range.preset} from={fromStr} to={toStr} statuses={statuses} />
       </div>
 
       <AnalyticsFilters
@@ -87,10 +85,14 @@ export default async function AnalyticsReportPage({
       </p>
 
       <p className="text-[11px] text-muted-foreground">
-        The last three columns count tickets created, resolved and closed {day.word === 'today' ? 'today' : `on ${day.label} (the end of the chosen dates)`}, whatever their status filter.
+        The last two columns count tickets created and resolved {day.word === 'today' ? 'today' : `on ${day.label} (the end of the chosen dates)`}, whatever their status filter.
       </p>
 
-      <AgeSummaryTable summary={summary} dayWord={day.word} />
+      <AgeSummaryView
+        summary={summary}
+        dayWord={day.word}
+        exportProps={{ slug: def.slug, group: team.id, services: selectedServiceIds, preset: range.preset, from: fromStr, to: toStr, statuses }}
+      />
     </div>
   )
 }
