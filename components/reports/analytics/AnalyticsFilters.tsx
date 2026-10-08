@@ -9,7 +9,7 @@ import type { RequestStatus } from '@/types'
 // The only things a viewer can change on a predefined report: which technician group, which dates (by
 // when the ticket was created) and which statuses to include. A plain GET form, so the chosen filters
 // live in the URL.
-export function AnalyticsFilters({ groups, groupId, services, selectedServiceIds, preset, from, to, statuses, resetHref }: {
+export function AnalyticsFilters({ groups, groupId, services, selectedServiceIds, preset, from, to, statuses, resetHref, detail }: {
   groups: { id: string; name: string }[]
   groupId: string
   /** The chosen group's services (a group can run several) and which of them are included. */
@@ -20,6 +20,8 @@ export function AnalyticsFilters({ groups, groupId, services, selectedServiceIds
   to: string
   statuses: RequestStatus[]
   resetHref: string
+  /** Ticket detail report only: narrow the lines to one technician and/or one age bucket. */
+  detail?: { technicians: string[]; buckets: string[]; technician: string; bucket: string }
 }) {
   const [range, setRange] = useState<RangePreset>(preset)
   const input = 'rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
@@ -54,6 +56,25 @@ export function AnalyticsFilters({ groups, groupId, services, selectedServiceIds
             {RANGE_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
         </label>
+
+        {detail && (
+          <>
+            <label className="text-xs font-medium text-muted-foreground">
+              Responsible
+              <select name="technician" defaultValue={detail.technician} className={`mt-1 block min-w-[11rem] ${input}`}>
+                <option value="">All</option>
+                {detail.technicians.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-medium text-muted-foreground">
+              Age bucket
+              <select name="bucket" defaultValue={detail.bucket} className={`mt-1 block min-w-[9rem] ${input}`}>
+                <option value="">All</option>
+                {detail.buckets.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </label>
+          </>
+        )}
 
         {range === 'custom' && (
           <>

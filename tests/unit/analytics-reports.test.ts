@@ -217,8 +217,12 @@ const PROD_GROUPS = ['ADMIN GROUP', 'BD Group', 'FINANCE GROUP', 'HR GROUP', 'IT
 const byName = (n: string) => PROD_GROUPS.find((g) => g.name === n)!
 
 describe('one report for all technician groups', () => {
-  it('is a single report; the group is chosen inside it', () => {
-    expect(ANALYTICS_REPORTS).toHaveLength(1)
+  it('is one summary report plus one ticket detail report; the group is chosen inside each', () => {
+    expect(ANALYTICS_REPORTS).toHaveLength(2)
+    expect(ANALYTICS_REPORTS[1].title).toBe('Ticket Detail Report Age bucket wise')
+    expect(ANALYTICS_REPORTS[1].kind).toBe('ticket-detail')
+    expect(findAnalyticsReport('ticket-detail-age-bucket')).toBe(ANALYTICS_REPORTS[1])
+    expect(reportTitleForGroup(ANALYTICS_REPORTS[1], 'BD Group')).toBe('BD Ticket Detail Report Age bucket wise')
     expect(ANALYTICS_REPORTS[0].title).toBe('Tickets Summary Report Age bucket wise')
     expect(findAnalyticsReport('tickets-summary-age-bucket')).toBe(ANALYTICS_REPORTS[0])
     expect(findAnalyticsReport('admin-tickets-summary-age-bucket')).toBeUndefined()

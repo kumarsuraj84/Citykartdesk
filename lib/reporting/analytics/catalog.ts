@@ -6,10 +6,13 @@
 import type { RequestStatus } from '@/types'
 import type { ProfileWithTeams } from '@/types'
 
+export type AnalyticsReportKind = 'age-summary' | 'ticket-detail'
+
 export interface AnalyticsReportDef {
   slug: string
   title: string
   description: string
+  kind: AnalyticsReportKind
 }
 
 export const ANALYTICS_REPORTS: AnalyticsReportDef[] = [
@@ -17,6 +20,13 @@ export const ANALYTICS_REPORTS: AnalyticsReportDef[] = [
     slug: 'tickets-summary-age-bucket',
     title: 'Tickets Summary Report Age bucket wise',
     description: 'A technician group’s tickets by technician and category, counted by how old they are. Choose the group, dates and statuses.',
+    kind: 'age-summary',
+  },
+  {
+    slug: 'ticket-detail-age-bucket',
+    title: 'Ticket Detail Report Age bucket wise',
+    description: 'The same tickets one by one: ticket number, subject, requester, technician, category, status and age. Choose the group, dates and statuses.',
+    kind: 'ticket-detail',
   },
 ]
 
