@@ -109,6 +109,66 @@ describe('Smart Dashboard', () => {
     expect((await within(dlg).findByRole('alert')).textContent).toMatch(/already nudged 5 minutes ago/)
   })
 
+  it('with a group picked, the tables, OEM boxes and pop-ups stay inside that group', () => {
+    const noOem = { brand: '(No OEM)', oem: '(No OEM)' }
+    const data = [
+      tk({ group: 'IT Group', tech: 'Mohit', store: 'Store B', ...noOem }),
+      tk({ group: 'IT Group', tech: 'Mohit', store: 'Store C', ...noOem }),
+      tk({ group: 'ADMIN GROUP', tech: 'Krishan', brand: 'LG' }),
+      tk({ group: 'HR GROUP', tech: 'Asha', store: 'Store D', ...noOem }),
+    ]
+    render(<ExecutiveDashboard level="admin" me="Krishan" now={NOW} tickets={data} approvals={[]} truncated={false} />)
+    fireEvent.click(screen.getByLabelText('Filter by group'))
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'Filter by group choices' })).getByLabelText(/IT Group/))
+    expect(screen.getByText('Group: IT Group ×')).toBeTruthy()
+
+    // the other departments are gone from the comparison tables
+    fireEvent.click(screen.getByText('Group & OEM Matrix'))
+    const matrices = document.getElementById('matrices-section')!
+    expect(within(matrices).getAllByText('IT Group').length).toBeGreaterThan(0)
+    expect(within(matrices).queryByText('ADMIN GROUP')).toBeNull()
+    expect(within(matrices).queryByText('HR GROUP')).toBeNull()
+    // and no OEM views for tickets that are not equipment requests
+    expect(within(matrices).queryByText(/OEM-wise/)).toBeNull()
+    expect(within(matrices).getByText('Store-wise tickets')).toBeTruthy()
+    expect(screen.queryByText('OEM / STORE EQUIPMENT')).toBeNull()
+    expect(screen.queryByLabelText('Filter by OEM brand')).toBeNull()
+
+    // the pop-up only holds IT Group tickets, and only IT's technician
+    fireEvent.click(kpi(/CREATED/))
+    const dlg = screen.getByRole('dialog')
+    expect(within(dlg).getAllByText('IT Group').length).toBeGreaterThan(0)
+    expect(within(dlg).queryByText('ADMIN GROUP')).toBeNull()
+    expect(within(dlg).queryByText('HR GROUP')).toBeNull()
+    expect(within(dlg).queryByText('Krishan')).toBeNull()
+    expect(within(dlg).queryByText('Asha')).toBeNull()
+    // no OEM list for non-equipment tickets: a category list takes its place
+    expect(within(dlg).queryByText('Drill down by store OEM equipment')).toBeNull()
+    expect(within(dlg).getByText('Drill down by category')).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    // and the leaderboard offers no OEM comparison either
+    fireEvent.click(screen.getByText('Workload & Approvals'))
+    const by = screen.getByLabelText('Leaderboard by') as HTMLSelectElement
+    expect(Array.from(by.options).map((o) => o.textContent)).not.toContain('OEM brand')
+  })
+
+  it('an equipment group (tickets with an OEM) keeps its OEM views', () => {
+    const data = [
+      tk({ group: 'ADMIN GROUP', tech: 'Krishan', brand: 'LG', oem: 'LG OEM - ALL' }),
+      tk({ group: 'ADMIN GROUP', tech: 'Krishan', brand: 'DAIKIN', oem: 'DAIKIN OEM - ALL' }),
+      tk({ group: 'IT Group', tech: 'Mohit', brand: '(No OEM)', oem: '(No OEM)' }),
+    ]
+    render(<ExecutiveDashboard level="admin" me="Krishan" now={NOW} tickets={data} approvals={[]} truncated={false} />)
+    fireEvent.click(screen.getByLabelText('Filter by group'))
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'Filter by group choices' })).getByLabelText(/ADMIN GROUP/))
+    fireEvent.click(screen.getByText('Group & OEM Matrix'))
+    const matrices = document.getElementById('matrices-section')!
+    expect(within(matrices).getByText('OEM-wise tickets - store equipment')).toBeTruthy()
+    expect(within(matrices).queryByText('IT Group')).toBeNull()
+    expect(screen.getByText('OEM / STORE EQUIPMENT')).toBeTruthy()
+    expect(screen.getByLabelText('Filter by OEM brand')).toBeTruthy()
+  })
+
   it('can jump straight to the ticket register and step back with the arrow', () => {
     view()
     fireEvent.click(kpi(/CREATED/))

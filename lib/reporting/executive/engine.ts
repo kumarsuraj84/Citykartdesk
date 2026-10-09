@@ -341,7 +341,7 @@ export interface RankItem { key: string; value: number | null; prev: number | nu
 export function rankItems(
   ts: ExecTicket[], f: Filters, dim: Dim, w: Win, p: Win, m: Measure, now: number
 ): RankItem[] {
-  const base = applyFilters(ts, f, now, [dim])
+  const base = applyFilters(ts, f, now)
   const by = new Map<string, ExecTicket[]>()
   for (const t of base) {
     const k = keyOf(dim, t, now)
@@ -361,7 +361,7 @@ export function rankItems(
 export type CompareRow = { key: string } & Record<`${Measure}`, number | null> & Record<`prev_${Measure}`, number | null>
 
 export function compareRows(ts: ExecTicket[], f: Filters, dim: Dim, w: Win, p: Win, now: number): CompareRow[] {
-  const base = applyFilters(ts, f, now, [dim])
+  const base = applyFilters(ts, f, now)
   const by = new Map<string, ExecTicket[]>()
   for (const t of base) {
     const k = keyOf(dim, t, now)

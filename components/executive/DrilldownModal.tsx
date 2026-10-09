@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Building2, ChevronRight, SlidersHorizontal, Store, User, Wrench, X } from 'lucide-react'
+import { ArrowLeft, Building2, ChevronRight, SlidersHorizontal, Store, Tag, User, Wrench, X } from 'lucide-react'
 import {
   MEASURES, UNASSIGNED, ageInDays, isOpen, applyFilters, approvalsBehind, TICKET_ONLY, capitalize, formatMeasure, keyOf, measure, statusLabel, ticketsBehind,
   type ApprovalRow, type Dim, type ExecTicket, type Filters, type SlaState, type Win,
@@ -58,7 +58,8 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
   // everything that matches the picked slice, before the metric narrows it to "behind the number"
   const slice = useMemo(() => {
     // Approvals ignore the status / age / SLA filters (as the approvals count does): the tickets behind them are waiting in "Pending approval"
-    let ts = applyFilters(tickets, filters, now, ctx.approvals ? [...selDims, ...TICKET_ONLY] : selDims).filter((t) => selDims.every((k) => keyOf(k, t, now) === sel[k]))
+    // Every dashboard filter stays on inside the pop-up (so nothing outside the chosen group, OEM, dates... can appear); the picked slice only narrows further.
+    let ts = applyFilters(tickets, filters, now, ctx.approvals ? TICKET_ONLY : []).filter((t) => selDims.every((k) => keyOf(k, t, now) === sel[k]))
     if (ctx.approvals) {
       const ids = new Set(approvalsBehind(approvals, Wc, ctx.approvals).map((a) => a.reqId))
       ts = ts.filter((t) => ids.has(t.id))
@@ -70,7 +71,10 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
   const cohort = useMemo(() => behind.filter((t) => (lens === 'breached' ? t.breached : lens === 'ok' ? !t.breached : true)), [behind, lens])
 
   const groups = useMemo(() => groupCount(cohort, (t) => t.group).slice(0, 8), [cohort])
-  const brands = useMemo(() => groupCount(cohort, (t) => t.brand), [cohort])
+  // OEM only applies to equipment requests: with none in this slice the OEM list (and column) give way to something that does apply
+  const hasOem = useMemo(() => cohort.some((t) => t.brand !== '(No OEM)'), [cohort])
+  const brands = useMemo(() => groupCount(cohort, (t) => t.brand).filter(([b]) => b !== '(No OEM)'), [cohort])
+  const cats = useMemo(() => groupCount(cohort, (t) => t.cat), [cohort])
   const stores = useMemo(() => groupCount(cohort, (t) => t.store), [cohort])
   const techs = useMemo(() => groupCount(cohort, (t) => t.tech), [cohort])
   const metricValue = ctx.approvals ? String(cohort.length) : formatMeasure(ctx.metric, measure(slice, Wc, ctx.metric))
@@ -179,13 +183,13 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
                 </div>
                 <div className={`${box} space-y-3 p-4`}>
                   <div className="flex items-center justify-between">
-                    <h3 className="flex items-center gap-1.5 text-sm font-bold text-foreground"><Wrench className="h-4 w-4 text-primary" />Drill down by store OEM equipment</h3>
-                    <span className="text-[11px] text-muted-foreground">Click an OEM → leg 2</span>
+                    <h3 className="flex items-center gap-1.5 text-sm font-bold text-foreground">{hasOem ? <Wrench className="h-4 w-4 text-primary" /> : <Tag className="h-4 w-4 text-primary" />}{hasOem ? 'Drill down by store OEM equipment' : 'Drill down by category'}</h3>
+                    <span className="text-[11px] text-muted-foreground">{hasOem ? 'Click an OEM → leg 2' : 'Click a category → leg 2'}</span>
                   </div>
                   <div className="space-y-2">
-                    {brands.length === 0 && <p className="py-4 text-center text-xs text-muted-foreground">Nothing in this slice.</p>}
-                    {brands.map(([b, ts]) => (
-                      <button key={b} type="button" onClick={() => pick({ brand: b }, 2)} className={row}>
+                    {(hasOem ? brands : cats).length === 0 && <p className="py-4 text-center text-xs text-muted-foreground">Nothing in this slice.</p>}
+                    {(hasOem ? brands : cats).map(([b, ts]) => (
+                      <button key={b} type="button" onClick={() => pick(hasOem ? { brand: b } : { cat: b }, 2)} className={row}>
                         <div><div className="font-semibold text-foreground">{b}</div><div className="text-[11px] text-muted-foreground">Top stores: {groupCount(ts, (t) => t.store).slice(0, 2).map((x) => x[0]).join(', ')}</div></div>
                         <div className="flex items-center gap-3 tabular-nums">
                           <div className="text-right"><div className="font-bold text-foreground">{ts.length} total</div><div className="text-[11px] text-warning">{ts.filter(isOpen).length} open{slaOf(ts) !== null ? ` · ${slaOf(ts)}% SLA` : ''}</div></div>
@@ -259,7 +263,7 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-left">
                     <thead className="border-b border-border bg-muted text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      <tr><th className="py-3 pl-4 pr-2">Ticket</th><th className="px-2 py-3">Store &amp; subject</th><th className="px-2 py-3">Group / tech</th><th className="px-2 py-3">OEM</th><th className="px-2 py-3">Status</th><th className="px-2 py-3 text-right">SLA / age</th><th className="py-3 pl-2 pr-4 text-right">Last leg</th></tr>
+                      <tr><th className="py-3 pl-4 pr-2">Ticket</th><th className="px-2 py-3">Store &amp; subject</th><th className="px-2 py-3">Group / tech</th>{hasOem && <th className="px-2 py-3">OEM</th>}<th className="px-2 py-3">Status</th><th className="px-2 py-3 text-right">SLA / age</th><th className="py-3 pl-2 pr-4 text-right">Last leg</th></tr>
                     </thead>
                     <tbody className="divide-y divide-border text-xs">
                       {cohort.slice(pg * PAGE, pg * PAGE + PAGE).map((t) => (
@@ -267,13 +271,13 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
                           <td className="whitespace-nowrap py-3 pl-4 pr-2 font-bold tabular-nums text-primary">{t.no}</td>
                           <td className="max-w-[220px] px-2 py-3"><div className="truncate font-semibold text-foreground">{t.subject}</div><div className="truncate text-[11px] text-muted-foreground">Store: {t.store} · Created {dateTimeLabel(t.created)}</div></td>
                           <td className="whitespace-nowrap px-2 py-3"><div className="font-medium text-foreground">{t.group}</div><div className="text-[11px] text-muted-foreground">{t.tech}</div></td>
-                          <td className="whitespace-nowrap px-2 py-3 font-medium text-foreground">{t.brand}</td>
+                          {hasOem && <td className="whitespace-nowrap px-2 py-3 font-medium text-foreground">{t.brand === '(No OEM)' ? '-' : t.brand}</td>}
                           <td className="whitespace-nowrap px-2 py-3"><span className="font-medium text-foreground">{statusLabel(t.status)}</span><div className="text-[11px] text-muted-foreground">Priority: {capitalize(t.prio)}</div></td>
                           <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums"><SlaMark breached={t.breached} /><div className="text-[11px] text-muted-foreground">Age {ageInDays(t, now)}d{t.frH !== null ? ` · resp ${t.frH.toFixed(1)}h` : ''}</div></td>
                           <td className="whitespace-nowrap py-3 pl-2 pr-4 text-right"><span className="inline-flex items-center gap-1 text-xs font-semibold text-primary">Inspect<ChevronRight className="h-4 w-4" /></span></td>
                         </tr>
                       ))}
-                      {cohort.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-xs text-muted-foreground">No tickets match this slice.</td></tr>}
+                      {cohort.length === 0 && <tr><td colSpan={hasOem ? 7 : 6} className="py-10 text-center text-xs text-muted-foreground">No tickets match this slice.</td></tr>}
                     </tbody>
                   </table>
                 </div>

@@ -116,11 +116,20 @@ describe('filters and rankings', () => {
     expect(applyFilters(ts, f, NOW)).toHaveLength(4)
   })
 
-  it('keeps every option of the dimension being ranked, whatever is picked in it', () => {
+  it('rankings and comparison tables follow every filter, including the one on the column being ranked', () => {
     const f = toggleFilter(emptyFilters(), 'tech', 'Krishan')
     const items = rankItems(ts, f, 'tech', W, P, 'created', NOW)
-    expect(items.map((i) => i.key).sort()).toEqual([UNASSIGNED, 'Krishan', 'Mohit'].sort())
+    expect(items.map((i) => i.key)).toEqual(['Krishan']) // not Mohit or Unassigned
     expect(items[0]).toMatchObject({ key: 'Krishan', value: 2 })
+    expect(compareRows(ts, f, 'tech', W, P, NOW).map((r) => r.key)).toEqual(['Krishan'])
+  })
+
+  it('with one group picked, no other group shows up in the group tables', () => {
+    const mixed = [tk({ group: 'IT Group' }), tk({ group: 'IT Group' }), tk({ group: 'ADMIN GROUP' }), tk({ group: 'HR GROUP' })]
+    const f = toggleFilter(emptyFilters(), 'group', 'IT Group')
+    expect(compareRows(mixed, f, 'group', W, P, NOW).map((r) => r.key)).toEqual(['IT Group'])
+    expect(rankItems(mixed, f, 'group', W, P, 'created', NOW).map((r) => r.key)).toEqual(['IT Group'])
+    expect(compareRows(mixed, f, 'tech', W, P, NOW).reduce((n, r) => n + (r.created ?? 0), 0)).toBe(2)
   })
 
   it('ranks best first: highest for "good up" measures, lowest for "good down"', () => {
@@ -209,13 +218,16 @@ describe('levels and the data rows', () => {
       responded_at: new Date(ago(5, -2)).toISOString(), resolution_due_at: new Date(ago(4, 5)).toISOString(), reopen_count: 0,
       source_metadata: { created_via: 'whatsapp' }, team: { name: 'ADMIN GROUP' }, assignee: null,
       requester: { full_name: 'Store A', department: null, location: { name: 'STORES' }, store: { name: 'Store A', state: 'Delhi', oem: { name: 'BLUE STAR OEM - DL' } } },
-      service: { name: 'S' }, category: { name: 'AC' }, sub_category: null, reopens: [{ created_at: new Date(ago(3)).toISOString() }],
+      service: { name: 'S', auto_oem_routing: true }, category: { name: 'AC' }, sub_category: null, reopens: [{ created_at: new Date(ago(3)).toISOString() }],
     }
     const a = toExecTicket({ ...base, csat: { rating: 4 } }, NOW)
     expect(a).toMatchObject({ oem: 'BLUE STAR OEM - DL', brand: 'BLUE STAR', store: 'Store A', tech: UNASSIGNED, src: 'WhatsApp', csat: 4, breached: true })
     expect(a.reo).toHaveLength(1)
     expect(a.frH).toBeCloseTo(2, 1)
     expect(toExecTicket({ ...base, csat: [{ rating: 2 }, { rating: 5 }] }, NOW).csat).toBe(5)
+    // an ordinary (non-equipment) service never carries the store's OEM, so it stays out of every OEM view
+    const itTicket = toExecTicket({ ...base, service: { name: 'IT support', auto_oem_routing: false }, csat: null }, NOW)
+    expect(itTicket).toMatchObject({ oem: '(No OEM)', brand: '(No OEM)' })
     expect(toExecTicket({ ...base, requester: null, csat: null }, NOW)).toMatchObject({ oem: '(No OEM)', store: '(No store)', csat: null })
   })
 })

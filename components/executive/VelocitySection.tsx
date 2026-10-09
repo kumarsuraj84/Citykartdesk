@@ -68,7 +68,7 @@ export function VelocitySection({ d, baseW, metric, onOpen }: { d: DashData; bas
 
   // queue panels
   const statusRows = useMemo(() => {
-    const ts = applyFilters(tickets, filters, now, ['status']).filter((t) => inWin(t.created, W))
+    const ts = applyFilters(tickets, filters, now).filter((t) => inWin(t.created, W))
     const c = new Map<string, number>()
     for (const t of ts) c.set(t.status, (c.get(t.status) ?? 0) + 1)
     const known = STATUS_ORDER.filter((s) => (c.get(s) ?? 0) > 0)
@@ -76,11 +76,11 @@ export function VelocitySection({ d, baseW, metric, onOpen }: { d: DashData; bas
     return { rows: [...known, ...other].map((s) => ({ s, n: c.get(s) ?? 0 })), total: ts.length }
   }, [tickets, filters, now, W])
   const prioRows = useMemo(() => {
-    const ts = applyFilters(tickets, filters, now, ['prio']).filter((t) => inWin(t.created, W))
+    const ts = applyFilters(tickets, filters, now).filter((t) => inWin(t.created, W))
     return (['urgent', 'high', 'medium', 'low'] as const).map((p) => ({ p, n: ts.filter((t) => t.prio === p).length }))
   }, [tickets, filters, now, W])
   const ageRows = useMemo(() => {
-    const ts = applyFilters(tickets, filters, now, ['age']).filter((t) => openAt(t, W.end))
+    const ts = applyFilters(tickets, filters, now).filter((t) => openAt(t, W.end))
     const c = new Map<string, number>()
     for (const t of ts) { const b = ageBucketOf(t, now); c.set(b, (c.get(b) ?? 0) + 1) }
     return { rows: AGE_BUCKET_LABELS.filter((l) => l !== RESOLVED_BUCKET).map((b) => ({ b, n: c.get(b) ?? 0 })), total: ts.length }

@@ -100,7 +100,7 @@ export function LastLeg({ id, now }: { id: string; now: number }) {
         </div>
         <div className="space-y-2 rounded-lg border border-border bg-card p-4 text-xs">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><Wrench className="h-3.5 w-3.5 text-primary" />Equipment &amp; OEM</p>
-          <p className="text-sm font-bold text-foreground">{d.oem || 'No OEM linked to this store'}</p>
+          <p className="text-sm font-bold text-foreground">{d.oem || 'Not an equipment (OEM) request'}</p>
           <div className="space-y-0.5 text-muted-foreground">
             {d.service && <div>Service: <strong className="text-foreground">{d.service}</strong></div>}
             <div>Category: <strong className="text-foreground">{[d.category, d.subCategory].filter(Boolean).join(' › ') || '-'}</strong></div>

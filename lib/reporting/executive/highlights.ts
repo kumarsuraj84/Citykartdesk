@@ -107,12 +107,8 @@ export function highlights(
         actionLabel: `View ${top[0].b} breakdown`,
         open: { metric: 'created', dims: [{ dim: 'brand', value: top[0].b }], stage: 2 },
       })
-    } else {
-      out.push({
-        id: 'oem', category: 'OEM / STORE EQUIPMENT', severity: 'info', headline: 'No OEM tickets in this period', keyStat: '-',
-        detail: 'Stores with an OEM show up here', actionLabel: 'Open the breakdown', open: { metric: 'created', dims: [], stage: 1 },
-      })
     }
+    // no equipment (OEM) tickets in view: the box is left out instead of showing an empty one
   }
 
   // 4 — approval bottleneck

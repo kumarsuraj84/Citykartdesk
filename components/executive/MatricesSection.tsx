@@ -42,7 +42,7 @@ function Matrix({ d, onOpen, title, caption, dims, defaultDim }: {
   const shown = all ? rows : rows.slice(0, SHOW)
   const sub = useMemo(() => {
     if (dim !== 'group' && dim !== 'brand' && dim !== 'oem') return new Map<string, string>()
-    const base = applyFilters(tickets, filters, now, [dim])
+    const base = applyFilters(tickets, filters, now)
     const out = new Map<string, string>()
     for (const r of shown) {
       const mine = base.filter((t) => keyOf(dim, t, now) === r.key)
@@ -134,7 +134,9 @@ export function MatricesSection({ d, onOpen }: { d: DashData; onOpen: OpenDrill 
   const [layout, setLayout] = useState<'both' | 'group' | 'oem'>('both')
   const all = dimsForLevel(d.level)
   const groupDims = (['group', 'tech', 'cat', 'sub', 'svc', 'dept', 'req', 'src', 'prio'] as Dim[]).filter((x) => all.includes(x))
-  const oemDims = (['brand', 'oem', 'store', 'state', 'loc'] as Dim[]).filter((x) => all.includes(x))
+  // OEM views only make sense when some ticket in view is an equipment request (e.g. AC) - for an IT or HR group they would be noise
+  const hasOem = useMemo(() => applyFilters(d.tickets, d.filters, d.now).some((t) => t.brand !== '(No OEM)'), [d.tickets, d.filters, d.now])
+  const oemDims = ((hasOem ? ['brand', 'oem', 'store', 'state', 'loc'] : ['store', 'state', 'loc']) as Dim[]).filter((x) => all.includes(x))
   return (
     <section id="matrices-section" aria-label="Group and OEM comparison" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -142,13 +144,13 @@ export function MatricesSection({ d, onOpen }: { d: DashData; onOpen: OpenDrill 
           <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Comparative performance matrices (group &amp; store OEM)</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">Red tint = SLA compliance at 25% or lower. Click a column to sort, a row to open its drill-down.</p>
         </div>
-        <Seg value={layout} onChange={setLayout} label="Matrices" tone="strong" options={[{ value: 'both', label: 'Both matrices' }, { value: 'group', label: 'By group' }, { value: 'oem', label: 'By OEM brand' }]} />
+        <Seg value={layout} onChange={setLayout} label="Matrices" tone="strong" options={[{ value: 'both', label: 'Both matrices' }, { value: 'group', label: 'By group' }, { value: 'oem', label: hasOem ? 'By OEM brand' : 'By store' }]} />
       </div>
       {(layout === 'both' || layout === 'group') && (
         <Matrix d={d} onOpen={onOpen} title="Compare side by side" caption="Every measure for each value of the field you pick, with the change vs the previous period." dims={groupDims} defaultDim={d.level === 'requester' ? 'cat' : 'group'} />
       )}
       {(layout === 'both' || layout === 'oem') && oemDims.length > 0 && (
-        <Matrix d={d} onOpen={onOpen} title="OEM-wise tickets - store equipment" caption="Tickets by OEM (from the requester's store): for example the AC issues of each OEM brand. Switch to OEM, store or state." dims={oemDims} defaultDim="brand" />
+        <Matrix key={hasOem ? 'oem' : 'store'} d={d} onOpen={onOpen} title={hasOem ? 'OEM-wise tickets - store equipment' : 'Store-wise tickets'} caption={hasOem ? "Equipment tickets by OEM (from the requester's store): for example the AC issues of each OEM brand. Switch to OEM, store or state." : 'Tickets by store. Switch to state or location.'} dims={oemDims} defaultDim={hasOem ? 'brand' : 'store'} />
       )}
     </section>
   )

@@ -21,12 +21,15 @@ function topBy<T>(items: T[], key: (t: T) => string): string {
 
 export function PeopleApprovals({ d, onOpen }: { d: DashData; onOpen: OpenDrill }) {
   const { tickets, approvals, filters, now, W, P, compareOn, level } = d
-  const dims = dimsForLevel(level).filter((x) => x !== 'age' && x !== 'status')
-  const [dim, setDim] = useState<Dim>(level === 'requester' ? 'cat' : 'tech')
+  const [dimPick, setDim] = useState<Dim>(level === 'requester' ? 'cat' : 'tech')
   const [measureKey, setMeasureKey] = useState<LeaderMeasure>('resolved')
   const [order, setOrder] = useState<'top5' | 'bottom5'>('top5')
 
   const base = useMemo(() => applyFilters(tickets, filters, now), [tickets, filters, now])
+  // OEM comparisons only make sense when some ticket in view is an equipment request (e.g. AC), not for an IT or HR group
+  const hasOem = useMemo(() => base.some((t) => t.brand !== '(No OEM)'), [base])
+  const dims = useMemo(() => dimsForLevel(level).filter((x) => x !== 'age' && x !== 'status' && (hasOem || (x !== 'brand' && x !== 'oem'))), [level, hasOem])
+  const dim: Dim = useMemo(() => (dims.includes(dimPick) ? dimPick : dims.includes('tech') ? 'tech' : dims[0]), [dims, dimPick])
   const ap = useMemo(() => approvalRows(approvals, filters, now), [approvals, filters, now])
 
   // ── leaderboard ──

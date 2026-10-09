@@ -60,7 +60,7 @@ interface Raw {
     location: { name: string } | null
     store: { name: string; state: string | null; oem: { name: string } | null } | null
   } | null
-  service: { name: string } | null
+  service: { name: string; auto_oem_routing: boolean | null } | null
   category: { name: string } | null
   sub_category: { name: string } | null
   /** one survey per ticket, so PostgREST may send an object instead of a list */
@@ -73,7 +73,7 @@ const SELECT = [
   'team:teams(name)',
   'assignee:profiles!requests_assigned_to_fkey(full_name)',
   'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), location:locations(name), store:stores(name, state, oem:oems(name)))',
-  'service:services(name)',
+  'service:services(name, auto_oem_routing)',
   'category:service_categories(name)',
   'sub_category:service_sub_categories(name)',
   'csat:csat_surveys(rating)',
@@ -100,7 +100,9 @@ export function toExecTicket(r: Raw, now: number): ExecTicket {
   const breached = due === null || r.status === 'cancelled' ? false : (resolved ?? now) > due
   const tat = resolved !== null ? (resolved - created) / 3_600_000 : null
   const rating = (Array.isArray(r.csat) ? r.csat : r.csat ? [r.csat] : []).map((c) => c.rating).filter((x): x is number => typeof x === 'number')
-  const oem = r.requester?.store?.oem?.name ?? ''
+  // The store's OEM only matters for equipment requests (a service with OEM routing switched on, such as an AC repair). An IT or HR
+  // ticket from the same store has nothing to do with the store's AC vendor, so it carries no OEM and stays out of every OEM view.
+  const oem = r.service?.auto_oem_routing ? (r.requester?.store?.oem?.name ?? '') : ''
   const via = r.source_metadata?.created_via
   const responded = r.responded_at ? (new Date(r.responded_at).getTime() - created) / 3_600_000 : null
   return {

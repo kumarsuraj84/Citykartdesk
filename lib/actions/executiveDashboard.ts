@@ -92,7 +92,7 @@ export async function getExecutiveTicketDetail(id: string): Promise<{ error: str
     'assignee:profiles!requests_assigned_to_fkey(full_name)',
     'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), store:stores(name, state, oem:oems(name)))',
     'source_metadata',
-    'service:services(name)',
+    'service:services(name, auto_oem_routing)',
     'category:service_categories(name)',
     'sub_category:service_sub_categories(name)',
     'csat:csat_surveys(rating, comment)',
@@ -119,7 +119,8 @@ export async function getExecutiveTicketDetail(id: string): Promise<{ error: str
   const activity = (acts ?? []) as { action: string; created_at: string; metadata: Record<string, unknown> | null; actor: { full_name: string } | null }[]
   const firstAssigned = activity.find((a) => a.action === 'assigned' && a.metadata?.assigned_to)
   const via = (data.source_metadata as { created_via?: string } | null)?.created_via
-  const oem: string = data.requester?.store?.oem?.name ?? ''
+  // same rule as the dashboard: the store's OEM belongs only to equipment (OEM-routed) services
+  const oem: string = data.service?.auto_oem_routing ? (data.requester?.store?.oem?.name ?? '') : ''
   const surveyRaw = data.csat as { rating: number | null; comment: string | null } | { rating: number | null; comment: string | null }[] | null
   const survey = Array.isArray(surveyRaw) ? surveyRaw[0] : surveyRaw ?? undefined
   const detail: ExecTicketDetail = {
