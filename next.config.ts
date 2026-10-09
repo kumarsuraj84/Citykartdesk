@@ -22,7 +22,12 @@ const nextConfig: NextConfig = {
   // server chunk, not just the one that imports imapflow. Marking the whole
   // chain external makes it use plain Node require() instead, which resolves
   // by the real package name and just works.
-  serverExternalPackages: ['imapflow', 'mailparser', 'pino'],
+  serverExternalPackages: ['imapflow', 'mailparser', 'pino', 'pdfkit'],
+  // The ticket PDF reads its fonts from disk at run time, which the build cannot see on its own, so the standalone
+  // output is told to ship them with that route.
+  outputFileTracingIncludes: {
+    '/api/requests/\\[id\\]/pdf': ['./assets/fonts/**/*'],
+  },
   // Deploy builds for Main (built locally on this same machine, with Main's env, while
   // the dev server may still be running against its own `.next/dev` cache — see
   // scripts/windows/build-for-deploy.ps1) go to a SEPARATE directory. Sharing `.next`

@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import {
   ChevronLeft,
+  Download,
   Lock,
   Clock,
   Mail,
@@ -960,6 +961,16 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
             />
           </div>
           {/* Right: action buttons */}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+          <a
+            href={`/api/requests/${request.id}/pdf`}
+            download
+            title="Download this ticket with its details and conversation as a PDF (internal notes are not included)"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Download PDF
+          </a>
           <RequestActionBar
             requestId={request.id}
             viewerId={profile.id}
@@ -975,6 +986,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
             resolvedAt={request.resolved_at}
             waitingSince={request.waiting_since}
           />
+          </div>
         </div>
 
         <h1 className="text-xl font-bold tracking-tight text-foreground">
