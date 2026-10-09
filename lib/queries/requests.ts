@@ -132,9 +132,9 @@ export interface GetRequestsOptions {
    *  counts only the still-in-flight statuses (open/assigned/in_progress/
    *  waiting_user/pending_approval). */
   status?: RequestStatus | 'active' | 'unresolved'
-  /** Matches title/request_no AND the body of any comment on the request (internal
-   *  notes included — RLS on request_comments already hides those the viewer
-   *  can't see, same as it would if they opened the thread directly). */
+  /** Matches the title, ticket number, description, the requester (name or store), the technician, the service / category /
+   *  sub-category name, AND the body of any comment on the request (internal notes included — RLS on request_comments already
+   *  hides those the viewer can't see, same as it would if they opened the thread directly). */
   q?: string
   limit?: number
   page?: number
@@ -338,6 +338,13 @@ export async function getTechnicianWorkloadBoard(orgId: string, scope: ReportVie
   })
 
   return result
+}
+
+/** The name shown on the "Requester: …" chip of the Agent Requests page. */
+export async function getRequesterName(id: string): Promise<string | null> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('profiles').select('full_name').eq('id', id).maybeSingle()
+  return data?.full_name ?? null
 }
 
 export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRequests> {
@@ -549,14 +556,34 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
   if (q) {
     const safe = sanitizeQuery(q)
     if (safe.length > 0) {
-      const { data: commentMatches } = await supabase
-        .from('request_comments')
-        .select('request_id')
-        .ilike('body', `%${safe}%`)
-        .order('created_at', { ascending: false })
-        .limit(500)
-      const commentRequestIds = Array.from(new Set((commentMatches ?? []).map((r) => r.request_id)))
-      const orParts = [`title.ilike.%${safe}%`, `request_no.ilike.%${safe}%`]
+      const like = `%${safe}%`
+      // Look the words up in the small tables first, then match tickets by id. The id lists are capped so the request
+      // address stays short; a very common word (say "a") matches too much to be a useful search anyway.
+      const [comments, people, stores, services, categories, subCategories] = await Promise.all([
+        supabase.from('request_comments').select('request_id').ilike('body', like).order('created_at', { ascending: false }).limit(150),
+        supabase.from('profiles').select('id').ilike('full_name', like).limit(60),
+        supabase.from('stores').select('id').or(`name.ilike.${like},code.ilike.${like}`).limit(20),
+        supabase.from('services').select('id').ilike('name', like).limit(20),
+        supabase.from('service_categories').select('id').ilike('name', like).limit(20),
+        supabase.from('service_sub_categories').select('id').ilike('name', like).limit(20),
+      ])
+      const ids = (r: { data: { id: string }[] | null }) => (r.data ?? []).map((x) => x.id)
+      // a store's own people (store users are often named after the store, but not always)
+      const storeIds = ids(stores as never)
+      const storePeople = storeIds.length > 0
+        ? await supabase.from('profiles').select('id').in('store_id', storeIds).limit(60)
+        : { data: [] as { id: string }[] }
+      const personIds = Array.from(new Set([...ids(people as never), ...ids(storePeople as never)])).slice(0, 60)
+      const commentRequestIds = Array.from(new Set((comments.data ?? []).map((r) => r.request_id)))
+      const serviceIds = ids(services as never)
+      const categoryIds = ids(categories as never)
+      const subCategoryIds = ids(subCategories as never)
+
+      const orParts = [`title.ilike.${like}`, `request_no.ilike.${like}`, `description.ilike.${like}`]
+      if (personIds.length > 0) orParts.push(`requester_id.in.(${personIds.join(',')})`, `assigned_to.in.(${personIds.join(',')})`)
+      if (serviceIds.length > 0) orParts.push(`service_id.in.(${serviceIds.join(',')})`)
+      if (categoryIds.length > 0) orParts.push(`category_id.in.(${categoryIds.join(',')})`)
+      if (subCategoryIds.length > 0) orParts.push(`sub_category_id.in.(${subCategoryIds.join(',')})`)
       if (commentRequestIds.length > 0) orParts.push(`id.in.(${commentRequestIds.join(',')})`)
       query = query.or(orParts.join(','))
     }

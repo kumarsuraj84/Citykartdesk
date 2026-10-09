@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   CheckSquare,
@@ -164,11 +165,13 @@ interface RequestsTableProps {
   sortDir: 'asc' | 'desc'
   pathname: string
   currentSearch: string
+  /** When set, the requester's name becomes a link that lists every ticket of that requester on this page. */
+  requesterFilterPath?: string
 }
 
 export function RequestsTable({
   requests, emptyTitle, emptyDescription, viewerId, teamMembers,
-  showAssignAction, sortCol, sortDir, pathname, currentSearch,
+  showAssignAction, sortCol, sortDir, pathname, currentSearch, requesterFilterPath,
 }: RequestsTableProps) {
   const router = useRouter()
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -321,7 +324,18 @@ export function RequestsTable({
                   </td>
                   <td className="px-3 py-2"><PriorityBadge priority={req.priority} size="sm" /></td>
                   <td className="px-3 py-2"><SourceBadge sourceMetadata={req.source_metadata} size="sm" /></td>
-                  <td className="px-3 py-2 whitespace-nowrap text-foreground">{req.requester?.full_name ?? '—'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-foreground">
+                    {req.requester && requesterFilterPath ? (
+                      <Link
+                        href={`${requesterFilterPath}?tab=team&status=all&requester=${req.requester.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        title={`Show all tickets of ${req.requester.full_name}`}
+                        className="hover:text-primary hover:underline underline-offset-2"
+                      >
+                        {req.requester.full_name}
+                      </Link>
+                    ) : (req.requester?.full_name ?? '—')}
+                  </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {req.assignee ? <span className="text-foreground">{req.assignee.full_name}</span> : <span className="text-amber-600 font-medium">Unassigned</span>}
                   </td>

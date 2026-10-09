@@ -204,7 +204,7 @@ export default async function RequestsPage({ searchParams }: PageProps) {
               type="search"
               name="q"
               defaultValue={q}
-              placeholder="Search requests + comments…"
+              placeholder="Search ticket, requester, store, technician, service, comments…"
               className="w-full rounded-lg border border-[#E0E0EC] bg-white py-1.5 pl-8 pr-3 text-[12px] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </form>

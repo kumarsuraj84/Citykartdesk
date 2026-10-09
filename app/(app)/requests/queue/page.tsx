@@ -4,7 +4,7 @@ import { Suspense } from 'react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { redirect } from 'next/navigation'
 import { getCurrentProfile, getTeamMembersForTeams, getAgentTierProfiles } from '@/lib/queries/profiles'
-import { getRequests } from '@/lib/queries/requests'
+import { getRequests, getRequesterName } from '@/lib/queries/requests'
 import { getActiveServicesForReclassify, getServiceCategories, getServiceSubCategoriesForFilter } from '@/lib/queries/services'
 import { RequestsTable } from '@/components/requests/RequestsTable'
 import { ColumnFilterSelect } from '@/components/requests/ColumnFilterSelect'
@@ -28,6 +28,8 @@ interface PageProps {
     layout?: string
     status?: string
     q?: string
+    /** show only the tickets of this requester (profile id) */
+    requester?: string
     assigned?: string
     /** 'breached' → only tickets past their resolution deadline (Home's "Currently Breached" tile) */
     sla?: string
@@ -86,6 +88,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
   const layout: 'table' | 'board' = params.layout === 'board' ? 'board' : 'table'
   const rawStatus      = params.status as string | undefined
   const q              = params.q
+  const requesterParam = /^[0-9a-f-]{36}$/i.test(params.requester ?? '') ? params.requester : undefined
   const rawAssigned     = rawTab === 'mine' ? 'me' : (params.assigned || undefined)
   const rawPriority    = params.priority
   const rawService     = params.service
@@ -111,12 +114,13 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
 
   const isBoard = layout === 'board'
 
-  const [result, serviceOptions, categoryOptions, subCategoryOptions] = await Promise.all([
+  const [result, serviceOptions, categoryOptions, subCategoryOptions, requesterRow] = await Promise.all([
     getRequests({
       view: 'queue',
       userId: profile.id,
       status: statusFilter,
       q: q || undefined,
+      requesterId: requesterParam,
       assignedTo,
       breachedOnly,
       priority: priorityFilter,
@@ -131,6 +135,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
     getActiveServicesForReclassify(),
     getServiceCategories(),
     getServiceSubCategoriesForFilter(),
+    requesterParam ? getRequesterName(requesterParam) : Promise.resolve(null),
   ])
   const requests = result.data
 
@@ -148,6 +153,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
     if (layout !== 'table') p.set('layout', layout)
     if (rawStatus && rawStatus !== 'active') p.set('status', rawStatus)
     if (q) p.set('q', q)
+    if (requesterParam) p.set('requester', requesterParam)
     if (rawTab === 'team' && assignedTo) p.set('assigned', assignedTo)
     if (breachedOnly) p.set('sla', 'breached')
     if (priorityFilter) p.set('priority', priorityFilter)
@@ -288,6 +294,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
             {rawStatus && rawStatus !== 'active' && (
               <input type="hidden" name="status" value={rawStatus} />
             )}
+            {requesterParam && <input type="hidden" name="requester" value={requesterParam} />}
             {priorityFilter && <input type="hidden" name="priority" value={priorityFilter} />}
             {serviceFilter && <input type="hidden" name="service" value={serviceFilter} />}
             {categoryFilter && <input type="hidden" name="category" value={categoryFilter} />}
@@ -296,7 +303,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
               type="search"
               name="q"
               defaultValue={q}
-              placeholder="Search requests + comments…"
+              placeholder="Search ticket, requester, store, technician, service, comments…"
               className="w-full rounded-lg border border-[#E0E0EC] bg-white py-1.5 pl-8 pr-3 text-[12px] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </form>
@@ -353,6 +360,25 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
         )}
       </div>
 
+      {(requesterParam || q) && (
+        <div className="flex flex-wrap items-center gap-2 text-[12px]">
+          <span className="font-semibold text-foreground">{result.total} {result.total === 1 ? 'ticket' : 'tickets'} found</span>
+          {requesterParam && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 font-medium text-primary">
+              Requester: {requesterRow ?? 'selected requester'}
+              <Link
+                href={(() => { const p = currentParams(); p.delete('requester'); p.delete('page'); return `/requests/queue?${p.toString()}` })()}
+                aria-label="Clear the requester filter"
+                className="text-primary/70 hover:text-primary"
+              >✕</Link>
+            </span>
+          )}
+          {requesterParam && (!rawStatus || rawStatus === 'active') && (
+            <span className="text-muted-foreground">Only active tickets are shown. Choose &quot;All&quot; in the status filter to include resolved and closed ones.</span>
+          )}
+        </div>
+      )}
+
       {/* ── Request list ── */}
       {isBoard ? (
         requests.length === 0 ? (
@@ -374,6 +400,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
           sortDir={sortDir}
           pathname="/requests/queue"
           currentSearch={currentSearch}
+          requesterFilterPath="/requests/queue"
         />
       )}
 
