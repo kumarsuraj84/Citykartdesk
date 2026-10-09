@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Clock, Loader2, Store, Wrench } from 'lucide-react'
-import { getExecutiveTicketDetail, type ExecTicketDetail } from '@/lib/actions/executiveDashboard'
+import { BellRing, Clock, Loader2, Store, Wrench } from 'lucide-react'
+import { getExecutiveTicketDetail, nudgeTicket, type ExecTicketDetail } from '@/lib/actions/executiveDashboard'
 import { statusLabel, capitalize } from '@/lib/reporting/executive/engine'
 import { dateTimeLabel, humanHours } from '@/lib/reporting/executive/labels'
 import { buildLifecycle, type StepState } from '@/lib/reporting/executive/lifecycle'
@@ -21,6 +21,52 @@ const STEP_CARD: Record<StepState, string> = {
   pending: 'border-border bg-card',
 }
 const STEP_DURATION: Record<StepState, string> = { completed: 'text-success', breached: 'text-destructive', current: 'text-foreground', pending: 'text-muted-foreground' }
+
+/** Reminder to the technician handling the ticket (or the group leads when nobody has it). The server checks who may and how often. */
+function NudgeBox({ id, who }: { id: string; who: string }) {
+  const [open, setOpen] = useState(false)
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const send = async () => {
+    setBusy(true)
+    try {
+      const r = await nudgeTicket(id, note)
+      if ('error' in r) setResult({ ok: false, text: r.error })
+      else { setResult({ ok: true, text: `Reminder sent to ${r.names.join(', ') || 'the technician'}.` }); setOpen(false); setNote('') }
+    } catch {
+      setResult({ ok: false, text: 'Could not send the reminder. Please try again.' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-muted-foreground">Needs attention? Send <strong className="text-foreground">{who}</strong> a reminder by bell and email.</p>
+        {!open && (
+          <button type="button" onClick={() => { setOpen(true); setResult(null) }} className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">
+            <BellRing className="h-3.5 w-3.5" />Nudge
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="mt-3 space-y-2">
+          <label htmlFor={`nudge-${id}`} className="font-medium text-foreground">Add a short message (optional)</label>
+          <textarea id={`nudge-${id}`} value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} rows={2} placeholder="e.g. The store has been waiting since morning, please update."
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-primary/30" />
+          <div className="flex gap-2">
+            <button type="button" onClick={send} disabled={busy} className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50">{busy ? 'Sending…' : 'Send reminder'}</button>
+            <button type="button" onClick={() => setOpen(false)} disabled={busy} className="rounded-md border border-border px-3 py-1.5 text-xs">Cancel</button>
+          </div>
+        </div>
+      )}
+      {result && <p role={result.ok ? 'status' : 'alert'} className={`mt-2 font-medium ${result.ok ? 'text-success' : 'text-destructive'}`}>{result.text}</p>}
+    </div>
+  )
+}
 
 /** Leg 4: one ticket from the store's request to the sign-off, using its real dates, approval and activity. */
 export function LastLeg({ id, now }: { id: string; now: number }) {
@@ -122,6 +168,8 @@ export function LastLeg({ id, now }: { id: string; now: number }) {
           </ol>
         </div>
       )}
+
+      {d.canNudge && <NudgeBox id={d.id} who={d.technician === 'Unassigned' ? `the ${d.group} group leads` : d.technician} />}
 
       <Link href={`/requests/${d.id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-primary underline underline-offset-2">Open the full ticket page ▸</Link>
     </div>

@@ -173,7 +173,7 @@ describe('last leg lifecycle', () => {
     id: 'x', no: 'CKSD-1', subject: 's', description: '', status: 'in_progress', priority: 'high', group: 'ADMIN GROUP', technician: 'Krishan', requester: 'Store A', department: '',
     store: 'Store A', oem: 'LG OEM - ALL', brand: 'LG', service: 'Repair', category: 'AC', subCategory: 'Cooling',
     created: ago(1), responded: ago(1) + 2 * HOUR, resolved: null, resolutionDue: ago(1) + 24 * HOUR, responseDue: ago(1) + 4 * HOUR, reopenCount: 0, csat: null,
-    source: 'Portal', storeState: 'Delhi', closed: null, assignedAt: ago(1) + HOUR, approval: null, events: [], ...o,
+    source: 'Portal', storeState: 'Delhi', closed: null, assignedAt: ago(1) + HOUR, approval: null, events: [], canNudge: true, ...o,
   })
   it('walks five steps from intake to sign-off', () => {
     const l = buildLifecycle(detail(), NOW)

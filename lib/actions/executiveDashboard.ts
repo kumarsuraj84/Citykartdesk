@@ -5,6 +5,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { resolveReportAccess } from '@/lib/reporting/access'
 import { applyScope, oemBrand } from '@/lib/queries/executive-dashboard'
 import { statusLabel } from '@/lib/reporting/executive/engine'
+import { nudgeRequest, NUDGEABLE_STATUSES } from '@/lib/requests/nudge'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -49,6 +50,8 @@ export interface ExecTicketDetail {
   assignedAt: number | null
   approval: { status: 'pending' | 'approved' | 'rejected'; requested: number; decided: number | null; by: string } | null
   events: ExecTicketEvent[]
+  /** the viewer may send the handling technician a reminder (not a requester; the ticket is waiting on a technician) */
+  canNudge: boolean
 }
 
 const ms = (iso: string | null | undefined) => (iso ? new Date(iso).getTime() : null)
@@ -152,6 +155,24 @@ export async function getExecutiveTicketDetail(id: string): Promise<{ error: str
       const d = describe(a.action, a.metadata ?? {})
       return { at: new Date(a.created_at).getTime(), label: d.label, by: a.actor?.full_name ?? 'System', note: d.note }
     }),
+    canNudge: profile.role !== 'user' && (NUDGEABLE_STATUSES as readonly string[]).includes(data.status),
   }
   return { detail }
+}
+
+/** Sends the technician handling a ticket (or the group leads, if nobody has it yet) a reminder. Once per ticket every few hours. */
+export async function nudgeTicket(id: string, message: string): Promise<{ error: string } | { sent: number; names: string[] }> {
+  const profile = await getCurrentProfile()
+  if (!profile?.org_id) return { error: 'Unauthorized.' }
+  // Requesters see their own tickets here but never hurry the technician from the dashboard.
+  if (profile.role === 'user') return { error: "You don't have permission to nudge." }
+  const access = resolveReportAccess(profile, 'requests')
+  if ('error' in access) return { error: access.error }
+
+  const admin = createAdminClient() as unknown as AnyClient
+  // the viewer must be able to see this ticket in their own level
+  const { data: visible } = await applyScope(admin.from('requests').select('id').eq('org_id', profile.org_id).eq('id', id), access.scope, '').maybeSingle()
+  if (!visible) return { error: 'This ticket is not available to you.' }
+
+  return nudgeRequest(admin, { requestId: id, orgId: profile.org_id, actorId: profile.id, actorName: profile.full_name, message })
 }

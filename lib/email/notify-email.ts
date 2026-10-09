@@ -112,6 +112,17 @@ export async function sendNotificationEmail(opts: {
         break
       case 'sla_warning':
       case 'sla_breached':
+        // A reminder sent from the Smart Dashboard is not an SLA alert: say who is asking.
+        if (type === 'sla_warning' && data.nudge === '1') {
+          template = requestEventEmail({
+            recipientName,
+            requestTitle: withNo(data.requestTitle || data.title || ''),
+            requestUrl: data.requestUrl || data.link || '',
+            headline: `Reminder from ${data.nudgedBy || 'your manager'}`,
+            detail: data.note ? `"${data.note}"` : 'Please take a look at this request and update it.',
+          })
+          break
+        }
         template = slaBreachEmail({
           recipientName: recipientName || '',
           requestTitle: withNo(data.requestTitle || data.title || ''),

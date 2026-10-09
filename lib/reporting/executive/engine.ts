@@ -448,7 +448,7 @@ export const APPROVAL_MEASURES: Record<ApprovalMeasure, { label: string; good: '
   cycle:    { label: 'Avg decision time',      good: 'down' },
 }
 /** Approvals follow every dashboard filter that describes the ticket (not its status, backlog age or SLA flag). */
-const TICKET_ONLY: Skip[] = ['status', 'age', 'sla']
+export const TICKET_ONLY: Skip[] = ['status', 'age', 'sla']
 export const approvalRows = (as: ApprovalRow[], f: Filters, now: number, skip: readonly Skip[] = []) =>
   as.filter((a) => matches(a.t, f, now, [...TICKET_ONLY, ...skip]))
 

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Building2, ChevronRight, SlidersHorizontal, Store, User, Wrench, X } from 'lucide-react'
 import {
-  MEASURES, UNASSIGNED, ageInDays, isOpen, applyFilters, approvalsBehind, capitalize, formatMeasure, keyOf, measure, statusLabel, ticketsBehind,
+  MEASURES, UNASSIGNED, ageInDays, isOpen, applyFilters, approvalsBehind, TICKET_ONLY, capitalize, formatMeasure, keyOf, measure, statusLabel, ticketsBehind,
   type ApprovalRow, type Dim, type ExecTicket, type Filters, type SlaState, type Win,
 } from '@/lib/reporting/executive/engine'
 import { dateTimeLabel } from '@/lib/reporting/executive/labels'
@@ -57,7 +57,8 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
 
   // everything that matches the picked slice, before the metric narrows it to "behind the number"
   const slice = useMemo(() => {
-    let ts = applyFilters(tickets, filters, now, selDims).filter((t) => selDims.every((k) => keyOf(k, t, now) === sel[k]))
+    // Approvals ignore the status / age / SLA filters (as the approvals count does): the tickets behind them are waiting in "Pending approval"
+    let ts = applyFilters(tickets, filters, now, ctx.approvals ? [...selDims, ...TICKET_ONLY] : selDims).filter((t) => selDims.every((k) => keyOf(k, t, now) === sel[k]))
     if (ctx.approvals) {
       const ids = new Set(approvalsBehind(approvals, Wc, ctx.approvals).map((a) => a.reqId))
       ts = ts.filter((t) => ids.has(t.id))

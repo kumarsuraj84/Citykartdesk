@@ -2,14 +2,16 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 
+const nudgeMock = vi.hoisted(() => vi.fn(async (): Promise<{ error: string } | { sent: number; names: string[] }> => ({ sent: 1, names: ['Krishan'] })))
 vi.mock('@/lib/actions/executiveDashboard', () => ({
+  nudgeTicket: nudgeMock,
   getExecutiveTicketDetail: vi.fn(async (id: string) => ({
     detail: {
       id, no: 'CKSD-2001', subject: 'AC not cooling', description: '', status: 'in_progress', priority: 'high', group: 'ADMIN GROUP', technician: 'Krishan',
       requester: 'Store A', department: '', store: 'Store A', oem: 'LG OEM - ALL', brand: 'LG', service: 'Admin repair', category: 'AC', subCategory: 'COOLING',
       created: 1_000_000, responded: 1_000_000 + 3_600_000, resolved: null, resolutionDue: 1_000_000 + 86_400_000, responseDue: 1_000_000 + 4 * 3_600_000, reopenCount: 0,
       csat: null, source: 'Portal', storeState: 'Delhi', closed: null, assignedAt: 1_000_000 + 1_800_000, approval: null,
-      events: [{ at: 1_000_000, label: 'Ticket raised', by: 'Store A', note: '' }],
+      events: [{ at: 1_000_000, label: 'Ticket raised', by: 'Store A', note: '' }], canNudge: true,
     },
   })),
   exportTicketDetailReportXlsx: vi.fn(),
@@ -78,6 +80,33 @@ describe('Smart Dashboard', () => {
     expect(within(dlg).getByText('First response')).toBeTruthy()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('the last leg lets a manager nudge the technician, with an optional message, and shows the outcome', async () => {
+    nudgeMock.mockClear()
+    view()
+    fireEvent.click(screen.getByText('Heatmap & Tickets'))
+    fireEvent.change(screen.getByLabelText('Search tickets'), { target: { value: 'printer' } })
+    fireEvent.click(within(document.getElementById('explorer-section')!).getByText('Printer jam').closest('tr')!)
+    const dlg = screen.getByRole('dialog')
+    expect(await within(dlg).findByText(/Send/)).toBeTruthy()
+    fireEvent.click(within(dlg).getByRole('button', { name: /Nudge/ }))
+    fireEvent.change(within(dlg).getByLabelText(/short message/), { target: { value: 'Store is waiting' } })
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Send reminder' }))
+    expect(await within(dlg).findByText('Reminder sent to Krishan.')).toBeTruthy()
+    expect(nudgeMock).toHaveBeenCalledWith(expect.any(String), 'Store is waiting')
+  })
+
+  it('shows the reason the server gave when a nudge is refused', async () => {
+    nudgeMock.mockResolvedValueOnce({ error: 'This ticket was already nudged 5 minutes ago by Asha.' })
+    view()
+    fireEvent.click(screen.getByText('Heatmap & Tickets'))
+    fireEvent.change(screen.getByLabelText('Search tickets'), { target: { value: 'printer' } })
+    fireEvent.click(within(document.getElementById('explorer-section')!).getByText('Printer jam').closest('tr')!)
+    const dlg = screen.getByRole('dialog')
+    fireEvent.click(await within(dlg).findByRole('button', { name: /Nudge/ }))
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Send reminder' }))
+    expect((await within(dlg).findByRole('alert')).textContent).toMatch(/already nudged 5 minutes ago/)
   })
 
   it('can jump straight to the ticket register and step back with the arrow', () => {
@@ -151,6 +180,22 @@ describe('Smart Dashboard', () => {
     const groups = screen.getByRole('listbox', { name: 'Filter by group choices' })
     expect(within(groups).getByLabelText(/IT Group/)).toBeTruthy()
     expect(within(groups).queryByLabelText(/ADMIN GROUP/)).toBeNull()
+  })
+
+  it('opens the approvals waiting for a decision even when a status filter hides their tickets (they sit in "Pending approval")', () => {
+    const gated = [tk({ status: 'pending_approval', subject: 'Gated one' }), tk({ status: 'pending_approval', subject: 'Gated two' })]
+    const approvals = gated.map((t, i) => ({ id: `a${i}`, reqId: t.id, status: 'pending' as const, requested: NOW - 2 * DAY, decided: null, by: '' }))
+    render(<ExecutiveDashboard level="admin" me="Krishan" now={NOW} tickets={[...tickets, ...gated]} approvals={approvals} truncated={false} />)
+    fireEvent.click(screen.getByLabelText('Filter by status'))
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'Filter by status choices' })).getByText('In Progress'))
+    expect(screen.getByText('Status: In Progress ×')).toBeTruthy()
+    fireEvent.click(kpi(/APPROVALS WAITING/))
+    const dlg = screen.getByRole('dialog')
+    fireEvent.click(within(dlg).getByText(/View 2 tickets/).closest('button')!)
+    expect(within(dlg).getByText(/Leg 3 of 4/)).toBeTruthy()
+    expect(within(dlg).getByText('Gated one')).toBeTruthy()
+    expect(within(dlg).getByText('Gated two')).toBeTruthy()
+    expect(within(dlg).queryByText('No tickets match this slice.')).toBeNull()
   })
 
   it('picks every "on hold" status with one click', () => {
