@@ -293,6 +293,11 @@ function HistoryRow({ item }: { item: RequestActivityWithActor }) {
     const m = item.metadata as { file_name?: string }
     if (m.file_name) detail = m.file_name
   }
+  // a technician copied a comment to other CK Desk addresses by e-mail
+  const copied = item.action === 'comment_added' && item.metadata && Array.isArray((item.metadata as { cc?: unknown }).cc)
+    ? ((item.metadata as { cc: { name?: string }[] }).cc.map((x) => x.name).filter(Boolean) as string[])
+    : []
+  if (copied.length > 0) detail = `Sent to ${copied.join(', ')}`
   if (item.action === 'approval_requested' && item.metadata) {
     const m = item.metadata as { approver_names?: string[] }
     if (m.approver_names?.length) detail = `Sent to ${m.approver_names.join(', ')}`
@@ -328,7 +333,7 @@ function HistoryRow({ item }: { item: RequestActivityWithActor }) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-foreground">{actor}</p>
-        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-xs text-muted-foreground">{copied.length > 0 ? 'copied a comment by e-mail' : label}</p>
         {detail && (
           <span className="mt-1 inline-block rounded-md bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
             {detail}

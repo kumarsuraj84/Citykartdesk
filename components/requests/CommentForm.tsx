@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useTransition, useRef, useCallback } from 'react'
-import { Loader2, Send, ChevronDown, Paperclip, X, FileIcon, AlertCircle } from 'lucide-react'
+import { Loader2, Send, ChevronDown, Paperclip, X, FileIcon, AlertCircle, AtSign } from 'lucide-react'
 import { addComment, deleteEmptyComment } from '@/lib/actions/requests'
 import { uploadAttachment } from '@/lib/actions/attachments'
+import { copyCommentByEmail } from '@/lib/actions/ticketCopy'
+import { CcField, type CcChip } from './CcField'
 import { validateAttachment } from '@/lib/attachments/validate'
 import { CANNED_RESPONSES, CANNED_CATEGORIES } from '@/lib/constants/canned-responses'
 import { AlertModal } from '@/components/ui/AlertModal'
@@ -29,6 +31,10 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
   const [tooLargeFileName, setTooLargeFileName] = useState<string | null>(null)
   const [error, setError]                    = useState<string | null>(null)
   const [isPending, startTransition]         = useTransition()
+  const [ccOpen, setCcOpen]                  = useState(false)
+  const [cc, setCc]                          = useState<CcChip[]>([])
+  const [attachPdf, setAttachPdf]            = useState(true)
+  const [ccNotice, setCcNotice]              = useState<{ ok: boolean; text: string } | null>(null)
   const [showCanned, setShowCanned]          = useState(false)
   const [cannedSearch, setCannedSearch]      = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -68,6 +74,12 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
     const pendingBody = body.trim()
     if (!pendingBody && files.length === 0) return
     setError(null)
+    setCcNotice(null)
+    // an address that is not a CK Desk address must be removed first; nothing is posted until then
+    if (!isInternal && cc.some((c) => c.status === 'bad')) {
+      setError('Remove the CC addresses marked in red (they are not CK Desk addresses) before posting.')
+      return
+    }
     const pendingFiles = files
     startTransition(async () => {
       const result = await addComment(requestId, body, isInternal, pendingFiles.length > 0)
@@ -94,6 +106,24 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
         textareaRef.current?.focus()
         return
       }
+
+      // copy the posted comment (with the whole conversation) to the CK Desk addresses in CC - after the files are up, so they are listed
+      const ccEmails = !isInternal ? cc.filter((c) => c.status === 'ok').map((c) => c.email) : []
+      let notice: { ok: boolean; text: string } | null = null
+      if (ccEmails.length > 0) {
+        try {
+          const out = await copyCommentByEmail(requestId, result.commentId, ccEmails, attachPdf)
+          const sentNames = out.sent.map((s) => s.name).join(', ')
+          if (out.sent.length > 0 && out.failed.length === 0) notice = { ok: true, text: `Copied by e-mail to ${sentNames}${out.pdfAttached ? ' (PDF attached)' : ''}.` }
+          else if (out.sent.length > 0) notice = { ok: false, text: `Copied to ${sentNames}, but not to: ${out.failed.map((f) => `${f.email} (${f.reason})`).join('; ')}` }
+          else notice = { ok: false, text: `Comment posted, but the copy was not sent: ${out.error ?? out.failed.map((f) => `${f.email} (${f.reason})`).join('; ')}` }
+        } catch {
+          notice = { ok: false, text: 'Comment posted, but the CC e-mails could not be sent.' }
+        }
+      }
+      setCcNotice(notice)
+      setCc([])
+      setCcOpen(false)
 
       setBody('')
       setIsInternal(false)
@@ -156,6 +186,10 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
         />
       </div>
 
+      {canPostInternal && !isInternal && (ccOpen || cc.length > 0) && (
+        <CcField chips={cc} onChange={setCc} attachPdf={attachPdf} onAttachPdf={setAttachPdf} />
+      )}
+
       {fileError && (
         <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
@@ -207,6 +241,18 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
             <Paperclip className="h-3.5 w-3.5" />
             Attach
           </button>
+          {canPostInternal && !isInternal && (
+            <button
+              type="button"
+              onClick={() => setCcOpen((v) => !v)}
+              aria-pressed={ccOpen || cc.length > 0}
+              title="Copy this comment, with the whole ticket and conversation, to CK Desk users or OEM contacts by e-mail"
+              className={`flex min-h-[36px] cursor-pointer select-none items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors ${ccOpen || cc.length > 0 ? 'border-primary/40 bg-primary/5 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}
+            >
+              <AtSign className="h-3.5 w-3.5" />
+              CC{cc.length > 0 ? ` (${cc.length})` : ''}
+            </button>
+          )}
           {canPostInternal && (
             <button
               type="button"
@@ -325,6 +371,9 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
 
       {error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
+      )}
+      {ccNotice && (
+        <p role="status" className={`rounded-lg px-3 py-2 text-xs ${ccNotice.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>{ccNotice.text}</p>
       )}
 
       {tooLargeFileName && (

@@ -38,7 +38,7 @@ export interface TicketPdfModel {
   /** the requester's answers to the request form (the description is shown separately) */
   submitted: { label: string; value: string }[]
   description: string
-  conversation: { author: string; at: string; body: string; via: string }[]
+  conversation: { id: string; author: string; at: string; body: string; via: string }[]
   approvals: PdfApproval[]
   history: { at: string; text: string; by: string; note: string }[]
   attachments: { name: string; size: string; by: string; at: string }[]
@@ -82,7 +82,11 @@ const label = (map: Record<string, string>, k: string) => map[k] ?? k.replace(/_
 function historyLine(a: RequestActivityWithActor): { text: string; note: string } | null {
   const m = (a.metadata ?? {}) as Record<string, unknown>
   switch (a.action) {
-    case 'comment_added':
+    case 'comment_added': {
+      // a comment is in the conversation already; only the line saying it was copied by e-mail belongs in the history
+      const cc = Array.isArray(m.cc) ? (m.cc as { name?: string }[]).map((x) => x.name).filter(Boolean) : []
+      return cc.length > 0 ? { text: `Comment copied by e-mail to ${cc.join(', ')}`, note: '' } : null
+    }
     case 'attachment_added':
       return null
     case 'created': return { text: 'Request submitted', note: '' }
@@ -148,6 +152,7 @@ export function buildTicketPdfModel(input: TicketPdfInput): TicketPdfModel {
     .filter((c) => !c.is_internal)
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
     .map((c) => ({
+      id: c.id,
       author: c.author?.full_name ?? c.external_name ?? 'Unknown sender',
       at: pdfDateTime(c.created_at),
       body: clean(c.body),
