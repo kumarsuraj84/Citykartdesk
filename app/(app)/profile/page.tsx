@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { User, Shield, Users, Building2, Lock, BellRing } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
-import { EditableName, AvatarUpload, PasswordResetButton, ChangePasswordForm, PushNotificationToggle } from './ProfileClient'
+import { EditableName, AvatarUpload, PasswordResetButton, ChangePasswordForm, PushNotificationToggle, PopupSettings } from './ProfileClient'
 import { hasPushSubscription } from '@/lib/actions/push'
 import { ROLE_LABELS } from '@/lib/constants/roles'
 
@@ -114,6 +114,7 @@ export default async function ProfilePage() {
           <h2 className="text-sm font-semibold text-foreground">Notifications</h2>
         </div>
         <div className="divide-y divide-border px-5">
+          <InfoRow label="Pop-ups in CK Desk (this browser)" value={<PopupSettings />} />
           <InfoRow label="Push notifications on this device" value={<PushNotificationToggle initiallyOn={pushOn} />} />
         </div>
       </div>

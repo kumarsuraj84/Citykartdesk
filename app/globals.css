@@ -739,3 +739,9 @@
   opacity: 0.6;
   pointer-events: none;
 }
+
+/* The thin timer bar on a pop-up notification (components/layout/PopupCard.tsx): it empties as the card is about to go away. */
+@keyframes ck-popup-shrink {
+  from { width: 100%; }
+  to { width: 0; }
+}

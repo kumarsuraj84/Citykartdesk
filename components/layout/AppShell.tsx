@@ -9,6 +9,7 @@ import { ThemeSwitcher } from './ThemeSwitcher'
 import { BrandLogo } from './BrandLogo'
 import { AutoRefresh } from './AutoRefresh'
 import { AutoPushPrompt } from './AutoPushPrompt'
+import { NotificationPopups } from './NotificationPopups'
 import { NewVersionBanner } from './NewVersionBanner'
 import { ROLE_LABELS } from '@/lib/constants/roles'
 import type { ProfileWithTeams, NavVisibility, NotificationWithActor } from '@/types'
@@ -111,6 +112,7 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <AutoRefresh />
       <AutoPushPrompt />
+      <NotificationPopups viewerId={profile.id} />
       <NewVersionBanner />
 
       {/* ── Dark top bar (full width) ─────────────────────────────────────── */}

@@ -5,6 +5,10 @@ import { Pencil, Check, X, Camera, KeyRound, Lock, Bell, BellOff } from 'lucide-
 import { updateProfile, uploadAvatar, sendPasswordResetEmail } from '@/lib/actions/profile'
 import { changeOwnPassword } from '@/lib/actions/auth'
 import { isPushSupported, enablePushOnThisDevice, disablePushOnThisDevice } from '@/lib/push/client'
+import { toast } from 'sonner'
+import { DEFAULT_PREFS, loadPrefs, savePrefs, type PopupMode, type PopupPrefs } from '@/lib/notifications/popup-rules'
+import { playChime } from '@/components/layout/NotificationPopups'
+import { PopupCard } from '@/components/layout/PopupCard'
 
 export function EditableName({ initialName }: { initialName: string }) {
   const [editing, setEditing] = useState(false)
@@ -293,6 +297,53 @@ export function PushNotificationToggle({ initiallyOn }: { initiallyOn: boolean }
         </button>
       )}
       {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
+  )
+}
+
+// ── Pop-ups in CK Desk ──────────────────────────────────────────────────────
+
+/** This browser's choice for the corner pop-ups: all, important only, or off; and an optional short sound. */
+export function PopupSettings() {
+  const [prefs, setPrefs] = useState<PopupPrefs>(DEFAULT_PREFS)
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    // the choice lives in this browser, so it can only be read after mount
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPrefs(loadPrefs()); setReady(true)
+  }, [])
+
+  const update = (next: PopupPrefs) => { setPrefs(next); savePrefs(next) }
+
+  function sample() {
+    toast.custom((tid) => (
+      <PopupCard
+        n={{ id: 'sample', type: 'comment_added', title: 'Sample: Ayush Rawat commented on CKSD-000169', body: 'This is how a pop-up looks. Click it to open the ticket.', link: null, request_id: null, metadata: null, created_at: new Date().toISOString(), actor_name: 'Ayush Rawat' }}
+        important={false} durationMs={6000} onOpen={() => toast.dismiss(tid)} onClose={() => toast.dismiss(tid)}
+      />
+    ), { duration: 6000 })
+    if (prefs.sound) playChime()
+  }
+
+  if (!ready) return <span className="text-sm text-muted-foreground">Loading…</span>
+  return (
+    <div className="flex flex-col items-end gap-2">
+      <select
+        aria-label="Pop-up notifications"
+        value={prefs.mode}
+        onChange={(e) => update({ ...prefs, mode: e.target.value as PopupMode })}
+        className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground shadow-sm"
+      >
+        <option value="all">Show pop-ups for new notifications</option>
+        <option value="important">Important ones only (approvals, SLA, reminders)</option>
+        <option value="off">No pop-ups (bell only)</option>
+      </select>
+      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <input type="checkbox" checked={prefs.sound} onChange={(e) => update({ ...prefs, sound: e.target.checked })} />
+        Play a short sound
+      </label>
+      <button type="button" onClick={sample} className="text-xs font-medium text-primary hover:underline">Show a sample pop-up</button>
     </div>
   )
 }
