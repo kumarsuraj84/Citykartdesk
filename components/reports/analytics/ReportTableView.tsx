@@ -8,8 +8,10 @@ import { ReportDetail } from './ReportDetail'
 // The look of the Excel pivot tables these reports replace: blue heading band, peach total columns, the first column in pale blue, bold blue "Total" lines,
 // thin grey grid. Drawn like a sheet of paper (fixed colours, not the app theme), the same as the exported Excel file.
 const COLOR = { head: '#4F81BD', peach: '#FBD9C3', tech: '#DCE6F1', total: '#B8CCE4', grid: '#C9D1DE', text: '#1F2937' }
-/** The columns are drawn this much narrower than their nominal width, with small text and thin rows, so more of the report fits on screen. */
-const SCALE = 0.82
+/** Small text and thin rows; each column is only as wide as its longest value (never wider than three quarters of its nominal width, which is where long text is cut). */
+const CHAR_PX = 5.7
+const PAD_PX = 14
+const CAP = 0.75
 const SHEET_FONT = "Calibri, Carlito, 'Segoe UI', Arial, sans-serif"
 
 interface Open { refs: number[]; title: string; subtitle: string }
@@ -30,9 +32,19 @@ export function ReportTableView({ table, choice }: { table: ReportTable; choice?
     )
   }
 
-  const w = (c: ReportColumn) => Math.round(c.width * SCALE)
-  const left = columns.map((_, i) => columns.slice(0, i).reduce((n, c) => n + w(c), 0))
-  const width = columns.reduce((n, c) => n + w(c), 0)
+  // the width each column needs: its longest value or its heading
+  const fit = columns.map((c, ci) => {
+    // a short heading stays on one line; a long one wraps, so only its longest word counts
+    let chars = c.label.length <= 12 ? c.label.length : Math.max(...c.label.split(' ').map((x) => x.length))
+    for (const r of rows) {
+      if (r.kind !== 'row' && ci < lead) continue // a Total line's label spans the leading columns
+      chars = Math.max(chars, cellText(r.cells[ci], c).length)
+    }
+    return Math.min(Math.round(c.width * CAP), Math.ceil(chars * CHAR_PX) + PAD_PX)
+  })
+  const w = (c: ReportColumn) => fit[columns.indexOf(c)]
+  const left = columns.map((_, i) => fit.slice(0, i).reduce((n, x) => n + x, 0))
+  const width = fit.reduce((n, x) => n + x, 0)
   const td = 'border px-1.5 py-0 text-[11px] leading-[16px]'
   const grid = { borderColor: COLOR.grid }
   const frozen = (i: number) => (i < lead ? 'md:sticky md:z-[5]' : '')

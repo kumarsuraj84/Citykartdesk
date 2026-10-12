@@ -5,7 +5,7 @@ import { render, screen, fireEvent, cleanup, within } from '@testing-library/rea
 vi.mock('@/lib/actions/fixedReportExport', () => ({ exportFixedReportXlsx: vi.fn() }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
-import { FIXED_REPORTS, REPORTS_NAME, buildFixedReport, findFixedReport, normName, type FixedReportDef } from '@/lib/reporting/analytics/fixed-reports'
+import { FIXED_REPORTS, REPORTS_FOLDER, REPORTS_NAME, buildFixedReport, findFixedReport, normName, type FixedReportDef } from '@/lib/reporting/analytics/fixed-reports'
 import { buildReportWorkbook, XLSX_HEAD_ROW } from '@/lib/reporting/analytics/report-table-xlsx'
 import { cellText, shortDate, type ReportTable } from '@/lib/reporting/analytics/report-table'
 import { ReportTableView } from '@/components/reports/analytics/ReportTableView'
@@ -26,7 +26,8 @@ describe('the fixed reports are the sheets of the Excel report, under their name
       'Repair & Maintenance Report', 'Admin Requirement Report', 'NSO Status Report', 'NSO Summary Report', 'BD Status Report', 'BD Summary Report', 'Admin Summary Report',
     ])
     expect(new Set(FIXED_REPORTS.map((r) => r.slug)).size).toBe(12)
-    expect(REPORTS_NAME).toBe('Fixed Predefined Reports')
+    expect(REPORTS_NAME).toBe('Predefined Reports')
+    expect(REPORTS_FOLDER).toBe('Admin/NSO/BD Reports')
   })
   it('no name has CKDESK or ckdesk in it', () => {
     for (const r of FIXED_REPORTS) expect(r.title).not.toMatch(/ckdesk/i)

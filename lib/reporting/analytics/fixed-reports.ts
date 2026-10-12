@@ -11,7 +11,10 @@ import {
 } from './report-table'
 
 /** What the section is called in the menu and on its pages. */
-export const REPORTS_NAME = 'Fixed Predefined Reports'
+export const REPORTS_NAME = 'Predefined Reports'
+
+/** The folder the reports are kept in. */
+export const REPORTS_FOLDER = 'Admin/NSO/BD Reports'
 
 export type ReportLayout = 'summary' | 'status' | 'cluster-list' | 'store-ac' | 'red-flag' | 'amc-vendor'
 
