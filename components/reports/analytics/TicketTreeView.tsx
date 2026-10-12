@@ -36,16 +36,18 @@ const TH = 'sticky top-0 z-10 bg-primary px-3 py-2 text-[11px] font-semibold upp
  * line of totals or open it again, and the level buttons fold everything at once. Export to Excel follows
  * exactly what is on screen.
  */
-export function TicketTreeView({ tree, groupBy, defaultLevel, exportProps }: {
+export function TicketTreeView({ tree, groupBy, oemAvailable, defaultLevel, exportProps }: {
   tree: TicketTree
   groupBy: TreeGroupBy
+  /** false when no chosen service goes to an OEM: there is no OEM column */
+  oemAvailable: boolean
   defaultLevel: TreeLevel
   exportProps: TreeExportProps
 }) {
   const [collapsed, setCollapsed] = useState<TreeCollapsed>(() => collapsedForTreeLevel(tree, defaultLevel))
   const rows = useMemo(() => flattenTree(tree, collapsed), [tree, collapsed])
   const level = treeLevelOf(tree, collapsed)
-  const cols = treeColumns(groupBy)
+  const cols = treeColumns(groupBy, oemAvailable)
   const { buckets, grand } = tree
   const heading = groupByLabel(groupBy)
   const statusLabel = (s: string) => (STATUS_LABELS as Record<string, string>)[s] ?? s

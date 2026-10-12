@@ -25,6 +25,8 @@ export function buildTicketTreeWorkbook(p: {
   /** e.g. "Responsible: Krishan · Stores with at least 2 tickets", or "". */
   extraFilters: string
   groupBy: TreeGroupBy
+  /** false when no chosen service goes to an OEM: the OEM column is left out. */
+  oemAvailable?: boolean
   tree: TicketTree
   collapsed?: TreeCollapsed
   statusLabel: (s: string) => string
@@ -35,7 +37,7 @@ export function buildTicketTreeWorkbook(p: {
   workbook.creator = 'CityKart Desk'
   workbook.created = new Date()
   const sheet = workbook.addWorksheet('Tickets', { views: [{ state: 'frozen', ySplit: TREE_HEADER_ROW, xSplit: 2 }] })
-  const cols = treeColumns(p.groupBy)
+  const cols = treeColumns(p.groupBy, p.oemAvailable ?? true)
   const lead = 2 + cols.length // group, store, ticket columns
 
   sheet.addRow([p.title]).font = { bold: true, size: 14, color: { argb: 'FF1F2A44' } }

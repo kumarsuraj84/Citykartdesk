@@ -53,7 +53,7 @@ export default async function AnalyticsReportPage({
     const res = await loadTicketTreeReport(profile, slug, { ...common, technician: sp.technician, bucket: sp.bucket, groupBy: sp.by, minTickets: sp.min })
     if ('error' in res) return notFound(res.error)
 
-    const { def, team, groups, services: groupServices, selectedServiceIds, range, tree, technicians, buckets, technician, bucket, groupBy, minTickets, totalBeforeFilters, truncated } = res
+    const { def, team, groups, services: groupServices, selectedServiceIds, range, tree, technicians, buckets, technician, bucket, groupBy, oemAvailable, minTickets, totalBeforeFilters, truncated } = res
     const servicesText = selectedServiceIds.length >= groupServices.length ? 'All services' : groupServices.filter((s) => selectedServiceIds.includes(s.id)).map((s) => s.name).join(', ')
     const title = reportTitleForGroup(def, team.name)
     const fromStr = ymd(range.from)
@@ -81,7 +81,7 @@ export default async function AnalyticsReportPage({
           statuses={statuses}
           resetHref={`/reports/analytics/${def.slug}?group=${encodeURIComponent(team.id)}`}
           detail={{ technicians, buckets, technician, bucket }}
-          tree={{ groupBy, minTickets, showMinTickets: !!def.tree?.minTicketsFilter }}
+          tree={{ groupBy, minTickets, showMinTickets: !!def.tree?.minTicketsFilter, oemAvailable }}
         />
 
         <p className="text-xs text-muted-foreground">
@@ -92,13 +92,14 @@ export default async function AnalyticsReportPage({
           {truncated && <span className="ml-2 font-semibold text-destructive">(very large result — showing the first part only)</span>}
         </p>
         <p className="text-[11px] text-muted-foreground">
-          A store is the requester account of the store; its OEM is the one set for it in Organization Structure. Tickets raised by head office staff show under the requester’s name, with no OEM.
+          A store is the requester account of the store. An OEM is shown only for tickets of services that go to an OEM ({groupServices.filter((s) => s.oemRouted).map((s) => s.name).join(', ') || 'none in this group'}), using the OEM set for the store in Organization Structure; grouped by OEM, only those tickets are listed. Tickets raised by head office staff show under the requester’s name.
         </p>
 
         <TicketTreeView
           key={`${filterKey}|view`}
           tree={tree}
           groupBy={groupBy}
+          oemAvailable={oemAvailable}
           defaultLevel={def.tree?.level ?? 'tickets'}
           exportProps={{ slug: def.slug, group: team.id, services: selectedServiceIds, preset: range.preset, from: fromStr, to: toStr, statuses, technician, bucket, groupBy, minTickets }}
         />

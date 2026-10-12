@@ -110,6 +110,7 @@ export async function exportTicketTreeReportXlsx(
       : res.services.filter((s) => res.selectedServiceIds.includes(s.id)).map((s) => s.name).join(', '),
     extraFilters: extra,
     groupBy: res.groupBy,
+    oemAvailable: res.oemAvailable,
     tree: res.tree,
     collapsed: { group: new Set(filters.collapsedGroups ?? []), store: new Set(filters.collapsedStores ?? []) },
     statusLabel: (s) => (STATUS_LABELS as Record<string, string>)[s] ?? s,

@@ -23,7 +23,8 @@ function daysBetween(a: string, b: string): number {
 }
 
 export interface OrgTeam { id: string; name: string }
-export interface GroupService { id: string; name: string }
+/** `oemRouted`: tickets of this service go to the store's OEM (AC servicing) — the only tickets an OEM has anything to do with. */
+export interface GroupService { id: string; name: string; oemRouted: boolean }
 
 /** The organisation's active technician groups. */
 export async function getOrgTeams(orgId: string): Promise<OrgTeam[]> {
@@ -35,8 +36,8 @@ export async function getOrgTeams(orgId: string): Promise<OrgTeam[]> {
 /** The services that belong to a technician group (one group can run several). */
 export async function getGroupServices(orgId: string, teamId: string): Promise<GroupService[]> {
   const admin = createAdminClient() as unknown as AnyClient
-  const { data } = await admin.from('services').select('id, name').eq('org_id', orgId).eq('team_id', teamId).order('name', { ascending: true })
-  return (data ?? []) as GroupService[]
+  const { data } = await admin.from('services').select('id, name, auto_oem_routing').eq('org_id', orgId).eq('team_id', teamId).order('name', { ascending: true })
+  return ((data ?? []) as { id: string; name: string; auto_oem_routing: boolean | null }[]).map((s) => ({ id: s.id, name: s.name, oemRouted: !!s.auto_oem_routing }))
 }
 
 /** The predefined reports a viewer can open (none when they belong to no technician group and are not an admin/owner). */
@@ -200,6 +201,21 @@ export async function loadAgeBucketReport(
   }
 }
 
+/**
+ * The Responsible and Age bucket choices depend on each other: Responsible lists only people who have tickets in the
+ * chosen age bucket, and Age bucket lists only the ages that the chosen person has tickets in. A choice that no longer
+ * fits (left over from another group, status or filter) is dropped.
+ */
+function linkedChoices<T extends Pick<DetailRow, 'technician' | 'ageBucket'>>(all: T[], wantTechnician: string | undefined, wantBucket: string | undefined) {
+  const technician = technicianOptions(all).includes(wantTechnician ?? '') ? wantTechnician! : ''
+  // the age buckets offered are the ones that person has; a bucket they have no tickets in is dropped
+  const buckets = bucketOptions(filterDetailRows(all, { technician }))
+  const bucket = buckets.includes(wantBucket ?? '') ? wantBucket! : ''
+  // the people offered are the ones who have tickets in the chosen age bucket
+  const technicians = technicianOptions(filterDetailRows(all, { bucket }))
+  return { technician, bucket, technicians, buckets }
+}
+
 // ── Ticket detail report ───────────────────────────────────────────────────────────────────────────
 
 interface DetailTicket {
@@ -284,11 +300,7 @@ export async function loadTicketDetailReport(
   const scope = await resolveScope(profile, slug, 'ticket-detail', filters)
   if ('error' in scope) return scope
   const { rows: all, truncated } = await fetchDetailRows(profile.org_id!, scope.team.id, scope.range, filters.statuses, scope.serviceIds)
-  const technicians = technicianOptions(all)
-  const buckets = bucketOptions(all)
-  // a technician or bucket that is not in this result (e.g. left over from another group) is ignored
-  const technician = technicians.includes(filters.technician ?? '') ? filters.technician! : ''
-  const bucket = buckets.includes(filters.bucket ?? '') ? filters.bucket! : ''
+  const { technician, bucket, technicians, buckets } = linkedChoices(all, filters.technician, filters.bucket)
   return {
     def: scope.def, team: scope.team, groups: scope.groups, services: scope.services,
     selectedServiceIds: scope.selectedServiceIds, range: scope.range, statuses: filters.statuses,
@@ -300,7 +312,8 @@ export async function loadTicketDetailReport(
 
 // ── Ticket status / store wise reports (group → store → ticket) ───────────────────────────────────────
 
-interface TreeTicketRow extends DetailTicket {
+interface TreeTicketRow extends Omit<DetailTicket, 'service' | 'requester'> {
+  service: { name: string; auto_oem_routing: boolean | null } | null
   requester: { full_name: string; store: { code: string; oem: { name: string } | null } | null } | null
 }
 
@@ -308,7 +321,7 @@ interface TreeTicketRow extends DetailTicket {
 const TREE_SELECT = DETAIL_SELECT.replace(
   'requester:profiles!requests_requester_id_fkey(full_name)',
   'requester:profiles!requests_requester_id_fkey(full_name, store:stores(code, oem:oems(name)))'
-)
+).replace('service:services(name)', 'service:services(name, auto_oem_routing)')
 
 async function fetchTreeRows(
   orgId: string, teamId: string, range: ResolvedRange, statuses: RequestStatus[], serviceIds: string[] | null
@@ -332,7 +345,8 @@ async function fetchTreeRows(
       requester: r.requester?.full_name ?? '',
       // a store's account is named after the store; anyone else (head office staff) shows under their own name
       store: store?.code || r.requester?.full_name || NO_STORE,
-      oem: store?.oem?.name ?? NO_OEM,
+      // an OEM only has to do with tickets of OEM-routed services (AC servicing); an IT or HR ticket from the same store has none
+      oem: r.service?.auto_oem_routing ? (store?.oem?.name ?? NO_OEM) : '',
       technician: r.assignee?.full_name ?? UNASSIGNED,
       category: r.category?.name ?? NO_CATEGORY,
       subCategory: r.sub_category?.name ?? NO_SUB_CATEGORY,
@@ -361,6 +375,8 @@ export interface TicketTreeReportResult {
   technician: string
   bucket: string
   groupBy: TreeGroupBy
+  /** Whether any chosen service goes to an OEM — only then can the report be grouped by OEM. */
+  oemAvailable: boolean
   minTickets: number
   tree: TicketTree
   /** Tickets before the responsible / age-bucket / minimum-tickets filters. */
@@ -380,16 +396,17 @@ export async function loadTicketTreeReport(
   const scope = await resolveScope(profile, slug, 'ticket-tree', filters)
   if ('error' in scope) return scope
   const { rows: all, truncated } = await fetchTreeRows(profile.org_id!, scope.team.id, scope.range, filters.statuses, scope.serviceIds)
-  const technicians = technicianOptions(all)
-  const buckets = bucketOptions(all)
-  const technician = technicians.includes(filters.technician ?? '') ? filters.technician! : ''
-  const bucket = buckets.includes(filters.bucket ?? '') ? filters.bucket! : ''
-  const groupBy = parseGroupBy(filters.groupBy, scope.def.tree?.groupBy ?? 'technician')
+  const { technician, bucket, technicians, buckets } = linkedChoices(all, filters.technician, filters.bucket)
+  const chosen = scope.services.filter((s) => scope.selectedServiceIds.includes(s.id))
+  const oemAvailable = chosen.some((s) => s.oemRouted)
+  const wantedBy = parseGroupBy(filters.groupBy, scope.def.tree?.groupBy ?? 'technician')
+  // no chosen service goes to an OEM: grouping by OEM would be empty, so the report is grouped by responsible instead
+  const groupBy: TreeGroupBy = wantedBy === 'oem' && !oemAvailable ? 'technician' : wantedBy
   const minTickets = scope.def.tree?.minTicketsFilter ? parseMinTickets(filters.minTickets) : 1
   return {
     def: scope.def, team: scope.team, groups: scope.groups, services: scope.services,
     selectedServiceIds: scope.selectedServiceIds, range: scope.range, statuses: filters.statuses,
-    technicians, buckets, technician, bucket, groupBy, minTickets,
+    technicians, buckets, technician, bucket, groupBy, oemAvailable, minTickets,
     tree: buildTicketTree(filterDetailRows(all, { technician, bucket }), groupBy, minTickets),
     totalBeforeFilters: all.length, truncated,
   }

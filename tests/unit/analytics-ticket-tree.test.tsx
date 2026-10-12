@@ -25,7 +25,8 @@ const rows: TreeTicket[] = [
   t({ ticketNo: 'CK-2', store: 'LSR', oem: 'DAIKAIN OEM - ALL', technician: 'Krishan', ageDays: 2 }),
   t({ ticketNo: 'CK-3', store: 'SBP', oem: 'BLUE STAR OEM - BR', technician: 'Krishan', ageDays: 9, ageBucket: '6–10 days' }),
   t({ ticketNo: 'CK-4', store: 'KGP', oem: 'BLUE STAR OEM - BR', technician: 'Shivanshu', category: 'FAN', ageDays: 1 }),
-  t({ ticketNo: 'CK-5', store: 'HO Person', oem: NO_OEM, technician: 'Unassigned', category: 'FAN', ageDays: 20, ageBucket: '11–20 days' }),
+  // an IT ticket from a store with an OEM: the OEM has nothing to do with it
+  t({ ticketNo: 'CK-5', store: 'HO Person', oem: '', technician: 'Unassigned', category: 'FAN', ageDays: 20, ageBucket: '11–20 days' }),
 ]
 
 const labels = (tree = buildTicketTree(rows, 'technician'), c = collapsedForTreeLevel(tree, 'tickets')) =>
@@ -44,8 +45,13 @@ describe('ticket tree', () => {
     expect(tree.grand.counts['11–20 days']).toBe(2)
   })
 
-  it('can group by OEM (no OEM last) or by category', () => {
-    expect(buildTicketTree(rows, 'oem').groups.map((g) => g.name)).toEqual(['BLUE STAR OEM - BR', 'DAIKAIN OEM - ALL', NO_OEM])
+  it('can group by OEM or by category', () => {
+    // grouped by OEM, a ticket that has no OEM to do with it (an IT ticket) is not listed at all
+    const byOem = buildTicketTree(rows, 'oem')
+    expect(byOem.groups.map((g) => g.name)).toEqual(['BLUE STAR OEM - BR', 'DAIKAIN OEM - ALL'])
+    expect(byOem.grand.total).toBe(4)
+    // an AC ticket whose store has no OEM is listed, last, as "(No OEM)"
+    expect(buildTicketTree([...rows, t({ ticketNo: 'CK-6', store: 'ZZZ', oem: NO_OEM })], 'oem').groups.map((g) => g.name).slice(-1)).toEqual([NO_OEM])
     const byCat = buildTicketTree(rows, 'category')
     expect(byCat.groups.map((g) => [g.name, g.total])).toEqual([['ADMIN AC ISSUE', 3], ['FAN', 2]])
   })
@@ -56,6 +62,8 @@ describe('ticket tree', () => {
     const tree = buildTicketTree(rows, 'oem', 2)
     expect(tree.groups.map((g) => g.name)).toEqual(['DAIKAIN OEM - ALL'])
     expect(tree.grand.total).toBe(2)
+    // the OEM grouping leaves out tickets without an OEM before counting a store's tickets
+    expect(buildTicketTree([...rows, t({ ticketNo: 'IT-1', store: 'LSR', oem: '' })], 'oem', 3).grand.total).toBe(0)
     // a store raising tickets under two responsibles still counts as one store with all its tickets
     const split = [t({ ticketNo: 'A', store: 'X', technician: 'P' }), t({ ticketNo: 'B', store: 'X', technician: 'Q' })]
     expect(buildTicketTree(split, 'technician', 2).grand.total).toBe(2)
@@ -102,6 +110,7 @@ describe('ticket tree', () => {
     expect(treeColumns('oem').map((c) => c.key)).not.toContain('oem')
     expect(treeColumns('category').map((c) => c.key)).not.toContain('category')
     expect(treeColumns('oem').map((c) => c.key)).toContain('technician')
+    expect(treeColumns('technician', false).map((c) => c.key)).not.toContain('oem')
   })
 })
 
@@ -148,7 +157,7 @@ describe('ticket tree Excel', () => {
 describe('ticket tree screen', () => {
   const tree = buildTicketTree(rows, 'technician')
   const exportProps = { slug: 's', group: 'g', services: [], preset: 'all', from: '', to: '', statuses: ['open'], technician: '', bucket: '', groupBy: 'technician', minTickets: 1 }
-  const show = (level: 'groups' | 'stores' | 'tickets') => render(<TicketTreeView tree={tree} groupBy="technician" defaultLevel={level} exportProps={exportProps} />)
+  const show = (level: 'groups' | 'stores' | 'tickets') => render(<TicketTreeView tree={tree} groupBy="technician" oemAvailable defaultLevel={level} exportProps={exportProps} />)
   const body = () => screen.getAllByRole('row').slice(1).map((r) => r.textContent ?? '')
 
   it('opens at the level the report asks for', () => {

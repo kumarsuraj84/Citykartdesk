@@ -48,13 +48,27 @@ describe('Ticket Status / Store wise reports: store and OEM per ticket', () => {
   }
 
   it('groups a store account\'s tickets under its store and OEM, and other requesters under their own name with no OEM', async () => {
+    // the group's service goes to an OEM (AC servicing), so its tickets have an OEM
+    await admin.from('services').update({ auto_oem_routing: true }).eq('id', fx.teamA.serviceId)
     const byOem = await load({ groupBy: 'oem' })
+    expect(byOem.oemAvailable).toBe(true)
     const groups = Object.fromEntries(byOem.tree.groups.map((g) => [g.name, g]))
     expect(groups['TEST OEM - ZZ'].stores.map((s) => [s.name, s.total])).toEqual([['ZZ1', 3]])
     expect(groups[NO_OEM].total).toBe(1)
     expect(groups[NO_OEM].stores).toHaveLength(1)
     expect(groups[NO_OEM].stores[0].name).not.toBe('')
     expect(byOem.tree.grand.total).toBe(4)
+  })
+
+  it('a service that does not go to an OEM has no OEM: nothing to group by, and the report falls back to responsible', async () => {
+    await admin.from('services').update({ auto_oem_routing: false }).eq('id', fx.teamA.serviceId)
+    const res = await load({ groupBy: 'oem' })
+    expect(res.oemAvailable).toBe(false)
+    expect(res.groupBy).toBe('technician')
+    // the store is still known, but no ticket carries an OEM
+    expect(res.tree.grand.total).toBe(4)
+    expect(res.tree.groups.flatMap((g) => g.stores.flatMap((s) => s.tickets)).every((x) => x.oem === '')).toBe(true)
+    await admin.from('services').update({ auto_oem_routing: true }).eq('id', fx.teamA.serviceId)
   })
 
   it('groups by responsible, with the unassigned ticket last', async () => {
@@ -73,6 +87,33 @@ describe('Ticket Status / Store wise reports: store and OEM per ticket', () => {
     expect(res.totalBeforeFilters).toBe(4)
     // the same filter is ignored on the report that does not offer it
     expect((await load({ minTickets: '2' })).minTickets).toBe(1)
+  })
+
+  it('Responsible and Age bucket depend on each other: each lists only what fits the other', async () => {
+    // the head-office requester's unassigned ticket is made 15 days old; the others are new
+    const old = await admin.from('requests').select('id').eq('requester_id', fx.requesterB.id).eq('team_id', fx.teamA.id).limit(1).single()
+    await admin.from('requests').update({ created_at: new Date(Date.now() - 15 * 86_400_000).toISOString() }).eq('id', old.data!.id)
+
+    const all = await load()
+    expect(all.buckets).toEqual(['0–5 days', '11–20 days'])
+    expect(all.technicians).toContain('Unassigned')
+    expect(all.technicians.length).toBeGreaterThan(1)
+
+    // only the unassigned ticket is old, so choosing the old bucket leaves Unassigned as the only person
+    const oldBucket = await load({ bucket: '11–20 days' })
+    expect(oldBucket.technicians).toEqual(['Unassigned'])
+    expect(oldBucket.tree.grand.total).toBe(1)
+
+    // and choosing Unassigned leaves only the old bucket
+    const unassigned = await load({ technician: 'Unassigned' })
+    expect(unassigned.buckets).toEqual(['11–20 days'])
+
+    // a person with no ticket in the chosen bucket: the bucket is dropped, the person stays
+    const other = all.technicians.find((t) => t !== 'Unassigned')!
+    const clash = await load({ technician: other, bucket: '11–20 days' })
+    expect(clash.technician).toBe(other)
+    expect(clash.bucket).toBe('')
+    expect(clash.buckets).toEqual(['0–5 days'])
   })
 
   it('keeps the usual access rule: someone outside the group cannot open it', async () => {

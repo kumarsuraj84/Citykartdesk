@@ -38,6 +38,7 @@ export function parseMinTickets(v: string | undefined): number {
 export interface TreeTicket extends DetailRow {
   /** The store code (the store's requester account), or the requester's name when they are not a store. */
   store: string
+  /** The store's OEM — only for tickets of services that go to an OEM (AC servicing); '' for every other ticket. */
   oem: string
 }
 
@@ -69,7 +70,8 @@ export function filterByMinTickets<T extends { store: string }>(rows: T[], min: 
 }
 
 export function buildTicketTree(rows: TreeTicket[], by: TreeGroupBy, minTickets = 1): TicketTree {
-  const kept = filterByMinTickets(rows, minTickets)
+  // grouped by OEM, only tickets that have an OEM to do with them are listed (an IT ticket does not belong under an AC vendor)
+  const kept = filterByMinTickets(by === 'oem' ? rows.filter((r) => r.oem !== '') : rows, minTickets)
   const groups = new Map<string, Map<string, TreeTicket[]>>()
   for (const t of kept) {
     const g = groupValue(t, by) || lastName(by)
@@ -202,8 +204,9 @@ export const TREE_COLUMNS: { key: TreeColumnKey; label: string; width: number; n
 ]
 
 /** The ticket columns for a grouping: the column the report is grouped by is the first column already, so it is not repeated. */
-export function treeColumns(by: TreeGroupBy) {
-  return TREE_COLUMNS.filter((c) => c.key !== by)
+export function treeColumns(by: TreeGroupBy, showOem = true) {
+  // the OEM column only exists where some service goes to an OEM (AC servicing)
+  return TREE_COLUMNS.filter((c) => c.key !== by && (showOem || c.key !== 'oem'))
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
