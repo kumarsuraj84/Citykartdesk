@@ -6,6 +6,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { logAdminAudit } from './audit'
 import { readStoreMasterFile } from '@/lib/stores/master-file'
+import { buildStoreMasterSampleWorkbook } from '@/lib/stores/master-sample'
 import { prepareStoreMaster, fieldHeading, type StoreMasterEntry, type StoreMasterField, type StoreMasterValues } from '@/lib/stores/master-import'
 import type { Database } from '@/types/database'
 
@@ -137,6 +138,14 @@ async function plan(formData: FormData, orgId: string): Promise<{ error: string 
     else changes.push({ store, set })
   }
   return { prepared, existing, changes, unchanged, missing, problems, oemIdByEntry, fileName: file.name }
+}
+
+/** The sample .xlsx for the upload: the right headings, two example rows and a how-to sheet. */
+export async function downloadStoreMasterSample(): Promise<ActionResult<{ data: string; filename: string }>> {
+  const guard = await requireAdminOrManager()
+  if ('error' in guard) return { error: guard.error }
+  const buffer = await buildStoreMasterSampleWorkbook().xlsx.writeBuffer()
+  return { data: { data: Buffer.from(buffer).toString('base64'), filename: 'Store Master - sample.xlsx' } }
 }
 
 /** Reads the file and says what an upload would do, without changing anything. */

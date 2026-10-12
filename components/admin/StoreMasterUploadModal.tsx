@@ -1,7 +1,8 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { previewStoreMaster, applyStoreMaster, type StoreMasterPreview, type StoreMasterResult } from '@/lib/actions/admin/storeMaster'
+import { previewStoreMaster, applyStoreMaster, downloadStoreMasterSample, type StoreMasterPreview, type StoreMasterResult } from '@/lib/actions/admin/storeMaster'
+import { downloadXlsxBase64 } from '@/lib/export/xlsx'
 
 /**
  * Upload the Store Master sheet (Excel or CSV) into the Stores. Two steps so nothing is changed by surprise:
@@ -46,6 +47,15 @@ export function StoreMasterUploadModal({ onClose }: { onClose: () => void }) {
     })
   }
 
+  function sample() {
+    setError(null)
+    start(async () => {
+      const res = await downloadStoreMasterSample()
+      if (res.error || !res.data) { setError(res.error ?? 'Could not create the sample file.'); return }
+      downloadXlsxBase64(res.data.filename, res.data.data)
+    })
+  }
+
   const nothingToDo = preview && preview.willChange === 0 && !(addMissing && preview.missing.length > 0)
 
   return (
@@ -62,6 +72,9 @@ export function StoreMasterUploadModal({ onClose }: { onClose: () => void }) {
           <p>and the AC details, used for the AC service only:</p>
           <p className="font-mono text-[11px] text-foreground">AC TOTAL · AC BRAND · AC-AMC BRAND · AC-AMC VENDOR · ZENATIX</p>
           <p>(and optionally NAME, ADDRESS, PIN CODE, OEM, ACTIVE). Only the columns in the file are updated, and an empty cell never wipes what is saved. Stores are matched by their code.</p>
+          <button type="button" onClick={sample} disabled={pending} className="mt-1 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted/40 disabled:opacity-50">
+            Download sample file (.xlsx)
+          </button>
         </div>
 
         <div className="space-y-2">

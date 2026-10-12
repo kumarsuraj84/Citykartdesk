@@ -140,3 +140,23 @@ describe('reading the uploaded file', () => {
     expect(await e('a.csv', new TextEncoder().encode('STORE\n').buffer as ArrayBuffer)).toMatch(/no store rows/)
   })
 })
+
+describe('the sample file', () => {
+  it('has the headings in order, loads without a problem, and its example rows are not real stores', async () => {
+    const { buildStoreMasterSampleWorkbook, SAMPLE_FIELDS } = await import('@/lib/stores/master-sample')
+    const wb = buildStoreMasterSampleWorkbook()
+    const buf = (await wb.xlsx.writeBuffer()) as ArrayBuffer
+    const t = await readStoreMasterFile('Store Master - sample.xlsx', buf)
+    if ('error' in t) throw new Error(t.error)
+    expect(t.headers).toEqual(['STORE', 'CITY', 'STATE', 'CLUSTER', 'REGION', 'STORE PRIORITY LIST AS PER OPS', 'OPEN DATE', 'FESTIVAL', 'AC TOTAL', 'AC BRAND', 'AC-AMC BRAND', 'AC-AMC VENDOR', 'ZENATIX'])
+    expect(SAMPLE_FIELDS).toHaveLength(13)
+    const p = prepareStoreMaster(t.headers, t.rows)
+    expect(p.problems).toEqual([])
+    expect(p.ignored).toEqual([])
+    expect(p.recognised).toHaveLength(12)
+    expect(p.entries.map((e) => e.code)).toEqual(['SAMPLE1', 'SAMPLE2'])
+    expect(p.entries[0].values).toMatchObject({ open_date: '2011-10-15', zenatix: true, ac_total: 11, priority_list: 'Top 50' })
+    expect(p.entries[1].values.open_date).toBeUndefined() // "Pending" stays empty
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Store Master', 'How to fill'])
+  })
+})
