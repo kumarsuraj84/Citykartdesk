@@ -2,15 +2,16 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { getCurrentProfile, getEnabledModules } from '@/lib/queries/profiles'
-import { loadAgeBucketReport, loadTicketDetailReport } from '@/lib/queries/report-analytics'
+import { loadAgeBucketReport, loadTicketDetailReport, loadTicketTreeReport } from '@/lib/queries/report-analytics'
 import { canUseReportAnalytics, findAnalyticsReport, parseStatuses, reportTitleForGroup } from '@/lib/reporting/analytics/catalog'
 import { AgeSummaryView } from '@/components/reports/analytics/AgeSummaryView'
 import { AnalyticsFilters } from '@/components/reports/analytics/AnalyticsFilters'
 import { TicketDetailTable } from '@/components/reports/analytics/TicketDetailTable'
+import { TicketTreeView } from '@/components/reports/analytics/TicketTreeView'
 import { ExportTicketDetailButton } from '@/components/reports/analytics/ExportTicketDetailButton'
 import { STATUS_LABELS } from '@/lib/constants/requests'
 
-type SP = { group?: string; service?: string | string[]; range?: string; from?: string; to?: string; status?: string | string[]; technician?: string; bucket?: string }
+type SP = { group?: string; service?: string | string[]; range?: string; from?: string; to?: string; status?: string | string[]; technician?: string; bucket?: string; by?: string; min?: string }
 
 const ymd = (d: Date | null) => (d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : '')
 
@@ -47,6 +48,63 @@ export default async function AnalyticsReportPage({
       </div>
     </div>
   )
+
+  if (findAnalyticsReport(slug)?.kind === 'ticket-tree') {
+    const res = await loadTicketTreeReport(profile, slug, { ...common, technician: sp.technician, bucket: sp.bucket, groupBy: sp.by, minTickets: sp.min })
+    if ('error' in res) return notFound(res.error)
+
+    const { def, team, groups, services: groupServices, selectedServiceIds, range, tree, technicians, buckets, technician, bucket, groupBy, minTickets, totalBeforeFilters, truncated } = res
+    const servicesText = selectedServiceIds.length >= groupServices.length ? 'All services' : groupServices.filter((s) => selectedServiceIds.includes(s.id)).map((s) => s.name).join(', ')
+    const title = reportTitleForGroup(def, team.name)
+    const fromStr = ymd(range.from)
+    const toStr = ymd(range.to)
+    const filterKey = `${team.id}|${selectedServiceIds.join('.')}|${range.preset}|${fromStr}|${toStr}|${statuses.join(',')}|${technician}|${bucket}|${groupBy}|${minTickets}`
+    const shown = tree.grand.total
+
+    return (
+      <div className="space-y-4">
+        {back}
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">{title}</h1>
+          <p className="text-sm text-muted-foreground">{def.description}</p>
+        </div>
+
+        <AnalyticsFilters
+          key={filterKey}
+          groups={groups}
+          groupId={team.id}
+          services={groupServices}
+          selectedServiceIds={selectedServiceIds}
+          preset={range.preset}
+          from={fromStr}
+          to={toStr}
+          statuses={statuses}
+          resetHref={`/reports/analytics/${def.slug}?group=${encodeURIComponent(team.id)}`}
+          detail={{ technicians, buckets, technician, bucket }}
+          tree={{ groupBy, minTickets, showMinTickets: !!def.tree?.minTicketsFilter }}
+        />
+
+        <p className="text-xs text-muted-foreground">
+          <span className="font-semibold text-foreground">{team.name}</span> · {servicesText} · created {range.label} · {statuses.map((s) => STATUS_LABELS[s]).join(', ')} ·{' '}
+          <span className="font-semibold text-foreground">{shown}</span> ticket{shown === 1 ? '' : 's'}
+          {shown !== totalBeforeFilters && <span> (of {totalBeforeFilters})</span>}
+          {minTickets > 1 && <span> · stores with at least {minTickets} tickets</span>}
+          {truncated && <span className="ml-2 font-semibold text-destructive">(very large result — showing the first part only)</span>}
+        </p>
+        <p className="text-[11px] text-muted-foreground">
+          A store is the requester account of the store; its OEM is the one set for it in Organization Structure. Tickets raised by head office staff show under the requester’s name, with no OEM.
+        </p>
+
+        <TicketTreeView
+          key={`${filterKey}|view`}
+          tree={tree}
+          groupBy={groupBy}
+          defaultLevel={def.tree?.level ?? 'tickets'}
+          exportProps={{ slug: def.slug, group: team.id, services: selectedServiceIds, preset: range.preset, from: fromStr, to: toStr, statuses, technician, bucket, groupBy, minTickets }}
+        />
+      </div>
+    )
+  }
 
   if (findAnalyticsReport(slug)?.kind === 'ticket-detail') {
     const res = await loadTicketDetailReport(profile, slug, { ...common, technician: sp.technician, bucket: sp.bucket })

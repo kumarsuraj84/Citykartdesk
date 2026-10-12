@@ -5,6 +5,9 @@ import { sortDetailRows, filterDetailRows, technicianOptions, bucketOptions, typ
 import {
   ANALYTICS_REPORTS, findAnalyticsReport, canUseReportAnalytics, selectableGroups, pickGroup, type AnalyticsReportDef,
 } from '@/lib/reporting/analytics/catalog'
+import {
+  buildTicketTree, parseGroupBy, parseMinTickets, NO_OEM, NO_STORE, type TicketTree, type TreeGroupBy, type TreeTicket,
+} from '@/lib/reporting/analytics/ticket-tree'
 import { resolveDateRange, referenceDay, type ResolvedRange, type ReferenceDay } from '@/lib/reporting/analytics/date-ranges'
 import type { ProfileWithTeams, RequestStatus } from '@/types'
 
@@ -291,6 +294,103 @@ export async function loadTicketDetailReport(
     selectedServiceIds: scope.selectedServiceIds, range: scope.range, statuses: filters.statuses,
     technicians, buckets, technician, bucket,
     rows: sortDetailRows(filterDetailRows(all, { technician, bucket })),
+    totalBeforeFilters: all.length, truncated,
+  }
+}
+
+// ── Ticket status / store wise reports (group → store → ticket) ───────────────────────────────────────
+
+interface TreeTicketRow extends DetailTicket {
+  requester: { full_name: string; store: { code: string; oem: { name: string } | null } | null } | null
+}
+
+// the detail columns, with the requester's store (and its OEM) added
+const TREE_SELECT = DETAIL_SELECT.replace(
+  'requester:profiles!requests_requester_id_fkey(full_name)',
+  'requester:profiles!requests_requester_id_fkey(full_name, store:stores(code, oem:oems(name)))'
+)
+
+async function fetchTreeRows(
+  orgId: string, teamId: string, range: ResolvedRange, statuses: RequestStatus[], serviceIds: string[] | null
+): Promise<{ rows: TreeTicket[]; truncated: boolean }> {
+  const admin = createAdminClient() as unknown as AnyClient
+  const now = new Date().toISOString()
+  const { rows, truncated } = await fetchAll<TreeTicketRow>((from, to) => {
+    let q = admin.from('requests').select(TREE_SELECT).eq('org_id', orgId).eq('team_id', teamId).in('status', statuses)
+    if (serviceIds) q = q.in('service_id', serviceIds)
+    if (range.from) q = q.gte('created_at', range.from.toISOString())
+    if (range.to) q = q.lte('created_at', range.to.toISOString())
+    return q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to)
+  })
+  const mapped: TreeTicket[] = rows.map((r) => {
+    const ageDays = daysBetween(r.created_at, r.resolved_at ?? r.closed_at ?? now)
+    const store = r.requester?.store
+    return {
+      id: r.id,
+      ticketNo: r.request_no,
+      subject: r.title,
+      requester: r.requester?.full_name ?? '',
+      // a store's account is named after the store; anyone else (head office staff) shows under their own name
+      store: store?.code || r.requester?.full_name || NO_STORE,
+      oem: store?.oem?.name ?? NO_OEM,
+      technician: r.assignee?.full_name ?? UNASSIGNED,
+      category: r.category?.name ?? NO_CATEGORY,
+      subCategory: r.sub_category?.name ?? NO_SUB_CATEGORY,
+      service: r.service?.name ?? '',
+      status: r.status,
+      priority: r.priority,
+      createdAt: r.created_at,
+      ageDays,
+      ageBucket: ageBucketLabel(ageDays),
+    }
+  })
+  const capped = mapped.length > MAX_DETAIL_ROWS
+  return { rows: capped ? mapped.slice(0, MAX_DETAIL_ROWS) : mapped, truncated: truncated || capped }
+}
+
+export interface TicketTreeReportResult {
+  def: AnalyticsReportDef
+  team: OrgTeam
+  groups: OrgTeam[]
+  services: GroupService[]
+  selectedServiceIds: string[]
+  range: ResolvedRange
+  statuses: RequestStatus[]
+  technicians: string[]
+  buckets: string[]
+  technician: string
+  bucket: string
+  groupBy: TreeGroupBy
+  minTickets: number
+  tree: TicketTree
+  /** Tickets before the responsible / age-bucket / minimum-tickets filters. */
+  totalBeforeFilters: number
+  truncated: boolean
+}
+
+/** Loads a ticket-status / store-wise report for a viewer, or says why they cannot have it. */
+export async function loadTicketTreeReport(
+  profile: ProfileWithTeams,
+  slug: string,
+  filters: {
+    group?: string; services?: string[]; preset?: string; from?: string; to?: string; statuses: RequestStatus[]
+    technician?: string; bucket?: string; groupBy?: string; minTickets?: string
+  }
+): Promise<{ error: string } | TicketTreeReportResult> {
+  const scope = await resolveScope(profile, slug, 'ticket-tree', filters)
+  if ('error' in scope) return scope
+  const { rows: all, truncated } = await fetchTreeRows(profile.org_id!, scope.team.id, scope.range, filters.statuses, scope.serviceIds)
+  const technicians = technicianOptions(all)
+  const buckets = bucketOptions(all)
+  const technician = technicians.includes(filters.technician ?? '') ? filters.technician! : ''
+  const bucket = buckets.includes(filters.bucket ?? '') ? filters.bucket! : ''
+  const groupBy = parseGroupBy(filters.groupBy, scope.def.tree?.groupBy ?? 'technician')
+  const minTickets = scope.def.tree?.minTicketsFilter ? parseMinTickets(filters.minTickets) : 1
+  return {
+    def: scope.def, team: scope.team, groups: scope.groups, services: scope.services,
+    selectedServiceIds: scope.selectedServiceIds, range: scope.range, statuses: filters.statuses,
+    technicians, buckets, technician, bucket, groupBy, minTickets,
+    tree: buildTicketTree(filterDetailRows(all, { technician, bucket }), groupBy, minTickets),
     totalBeforeFilters: all.length, truncated,
   }
 }

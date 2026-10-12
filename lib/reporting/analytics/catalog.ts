@@ -5,14 +5,17 @@
 
 import type { RequestStatus } from '@/types'
 import type { ProfileWithTeams } from '@/types'
+import type { TreeGroupBy, TreeLevel } from './ticket-tree'
 
-export type AnalyticsReportKind = 'age-summary' | 'ticket-detail'
+export type AnalyticsReportKind = 'age-summary' | 'ticket-detail' | 'ticket-tree'
 
 export interface AnalyticsReportDef {
   slug: string
   title: string
   description: string
   kind: AnalyticsReportKind
+  /** Ticket-tree reports only: how the report opens (the viewer can change the grouping and open or close rows). */
+  tree?: { groupBy: TreeGroupBy; level: TreeLevel; minTicketsFilter: boolean }
 }
 
 export const ANALYTICS_REPORTS: AnalyticsReportDef[] = [
@@ -27,6 +30,20 @@ export const ANALYTICS_REPORTS: AnalyticsReportDef[] = [
     title: 'Ticket Detail Report Age bucket wise',
     description: 'The same tickets one by one: ticket number, subject, requester, technician, category, status and age. Choose the group, dates and statuses.',
     kind: 'ticket-detail',
+  },
+  {
+    slug: 'ticket-status-age-bucket',
+    title: 'Ticket Status Report Age bucket wise',
+    description: 'Tickets by responsible, OEM or category, then by store, one line per ticket with its age bucket and a total for every heading. Open or close any heading or store.',
+    kind: 'ticket-tree',
+    tree: { groupBy: 'technician', level: 'tickets', minTicketsFilter: false },
+  },
+  {
+    slug: 'store-tickets-age-bucket',
+    title: 'Store wise Ticket Report Age bucket wise',
+    description: 'Every store with its ticket count by age bucket, under its OEM, responsible or category. Show only stores with several tickets to spot repeat-issue stores, and open a store to see its tickets.',
+    kind: 'ticket-tree',
+    tree: { groupBy: 'oem', level: 'stores', minTicketsFilter: true },
   },
 ]
 

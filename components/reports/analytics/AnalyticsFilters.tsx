@@ -4,12 +4,13 @@ import { useState } from 'react'
 import { RANGE_PRESETS, type RangePreset } from '@/lib/reporting/analytics/date-ranges'
 import { ALL_REPORT_STATUSES } from '@/lib/reporting/analytics/catalog'
 import { STATUS_LABELS } from '@/lib/constants/requests'
+import { TREE_GROUP_BYS, type TreeGroupBy } from '@/lib/reporting/analytics/ticket-tree'
 import type { RequestStatus } from '@/types'
 
 // The only things a viewer can change on a predefined report: which technician group, which dates (by
 // when the ticket was created) and which statuses to include. A plain GET form, so the chosen filters
 // live in the URL.
-export function AnalyticsFilters({ groups, groupId, services, selectedServiceIds, preset, from, to, statuses, resetHref, detail }: {
+export function AnalyticsFilters({ groups, groupId, services, selectedServiceIds, preset, from, to, statuses, resetHref, detail, tree }: {
   groups: { id: string; name: string }[]
   groupId: string
   /** The chosen group's services (a group can run several) and which of them are included. */
@@ -22,6 +23,8 @@ export function AnalyticsFilters({ groups, groupId, services, selectedServiceIds
   resetHref: string
   /** Ticket detail report only: narrow the lines to one technician and/or one age bucket. */
   detail?: { technicians: string[]; buckets: string[]; technician: string; bucket: string }
+  /** Ticket status / store wise reports: what the rows are grouped under, and (store wise) the repeat-issue store filter. */
+  tree?: { groupBy: TreeGroupBy; minTickets: number; showMinTickets: boolean }
 }) {
   const [range, setRange] = useState<RangePreset>(preset)
   const input = 'rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
@@ -56,6 +59,25 @@ export function AnalyticsFilters({ groups, groupId, services, selectedServiceIds
             {RANGE_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
         </label>
+
+        {tree && (
+          <label className="text-xs font-medium text-muted-foreground">
+            Group by
+            <select name="by" defaultValue={tree.groupBy} className={`mt-1 block min-w-[9rem] ${input}`}>
+              {TREE_GROUP_BYS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+            </select>
+          </label>
+        )}
+
+        {tree?.showMinTickets && (
+          <label className="text-xs font-medium text-muted-foreground" title="Leave at 1 to see every store. Use 2 or more to see only stores that keep raising tickets.">
+            Stores with at least
+            <span className="mt-1 flex items-center gap-1.5">
+              <input type="number" name="min" min={1} max={1000} defaultValue={tree.minTickets} className={`w-20 ${input}`} />
+              <span className="text-xs text-muted-foreground">tickets</span>
+            </span>
+          </label>
+        )}
 
         {detail && (
           <>

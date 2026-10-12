@@ -37,17 +37,17 @@ export function sortDetailRows(rows: DetailRow[]): DetailRow[] {
 }
 
 /** The technician and age-bucket filters ('' means all). */
-export function filterDetailRows(rows: DetailRow[], f: { technician?: string; bucket?: string }): DetailRow[] {
+export function filterDetailRows<T extends Pick<DetailRow, 'technician' | 'ageBucket'>>(rows: T[], f: { technician?: string; bucket?: string }): T[] {
   return rows.filter((r) => (!f.technician || r.technician === f.technician) && (!f.bucket || r.ageBucket === f.bucket))
 }
 
 /** Technicians that have tickets in the result (A→Z, Unassigned last) — the choices for the technician filter. */
-export function technicianOptions(rows: DetailRow[]): string[] {
+export function technicianOptions(rows: Pick<DetailRow, 'technician'>[]): string[] {
   return [...new Set(rows.map((r) => r.technician))].sort((a, b) => nameOrder(a, b, UNASSIGNED))
 }
 
 /** Age buckets that have tickets in the result, in age order — the choices for the age-bucket filter. */
-export function bucketOptions(rows: DetailRow[]): string[] {
+export function bucketOptions(rows: Pick<DetailRow, 'ageBucket'>[]): string[] {
   const used = new Set(rows.map((r) => r.ageBucket))
   return AGE_BUCKETS.map((b) => b.label).filter((l) => used.has(l))
 }
