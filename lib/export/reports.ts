@@ -281,7 +281,7 @@ export async function exportStoresCSV(orgId: string): Promise<string> {
 
   const { data, error } = await admin
     .from('stores')
-    .select('code,name,address,city,state,pincode,is_active,oem:oems(name)')
+    .select('code,name,address,city,state,pincode,is_active,ac_total,ac_brand,ac_amc_brand,ac_amc_vendor,zenatix,open_date,cluster,region,priority_list,festival,oem:oems(name)')
     .eq('org_id', orgId)
     .order('code', { ascending: true })
     .limit(MAX_EXPORT_ROWS + 1)
@@ -297,6 +297,8 @@ export async function exportStoresCSV(orgId: string): Promise<string> {
   type StoreExportRow = {
     code: string; name: string; address: string | null; city: string | null
     state: string | null; pincode: string | null; is_active: boolean
+    ac_total: number | null; ac_brand: string | null; ac_amc_brand: string | null; ac_amc_vendor: string | null; zenatix: boolean | null
+    open_date: string | null; cluster: string | null; region: string | null; priority_list: string | null; festival: string | null
     oem: { name: string } | null
   }
 
@@ -309,6 +311,16 @@ export async function exportStoresCSV(orgId: string): Promise<string> {
     pincode: s.pincode ?? '',
     oem: s.oem?.name ?? '',
     active: s.is_active ? 'Yes' : 'No',
+    ac_total: s.ac_total ?? '',
+    ac_brand: s.ac_brand ?? '',
+    ac_amc_brand: s.ac_amc_brand ?? '',
+    ac_amc_vendor: s.ac_amc_vendor ?? '',
+    zenatix: s.zenatix == null ? '' : s.zenatix ? 'Yes' : 'No',
+    open_date: s.open_date ?? '',
+    cluster: s.cluster ?? '',
+    region: s.region ?? '',
+    priority_list: s.priority_list ?? '',
+    festival: s.festival ?? '',
   }))
 
   const columns = [
@@ -320,6 +332,16 @@ export async function exportStoresCSV(orgId: string): Promise<string> {
     { key: 'pincode', label: 'Pincode' },
     { key: 'oem',     label: 'OEM' },
     { key: 'active',  label: 'Active' },
+    { key: 'ac_total', label: 'AC Total' },
+    { key: 'ac_brand', label: 'AC Brand' },
+    { key: 'ac_amc_brand', label: 'AC-AMC Brand' },
+    { key: 'ac_amc_vendor', label: 'AC-AMC Vendor' },
+    { key: 'zenatix', label: 'Zenatix' },
+    { key: 'open_date', label: 'Open Date' },
+    { key: 'cluster', label: 'Cluster' },
+    { key: 'region', label: 'Region' },
+    { key: 'priority_list', label: 'Priority List' },
+    { key: 'festival', label: 'Festival' },
   ]
 
   return toCSV(rows, columns)

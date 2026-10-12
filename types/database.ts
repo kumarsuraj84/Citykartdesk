@@ -2586,6 +2586,16 @@ export type Database = {
           city: string | null
           state: string | null
           pincode: string | null
+          ac_total: number | null
+          ac_brand: string | null
+          ac_amc_brand: string | null
+          ac_amc_vendor: string | null
+          zenatix: boolean | null
+          open_date: string | null
+          cluster: string | null
+          region: string | null
+          priority_list: string | null
+          festival: string | null
           oem_id: string | null
           is_active: boolean
           created_at: string
@@ -2600,6 +2610,16 @@ export type Database = {
           city?: string | null
           state?: string | null
           pincode?: string | null
+          ac_total?: number | null
+          ac_brand?: string | null
+          ac_amc_brand?: string | null
+          ac_amc_vendor?: string | null
+          zenatix?: boolean | null
+          open_date?: string | null
+          cluster?: string | null
+          region?: string | null
+          priority_list?: string | null
+          festival?: string | null
           oem_id?: string | null
           is_active?: boolean
           created_at?: string
@@ -2614,6 +2634,16 @@ export type Database = {
           city?: string | null
           state?: string | null
           pincode?: string | null
+          ac_total?: number | null
+          ac_brand?: string | null
+          ac_amc_brand?: string | null
+          ac_amc_vendor?: string | null
+          zenatix?: boolean | null
+          open_date?: string | null
+          cluster?: string | null
+          region?: string | null
+          priority_list?: string | null
+          festival?: string | null
           oem_id?: string | null
           is_active?: boolean
           created_at?: string

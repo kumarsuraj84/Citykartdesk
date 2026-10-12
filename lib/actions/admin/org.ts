@@ -276,6 +276,38 @@ export async function importLocations(
 // (HO/Stores/Warehouse) — this is what the "AC Issues Support" address
 // auto-fill and OEM routing both key off. See lib/actions/requests.ts.
 
+// the Store Master details kept on a store besides its address (see the Stores tab and the Store Master upload)
+export type StoreMasterFields = {
+  ac_total?: number | null
+  ac_brand?: string | null
+  ac_amc_brand?: string | null
+  ac_amc_vendor?: string | null
+  zenatix?: boolean | null
+  open_date?: string | null
+  cluster?: string | null
+  region?: string | null
+  priority_list?: string | null
+  festival?: string | null
+}
+
+const MASTER_TEXT_KEYS = ['ac_brand', 'ac_amc_brand', 'ac_amc_vendor', 'cluster', 'region', 'priority_list', 'festival'] as const
+
+/** Validates and shapes the Store Master details for saving; only the keys that were given are included. */
+function masterColumns(f: StoreMasterFields): { error: string } | { columns: StoreMasterFields } {
+  const out: StoreMasterFields = {}
+  if ('ac_total' in f) {
+    if (f.ac_total != null && (!Number.isInteger(f.ac_total) || f.ac_total < 0)) return { error: 'AC total must be a whole number, 0 or more.' }
+    out.ac_total = f.ac_total ?? null
+  }
+  for (const k of MASTER_TEXT_KEYS) if (k in f) out[k] = f[k]?.trim() || null
+  if ('zenatix' in f) out.zenatix = f.zenatix ?? null
+  if ('open_date' in f) {
+    if (f.open_date && !/^d{4}-d{2}-d{2}$/.test(f.open_date)) return { error: 'Open date must be a valid date.' }
+    out.open_date = f.open_date || null
+  }
+  return { columns: out }
+}
+
 export async function createStore(fields: {
   code: string
   name: string
@@ -285,11 +317,13 @@ export async function createStore(fields: {
   pincode?: string
   oem_id?: string | null
   is_active?: boolean
-}): Promise<ActionResult<{ id: string }>> {
+} & StoreMasterFields): Promise<ActionResult<{ id: string }>> {
   const guard = await requireAdminOrManager()
   if (guard.error) return { error: guard.error }
   if (!fields.code.trim()) return { error: 'Store code is required.' }
   if (!fields.name.trim()) return { error: 'Store name is required.' }
+  const master = masterColumns(fields)
+  if ('error' in master) return { error: master.error }
 
   const admin = createAdminClient()
 
@@ -314,6 +348,7 @@ export async function createStore(fields: {
       pincode: fields.pincode?.trim() || null,
       oem_id: fields.oem_id || null,
       is_active: fields.is_active ?? true,
+      ...master.columns,
     })
     .select('id')
     .single()
@@ -336,10 +371,12 @@ export async function updateStore(
     pincode?: string | null
     oem_id?: string | null
     is_active?: boolean
-  }
+  } & StoreMasterFields
 ): Promise<ActionResult> {
   const guard = await requireAdminOrManager()
   if (guard.error) return { error: guard.error }
+  const master = masterColumns(fields)
+  if ('error' in master) return { error: master.error }
 
   const admin = createAdminClient()
 
@@ -358,6 +395,7 @@ export async function updateStore(
   if ('pincode' in fields) update.pincode = fields.pincode?.trim() || null
   if ('oem_id' in fields) update.oem_id = fields.oem_id || null
   if (fields.is_active !== undefined) update.is_active = fields.is_active
+  Object.assign(update, master.columns)
 
   const { error } = await admin.from('stores').update(update).eq('id', id).eq('org_id', guard.profile!.org_id!)
   if (error) {
@@ -376,67 +414,6 @@ export async function deleteStore(id: string): Promise<ActionResult> {
   if (error) return { error: sanitizeError(error, { route: 'org.ts#deleteStore', fallback: 'Failed to delete store.' }) }
   revalidatePath('/admin/org')
   return {}
-}
-
-// ── importStores ──────────────────────────────────────────────────────────────
-
-export async function importStores(
-  rows: { code: string; name: string; address?: string; city?: string; state?: string; pincode?: string; oem?: string; active?: string }[]
-): Promise<ActionResult<{ imported: number; errors: string[] }>> {
-  const guard = await requireAdminOrManager()
-  if (guard.error) return { error: guard.error }
-  if (rows.length === 0) return { error: 'No rows to import.' }
-
-  const admin = createAdminClient()
-  const orgId = guard.profile!.org_id!
-
-  const { data: oemsData } = await admin.from('oems').select('id, name').eq('org_id', orgId)
-  const oemByName = new Map<string, string>(
-    (oemsData ?? []).map((o: { id: string; name: string }) => [o.name.trim().toLowerCase(), o.id])
-  )
-
-  const errors: string[] = []
-  let imported = 0
-
-  for (let i = 0; i < rows.length; i++) {
-    const rowLabel = `Row ${i + 2}`
-    const code = rows[i].code?.trim().toUpperCase()
-    const name = rows[i].name?.trim()
-    if (!code) { errors.push(`${rowLabel}: store code is required, skipped.`); continue }
-    if (!name) { errors.push(`${rowLabel}: name is required, skipped.`); continue }
-
-    let oemId: string | null = null
-    if (rows[i].oem?.trim()) {
-      const found = oemByName.get(rows[i].oem!.trim().toLowerCase())
-      if (!found) { errors.push(`${rowLabel}: OEM "${rows[i].oem}" not found, skipped.`); continue }
-      oemId = found
-    }
-
-    // Upsert on (org_id, code): a code that already exists re-imports as an
-    // update (e.g. to correct OEM/address in bulk) rather than being skipped
-    // as a duplicate — the sheet's values become the store's values going
-    // forward, same as editing it by hand field-by-field.
-    const { error } = await admin.from('stores').upsert({
-      org_id: orgId,
-      code,
-      name,
-      address: rows[i].address?.trim() || null,
-      city: rows[i].city?.trim() || null,
-      state: rows[i].state?.trim() || null,
-      pincode: rows[i].pincode?.trim() || null,
-      oem_id: oemId,
-      is_active: isActiveValue(rows[i].active),
-    }, { onConflict: 'org_id,code' })
-
-    if (error) {
-      errors.push(`${rowLabel}: ${sanitizeError(error, { route: 'org.ts#importStores' })}, skipped.`)
-      continue
-    }
-    imported++
-  }
-
-  revalidatePath('/admin/org')
-  return { data: { imported, errors } }
 }
 
 // ── Cost Centers ──────────────────────────────────────────────────────────────

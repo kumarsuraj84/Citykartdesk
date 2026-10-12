@@ -7,12 +7,13 @@ import {
   createCostCenter, updateCostCenter, deleteCostCenter,
   createJobFunction, updateJobFunction, deleteJobFunction,
   createDesignation, updateDesignation, deleteDesignation,
-  createStore, updateStore, deleteStore, importStores,
+  createStore, updateStore, deleteStore,
 } from '@/lib/actions/admin/org'
 import { createOem, updateOem, deleteOem, setOemStores } from '@/lib/actions/admin/oems'
 import { exportStores } from '@/lib/actions/export'
 import { planStoreAssignment } from '@/lib/oems/store-assignment'
 import { ImportModal } from '@/components/ui/ImportModal'
+import { StoreMasterUploadModal } from '@/components/admin/StoreMasterUploadModal'
 import { ExportButton } from '@/components/requests/ExportButton'
 import dynamic from 'next/dynamic'
 
@@ -77,6 +78,42 @@ function FormSelect({ label, value, onChange, options, placeholder }: {
       >
         <option value="">{placeholder ?? '— None —'}</option>
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </label>
+  )
+}
+
+const ADD_NEW = '__add_new__'
+
+/** Pick from the values already in use (keeps spelling the same everywhere); "+ Add new…" opens a box for one that is not there yet. */
+function ChoiceOrNew({ label, value, onChange, options, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; options: string[]; placeholder?: string
+}) {
+  const [adding, setAdding] = useState(false)
+  const known = options.includes(value) || value === ''
+  const list = known ? options : [...options, value] // a saved value that is not in the list yet stays selectable
+  if (adding) {
+    return (
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium text-muted-foreground">{label} (new)</span>
+        <span className="flex gap-1.5">
+          <input autoFocus value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+          <button type="button" onClick={() => { setAdding(false); onChange('') }} className="rounded-lg border border-border px-2 text-xs text-muted-foreground hover:bg-muted/40">Back</button>
+        </span>
+      </label>
+    )
+  }
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <select
+        value={value}
+        onChange={e => { if (e.target.value === ADD_NEW) { setAdding(true); onChange('') } else onChange(e.target.value) }}
+        className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        <option value="">— Not set —</option>
+        {list.map(o => <option key={o} value={o}>{o}</option>)}
+        <option value={ADD_NEW}>+ Add new…</option>
       </select>
     </label>
   )
@@ -1069,11 +1106,29 @@ function OemsTab({ oems, stores }: { oems: OemRow[]; stores: StoreRow[] }) {
 // what decides where the auto-routing email goes. Distinct from the
 // Locations tab above (HO/Stores/Warehouse — a coarse visibility category).
 
-interface StoreFormValues { code: string; name: string; address: string; city: string; state: string; pincode: string; oem_id: string; is_active: boolean }
+interface StoreFormValues {
+  code: string; name: string; address: string; city: string; state: string; pincode: string; oem_id: string; is_active: boolean
+  ac_total: string; ac_brand: string; ac_amc_brand: string; ac_amc_vendor: string; zenatix: '' | 'yes' | 'no'; open_date: string
+  cluster: string; region: string; priority_list: string; festival: string
+}
 
-function StoreForm({ f, setF, onSubmit, onCancel, submitLabel, pending, oemOptions }: {
+/** The Store Master details of a form, shaped for createStore / updateStore. */
+function masterOf(f: StoreFormValues) {
+  return {
+    ac_total: f.ac_total.trim() === '' ? null : Number(f.ac_total),
+    ac_brand: f.ac_brand, ac_amc_brand: f.ac_amc_brand, ac_amc_vendor: f.ac_amc_vendor,
+    zenatix: f.zenatix === '' ? null : f.zenatix === 'yes',
+    open_date: f.open_date || null,
+    cluster: f.cluster, region: f.region, priority_list: f.priority_list, festival: f.festival,
+  }
+}
+
+/** The values already in use for each drop-down field of a store (so spelling stays the same everywhere). */
+type StoreChoices = Record<'cluster' | 'region' | 'priority_list' | 'ac_brand' | 'ac_amc_brand' | 'ac_amc_vendor', string[]>
+
+function StoreForm({ f, setF, onSubmit, onCancel, submitLabel, pending, oemOptions, choices }: {
   f: StoreFormValues; setF: (v: StoreFormValues) => void; onSubmit: (e: React.FormEvent) => void; onCancel: () => void; submitLabel: string
-  pending: boolean; oemOptions: { value: string; label: string }[]
+  pending: boolean; oemOptions: { value: string; label: string }[]; choices: StoreChoices
 }) {
   return (
     <form onSubmit={onSubmit} className="space-y-3">
@@ -1087,6 +1142,25 @@ function StoreForm({ f, setF, onSubmit, onCancel, submitLabel, pending, oemOptio
         <FormInput label="City" value={f.city} onChange={v => setF({ ...f, city: v })} placeholder="e.g. Alwar" />
         <FormInput label="State" value={f.state} onChange={v => setF({ ...f, state: v })} placeholder="e.g. Rajasthan" />
         <FormInput label="Pincode" value={f.pincode} onChange={v => setF({ ...f, pincode: v })} placeholder="e.g. 301001" />
+      </div>
+      <p className="pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Store Master</p>
+      <div className="grid grid-cols-3 gap-3">
+        <ChoiceOrNew label="Cluster" value={f.cluster} onChange={v => setF({ ...f, cluster: v })} options={choices.cluster} placeholder="e.g. UP2" />
+        <ChoiceOrNew label="Region" value={f.region} onChange={v => setF({ ...f, region: v })} options={choices.region} placeholder="e.g. R4" />
+        <ChoiceOrNew label="Priority list" value={f.priority_list} onChange={v => setF({ ...f, priority_list: v })} options={choices.priority_list} placeholder="e.g. Top 50 / ROS" />
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground" htmlFor="store-open-date">Open date</label>
+          <input id="store-open-date" type="date" value={f.open_date} onChange={e => setF({ ...f, open_date: e.target.value })} className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm" />
+        </div>
+        <FormInput label="Festival" value={f.festival} onChange={v => setF({ ...f, festival: v })} placeholder="e.g. DIWALI|HOLI|EID" />
+      </div>
+      <p className="pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">AC details <span className="font-normal normal-case tracking-normal">(used for the AC service only)</span></p>
+      <div className="grid grid-cols-3 gap-3">
+        <FormInput label="AC total" value={f.ac_total} onChange={v => setF({ ...f, ac_total: v.replace(/[^0-9]/g, '') })} placeholder="Number of ACs" />
+        <ChoiceOrNew label="AC brand" value={f.ac_brand} onChange={v => setF({ ...f, ac_brand: v })} options={choices.ac_brand} placeholder="e.g. HITACHI" />
+        <ChoiceOrNew label="AC-AMC brand" value={f.ac_amc_brand} onChange={v => setF({ ...f, ac_amc_brand: v })} options={choices.ac_amc_brand} placeholder="e.g. BLUE STAR" />
+        <ChoiceOrNew label="AC-AMC vendor" value={f.ac_amc_vendor} onChange={v => setF({ ...f, ac_amc_vendor: v })} options={choices.ac_amc_vendor} placeholder="Vendor company" />
+        <FormSelect label="Zenatix" value={f.zenatix} onChange={v => setF({ ...f, zenatix: v as StoreFormValues['zenatix'] })} options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]} placeholder="Not set" />
       </div>
       <div className="flex items-center gap-2">
         <input type="checkbox" checked={f.is_active} onChange={e => setF({ ...f, is_active: e.target.checked })} className="rounded" />
@@ -1108,17 +1182,30 @@ function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
   const [showAdd, setShowAdd] = useState(false)
   const [showImport, setShowImport] = useState(false)
 
-  const blank: StoreFormValues = { code: '', name: '', address: '', city: '', state: '', pincode: '', oem_id: '', is_active: true }
+  const blank: StoreFormValues = {
+    code: '', name: '', address: '', city: '', state: '', pincode: '', oem_id: '', is_active: true,
+    ac_total: '', ac_brand: '', ac_amc_brand: '', ac_amc_vendor: '', zenatix: '', open_date: '', cluster: '', region: '', priority_list: '', festival: '',
+  }
   const [addF, setAddF] = useState(blank)
   const [editF, setEditF] = useState(blank)
 
   const oemOptions = oems.map(o => ({ value: o.id, label: o.name }))
+  // the clusters and regions already used by stores, A to Z (numbers inside names sort naturally: UP2 before UP10)
+  const distinct = (pick: (s: StoreRow) => string | null) =>
+    [...new Set(stores.map(pick).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
+  const choices = useMemo<StoreChoices>(() => ({
+    cluster: distinct(s => s.cluster), region: distinct(s => s.region), priority_list: distinct(s => s.priority_list),
+    ac_brand: distinct(s => s.ac_brand), ac_amc_brand: distinct(s => s.ac_amc_brand), ac_amc_vendor: distinct(s => s.ac_amc_vendor),
+  }), [stores]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function startEdit(s: StoreRow) {
     setEditId(s.id)
     setEditF({
       code: s.code, name: s.name, address: s.address ?? '', city: s.city ?? '',
       state: s.state ?? '', pincode: s.pincode ?? '', oem_id: s.oem_id ?? '', is_active: s.is_active,
+      ac_total: s.ac_total == null ? '' : String(s.ac_total), ac_brand: s.ac_brand ?? '', ac_amc_brand: s.ac_amc_brand ?? '', ac_amc_vendor: s.ac_amc_vendor ?? '',
+      zenatix: s.zenatix == null ? '' : s.zenatix ? 'yes' : 'no', open_date: s.open_date ?? '',
+      cluster: s.cluster ?? '', region: s.region ?? '', priority_list: s.priority_list ?? '', festival: s.festival ?? '',
     })
   }
 
@@ -1128,7 +1215,7 @@ function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
     startTransition(async () => {
       const res = await createStore({
         code: addF.code, name: addF.name, address: addF.address, city: addF.city,
-        state: addF.state, pincode: addF.pincode, oem_id: addF.oem_id || null, is_active: addF.is_active,
+        state: addF.state, pincode: addF.pincode, oem_id: addF.oem_id || null, is_active: addF.is_active, ...masterOf(addF),
       })
       if (res.error) { setError(res.error); return }
       setAddF(blank); setShowAdd(false)
@@ -1142,7 +1229,7 @@ function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
     startTransition(async () => {
       const res = await updateStore(editId, {
         code: editF.code, name: editF.name, address: editF.address, city: editF.city,
-        state: editF.state, pincode: editF.pincode, oem_id: editF.oem_id || null, is_active: editF.is_active,
+        state: editF.state, pincode: editF.pincode, oem_id: editF.oem_id || null, is_active: editF.is_active, ...masterOf(editF),
       })
       if (res.error) { setError(res.error); return }
       setEditId(null)
@@ -1163,7 +1250,7 @@ function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
       <div className="flex justify-end gap-2">
         <ExportButton action={exportStores} filename="stores.csv" label="Export" />
         <button onClick={() => setShowImport(true)} className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted/40 transition-colors">
-          Import
+          Upload Store Master
         </button>
         <button onClick={() => setShowAdd(v => !v)} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors">
           + Add Store
@@ -1172,40 +1259,19 @@ function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
 
       {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
 
-      {showImport && (
-        <ImportModal
-          title="Stores"
-          sampleFilename="stores-sample.csv"
-          sampleColumns={[
-            { key: 'code', label: 'code' },
-            { key: 'name', label: 'name' },
-            { key: 'address', label: 'address' },
-            { key: 'city', label: 'city' },
-            { key: 'state', label: 'state' },
-            { key: 'pincode', label: 'pincode' },
-            { key: 'oem', label: 'oem' },
-            { key: 'active', label: 'active' },
-          ]}
-          sampleRows={[
-            { code: 'ALC', name: 'Alwar City', address: 'Main Road, Alwar', city: 'Alwar', state: 'Rajasthan', pincode: '301001', oem: 'Voltas AC Service', active: 'true' },
-            { code: 'JPR', name: 'Jaipur Central', address: 'MI Road, Jaipur', city: 'Jaipur', state: 'Rajasthan', pincode: '302001', oem: '', active: 'true' },
-          ]}
-          onImport={(rows) => importStores(rows as never)}
-          onClose={() => setShowImport(false)}
-          onDone={() => {}}
-        />
-      )}
+      {showImport && <StoreMasterUploadModal onClose={() => setShowImport(false)} />}
 
       {showAdd && (
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
           <p className="text-sm font-semibold text-foreground">New Store</p>
-          <StoreForm f={addF} setF={setAddF} onSubmit={handleAdd} onCancel={() => setShowAdd(false)} submitLabel="Create" pending={pending} oemOptions={oemOptions} />
+          <StoreForm f={addF} setF={setAddF} onSubmit={handleAdd} onCancel={() => setShowAdd(false)} submitLabel="Create" pending={pending} oemOptions={oemOptions} choices={choices} />
         </div>
       )}
 
-      <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-        <div className="grid grid-cols-[80px_1fr_1.4fr_140px_80px_120px] gap-x-4 border-b border-border bg-muted/30 px-4 py-2.5">
-          {['Code', 'Name', 'Address', 'OEM', 'Active', 'Actions'].map(h => (
+      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
+        <div className="min-w-[860px]">
+        <div className="grid grid-cols-[70px_minmax(150px,1.3fr)_70px_60px_50px_minmax(110px,1fr)_minmax(130px,1fr)_70px_110px] gap-x-3 border-b border-border bg-muted/30 px-4 py-2.5">
+          {['Code', 'Name', 'Cluster', 'Region', 'ACs', 'AC-AMC vendor', 'OEM', 'Active', 'Actions'].map(h => (
             <span key={h} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
           ))}
         </div>
@@ -1216,13 +1282,19 @@ function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
           <div key={s.id}>
             {editId === s.id ? (
               <div className="px-4 py-3 border-b border-border/50 bg-muted/20 space-y-3">
-                <StoreForm f={editF} setF={setEditF} onSubmit={handleEdit} onCancel={() => setEditId(null)} submitLabel="Save" pending={pending} oemOptions={oemOptions} />
+                <StoreForm f={editF} setF={setEditF} onSubmit={handleEdit} onCancel={() => setEditId(null)} submitLabel="Save" pending={pending} oemOptions={oemOptions} choices={choices} />
               </div>
             ) : (
-              <div className="grid grid-cols-[80px_1fr_1.4fr_140px_80px_120px] items-center gap-x-4 border-b border-border/50 last:border-0 px-4 py-3">
+              <div className="grid grid-cols-[70px_minmax(150px,1.3fr)_70px_60px_50px_minmax(110px,1fr)_minmax(130px,1fr)_70px_110px] items-center gap-x-3 border-b border-border/50 last:border-0 px-4 py-3">
                 <TableCell className="font-mono text-xs">{s.code}</TableCell>
-                <TableCell>{s.name}</TableCell>
-                <TableCell className="text-muted-foreground text-xs truncate">{s.address ?? '—'}</TableCell>
+                <div className="min-w-0">
+                  <TableCell>{s.name}</TableCell>
+                  {s.address && <p className="truncate text-[11px] text-muted-foreground" title={s.address}>{s.address}</p>}
+                </div>
+                <TableCell className="text-muted-foreground text-xs">{s.cluster ?? '—'}</TableCell>
+                <TableCell className="text-muted-foreground text-xs">{s.region ?? '—'}</TableCell>
+                <TableCell className="text-muted-foreground text-xs">{s.ac_total ?? '—'}</TableCell>
+                <TableCell className="text-muted-foreground text-xs truncate">{s.ac_amc_vendor ?? '—'}</TableCell>
                 <TableCell className="text-muted-foreground text-xs">{s.oem_name ?? <span className="italic">Unmapped</span>}</TableCell>
                 <div><ActiveBadge active={s.is_active} /></div>
                 <div className="flex gap-1.5">
@@ -1240,6 +1312,7 @@ function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
             )}
           </div>
         ))}
+        </div>
       </div>
     </div>
   )

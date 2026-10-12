@@ -85,6 +85,16 @@ export interface StoreRow {
   oem_name?: string | null
   is_active: boolean
   created_at: string
+  ac_total: number | null
+  ac_brand: string | null
+  ac_amc_brand: string | null
+  ac_amc_vendor: string | null
+  zenatix: boolean | null
+  open_date: string | null
+  cluster: string | null
+  region: string | null
+  priority_list: string | null
+  festival: string | null
 }
 
 export default async function OrgStructurePage() {
@@ -136,7 +146,7 @@ export default async function OrgStructurePage() {
       .order('name'),
     supabase
       .from('stores')
-      .select('id, code, name, address, city, state, pincode, oem_id, is_active, created_at, oem:oems(name)')
+      .select('id, code, name, address, city, state, pincode, oem_id, is_active, created_at, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, zenatix, open_date, cluster, region, priority_list, festival, oem:oems(name)')
       .order('code'),
   ])
 
@@ -221,6 +231,8 @@ export default async function OrgStructurePage() {
     id: string; code: string; name: string; address: string | null; city: string | null
     state: string | null; pincode: string | null; oem_id: string | null
     is_active: boolean; created_at: string; oem: { name: string } | null
+    ac_total: number | null; ac_brand: string | null; ac_amc_brand: string | null; ac_amc_vendor: string | null; zenatix: boolean | null
+    open_date: string | null; cluster: string | null; region: string | null; priority_list: string | null; festival: string | null
   }
   const stores: StoreRow[] = ((storeResult.data ?? []) as StoreQueryRow[]).map((s) => ({
     id: s.id,
@@ -234,6 +246,8 @@ export default async function OrgStructurePage() {
     oem_name: s.oem?.name ?? null,
     is_active: s.is_active,
     created_at: s.created_at,
+    ac_total: s.ac_total, ac_brand: s.ac_brand, ac_amc_brand: s.ac_amc_brand, ac_amc_vendor: s.ac_amc_vendor, zenatix: s.zenatix,
+    open_date: s.open_date, cluster: s.cluster, region: s.region, priority_list: s.priority_list, festival: s.festival,
   }))
 
   return (
