@@ -33,7 +33,8 @@ export async function exportTasks(f?: ExportFilters): Promise<string> {
 export async function exportApprovals(f?: ExportFilters): Promise<string> {
   const profile = await getCurrentProfile()
   if (!profile) throw new Error('Not authenticated.')
-  if (!['admin', 'manager', 'platform_owner'].includes(profile.role)) throw new Error('Not authorized.')
+  // the whole organisation's approvals: admins and platform owners only (a manager's list is limited to their own, see getApprovals)
+  if (!['admin', 'platform_owner'].includes(profile.role)) throw new Error('Not authorized.')
   if (!profile.org_id) throw new Error('No organization.')
   return exportApprovalsCSV(profile.org_id, f)
 }

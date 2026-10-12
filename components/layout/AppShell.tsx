@@ -14,6 +14,7 @@ import { NewVersionBanner } from './NewVersionBanner'
 import { ROLE_LABELS } from '@/lib/constants/roles'
 import type { ProfileWithTeams, NavVisibility, NotificationWithActor } from '@/types'
 import type { NavCounts } from '@/lib/queries/profiles'
+import type { PendingApprovalItem } from '@/lib/queries/approvals'
 
 function getInitials(name: string): string {
   return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -26,6 +27,7 @@ interface AppShellProps {
   navVisibility: NavVisibility
   navCountsPromise: Promise<NavCounts>
   notificationsPromise: Promise<NotificationWithActor[]>
+  approvalItemsPromise: Promise<PendingApprovalItem[]>
   children: React.ReactNode
 }
 
@@ -70,12 +72,11 @@ async function DeferredNotificationBell({
   // Approval-required items live in their own bell (see DeferredApprovalsBell)
   // — kept out of the general feed so an actionable item never gets buried
   // among comments/assignments/SLA warnings.
-  const generalNotifications = notifications.filter((n) => n.type !== 'approval_requested')
-  const approvalUnreadCount = notifications.filter((n) => n.type === 'approval_requested' && !n.read_at).length
+  // (the number already leaves approval requests out, see getNavCounts)
   return (
     <NotificationBell
-      initialNotifications={generalNotifications}
-      initialUnreadCount={Math.max(0, navCounts.notifications - approvalUnreadCount)}
+      initialNotifications={notifications}
+      initialUnreadCount={navCounts.notifications}
       viewerId={viewerId}
       viewerRole={viewerRole}
       dark
@@ -85,17 +86,35 @@ async function DeferredNotificationBell({
 
 async function DeferredApprovalsBell({
   navCountsPromise,
-  notificationsPromise,
+  approvalItemsPromise,
   viewerId,
   viewerRole,
 }: {
   navCountsPromise: Promise<NavCounts>
-  notificationsPromise: Promise<NotificationWithActor[]>
+  approvalItemsPromise: Promise<PendingApprovalItem[]>
   viewerId: string
   viewerRole: ProfileWithTeams['role']
 }) {
-  const [navCounts, notifications] = await Promise.all([navCountsPromise, notificationsPromise])
-  const approvalNotifications = notifications.filter((n) => n.type === 'approval_requested')
+  const [navCounts, items] = await Promise.all([navCountsPromise, approvalItemsPromise])
+  // The list is the approvals that are waiting for this person, taken from the approvals themselves (not from notifications), so an
+  // approval stays here until it is approved or rejected: opening the e-mail or the ticket does not remove it, and a flood of other
+  // notifications cannot push it out. The bell's rows are notification-shaped, so each approval is dressed as one.
+  const approvalNotifications = items.map((i) => ({
+    id: `approval:${i.approvalId}`,
+    user_id: viewerId,
+    type: 'approval_requested',
+    title: `Approval required: ${i.requestNo}`,
+    body: i.awaiting ? `${i.requestTitle} · ${i.awaiting}` : i.requestTitle,
+    request_id: i.requestId,
+    task_id: null,
+    read_at: null,
+    archived_at: null,
+    created_at: i.createdAt,
+    actor_id: null,
+    link: `/requests/${i.requestId}?tab=approvals`,
+    metadata: {},
+    actor: { id: '', full_name: i.sentByName || i.requesterName || 'Approval', avatar_url: null },
+  })) as unknown as NotificationWithActor[]
   return (
     <ApprovalsBell
       initialNotifications={approvalNotifications}
@@ -107,7 +126,7 @@ async function DeferredApprovalsBell({
   )
 }
 
-export function AppShell({ profile, navVisibility, navCountsPromise, notificationsPromise, children }: AppShellProps) {
+export function AppShell({ profile, navVisibility, navCountsPromise, notificationsPromise, approvalItemsPromise, children }: AppShellProps) {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <AutoRefresh />
@@ -134,7 +153,7 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
           <Suspense fallback={<div className="w-9 h-9" />}>
             <DeferredApprovalsBell
               navCountsPromise={navCountsPromise}
-              notificationsPromise={notificationsPromise}
+              approvalItemsPromise={approvalItemsPromise}
               viewerId={profile.id}
               viewerRole={profile.role}
             />

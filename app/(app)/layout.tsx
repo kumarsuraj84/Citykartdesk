@@ -3,6 +3,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { getCurrentProfile, getEnabledModules, getTrialInfo, getNavCounts } from '@/lib/queries/profiles'
 import { getNotifications } from '@/lib/queries/notifications'
+import { getActionableApprovalsForUser } from '@/lib/queries/approvals'
 import { TrialBanner } from '@/components/layout/TrialBanner'
 import { DemoBanner } from '@/components/layout/DemoBanner'
 import { EventTracker } from '@/components/EventTracker'
@@ -39,7 +40,9 @@ export default async function AppLayout({
 
   // Start these fetches immediately; they resolve while React streams the shell.
   const navCountsPromise = getNavCounts(profile.id)
-  const notificationsPromise = getNotifications(profile.id, { limit: 10 })
+  // approval requests are kept out of this list: they are listed by the approvals bell from the approvals themselves
+  const notificationsPromise = getNotifications(profile.id, { limit: 10, excludeTypes: ['approval_requested'] })
+  const approvalItemsPromise = profile.org_id ? getActionableApprovalsForUser(profile.id, profile.role, profile.org_id) : Promise.resolve([])
 
   const isAgent =
     profile.role === 'agent' ||
@@ -73,6 +76,7 @@ export default async function AppLayout({
         navVisibility={navVisibility}
         navCountsPromise={navCountsPromise}
         notificationsPromise={notificationsPromise}
+        approvalItemsPromise={approvalItemsPromise}
       >
         <ErrorBoundary>{children}</ErrorBoundary>
       </AppShell>

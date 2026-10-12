@@ -7,6 +7,7 @@ import { StatusBadge, PriorityBadge } from './RequestBadges'
 import { ApprovalPreviewDialog } from './ApprovalPreviewDialog'
 import { ApprovalQuickActions } from './ApprovalQuickActions'
 import { canActOnApproval } from '@/lib/approvals/canAct'
+import { approvalPeopleLine } from '@/lib/approvals/people'
 import { formatRelativeTime } from '@/lib/utils'
 import type { ApprovalWithDetails } from '@/lib/queries/approvals'
 import type { ApprovalStatus, UserRole } from '@/types'
@@ -49,16 +50,11 @@ export function ApprovalRow({
 
   const Icon = STATUS_ICONS[approval.status]
   const colorCls = STATUS_COLORS[approval.status]
-  const isParallel = approval.current_step === 0
   const canAct = approval.status === 'pending' && canActOnApproval(approval, viewerId, viewerRole)
 
-  const currentStepInfo = isParallel
-    ? null
-    : approval.steps.find((s) => s.step_order === (approval.current_step ?? 1))
-  const approverLabel =
-    currentStepInfo?.approver_type === 'specific_user' && currentStepInfo.approver
-      ? currentStepInfo.approver.full_name
-      : 'Any Manager'
+  // who it is waiting on (pending), or who approved / rejected it
+  const people = approvalPeopleLine(approval)
+  const peopleColor = people.tone === 'approved' ? 'text-emerald-700' : people.tone === 'rejected' ? 'text-red-600' : 'text-amber-600'
 
   function handleDecided() {
     setQuickAction(false)
@@ -89,11 +85,11 @@ export function ApprovalRow({
             {req.requester && (
               <span className="text-xs text-muted-foreground">{req.requester.full_name}</span>
             )}
-            {approval.status === 'pending' && (
+            {people.text && (
               <>
                 <span className="text-muted-foreground/40">·</span>
-                <span className="text-xs text-amber-600">
-                  Awaiting: {isParallel ? 'All approvers' : approverLabel}
+                <span className={`text-xs font-medium ${peopleColor}`} title={people.allApprovers.length > 0 ? `Sent for approval to: ${people.allApprovers.join(', ')}` : undefined}>
+                  {people.text}
                 </span>
               </>
             )}

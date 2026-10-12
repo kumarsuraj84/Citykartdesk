@@ -2,6 +2,7 @@ import { cache } from 'react'
 import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { OPEN_REQUEST_STATUSES } from '@/lib/constants/requests'
+import { getActionableApprovalsForUser } from '@/lib/queries/approvals'
 import type { ModuleSlug, ProfileWithTeams } from '@/types'
 
 export const getCurrentProfile = cache(async function (): Promise<ProfileWithTeams | null> {
@@ -235,6 +236,8 @@ export type NavCounts = {
   projects: number
 }
 
+// The old count (below) counted every approval the person appears on, including steps already decided or not their turn yet, while the
+// bell listed only what fitted in the newest ten notifications: so the badge and the list could disagree. Kept for reference only.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function countPendingApprovalsForUser(supabase: any, userId: string): Promise<number> {
   // approvals and approval_workflow_steps are SIBLINGS under
@@ -271,11 +274,15 @@ export const getNavCounts = cache(async function (userId: string): Promise<NavCo
       .select('*', { count: 'exact', head: true })
       .eq('assignee_id', userId)
       .in('status', ['open', 'in_progress']),
-    countPendingApprovalsForUser(supabase, userId),
+    (async () => {
+      const p = await getCurrentProfile()
+      return p?.org_id ? (await getActionableApprovalsForUser(p.id, p.role, p.org_id)).length : countPendingApprovalsForUser(supabase, userId)
+    })(),
     supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', userId)
+      .neq('type', 'approval_requested') // approval requests have their own bell and number
       .is('read_at', null),
     supabase
       .from('projects')

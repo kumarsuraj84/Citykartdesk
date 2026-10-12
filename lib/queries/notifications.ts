@@ -9,10 +9,12 @@ export async function getNotifications(
     filter?: NotificationFilter
     limit?: number
     offset?: number
+    /** leave these kinds out (the approvals bell lists approval requests itself) */
+    excludeTypes?: string[]
   } = {}
 ): Promise<NotificationWithActor[]> {
   const supabase = await createClient()
-  const { filter = 'all', limit = 30, offset = 0 } = opts
+  const { filter = 'all', limit = 30, offset = 0, excludeTypes = [] } = opts
 
   let query = supabase
     .from('notifications')
@@ -28,6 +30,8 @@ export async function getNotifications(
   } else {
     query = query.is('archived_at', null)
   }
+
+  if (excludeTypes.length > 0) query = query.not('type', 'in', `(${excludeTypes.map((t) => `"${t}"`).join(',')})`)
 
   const { data } = await query
   return (data ?? []) as unknown as NotificationWithActor[]

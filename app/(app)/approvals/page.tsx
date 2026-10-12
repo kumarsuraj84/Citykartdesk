@@ -55,6 +55,7 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
   // per viewer, so a non-manager naturally sees only approvals assigned to
   // them; a manager still sees everything for their org/team.
   const isManager = profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'
+  const seesEverything = profile.role === 'admin' || profile.role === 'platform_owner'
 
   const params = await searchParams
   const activeTab = (
@@ -70,7 +71,8 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
   const supabase = await createClient()
   const countStatuses: Array<ApprovalStatus | 'all'> = ['pending', 'approved', 'rejected', 'all']
   const [approvalResult, ...countResults] = await Promise.all([
-    getApprovals(activeTab, { page, pageSize }),
+    // a manager sees the approvals sent to them, on their own requests and on their team's requests; admins and platform owners see all
+    getApprovals(activeTab, { page, pageSize, restrictTo: profile.role === 'manager' ? { userId: profile.id, teamIds: profile.team_members.map((m) => m.team_id) } : undefined }),
     ...countStatuses.map((s) =>
       s === 'all'
         ? supabase.from('approvals').select('*', { count: 'exact', head: true })
@@ -78,7 +80,7 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
     ),
   ])
 
-  const counts: Record<string, number> = Object.fromEntries(
+  const counts: Record<string, number> = approvalResult.counts ?? Object.fromEntries(
     countStatuses.map((s, i) => [s, countResults[i].count ?? 0])
   )
 
@@ -96,11 +98,11 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
       <div className="flex items-start justify-between gap-4">
         <PageHeader
           title="Approvals"
-          description={isManager ? 'Review and action approval requests from your technician group' : 'Approvals sent to you for review'}
+          description={seesEverything ? 'All approval requests in the organisation' : isManager ? 'Approvals sent to you, raised by you, and on your team\'s requests' : 'Approvals sent to you for review'}
         />
         {/* exportApprovals() is an org-wide admin-bypass export — kept
             manager+ only even though the page itself no longer is. */}
-        {isManager && <ApprovalsExportButton activeTab={activeTab} />}
+        {seesEverything && <ApprovalsExportButton activeTab={activeTab} />}
       </div>
 
       {/* Tabs */}
