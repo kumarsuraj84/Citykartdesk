@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { exportAgeBucketReportXlsx } from '@/lib/actions/analyticsReportExport'
 import { downloadXlsxBase64 } from '@/lib/export/xlsx'
 
-export function ExportAgeBucketButton({ slug, group, services, preset, from, to, statuses, collapsedTech, collapsedCat }: {
+export function ExportAgeBucketButton({ slug, group, services, preset, from, to, statuses, filters, collapsedTech, collapsedCat }: {
   slug: string
   group: string
   services: string[]
@@ -17,6 +17,8 @@ export function ExportAgeBucketButton({ slug, group, services, preset, from, to,
   from: string
   to: string
   statuses: string[]
+  /** the chosen filters, as f_<name> -> value */
+  filters: Record<string, string>
 }) {
   const [pending, start] = useTransition()
   return (
@@ -24,7 +26,7 @@ export function ExportAgeBucketButton({ slug, group, services, preset, from, to,
       type="button"
       disabled={pending}
       onClick={() => start(async () => {
-        const res = await exportAgeBucketReportXlsx(slug, { group, service: services, preset, from, to, status: statuses, collapsedTech, collapsedCat })
+        const res = await exportAgeBucketReportXlsx(slug, { group, service: services, preset, from, to, status: statuses, filters, collapsedTech, collapsedCat })
         if (res.error || !res.data || !res.filename) { toast.error(res.error || 'Export failed.'); return }
         downloadXlsxBase64(res.filename, res.data)
         toast.success('Report exported.')

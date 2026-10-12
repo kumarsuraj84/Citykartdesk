@@ -27,7 +27,7 @@ const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensiti
 const nameOrder = (a: string, b: string, last: string) => (a === last ? (b === last ? 0 : 1) : b === last ? -1 : byName(a, b))
 
 /** Technician, then category, then sub category — the same order as the summary — and within them the oldest ticket first. */
-export function sortDetailRows(rows: DetailRow[]): DetailRow[] {
+export function sortDetailRows<T extends DetailRow>(rows: T[]): T[] {
   return [...rows].sort((x, y) =>
     nameOrder(x.technician, y.technician, UNASSIGNED)
     || nameOrder(x.category, y.category, NO_CATEGORY)

@@ -1,13 +1,19 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { buildAgeSummary, UNASSIGNED, NO_CATEGORY, NO_SUB_CATEGORY, type AgeSummary, type SummaryInputRow, type DayInputRow } from '@/lib/reporting/analytics/age-summary'
-import { ageBucketLabel } from '@/lib/reporting/aging'
-import { sortDetailRows, filterDetailRows, technicianOptions, bucketOptions, type DetailRow } from '@/lib/reporting/analytics/ticket-detail'
+import { getServiceFormFieldsForOrg } from '@/lib/forms/sections'
+import { buildAgeSummary, type AgeSummary, type SummaryInputRow, type DayInputRow } from '@/lib/reporting/analytics/age-summary'
+import { sortDetailRows } from '@/lib/reporting/analytics/ticket-detail'
 import {
-  ANALYTICS_REPORTS, findAnalyticsReport, canUseReportAnalytics, selectableGroups, pickGroup, type AnalyticsReportDef,
+  ANALYTICS_REPORTS, DEFAULT_REPORT_STATUSES, findAnalyticsReport, canUseReportAnalytics, selectableGroups, pickGroup, type AnalyticsReportDef,
 } from '@/lib/reporting/analytics/catalog'
 import {
-  buildTicketTree, parseGroupBy, parseMinTickets, NO_OEM, NO_STORE, type TicketTree, type TreeGroupBy, type TreeTicket,
-} from '@/lib/reporting/analytics/ticket-tree'
+  makeFact, acFormFields, answerText, isServerRoomAc, DEFAULT_RED_FLAG_PERCENT,
+  type TicketFact, type RawTicket, type AcFormFields, type FactContext,
+} from '@/lib/reporting/analytics/facts'
+import {
+  applyFacets, facetOptions, reconcileSelection, type FacetKey, type FacetOption, type FacetSelection,
+} from '@/lib/reporting/analytics/facets'
+import { buildTicketTree, layoutById, layoutUsesOem, parseMinTickets, type Layout, type TicketTree } from '@/lib/reporting/analytics/ticket-tree'
+import { buildStoreAc, parseStoreAcGroup, type StoreAcGroupBy, type StoreAcReport } from '@/lib/reporting/analytics/store-ac'
 import { resolveDateRange, referenceDay, type ResolvedRange, type ReferenceDay } from '@/lib/reporting/analytics/date-ranges'
 import type { ProfileWithTeams, RequestStatus } from '@/types'
 
@@ -17,14 +23,15 @@ type AnyClient = { from: (t: string) => any }
 const PAGE = 1000
 /** Safety cap — a technician group's tickets never get near this; it only stops a runaway query. */
 const MAX_TICKETS = 50_000
-
-function daysBetween(a: string, b: string): number {
-  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000)
-}
+/** The most ticket lines one detail report shows or exports (the same cap Report Builder uses). */
+export const MAX_DETAIL_ROWS = 20_000
 
 export interface OrgTeam { id: string; name: string }
 /** `oemRouted`: tickets of this service go to the store's OEM (AC servicing) — the only tickets an OEM has anything to do with. */
 export interface GroupService { id: string; name: string; oemRouted: boolean }
+
+type ServiceRow = { id: string; name: string; auto_oem_routing: boolean | null }
+const toService = (s: ServiceRow): GroupService => ({ id: s.id, name: s.name, oemRouted: !!s.auto_oem_routing })
 
 /** The organisation's active technician groups. */
 export async function getOrgTeams(orgId: string): Promise<OrgTeam[]> {
@@ -37,7 +44,7 @@ export async function getOrgTeams(orgId: string): Promise<OrgTeam[]> {
 export async function getGroupServices(orgId: string, teamId: string): Promise<GroupService[]> {
   const admin = createAdminClient() as unknown as AnyClient
   const { data } = await admin.from('services').select('id, name, auto_oem_routing').eq('org_id', orgId).eq('team_id', teamId).order('name', { ascending: true })
-  return ((data ?? []) as { id: string; name: string; auto_oem_routing: boolean | null }[]).map((s) => ({ id: s.id, name: s.name, oemRouted: !!s.auto_oem_routing }))
+  return ((data ?? []) as ServiceRow[]).map(toService)
 }
 
 /** The predefined reports a viewer can open (none when they belong to no technician group and are not an admin/owner). */
@@ -47,19 +54,8 @@ export async function listReportsForViewer(profile: ProfileWithTeams): Promise<A
   return groups.length > 0 ? ANALYTICS_REPORTS : []
 }
 
-interface TicketRow {
-  created_at: string
-  resolved_at: string | null
-  closed_at: string | null
-  category: { name: string } | null
-  sub_category: { name: string } | null
-  assignee: { full_name: string } | null
-}
-
-const SELECT = 'created_at, resolved_at, closed_at, category:service_categories(name), sub_category:service_sub_categories(name), assignee:profiles!requests_assigned_to_fkey(full_name)'
-
 /** Pages through a query until it runs out (PostgREST returns at most 1000 rows per request). */
-async function fetchAll<T = TicketRow>(build: (from: number, to: number) => PromiseLike<{ data: unknown }>): Promise<{ rows: T[]; truncated: boolean }> {
+async function fetchAll<T>(build: (from: number, to: number) => PromiseLike<{ data: unknown }>): Promise<{ rows: T[]; truncated: boolean }> {
   const rows: T[] = []
   let truncated = false
   for (let offset = 0; ; offset += PAGE) {
@@ -72,74 +68,46 @@ async function fetchAll<T = TicketRow>(build: (from: number, to: number) => Prom
   return { rows, truncated }
 }
 
-/** Every ticket of one technician group created in the range, in the given statuses (and services), as summary input rows. */
-async function fetchGroupTickets(
-  orgId: string, teamId: string, range: ResolvedRange, statuses: RequestStatus[], serviceIds: string[] | null
-): Promise<{ rows: SummaryInputRow[]; truncated: boolean }> {
-  const admin = createAdminClient() as unknown as AnyClient
-  const now = new Date().toISOString()
-  const { rows, truncated } = await fetchAll((from, to) => {
-    let q = admin.from('requests').select(SELECT).eq('org_id', orgId).eq('team_id', teamId).in('status', statuses)
-    if (serviceIds) q = q.in('service_id', serviceIds)
-    if (range.from) q = q.gte('created_at', range.from.toISOString())
-    if (range.to) q = q.lte('created_at', range.to.toISOString())
-    return q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to)
-  })
-  return {
-    truncated,
-    rows: rows.map((r) => ({
-      technician: r.assignee?.full_name ?? null,
-      category: r.category?.name ?? null,
-      subCategory: r.sub_category?.name ?? null,
-      // Same age rule as Report Builder: still open → age so far; resolved/closed → time it took.
-      ageDays: daysBetween(r.created_at, r.resolved_at ?? r.closed_at ?? now),
-    })),
-  }
-}
+// ── Reading the tickets as facts ─────────────────────────────────────────────────────────────────
+
+const FACT_SELECT = 'id, request_no, title, status, priority, created_at, resolved_at, closed_at, form_data, service:services(id, name, auto_oem_routing), category:service_categories(name), sub_category:service_sub_categories(name), assignee:profiles!requests_assigned_to_fkey(full_name), requester:profiles!requests_requester_id_fkey(full_name, store:stores(id, code, city, state, cluster, region, priority_list, festival, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, zenatix, open_date, oem:oems(name)))'
 
 /**
- * Tickets of the group that were created or resolved on the reference day — whatever their
- * status now, so "resolved today" works even though resolved tickets are hidden by the default Status filter.
+ * What is needed besides the tickets themselves: where the AC form fields of each service are, and how many open AC tickets
+ * each store has (Server Room AC excluded). The count covers every open AC ticket of the organisation, whatever the report's
+ * own filters are, because it is the store's position: AC Not Working % must not change when the viewer narrows the list.
  */
-async function fetchDayActivity(orgId: string, teamId: string, day: ReferenceDay, serviceIds: string[] | null): Promise<DayInputRow[]> {
+async function loadFactContext(orgId: string, redFlagPercent: number): Promise<{ ctx: FactContext; acServiceIds: string[] }> {
   const admin = createAdminClient() as unknown as AnyClient
-  const a = day.start.toISOString()
-  const b = day.end.toISOString()
-  const { rows } = await fetchAll((from, to) => {
-    let q = admin.from('requests').select(SELECT).eq('org_id', orgId).eq('team_id', teamId)
-      .or(`and(created_at.gte.${a},created_at.lte.${b}),and(resolved_at.gte.${a},resolved_at.lte.${b})`)
-    if (serviceIds) q = q.in('service_id', serviceIds)
-    return q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to)
-  })
-  const within = (iso: string | null) => !!iso && iso >= a && iso <= b
-  return rows.map((r) => ({
-    technician: r.assignee?.full_name ?? null,
-    category: r.category?.name ?? null,
-    subCategory: r.sub_category?.name ?? null,
-    created: within(r.created_at),
-    resolved: within(r.resolved_at),
-  }))
+  const fields = await getServiceFormFieldsForOrg(admin, orgId)
+  const byService = new Map<string, typeof fields>()
+  for (const f of fields) byService.set(f.serviceId, [...(byService.get(f.serviceId) ?? []), f])
+  const acFields = new Map<string, AcFormFields>([...byService.entries()].map(([id, list]) => [id, acFormFields(list)]))
+
+  const { data: acServices } = await admin.from('services').select('id').eq('org_id', orgId).eq('auto_oem_routing', true)
+  const acServiceIds = ((acServices ?? []) as { id: string }[]).map((s) => s.id)
+
+  const openAcByStore = new Map<string, number>()
+  if (acServiceIds.length > 0) {
+    type Row = { service_id: string; form_data: Record<string, unknown> | null; requester: { store: { code: string } | null } | null }
+    const { rows } = await fetchAll<Row>((from, to) =>
+      admin.from('requests')
+        .select('service_id, form_data, requester:profiles!requests_requester_id_fkey(store:stores(code))')
+        .eq('org_id', orgId).in('service_id', acServiceIds).in('status', DEFAULT_REPORT_STATUSES)
+        .order('id', { ascending: true }).range(from, to))
+    for (const r of rows) {
+      const code = r.requester?.store?.code
+      if (!code) continue
+      const f = acFields.get(r.service_id)?.acNo
+      const acNo = f ? answerText((r.form_data ?? {})[f.id], f.options) : ''
+      if (isServerRoomAc(acNo)) continue
+      openAcByStore.set(code, (openAcByStore.get(code) ?? 0) + 1)
+    }
+  }
+  return { ctx: { asOf: new Date(), acFields, openAcByStore, redFlagPercent }, acServiceIds }
 }
 
-export interface AgeBucketReportResult {
-  def: AnalyticsReportDef
-  /** The group being shown. */
-  team: OrgTeam
-  /** Every group this viewer can choose from (A→Z). */
-  groups: OrgTeam[]
-  /** The chosen group's services, and which of them are included. */
-  services: GroupService[]
-  selectedServiceIds: string[]
-  range: ResolvedRange
-  /** The day the "created / resolved that day" columns are about. */
-  day: ReferenceDay
-  statuses: RequestStatus[]
-  summary: AgeSummary
-  ticketCount: number
-  truncated: boolean
-}
-
-interface ReportScope {
+export interface ReportScope {
   def: AnalyticsReportDef
   team: OrgTeam
   groups: OrgTeam[]
@@ -147,267 +115,226 @@ interface ReportScope {
   selectedServiceIds: string[]
   /** null = every service (no filter) */
   serviceIds: string[] | null
+  /** some chosen service goes to an OEM (AC servicing) */
+  acAvailable: boolean
   range: ResolvedRange
 }
 
+export interface LoadParams {
+  group?: string
+  services?: string[]
+  preset?: string
+  from?: string
+  to?: string
+  statuses: RequestStatus[]
+  /** the filters chosen in the filter bar (each is dropped when it no longer fits the others) */
+  facets?: FacetSelection
+  /** AC Not Working % above this is a red flag */
+  redFlagPercent?: number
+}
+
 /** Who may open which report, which group it is about, which services and dates are included — shared by every report. */
-async function resolveScope(
-  profile: ProfileWithTeams,
-  slug: string,
-  kind: AnalyticsReportDef['kind'],
-  filters: { group?: string; services?: string[]; preset?: string; from?: string; to?: string }
-): Promise<{ error: string } | ReportScope> {
+async function resolveScope(profile: ProfileWithTeams, slug: string, kinds: AnalyticsReportDef['kind'][], p: LoadParams): Promise<{ error: string } | ReportScope> {
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
   if (!canUseReportAnalytics(profile.role)) return { error: "You don't have access to this report." }
   const def = findAnalyticsReport(slug)
-  if (!def || def.kind !== kind) return { error: 'This report does not exist.' }
+  if (!def || !kinds.includes(def.kind)) return { error: 'This report does not exist.' }
 
   const groups = selectableGroups(profile, await getOrgTeams(profile.org_id))
-  const team = pickGroup(groups, filters.group)
+  const team = pickGroup(groups, p.group)
   if (!team) return { error: "You don't belong to a technician group yet, so there is no group to report on." }
 
   // Only services that really belong to this group count (a service picked for another group is ignored);
   // choosing none, or all of them, means "every service" — no filter, so tickets without a service still show.
+  // An AC report starts from the group's AC services.
   const services = await getGroupServices(profile.org_id, team.id)
-  const wanted = new Set(filters.services ?? [])
+  const wanted = new Set(p.services ?? [])
   const chosen = services.filter((s) => wanted.has(s.id))
   const useFilter = chosen.length > 0 && chosen.length < services.length
+  const acIds = services.filter((s) => s.oemRouted).map((s) => s.id)
+  let selectedServiceIds: string[]
+  let serviceIds: string[] | null
+  if (useFilter) { selectedServiceIds = chosen.map((s) => s.id); serviceIds = selectedServiceIds }
+  else if (def.acOnly) { selectedServiceIds = acIds; serviceIds = acIds }
+  else { selectedServiceIds = services.map((s) => s.id); serviceIds = null }
+  const acAvailable = services.some((s) => selectedServiceIds.includes(s.id) && s.oemRouted)
+  return { def, team, groups, services, selectedServiceIds, serviceIds, acAvailable, range: resolveDateRange(p.preset, p.from, p.to) }
+}
+
+function inServices(q: AnyClient & { in: (c: string, v: string[]) => unknown }, serviceIds: string[] | null) {
+  return serviceIds ? q.in('service_id', serviceIds) : q
+}
+
+/** Every ticket of the group created in the range, in the given statuses (and services), as facts. */
+async function fetchFacts(orgId: string, teamId: string, scope: ReportScope, statuses: RequestStatus[], ctx: FactContext): Promise<{ rows: TicketFact[]; truncated: boolean }> {
+  if (scope.serviceIds && scope.serviceIds.length === 0) return { rows: [], truncated: false }
+  const admin = createAdminClient() as unknown as AnyClient
+  const { rows, truncated } = await fetchAll<RawTicket>((from, to) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q: any = admin.from('requests').select(FACT_SELECT).eq('org_id', orgId).eq('team_id', teamId).in('status', statuses)
+    q = inServices(q, scope.serviceIds)
+    if (scope.range.from) q = q.gte('created_at', scope.range.from.toISOString())
+    if (scope.range.to) q = q.lte('created_at', scope.range.to.toISOString())
+    return q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to)
+  })
+  return { rows: rows.map((r) => makeFact(r, ctx)), truncated }
+}
+
+/** Tickets of the group that were created or resolved on the reference day — whatever their status now. */
+async function fetchDayFacts(orgId: string, teamId: string, scope: ReportScope, day: ReferenceDay, ctx: FactContext): Promise<TicketFact[]> {
+  if (scope.serviceIds && scope.serviceIds.length === 0) return []
+  const admin = createAdminClient() as unknown as AnyClient
+  const a = day.start.toISOString()
+  const b = day.end.toISOString()
+  const { rows } = await fetchAll<RawTicket>((from, to) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q: any = admin.from('requests').select(FACT_SELECT).eq('org_id', orgId).eq('team_id', teamId)
+      .or(`and(created_at.gte.${a},created_at.lte.${b}),and(resolved_at.gte.${a},resolved_at.lte.${b})`)
+    q = inServices(q, scope.serviceIds)
+    return q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to)
+  })
+  return rows.map((r) => makeFact(r, ctx))
+}
+
+// ── Common result ────────────────────────────────────────────────────────────────────────────────
+
+export interface FacetState {
+  /** the filters this report offers, in order */
+  keys: FacetKey[]
+  /** what is chosen (only values that fit the other choices) */
+  selection: FacetSelection
+  /** each filter's choices, given the other filters */
+  options: Record<FacetKey, FacetOption[]>
+}
+
+export interface ReportBase {
+  def: AnalyticsReportDef
+  team: OrgTeam
+  groups: OrgTeam[]
+  services: GroupService[]
+  selectedServiceIds: string[]
+  acAvailable: boolean
+  range: ResolvedRange
+  statuses: RequestStatus[]
+  facets: FacetState
+  /** tickets before the filter bar's filters */
+  totalBeforeFilters: number
+  truncated: boolean
+  redFlagPercent: number
+}
+
+interface Prepared {
+  scope: ReportScope
+  ctx: FactContext
+  all: TicketFact[]
+  /** tickets that match the filter bar */
+  filtered: TicketFact[]
+  base: ReportBase
+}
+
+async function prepare(profile: ProfileWithTeams, slug: string, kinds: AnalyticsReportDef['kind'][], p: LoadParams): Promise<{ error: string } | Prepared> {
+  const scope = await resolveScope(profile, slug, kinds, p)
+  if ('error' in scope) return scope
+  const redFlagPercent = p.redFlagPercent && p.redFlagPercent > 0 ? p.redFlagPercent : DEFAULT_RED_FLAG_PERCENT
+  const { ctx } = await loadFactContext(profile.org_id!, redFlagPercent)
+  const { rows: fetched, truncated } = await fetchFacts(profile.org_id!, scope.team.id, scope, p.statuses, ctx)
+  // an AC report is about AC tickets only
+  const all = scope.def.acOnly ? fetched.filter((t) => t.isAcTicket) : fetched
+
+  const keys = [...scope.def.facets, ...(scope.acAvailable ? (scope.def.acFacets ?? []) : [])]
+  const selection = reconcileSelection(all, p.facets ?? {}, keys)
+  const filtered = applyFacets(all, selection)
   return {
-    def, team, groups, services,
-    selectedServiceIds: useFilter ? chosen.map((s) => s.id) : services.map((s) => s.id),
-    serviceIds: useFilter ? chosen.map((s) => s.id) : null,
-    range: resolveDateRange(filters.preset, filters.from, filters.to),
+    scope, ctx, all, filtered,
+    base: {
+      def: scope.def, team: scope.team, groups: scope.groups, services: scope.services, selectedServiceIds: scope.selectedServiceIds,
+      acAvailable: scope.acAvailable, range: scope.range, statuses: p.statuses,
+      facets: { keys, selection, options: facetOptions(all, selection, keys) },
+      totalBeforeFilters: all.length, truncated, redFlagPercent,
+    },
   }
+}
+
+// ── Tickets summary ──────────────────────────────────────────────────────────────────────────────
+
+export interface AgeBucketReportResult extends ReportBase {
+  /** The day the "created / resolved that day" columns are about. */
+  day: ReferenceDay
+  summary: AgeSummary
+  ticketCount: number
 }
 
 /** Loads the summary report for a viewer, or says why they cannot have it. */
-export async function loadAgeBucketReport(
-  profile: ProfileWithTeams,
-  slug: string,
-  filters: { group?: string; services?: string[]; preset?: string; from?: string; to?: string; statuses: RequestStatus[] }
-): Promise<{ error: string } | AgeBucketReportResult> {
-  const scope = await resolveScope(profile, slug, 'age-summary', filters)
-  if ('error' in scope) return scope
-  const day = referenceDay(scope.range)
-  const [{ rows, truncated }, dayRows] = await Promise.all([
-    fetchGroupTickets(profile.org_id!, scope.team.id, scope.range, filters.statuses, scope.serviceIds),
-    fetchDayActivity(profile.org_id!, scope.team.id, day, scope.serviceIds),
-  ])
-  return {
-    def: scope.def, team: scope.team, groups: scope.groups, services: scope.services,
-    selectedServiceIds: scope.selectedServiceIds,
-    range: scope.range, day, statuses: filters.statuses,
-    summary: buildAgeSummary(rows, dayRows), ticketCount: rows.length, truncated,
-  }
+export async function loadAgeBucketReport(profile: ProfileWithTeams, slug: string, p: LoadParams): Promise<{ error: string } | AgeBucketReportResult> {
+  const prep = await prepare(profile, slug, ['age-summary'], p)
+  if ('error' in prep) return prep
+  const day = referenceDay(prep.scope.range)
+  // the "that day" columns follow the same filters, whatever the status filter says; a cancelled ticket was never work, so it is not counted
+  const dayAll = await fetchDayFacts(profile.org_id!, prep.scope.team.id, prep.scope, day, prep.ctx)
+  const dayFiltered = applyFacets(dayAll.filter((t) => t.status !== 'cancelled'), prep.base.facets.selection)
+  const a = day.start.toISOString()
+  const b = day.end.toISOString()
+  const within = (iso: string | null) => !!iso && iso >= a && iso <= b
+
+  const rows: SummaryInputRow[] = prep.filtered.map((t) => ({ technician: t.technician, category: t.category, subCategory: t.subCategory, ageDays: t.ageDays }))
+  const dayRows: DayInputRow[] = dayFiltered.map((t) => ({
+    technician: t.technician, category: t.category, subCategory: t.subCategory, created: within(t.createdAt), resolved: within(t.resolvedAt),
+  }))
+  return { ...prep.base, day, summary: buildAgeSummary(rows, dayRows), ticketCount: rows.length }
 }
 
-/**
- * The Responsible and Age bucket choices depend on each other: Responsible lists only people who have tickets in the
- * chosen age bucket, and Age bucket lists only the ages that the chosen person has tickets in. A choice that no longer
- * fits (left over from another group, status or filter) is dropped.
- */
-function linkedChoices<T extends Pick<DetailRow, 'technician' | 'ageBucket'>>(all: T[], wantTechnician: string | undefined, wantBucket: string | undefined) {
-  const technician = technicianOptions(all).includes(wantTechnician ?? '') ? wantTechnician! : ''
-  // the age buckets offered are the ones that person has; a bucket they have no tickets in is dropped
-  const buckets = bucketOptions(filterDetailRows(all, { technician }))
-  const bucket = buckets.includes(wantBucket ?? '') ? wantBucket! : ''
-  // the people offered are the ones who have tickets in the chosen age bucket
-  const technicians = technicianOptions(filterDetailRows(all, { bucket }))
-  return { technician, bucket, technicians, buckets }
-}
+// ── Ticket detail ────────────────────────────────────────────────────────────────────────────────
 
-// ── Ticket detail report ───────────────────────────────────────────────────────────────────────────
-
-interface DetailTicket {
-  id: string
-  request_no: string
-  title: string
-  status: string
-  priority: string
-  created_at: string
-  resolved_at: string | null
-  closed_at: string | null
-  service: { name: string } | null
-  category: { name: string } | null
-  sub_category: { name: string } | null
-  assignee: { full_name: string } | null
-  requester: { full_name: string } | null
-}
-
-const DETAIL_SELECT = 'id, request_no, title, status, priority, created_at, resolved_at, closed_at, service:services(name), category:service_categories(name), sub_category:service_sub_categories(name), assignee:profiles!requests_assigned_to_fkey(full_name), requester:profiles!requests_requester_id_fkey(full_name)'
-/** The most ticket lines one detail report shows or exports (the same cap Report Builder uses). */
-export const MAX_DETAIL_ROWS = 20_000
-
-async function fetchDetailRows(
-  orgId: string, teamId: string, range: ResolvedRange, statuses: RequestStatus[], serviceIds: string[] | null
-): Promise<{ rows: DetailRow[]; truncated: boolean }> {
-  const admin = createAdminClient() as unknown as AnyClient
-  const now = new Date().toISOString()
-  const { rows, truncated } = await fetchAll<DetailTicket>((from, to) => {
-    let q = admin.from('requests').select(DETAIL_SELECT).eq('org_id', orgId).eq('team_id', teamId).in('status', statuses)
-    if (serviceIds) q = q.in('service_id', serviceIds)
-    if (range.from) q = q.gte('created_at', range.from.toISOString())
-    if (range.to) q = q.lte('created_at', range.to.toISOString())
-    return q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to)
-  })
-  const mapped: DetailRow[] = rows.map((r) => {
-    const ageDays = daysBetween(r.created_at, r.resolved_at ?? r.closed_at ?? now)
-    return {
-      id: r.id,
-      ticketNo: r.request_no,
-      subject: r.title,
-      requester: r.requester?.full_name ?? '',
-      technician: r.assignee?.full_name ?? UNASSIGNED,
-      category: r.category?.name ?? NO_CATEGORY,
-      subCategory: r.sub_category?.name ?? NO_SUB_CATEGORY,
-      service: r.service?.name ?? '',
-      status: r.status,
-      priority: r.priority,
-      createdAt: r.created_at,
-      ageDays,
-      ageBucket: ageBucketLabel(ageDays),
-    }
-  })
-  const capped = mapped.length > MAX_DETAIL_ROWS
-  return { rows: capped ? mapped.slice(0, MAX_DETAIL_ROWS) : mapped, truncated: truncated || capped }
-}
-
-export interface TicketDetailReportResult {
-  def: AnalyticsReportDef
-  team: OrgTeam
-  groups: OrgTeam[]
-  services: GroupService[]
-  selectedServiceIds: string[]
-  range: ResolvedRange
-  statuses: RequestStatus[]
-  /** Technician / age-bucket choices (from the tickets before those two filters) and what is selected. */
-  technicians: string[]
-  buckets: string[]
-  technician: string
-  bucket: string
-  rows: DetailRow[]
-  /** Tickets before the technician / age-bucket filters. */
-  totalBeforeFilters: number
-  truncated: boolean
+export interface TicketDetailReportResult extends ReportBase {
+  rows: TicketFact[]
 }
 
 /** Loads the ticket detail report for a viewer, or says why they cannot have it. */
-export async function loadTicketDetailReport(
-  profile: ProfileWithTeams,
-  slug: string,
-  filters: { group?: string; services?: string[]; preset?: string; from?: string; to?: string; statuses: RequestStatus[]; technician?: string; bucket?: string }
-): Promise<{ error: string } | TicketDetailReportResult> {
-  const scope = await resolveScope(profile, slug, 'ticket-detail', filters)
-  if ('error' in scope) return scope
-  const { rows: all, truncated } = await fetchDetailRows(profile.org_id!, scope.team.id, scope.range, filters.statuses, scope.serviceIds)
-  const { technician, bucket, technicians, buckets } = linkedChoices(all, filters.technician, filters.bucket)
-  return {
-    def: scope.def, team: scope.team, groups: scope.groups, services: scope.services,
-    selectedServiceIds: scope.selectedServiceIds, range: scope.range, statuses: filters.statuses,
-    technicians, buckets, technician, bucket,
-    rows: sortDetailRows(filterDetailRows(all, { technician, bucket })),
-    totalBeforeFilters: all.length, truncated,
-  }
+export async function loadTicketDetailReport(profile: ProfileWithTeams, slug: string, p: LoadParams): Promise<{ error: string } | TicketDetailReportResult> {
+  const prep = await prepare(profile, slug, ['ticket-detail'], p)
+  if ('error' in prep) return prep
+  const sorted = sortDetailRows(prep.filtered)
+  const capped = sorted.length > MAX_DETAIL_ROWS
+  return { ...prep.base, rows: capped ? sorted.slice(0, MAX_DETAIL_ROWS) : sorted, truncated: prep.base.truncated || capped }
 }
 
-// ── Ticket status / store wise reports (group → store → ticket) ───────────────────────────────────────
+// ── Grouped ticket reports (Ticket Status, Store wise, AMC Vendor) ───────────────────────────────
 
-interface TreeTicketRow extends Omit<DetailTicket, 'service' | 'requester'> {
-  service: { name: string; auto_oem_routing: boolean | null } | null
-  requester: { full_name: string; store: { code: string; oem: { name: string } | null } | null } | null
-}
-
-// the detail columns, with the requester's store (and its OEM) added
-const TREE_SELECT = DETAIL_SELECT.replace(
-  'requester:profiles!requests_requester_id_fkey(full_name)',
-  'requester:profiles!requests_requester_id_fkey(full_name, store:stores(code, oem:oems(name)))'
-).replace('service:services(name)', 'service:services(name, auto_oem_routing)')
-
-async function fetchTreeRows(
-  orgId: string, teamId: string, range: ResolvedRange, statuses: RequestStatus[], serviceIds: string[] | null
-): Promise<{ rows: TreeTicket[]; truncated: boolean }> {
-  const admin = createAdminClient() as unknown as AnyClient
-  const now = new Date().toISOString()
-  const { rows, truncated } = await fetchAll<TreeTicketRow>((from, to) => {
-    let q = admin.from('requests').select(TREE_SELECT).eq('org_id', orgId).eq('team_id', teamId).in('status', statuses)
-    if (serviceIds) q = q.in('service_id', serviceIds)
-    if (range.from) q = q.gte('created_at', range.from.toISOString())
-    if (range.to) q = q.lte('created_at', range.to.toISOString())
-    return q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to)
-  })
-  const mapped: TreeTicket[] = rows.map((r) => {
-    const ageDays = daysBetween(r.created_at, r.resolved_at ?? r.closed_at ?? now)
-    const store = r.requester?.store
-    return {
-      id: r.id,
-      ticketNo: r.request_no,
-      subject: r.title,
-      requester: r.requester?.full_name ?? '',
-      // a store's account is named after the store; anyone else (head office staff) shows under their own name
-      store: store?.code || r.requester?.full_name || NO_STORE,
-      // an OEM only has to do with tickets of OEM-routed services (AC servicing); an IT or HR ticket from the same store has none
-      oem: r.service?.auto_oem_routing ? (store?.oem?.name ?? NO_OEM) : '',
-      technician: r.assignee?.full_name ?? UNASSIGNED,
-      category: r.category?.name ?? NO_CATEGORY,
-      subCategory: r.sub_category?.name ?? NO_SUB_CATEGORY,
-      service: r.service?.name ?? '',
-      status: r.status,
-      priority: r.priority,
-      createdAt: r.created_at,
-      ageDays,
-      ageBucket: ageBucketLabel(ageDays),
-    }
-  })
-  const capped = mapped.length > MAX_DETAIL_ROWS
-  return { rows: capped ? mapped.slice(0, MAX_DETAIL_ROWS) : mapped, truncated: truncated || capped }
-}
-
-export interface TicketTreeReportResult {
-  def: AnalyticsReportDef
-  team: OrgTeam
-  groups: OrgTeam[]
-  services: GroupService[]
-  selectedServiceIds: string[]
-  range: ResolvedRange
-  statuses: RequestStatus[]
-  technicians: string[]
-  buckets: string[]
-  technician: string
-  bucket: string
-  groupBy: TreeGroupBy
-  /** Whether any chosen service goes to an OEM — only then can the report be grouped by OEM. */
-  oemAvailable: boolean
-  minTickets: number
+export interface TicketTreeReportResult extends ReportBase {
+  layout: Layout
   tree: TicketTree
-  /** Tickets before the responsible / age-bucket / minimum-tickets filters. */
-  totalBeforeFilters: number
-  truncated: boolean
+  minTickets: number
 }
 
-/** Loads a ticket-status / store-wise report for a viewer, or says why they cannot have it. */
 export async function loadTicketTreeReport(
   profile: ProfileWithTeams,
   slug: string,
-  filters: {
-    group?: string; services?: string[]; preset?: string; from?: string; to?: string; statuses: RequestStatus[]
-    technician?: string; bucket?: string; groupBy?: string; minTickets?: string
-  }
+  p: LoadParams & { layout?: string; minTickets?: string }
 ): Promise<{ error: string } | TicketTreeReportResult> {
-  const scope = await resolveScope(profile, slug, 'ticket-tree', filters)
-  if ('error' in scope) return scope
-  const { rows: all, truncated } = await fetchTreeRows(profile.org_id!, scope.team.id, scope.range, filters.statuses, scope.serviceIds)
-  const { technician, bucket, technicians, buckets } = linkedChoices(all, filters.technician, filters.bucket)
-  const chosen = scope.services.filter((s) => scope.selectedServiceIds.includes(s.id))
-  const oemAvailable = chosen.some((s) => s.oemRouted)
-  const wantedBy = parseGroupBy(filters.groupBy, scope.def.tree?.groupBy ?? 'technician')
-  // no chosen service goes to an OEM: grouping by OEM would be empty, so the report is grouped by responsible instead
-  const groupBy: TreeGroupBy = wantedBy === 'oem' && !oemAvailable ? 'technician' : wantedBy
-  const minTickets = scope.def.tree?.minTicketsFilter ? parseMinTickets(filters.minTickets) : 1
-  return {
-    def: scope.def, team: scope.team, groups: scope.groups, services: scope.services,
-    selectedServiceIds: scope.selectedServiceIds, range: scope.range, statuses: filters.statuses,
-    technicians, buckets, technician, bucket, groupBy, oemAvailable, minTickets,
-    tree: buildTicketTree(filterDetailRows(all, { technician, bucket }), groupBy, minTickets),
-    totalBeforeFilters: all.length, truncated,
-  }
+  const prep = await prepare(profile, slug, ['ticket-tree'], p)
+  if ('error' in prep) return prep
+  const cfg = prep.scope.def.tree!
+  let layout = layoutById(cfg.layouts.includes(p.layout ?? '') ? p.layout : undefined, cfg.defaultLayout)
+  // no chosen service goes to an OEM: grouping by OEM would be empty, so the report opens with its usual layout
+  if (layoutUsesOem(layout) && !prep.scope.acAvailable) layout = layoutById(undefined, cfg.defaultLayout)
+  const minTickets = cfg.minTicketsFilter ? parseMinTickets(p.minTickets) : 1
+  return { ...prep.base, layout, minTickets, tree: buildTicketTree(prep.filtered, layout.levels, minTickets) }
+}
+
+// ── Store AC Not Working ─────────────────────────────────────────────────────────────────────────
+
+export interface StoreAcReportResult extends ReportBase {
+  groupBy: StoreAcGroupBy
+  report: StoreAcReport
+}
+
+export async function loadStoreAcReport(
+  profile: ProfileWithTeams,
+  slug: string,
+  p: LoadParams & { groupBy?: string }
+): Promise<{ error: string } | StoreAcReportResult> {
+  const prep = await prepare(profile, slug, ['store-ac'], p)
+  if ('error' in prep) return prep
+  const groupBy = parseStoreAcGroup(p.groupBy)
+  return { ...prep.base, groupBy, report: buildStoreAc(prep.filtered, groupBy, prep.base.redFlagPercent) }
 }

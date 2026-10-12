@@ -3,170 +3,178 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import ExcelJS from 'exceljs'
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 
-vi.mock('@/lib/actions/analyticsReportExport', () => ({ exportTicketTreeReportXlsx: vi.fn() }))
+vi.mock('@/lib/actions/analyticsReportExport', () => ({ exportTicketTreeReportXlsx: vi.fn(), exportStoreAcReportXlsx: vi.fn() }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
 import {
-  buildTicketTree, flattenTree, collapsedForTreeLevel, treeLevelOf, treeColumns, filterByMinTickets, parseGroupBy, parseMinTickets,
-  storeKey, NO_OEM, type TreeTicket,
+  buildTicketTree, flattenTree, collapsedForDepth, depthOf, columnsFor, filterByMinTickets, parseMinTickets, layoutById, LAYOUTS, cellValue, formatDay,
+  type TicketTree,
 } from '@/lib/reporting/analytics/ticket-tree'
 import { buildTicketTreeWorkbook, TREE_HEADER_ROW } from '@/lib/reporting/analytics/ticket-tree-xlsx'
 import { TicketTreeView } from '@/components/reports/analytics/TicketTreeView'
+import { fact } from './helpers/fact'
 
 afterEach(() => cleanup())
 
-const t = (o: Partial<TreeTicket> & { ticketNo: string }): TreeTicket => ({
-  id: o.ticketNo, subject: `Subject ${o.ticketNo}`, requester: 'LSR', store: 'LSR', oem: 'DAIKAIN OEM - ALL', technician: 'Krishan', category: 'ADMIN AC ISSUE',
-  subCategory: 'COOLING ISSUE', service: 'ADMIN - AC', status: 'in_progress', priority: 'medium', createdAt: '2026-10-01T10:00:00.000Z', ageDays: 3, ageBucket: '0–5 days', ...o,
-})
-
-const rows: TreeTicket[] = [
-  t({ ticketNo: 'CK-1', store: 'LSR', oem: 'DAIKAIN OEM - ALL', technician: 'Krishan', ageDays: 11, ageBucket: '11–20 days' }),
-  t({ ticketNo: 'CK-2', store: 'LSR', oem: 'DAIKAIN OEM - ALL', technician: 'Krishan', ageDays: 2 }),
-  t({ ticketNo: 'CK-3', store: 'SBP', oem: 'BLUE STAR OEM - BR', technician: 'Krishan', ageDays: 9, ageBucket: '6–10 days' }),
-  t({ ticketNo: 'CK-4', store: 'KGP', oem: 'BLUE STAR OEM - BR', technician: 'Shivanshu', category: 'FAN', ageDays: 1 }),
-  // an IT ticket from a store with an OEM: the OEM has nothing to do with it
-  t({ ticketNo: 'CK-5', store: 'HO Person', oem: '', technician: 'Unassigned', category: 'FAN', ageDays: 20, ageBucket: '11–20 days' }),
+const rows = [
+  fact({ ticketNo: 'CK-1', store: 'LSR', cluster: 'JH1', technician: 'Krishan', ageDays: 11, ageBucket: '11–20 days' }),
+  fact({ ticketNo: 'CK-2', store: 'LSR', cluster: 'JH1', technician: 'Krishan', ageDays: 2 }),
+  fact({ ticketNo: 'CK-3', store: 'SBP', cluster: 'BR3', technician: 'Krishan', ageDays: 9, ageBucket: '6–10 days' }),
+  fact({ ticketNo: 'CK-4', store: 'KGP', cluster: 'BR4', technician: 'Shivanshu', category: 'FAN', ageDays: 1, oem: '', isAcTicket: false }),
+  // a head office requester: no cluster, no OEM
+  fact({ ticketNo: 'CK-5', store: 'HO Person', cluster: '', technician: 'Unassigned', category: 'FAN', ageDays: 20, ageBucket: '11–20 days', oem: '', isAcTicket: false, isStoreAccount: false }),
 ]
+const L = (id: string) => layoutById(id, 'cluster-store').levels
 
-const labels = (tree = buildTicketTree(rows, 'technician'), c = collapsedForTreeLevel(tree, 'tickets')) =>
-  flattenTree(tree, c).map((r) => `${r.kind}:${[r.groupLabel, r.storeLabel, r.ticket?.ticketNo].filter(Boolean).join('/')}`)
+const lines = (tree: TicketTree, collapsed: ReadonlySet<string> = new Set()) =>
+  flattenTree(tree, collapsed).map((r) => `${r.kind}:${[...r.labels.filter(Boolean), r.ticket?.ticketNo].filter(Boolean).join('/')}`)
 
-describe('ticket tree', () => {
-  it('groups by responsible → store → ticket, Unassigned last, oldest ticket first, totals added up', () => {
-    const tree = buildTicketTree(rows, 'technician')
-    expect(tree.groups.map((g) => g.name)).toEqual(['Krishan', 'Shivanshu', 'Unassigned'])
-    expect(tree.groups[0].stores.map((s) => s.name)).toEqual(['LSR', 'SBP'])
-    expect(tree.groups[0].stores[0].tickets.map((x) => x.ticketNo)).toEqual(['CK-1', 'CK-2'])
-    expect(tree.groups[0].total).toBe(3)
-    expect(tree.groups[0].counts).toEqual({ '11–20 days': 1, '0–5 days': 1, '6–10 days': 1 })
+describe('grouped ticket table', () => {
+  it('Cluster › Store › ticket: clusters A-Z with "(Not set)" last, oldest ticket first, a total line per cluster', () => {
+    const tree = buildTicketTree(rows, L('cluster-store'))
+    expect(tree.roots.map((r) => r.name)).toEqual(['BR3', 'BR4', 'JH1', '(Not set)'])
+    expect(tree.roots[2].children.map((s) => s.name)).toEqual(['LSR'])
+    expect(tree.roots[2].children[0].tickets.map((t) => t.ticketNo)).toEqual(['CK-1', 'CK-2'])
+    expect(tree.roots[2].total).toBe(2)
     expect(tree.buckets).toEqual(['0–5 days', '6–10 days', '11–20 days'])
     expect(tree.grand.total).toBe(5)
-    expect(tree.grand.counts['11–20 days']).toBe(2)
+    expect(lines(tree)).toEqual([
+      'ticket:BR3/SBP/CK-3', 'total:BR3 Total', 'ticket:BR4/KGP/CK-4', 'total:BR4 Total',
+      'ticket:JH1/LSR/CK-1', 'ticket:CK-2', 'total:JH1 Total', 'ticket:(Not set)/HO Person/CK-5', 'total:(Not set) Total',
+    ])
   })
 
-  it('can group by OEM or by category', () => {
-    // grouped by OEM, a ticket that has no OEM to do with it (an IT ticket) is not listed at all
-    const byOem = buildTicketTree(rows, 'oem')
-    expect(byOem.groups.map((g) => g.name)).toEqual(['BLUE STAR OEM - BR', 'DAIKAIN OEM - ALL'])
-    expect(byOem.grand.total).toBe(4)
-    // an AC ticket whose store has no OEM is listed, last, as "(No OEM)"
-    expect(buildTicketTree([...rows, t({ ticketNo: 'CK-6', store: 'ZZZ', oem: NO_OEM })], 'oem').groups.map((g) => g.name).slice(-1)).toEqual([NO_OEM])
-    const byCat = buildTicketTree(rows, 'category')
-    expect(byCat.groups.map((g) => [g.name, g.total])).toEqual([['ADMIN AC ISSUE', 3], ['FAN', 2]])
+  it('three levels: Responsible › Cluster › Store, with a label on the first line of each heading only', () => {
+    const tree = buildTicketTree(rows, L('tech-cluster-store'))
+    expect(tree.roots.map((r) => r.name)).toEqual(['Krishan', 'Shivanshu', 'Unassigned'])
+    expect(tree.roots[0].children.map((c) => c.name)).toEqual(['BR3', 'JH1'])
+    const flat = flattenTree(tree)
+    expect(flat[0].labels).toEqual(['Krishan', 'BR3', 'SBP'])
+    expect(flat[1].labels).toEqual(['', 'JH1', 'LSR']) // Krishan is not repeated
+    expect(flat[2].labels).toEqual(['', '', ''])
+    expect(flat.filter((r) => r.kind === 'total').map((r) => r.labels[0])).toEqual(['Krishan Total', 'Shivanshu Total', 'Unassigned Total'])
+  })
+
+  it('four levels: AC-AMC brand › vendor › cluster › store', () => {
+    const t = buildTicketTree([fact({ ticketNo: 'A', acAmcBrand: 'DAIKIN', acAmcVendor: 'V1' }), fact({ ticketNo: 'B', acAmcBrand: 'DAIKIN', acAmcVendor: 'V2' }), fact({ ticketNo: 'C', acAmcBrand: '', acAmcVendor: '' })], L('amc-brand-vendor-cluster-store'))
+    expect(t.roots.map((r) => r.name)).toEqual(['DAIKIN', '(Not set)'])
+    expect(t.roots[0].children.map((v) => v.name)).toEqual(['V1', 'V2'])
+    expect(flattenTree(t)[0].labels).toEqual(['DAIKIN', 'V1', 'JH1', 'LSR'])
+  })
+
+  it('a folded heading or store becomes one line of totals; the level buttons fold one level at a time', () => {
+    const tree = buildTicketTree(rows, L('tech-cluster-store'))
+    expect(lines(tree, collapsedForDepth(tree, 0))).toEqual(['node:Krishan', 'node:Shivanshu', 'node:Unassigned'])
+    // closing the clusters keeps each one as a line, with its total, under its responsible
+    expect(lines(tree, collapsedForDepth(tree, 1))).toEqual(['node:Krishan/BR3', 'node:JH1', 'total:Krishan Total', 'node:Shivanshu/BR4', 'total:Shivanshu Total', 'node:Unassigned/(Not set)', 'total:Unassigned Total'])
+    const stores = flattenTree(tree, collapsedForDepth(tree, 2))
+    expect(stores.filter((r) => r.kind === 'node')).toHaveLength(4)
+    expect(stores[0]).toMatchObject({ kind: 'node', total: 1 })
+    expect(collapsedForDepth(tree, 'tickets').size).toBe(0)
+    for (const d of [0, 1, 2, 'tickets'] as const) expect(depthOf(tree, collapsedForDepth(tree, d))).toBe(d)
+    expect(depthOf(tree, new Set([tree.roots[0].key, tree.roots[1].children[0].key]))).toBeNull()
+  })
+
+  it('grouped by OEM, only tickets that have an OEM are listed (an IT ticket does not belong under an AC vendor)', () => {
+    const tree = buildTicketTree(rows, L('oem-store'))
+    expect(tree.grand.total).toBe(3)
+    expect(tree.roots.map((r) => r.name)).toEqual(['DAIKAIN OEM - ALL'])
+    // an AC ticket from a store with no OEM is listed, last
+    const withNoOem = buildTicketTree([...rows, fact({ ticketNo: 'Z', store: 'ZZZ', oem: '(No OEM)' })], L('oem-store'))
+    expect(withNoOem.roots.map((r) => r.name)).toEqual(['DAIKAIN OEM - ALL', '(No OEM)'])
   })
 
   it('keeps only stores with at least N tickets, counted over the whole result', () => {
     expect(filterByMinTickets(rows, 2).map((r) => r.ticketNo)).toEqual(['CK-1', 'CK-2'])
     expect(filterByMinTickets(rows, 1)).toHaveLength(5)
-    const tree = buildTicketTree(rows, 'oem', 2)
-    expect(tree.groups.map((g) => g.name)).toEqual(['DAIKAIN OEM - ALL'])
-    expect(tree.grand.total).toBe(2)
-    // the OEM grouping leaves out tickets without an OEM before counting a store's tickets
-    expect(buildTicketTree([...rows, t({ ticketNo: 'IT-1', store: 'LSR', oem: '' })], 'oem', 3).grand.total).toBe(0)
-    // a store raising tickets under two responsibles still counts as one store with all its tickets
-    const split = [t({ ticketNo: 'A', store: 'X', technician: 'P' }), t({ ticketNo: 'B', store: 'X', technician: 'Q' })]
-    expect(buildTicketTree(split, 'technician', 2).grand.total).toBe(2)
+    expect(buildTicketTree(rows, L('cluster-store'), 2).grand.total).toBe(2)
+    const split = [fact({ ticketNo: 'A', store: 'X', technician: 'P' }), fact({ ticketNo: 'B', store: 'X', technician: 'Q' })]
+    expect(buildTicketTree(split, L('tech-store'), 2).grand.total).toBe(2)
+    expect([parseMinTickets('3'), parseMinTickets('0'), parseMinTickets('x'), parseMinTickets(undefined), parseMinTickets('5000'), parseMinTickets('2.5')]).toEqual([3, 1, 1, 1, 1000, 1])
   })
 
-  it('reads the grouping and the minimum from the address, with safe defaults', () => {
-    expect(parseGroupBy('oem', 'technician')).toBe('oem')
-    expect(parseGroupBy('nonsense', 'category')).toBe('category')
-    expect(parseGroupBy(undefined, 'technician')).toBe('technician')
-    expect([parseMinTickets('3'), parseMinTickets('0'), parseMinTickets('-2'), parseMinTickets('x'), parseMinTickets(undefined), parseMinTickets('5000'), parseMinTickets('2.5')]).toEqual([3, 1, 1, 1, 1, 1000, 1])
+  it('nothing matches: an empty table', () => {
+    const tree = buildTicketTree([], L('cluster-store'))
+    expect(tree.roots).toEqual([])
+    expect(flattenTree(tree)).toEqual([])
+    expect(tree.grand.total).toBe(0)
   })
 
-  it('everything open: heading and store on the first line, a total line per heading', () => {
-    expect(labels()).toEqual([
-      'ticket:Krishan/LSR/CK-1', 'ticket:CK-2', 'ticket:SBP/CK-3', 'groupTotal:Krishan Total',
-      'ticket:Shivanshu/KGP/CK-4', 'groupTotal:Shivanshu Total',
-      'ticket:Unassigned/HO Person/CK-5', 'groupTotal:Unassigned Total',
-    ])
+  it('every layout has real levels ending in the store, and an unknown layout falls back', () => {
+    for (const l of LAYOUTS) expect(l.levels[l.levels.length - 1]).toBe('store')
+    expect(layoutById('nonsense', 'tech-store').id).toBe('tech-store')
+    expect(layoutById('cluster-store', 'tech-store').id).toBe('cluster-store')
   })
 
-  it('a folded store becomes one line with its totals; a folded heading likewise, without a total line', () => {
-    const tree = buildTicketTree(rows, 'technician')
-    const store = flattenTree(tree, { group: new Set(), store: new Set([storeKey('Krishan', 'LSR')]) })
-    expect(store.map((r) => r.kind).slice(0, 3)).toEqual(['store', 'ticket', 'groupTotal'])
-    expect(store[0]).toMatchObject({ groupLabel: 'Krishan', storeLabel: 'LSR', total: 2 })
-    const group = flattenTree(tree, { group: new Set(['Krishan']), store: new Set() })
-    expect(group[0]).toMatchObject({ kind: 'group', groupLabel: 'Krishan', total: 3 })
-    expect(group[1].kind).toBe('ticket')
-    expect(group.some((r) => r.groupLabel === 'Krishan Total')).toBe(false)
+  it('does not repeat a heading among the ticket columns; AC columns only where a service goes to an OEM', () => {
+    const wanted = ['category', 'subject', 'technician', 'oem', 'acNo', 'cluster', 'ticketNo'] as const
+    expect(columnsFor([...wanted], ['technician', 'store'], true)).toEqual(['category', 'subject', 'oem', 'acNo', 'cluster', 'ticketNo'])
+    expect(columnsFor([...wanted], ['cluster', 'store'], false)).toEqual(['category', 'subject', 'technician', 'ticketNo'])
   })
 
-  it('levels: headings only, + stores, + tickets', () => {
-    const tree = buildTicketTree(rows, 'technician')
-    expect(labels(tree, collapsedForTreeLevel(tree, 'groups'))).toEqual(['group:Krishan', 'group:Shivanshu', 'group:Unassigned'])
-    expect(labels(tree, collapsedForTreeLevel(tree, 'stores'))).toEqual([
-      'store:Krishan/LSR', 'store:SBP', 'groupTotal:Krishan Total', 'store:Shivanshu/KGP', 'groupTotal:Shivanshu Total', 'store:Unassigned/HO Person', 'groupTotal:Unassigned Total',
-    ])
-    for (const l of ['groups', 'stores', 'tickets'] as const) expect(treeLevelOf(tree, collapsedForTreeLevel(tree, l))).toBe(l)
-    expect(treeLevelOf(tree, { group: new Set(['Krishan']), store: new Set(['x']) })).toBeNull()
-  })
-
-  it('does not repeat the grouping column among the ticket columns', () => {
-    expect(treeColumns('technician').map((c) => c.key)).not.toContain('technician')
-    expect(treeColumns('oem').map((c) => c.key)).not.toContain('oem')
-    expect(treeColumns('category').map((c) => c.key)).not.toContain('category')
-    expect(treeColumns('oem').map((c) => c.key)).toContain('technician')
-    expect(treeColumns('technician', false).map((c) => c.key)).not.toContain('oem')
+  it('shows the cell values: dates, the OEM ticket date, percent and counts', () => {
+    const t = fact({ ticketNo: 'Q', oemTicketDate: '2026-10-02', acNotWorkingPct: 36.36, storeAcTickets: 4, acTotal: 11 })
+    expect(cellValue(t, 'oemTicketDate', String)).toBe('02 Oct 2026')
+    expect(cellValue(t, 'acPct', String)).toBe('36%')
+    expect(cellValue(t, 'storeAcTickets', String)).toBe(4)
+    expect(cellValue(t, 'acTotal', String)).toBe(11)
+    expect(cellValue(fact({ ticketNo: 'N', acNotWorkingPct: null, isAcTicket: false }), 'acPct', String)).toBe('')
+    expect(cellValue(fact({ ticketNo: 'N', isAcTicket: false }), 'storeAcTickets', String)).toBe('')
+    expect(formatDay(null)).toBe('')
+    expect(formatDay('2026-02-14')).toBe('14 Feb 2026')
   })
 })
 
-describe('ticket tree Excel', () => {
-  const build = async (collapsed?: Parameters<typeof buildTicketTreeWorkbook>[0]['collapsed'], tree = buildTicketTree(rows, 'technician')) => {
+describe('grouped ticket Excel', () => {
+  const build = async (tree: TicketTree, collapsed?: ReadonlySet<string>, columns = columnsFor(['category', 'subject', 'ticketNo', 'status', 'createdDate', 'ageDays'], tree.levels, true)) => {
     const wb = buildTicketTreeWorkbook({
       title: 'Admin Ticket Status Report Age bucket wise', teamName: 'ADMIN GROUP', rangeLabel: 'All time', statusLabels: ['Open'], servicesLabel: 'All services',
-      extraFilters: '', groupBy: 'technician', tree, collapsed, statusLabel: (s) => s,
+      filtersText: 'Cluster: JH1', tree, columns, collapsed, statusLabel: (s) => s,
     })
     const back = new ExcelJS.Workbook()
     await back.xlsx.load(await wb.xlsx.writeBuffer())
     return back.getWorksheet('Tickets')!
   }
-  const col = (sheet: ExcelJS.Worksheet, n: number) => {
-    const out: unknown[] = []
-    sheet.eachRow((row, r) => { if (r > TREE_HEADER_ROW) out.push(row.getCell(n).value) })
-    return out
-  }
+  const col = (sheet: ExcelJS.Worksheet, n: number) => { const out: unknown[] = []; sheet.eachRow((row, r) => { if (r > TREE_HEADER_ROW) out.push(row.getCell(n).value) }); return out }
 
-  it('has the heading, store and ticket columns, one column per age bucket and a grand total that adds up', async () => {
-    const sheet = await build()
+  it('has one column per heading level, the ticket columns, one column per age bucket and a grand total that adds up', async () => {
+    const tree = buildTicketTree(rows, L('tech-cluster-store'))
+    const sheet = await build(tree)
     const header = sheet.getRow(TREE_HEADER_ROW).values as unknown[]
-    expect(header.slice(1, 4)).toEqual(['Responsible', 'Store', 'Category'])
+    expect(header.slice(1, 8)).toEqual(['Responsible', 'Cluster', 'Store', 'Category', 'Subject', 'Ticket No', 'Status'])
     expect(header.slice(-4)).toEqual(['0–5 days', '6–10 days', '11–20 days', 'Grand Total'])
-    const labelsCol = col(sheet, 1)
-    expect(labelsCol).toContain('Krishan Total')
-    expect(labelsCol[labelsCol.length - 1]).toBe('Grand Total')
-    const lastRow = sheet.getRow(sheet.rowCount)
-    expect(lastRow.getCell(sheet.columnCount).value).toBe(5)
+    expect(col(sheet, 1)).toContain('Krishan Total')
+    expect(col(sheet, 1)[col(sheet, 1).length - 1]).toBe('Grand Total')
+    expect(sheet.getRow(sheet.rowCount).getCell(sheet.columnCount).value).toBe(5)
+    expect(String(sheet.getRow(3).getCell(1).value)).toContain('Cluster: JH1')
   })
 
   it('follows what is folded on screen', async () => {
-    const tree = buildTicketTree(rows, 'technician')
-    const sheet = await build(collapsedForTreeLevel(tree, 'groups'))
+    const tree = buildTicketTree(rows, L('tech-store'))
+    const sheet = await build(tree, collapsedForDepth(tree, 0))
     expect(col(sheet, 1)).toEqual(['Krishan', 'Shivanshu', 'Unassigned', 'Grand Total'])
   })
 
   it('says so when nothing matches', async () => {
-    const sheet = await build(undefined, buildTicketTree([], 'technician'))
-    expect(col(sheet, 1)).toEqual(['No tickets match these filters.'])
+    expect(col(await build(buildTicketTree([], L('cluster-store'))), 1)).toEqual(['No tickets match these filters.'])
   })
 })
 
-describe('ticket tree screen', () => {
-  const tree = buildTicketTree(rows, 'technician')
-  const exportProps = { slug: 's', group: 'g', services: [], preset: 'all', from: '', to: '', statuses: ['open'], technician: '', bucket: '', groupBy: 'technician', minTickets: 1 }
-  const show = (level: 'groups' | 'stores' | 'tickets') => render(<TicketTreeView tree={tree} groupBy="technician" oemAvailable defaultLevel={level} exportProps={exportProps} />)
+describe('grouped ticket screen', () => {
+  const tree = buildTicketTree(rows, L('tech-cluster-store'))
+  const exportProps = { slug: 's', group: 'g', services: [], preset: 'all', from: '', to: '', statuses: ['open'], filters: {}, layout: 'tech-cluster-store', minTickets: 1 }
+  const show = (depth: 'tickets' | number) => render(<TicketTreeView tree={tree} columns={['category', 'subject', 'ticketNo']} defaultDepth={depth} exportProps={exportProps} />)
   const body = () => screen.getAllByRole('row').slice(1).map((r) => r.textContent ?? '')
 
-  it('opens at the level the report asks for', () => {
-    show('stores')
+  it('opens at the level the report asks for, with a button per heading level and one for the tickets', () => {
+    show(2)
     expect(screen.queryByText('CK-1')).toBeNull()
-    expect(screen.getAllByRole('button', { name: /Expand/ }).length).toBeGreaterThan(0)
+    const levels = within(screen.getByRole('group', { name: 'Level of detail' }))
+    expect(levels.getAllByRole('button').map((b) => b.textContent)).toEqual(['Responsible', '+ Cluster', '+ Store', '+ Tickets'])
+    expect(levels.getByRole('button', { name: '+ Store' }).getAttribute('aria-pressed')).toBe('true')
   })
 
-  it('opens and closes a heading with its arrow, and the level buttons fold everything', () => {
+  it('opens and closes a heading with its arrow, and the level buttons fold everything at one level', () => {
     show('tickets')
     expect(screen.getByText('CK-1')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Collapse Krishan' }))
@@ -178,11 +186,9 @@ describe('ticket tree screen', () => {
     const levels = within(screen.getByRole('group', { name: 'Level of detail' }))
     fireEvent.click(levels.getByRole('button', { name: 'Responsible' }))
     expect(body().map((r) => r.replace(/\d+/g, '').trim())).toEqual(['Krishan', 'Shivanshu', 'Unassigned', 'Grand Total'])
-    expect(screen.queryByText('CK-1')).toBeNull()
+    fireEvent.click(levels.getByRole('button', { name: '+ Cluster' }))
+    expect(screen.getByText('JH1')).toBeTruthy()
     expect(screen.queryByText('LSR')).toBeNull()
-    fireEvent.click(levels.getByRole('button', { name: '+ Stores' }))
-    expect(screen.getByText('LSR')).toBeTruthy()
-    expect(screen.queryByText('CK-1')).toBeNull()
     fireEvent.click(levels.getByRole('button', { name: '+ Tickets' }))
     expect(screen.getByText('CK-1')).toBeTruthy()
   })
@@ -190,5 +196,10 @@ describe('ticket tree screen', () => {
   it('links each ticket number to the ticket', () => {
     show('tickets')
     expect(screen.getByText('CK-3').closest('a')?.getAttribute('href')).toContain('/requests/CK-3')
+  })
+
+  it('says so when nothing matches', () => {
+    render(<TicketTreeView tree={buildTicketTree([], L('cluster-store'))} columns={[]} defaultDepth="tickets" exportProps={exportProps} />)
+    expect(screen.getByText('No tickets match these filters')).toBeTruthy()
   })
 })

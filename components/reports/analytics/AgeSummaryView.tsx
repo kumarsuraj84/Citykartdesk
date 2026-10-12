@@ -10,6 +10,7 @@ import { ExportAgeBucketButton } from './ExportAgeBucketButton'
 
 type ExportProps = {
   slug: string; group: string; services: string[]; preset: string; from: string; to: string; statuses: string[]
+  filters: Record<string, string>
 }
 
 const LEVELS: { value: DetailLevel; label: string }[] = [

@@ -83,7 +83,7 @@ describe('which rows are shown when things are collapsed', () => {
 })
 
 describe('the table on screen', () => {
-  const exportProps = { slug: 's', group: 'g', services: [], preset: 'all', from: '', to: '', statuses: ['open'] }
+  const exportProps = { slug: 's', group: 'g', services: [], preset: 'all', from: '', to: '', statuses: ['open'], filters: {} }
   const renderView = () => render(<AgeSummaryView summary={summary} dayWord="today" exportProps={exportProps} />)
   const bodyText = () => [...document.querySelectorAll('tbody tr')].map((tr) => tr.textContent ?? '')
   const has = (text: string) => bodyText().some((t) => t.includes(text))

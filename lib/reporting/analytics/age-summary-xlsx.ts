@@ -25,6 +25,8 @@ export function buildAgeBucketWorkbook(p: {
   /** "today" or "on 7 Oct 2026" — appears in the last two column headings. */
   dayWord: string
   ticketCount: number
+  /** the chosen filters in words, e.g. "Cluster: UP2 · Store type: NSO", or "" */
+  filtersText?: string
   summary: AgeSummary
   /** Technicians / categories collapsed on screen; the file shows them collapsed too. */
   collapsed?: Collapsed
@@ -40,7 +42,7 @@ export function buildAgeBucketWorkbook(p: {
 
   sheet.addRow([p.title]).font = { bold: true, size: 14, color: { argb: 'FF1F2A44' } }
   sheet.addRow([`Technician group: ${p.teamName}   |   Services: ${p.servicesLabel}`]).font = { size: 10, color: { argb: 'FF555555' } }
-  sheet.addRow([`Created: ${p.rangeLabel}   |   Status: ${p.statusLabels.join(', ')}   |   Tickets: ${p.ticketCount}`]).font = { size: 10, color: { argb: 'FF555555' } }
+  sheet.addRow([`Created: ${p.rangeLabel}   |   Status: ${p.statusLabels.join(', ')}${p.filtersText ? `   |   ${p.filtersText}` : ''}   |   Tickets: ${p.ticketCount}`]).font = { size: 10, color: { argb: 'FF555555' } }
   sheet.addRow([`Generated ${(p.generatedAt ?? new Date()).toLocaleString('en-GB')}`]).font = { size: 9, italic: true, color: { argb: 'FF777777' } }
 
   const header = sheet.addRow([

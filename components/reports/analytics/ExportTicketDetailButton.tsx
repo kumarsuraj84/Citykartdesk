@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { exportTicketDetailReportXlsx } from '@/lib/actions/analyticsReportExport'
 import { downloadXlsxBase64 } from '@/lib/export/xlsx'
 
-export function ExportTicketDetailButton({ slug, group, services, preset, from, to, statuses, technician, bucket }: {
+export function ExportTicketDetailButton({ slug, group, services, preset, from, to, statuses, filters }: {
   slug: string
   group: string
   services: string[]
@@ -14,8 +14,8 @@ export function ExportTicketDetailButton({ slug, group, services, preset, from, 
   from: string
   to: string
   statuses: string[]
-  technician: string
-  bucket: string
+  /** the chosen filters, as f_<name> -> value */
+  filters: Record<string, string>
 }) {
   const [pending, start] = useTransition()
   return (
@@ -23,7 +23,7 @@ export function ExportTicketDetailButton({ slug, group, services, preset, from, 
       type="button"
       disabled={pending}
       onClick={() => start(async () => {
-        const res = await exportTicketDetailReportXlsx(slug, { group, service: services, preset, from, to, status: statuses, technician, bucket })
+        const res = await exportTicketDetailReportXlsx(slug, { group, service: services, preset, from, to, status: statuses, filters })
         if (res.error || !res.data || !res.filename) { toast.error(res.error || 'Export failed.'); return }
         downloadXlsxBase64(res.filename, res.data)
         toast.success('Report exported.')

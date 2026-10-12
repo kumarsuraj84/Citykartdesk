@@ -8,13 +8,14 @@ import { downloadXlsxBase64 } from '@/lib/export/xlsx'
 
 export type TreeExportProps = {
   slug: string; group: string; services: string[]; preset: string; from: string; to: string; statuses: string[]
-  technician: string; bucket: string; groupBy: string; minTickets: number
+  /** the chosen filters, as f_<name> -> value */
+  filters: Record<string, string>
+  layout: string; minTickets: number
 }
 
-export function ExportTicketTreeButton({ collapsedGroups, collapsedStores, ...p }: TreeExportProps & {
+export function ExportTicketTreeButton({ collapsed, ...p }: TreeExportProps & {
   /** What the viewer has folded on screen — the Excel file follows it. */
-  collapsedGroups: string[]
-  collapsedStores: string[]
+  collapsed: string[]
 }) {
   const [pending, start] = useTransition()
   return (
@@ -24,8 +25,7 @@ export function ExportTicketTreeButton({ collapsedGroups, collapsedStores, ...p 
       onClick={() => start(async () => {
         const res = await exportTicketTreeReportXlsx(p.slug, {
           group: p.group, service: p.services, preset: p.preset, from: p.from, to: p.to, status: p.statuses,
-          technician: p.technician, bucket: p.bucket, groupBy: p.groupBy, minTickets: String(p.minTickets),
-          collapsedGroups, collapsedStores,
+          filters: p.filters, layout: p.layout, minTickets: String(p.minTickets), collapsed,
         })
         if (res.error || !res.data || !res.filename) { toast.error(res.error || 'Export failed.'); return }
         downloadXlsxBase64(res.filename, res.data)

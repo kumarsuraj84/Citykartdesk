@@ -1,32 +1,51 @@
-// The tree behind the "Ticket Status" and "Store wise" reports (the Excel sheets that listed tickets under
-// a CLUSTER / RESPONSIBLE heading with a total per heading): group → store → ticket, one column per age
-// bucket. The top level can be the Responsible technician, the store's OEM (CK Desk has no cluster, the
-// OEM is the grouping every store already has) or the Category. Pure helpers — the screen and the Excel
-// export both build their rows here, so what is exported is exactly what is on screen.
+// The grouped ticket table behind the Ticket Status, Store wise and AMC Vendor reports (the Excel sheets that listed
+// tickets under a CLUSTER / RESPONSIBLE / AMC BRAND heading with a total per heading): any number of heading levels
+// (for example Responsible > Cluster > Store), then one line per ticket, one column per age bucket, and every
+// heading or store can be opened or closed like an Excel pivot. Pure helpers: the screen and the Excel export both
+// build their rows here, so what is exported is exactly what is on screen.
 
 import { AGE_BUCKETS } from '@/lib/reporting/aging'
-import { UNASSIGNED, NO_CATEGORY } from './age-summary'
-import type { DetailRow } from './ticket-detail'
+import { NO_OEM, NO_STORE, UNASSIGNED, type TicketFact } from './facts'
 
-export type TreeGroupBy = 'technician' | 'oem' | 'category'
-export type TreeLevel = 'groups' | 'stores' | 'tickets'
+export type LevelKey = 'technician' | 'cluster' | 'region' | 'oem' | 'category' | 'store' | 'acAmcBrand' | 'acAmcVendor' | 'priorityList' | 'storeType'
 
-export const NO_OEM = '(No OEM)'
-export const NO_STORE = '(No store)'
+export const NOT_SET = '(Not set)'
 
-export const TREE_GROUP_BYS: { value: TreeGroupBy; label: string }[] = [
-  { value: 'technician', label: 'Responsible' },
-  { value: 'oem', label: 'OEM' },
-  { value: 'category', label: 'Category' },
-]
+interface LevelDef { label: string; get: (t: TicketFact) => string; last: string }
 
-export const TREE_LEVELS: TreeLevel[] = ['groups', 'stores', 'tickets']
-
-export function parseGroupBy(v: string | undefined, fallback: TreeGroupBy): TreeGroupBy {
-  return TREE_GROUP_BYS.some((g) => g.value === v) ? (v as TreeGroupBy) : fallback
+export const LEVELS: Record<LevelKey, LevelDef> = {
+  technician: { label: 'Responsible', get: (t) => t.technician, last: UNASSIGNED },
+  cluster: { label: 'Cluster', get: (t) => t.cluster, last: NOT_SET },
+  region: { label: 'Region', get: (t) => t.region, last: NOT_SET },
+  oem: { label: 'OEM', get: (t) => t.oem, last: NO_OEM },
+  category: { label: 'Category', get: (t) => t.category, last: '(No category)' },
+  store: { label: 'Store', get: (t) => t.store, last: NO_STORE },
+  acAmcBrand: { label: 'AC-AMC brand', get: (t) => t.acAmcBrand, last: NOT_SET },
+  acAmcVendor: { label: 'AC-AMC vendor', get: (t) => t.acAmcVendor, last: NOT_SET },
+  priorityList: { label: 'Store priority list as per Ops', get: (t) => t.priorityList, last: NOT_SET },
+  storeType: { label: 'Store type', get: (t) => t.storeType, last: NOT_SET },
 }
 
-export const groupByLabel = (g: TreeGroupBy) => TREE_GROUP_BYS.find((x) => x.value === g)!.label
+/** The ways a report can be laid out (what the headings are, outermost first). The viewer picks one. */
+export interface Layout { id: string; label: string; levels: LevelKey[] }
+
+export const LAYOUTS: Layout[] = [
+  { id: 'cluster-store', label: 'Cluster › Store', levels: ['cluster', 'store'] },
+  { id: 'tech-store', label: 'Responsible › Store', levels: ['technician', 'store'] },
+  { id: 'tech-cluster-store', label: 'Responsible › Cluster › Store', levels: ['technician', 'cluster', 'store'] },
+  { id: 'region-cluster-store', label: 'Region › Cluster › Store', levels: ['region', 'cluster', 'store'] },
+  { id: 'category-store', label: 'Category › Store', levels: ['category', 'store'] },
+  { id: 'oem-store', label: 'OEM › Store', levels: ['oem', 'store'] },
+  { id: 'amc-brand-vendor-cluster-store', label: 'AC-AMC brand › Vendor › Cluster › Store', levels: ['acAmcBrand', 'acAmcVendor', 'cluster', 'store'] },
+  { id: 'amc-vendor-store', label: 'AC-AMC vendor › Store', levels: ['acAmcVendor', 'store'] },
+]
+const LAYOUT_BY_ID = new Map(LAYOUTS.map((l) => [l.id, l]))
+export const layoutById = (id: string | undefined, fallback: string): Layout => LAYOUT_BY_ID.get(id ?? '') ?? LAYOUT_BY_ID.get(fallback) ?? LAYOUTS[0]
+
+/** A layout that groups by OEM only makes sense where some chosen service goes to an OEM. */
+export const layoutUsesOem = (l: Layout) => l.levels.includes('oem')
+
+export type TreeDepth = number | 'tickets'
 
 /** "At least this many tickets" — a whole number from 1 to 1000; anything else means 1 (no narrowing). */
 export function parseMinTickets(v: string | undefined): number {
@@ -34,34 +53,7 @@ export function parseMinTickets(v: string | undefined): number {
   return Number.isInteger(n) && n >= 1 ? Math.min(n, 1000) : 1
 }
 
-/** A ticket line of the tree: the detail row plus the store it was raised from and that store's OEM. */
-export interface TreeTicket extends DetailRow {
-  /** The store code (the store's requester account), or the requester's name when they are not a store. */
-  store: string
-  /** The store's OEM — only for tickets of services that go to an OEM (AC servicing); '' for every other ticket. */
-  oem: string
-}
-
-export interface TreeStore { name: string; tickets: TreeTicket[]; counts: Record<string, number>; total: number }
-export interface TreeGroup { name: string; stores: TreeStore[]; counts: Record<string, number>; total: number }
-export interface TicketTree {
-  /** Bucket labels in age order — only the ones that have at least one ticket. */
-  buckets: string[]
-  groups: TreeGroup[]
-  grand: { counts: Record<string, number>; total: number }
-}
-
-const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' })
-const lastName = (g: TreeGroupBy) => (g === 'technician' ? UNASSIGNED : g === 'oem' ? NO_OEM : NO_CATEGORY)
-const nameOrder = (a: string, b: string, last: string) => (a === last ? (b === last ? 0 : 1) : b === last ? -1 : byName(a, b))
-const addCounts = (into: Record<string, number>, from: Record<string, number>) => { for (const [k, v] of Object.entries(from)) into[k] = (into[k] ?? 0) + v }
-const sum = (c: Record<string, number>) => Object.values(c).reduce((a, b) => a + b, 0)
-
-function groupValue(t: TreeTicket, by: TreeGroupBy): string {
-  return by === 'technician' ? t.technician : by === 'oem' ? t.oem : t.category
-}
-
-/** Stores with fewer than `min` tickets in the whole result are left out (counted across every group, not per group). */
+/** Stores with fewer than `min` tickets in the whole result are left out (counted across every heading, not per heading). */
 export function filterByMinTickets<T extends { store: string }>(rows: T[], min: number): T[] {
   if (min <= 1) return rows
   const perStore = new Map<string, number>()
@@ -69,158 +61,205 @@ export function filterByMinTickets<T extends { store: string }>(rows: T[], min: 
   return rows.filter((r) => (perStore.get(r.store) ?? 0) >= min)
 }
 
-export function buildTicketTree(rows: TreeTicket[], by: TreeGroupBy, minTickets = 1): TicketTree {
-  // grouped by OEM, only tickets that have an OEM to do with them are listed (an IT ticket does not belong under an AC vendor)
-  const kept = filterByMinTickets(by === 'oem' ? rows.filter((r) => r.oem !== '') : rows, minTickets)
-  const groups = new Map<string, Map<string, TreeTicket[]>>()
-  for (const t of kept) {
-    const g = groupValue(t, by) || lastName(by)
-    const stores = groups.get(g) ?? new Map<string, TreeTicket[]>()
-    const list = stores.get(t.store) ?? []
-    list.push(t)
-    stores.set(t.store, list)
-    groups.set(g, stores)
-  }
+// ── Building the tree ────────────────────────────────────────────────────────────────────────────
 
-  const used = new Set<string>()
-  const grandCounts: Record<string, number> = {}
-  const built: TreeGroup[] = [...groups.entries()]
-    .sort(([a], [b]) => nameOrder(a, b, lastName(by)))
-    .map(([name, stores]) => {
-      const groupCounts: Record<string, number> = {}
-      const storeList: TreeStore[] = [...stores.entries()]
-        .sort(([a], [b]) => nameOrder(a, b, NO_STORE))
-        .map(([sname, tickets]) => {
-          // oldest first, like the detail report
-          const sorted = [...tickets].sort((x, y) => y.ageDays - x.ageDays || byName(x.ticketNo, y.ticketNo))
-          const counts: Record<string, number> = {}
-          for (const t of sorted) { counts[t.ageBucket] = (counts[t.ageBucket] ?? 0) + 1; used.add(t.ageBucket) }
-          addCounts(groupCounts, counts)
-          return { name: sname, tickets: sorted, counts, total: sorted.length }
-        })
-      addCounts(grandCounts, groupCounts)
-      return { name, stores: storeList, counts: groupCounts, total: sum(groupCounts) }
-    })
-
-  return { buckets: AGE_BUCKETS.map((b) => b.label).filter((l) => used.has(l)), groups: built, grand: { counts: grandCounts, total: sum(grandCounts) } }
-}
-
-// ── What is shown, with groups and stores opened or closed ─────────────────────────────────────────
-
-export interface TreeCollapsed {
-  /** Group names whose stores are hidden. */
-  group: ReadonlySet<string>
-  /** Stores (key = storeKey(group, store)) whose tickets are hidden. */
-  store: ReadonlySet<string>
-}
-
-export const NOTHING_COLLAPSED_TREE: TreeCollapsed = { group: new Set(), store: new Set() }
-export const storeKey = (group: string, store: string) => `${group}\u0001${store}`
-
-export type TreeToggle = { type: 'group' | 'store'; key: string; expanded: boolean }
-
-export interface TreeDisplayRow {
-  kind: 'group' | 'store' | 'ticket' | 'groupTotal'
+export interface TreeNode {
+  /** unique path of the node, used to remember what is closed */
   key: string
-  groupLabel: string
-  storeLabel: string
-  groupToggle?: TreeToggle
-  storeToggle?: TreeToggle
-  /** Only on a ticket line. */
-  ticket?: TreeTicket
+  name: string
+  depth: number
+  children: TreeNode[]
+  /** only the deepest level has tickets */
+  tickets: TicketFact[]
   counts: Record<string, number>
   total: number
 }
 
-export function flattenTree(tree: TicketTree, collapsed: TreeCollapsed = NOTHING_COLLAPSED_TREE): TreeDisplayRow[] {
+export interface TicketTree {
+  levels: LevelKey[]
+  /** Bucket labels in age order: only the ones that have at least one ticket. */
+  buckets: string[]
+  roots: TreeNode[]
+  grand: { counts: Record<string, number>; total: number }
+}
+
+const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+const nameOrder = (a: string, b: string, last: string) => (a === last ? (b === last ? 0 : 1) : b === last ? -1 : byName(a, b))
+const SEP = '\u0001'
+
+export function buildTicketTree(rows: TicketFact[], levels: LevelKey[], minTickets = 1): TicketTree {
+  // grouped by OEM, only tickets that have an OEM to do with them are listed (an IT ticket does not belong under an AC vendor)
+  const base = levels.includes('oem') ? rows.filter((r) => r.oem !== '') : rows
+  const kept = filterByMinTickets(base, minTickets)
+  const used = new Set<string>()
+  const grandCounts: Record<string, number> = {}
+
+  const build = (items: TicketFact[], depth: number, parentKey: string): TreeNode[] => {
+    const def = LEVELS[levels[depth]]
+    const groups = new Map<string, TicketFact[]>()
+    for (const t of items) {
+      const name = def.get(t) || def.last
+      const list = groups.get(name) ?? []
+      list.push(t)
+      groups.set(name, list)
+    }
+    return [...groups.entries()]
+      .sort(([a], [b]) => nameOrder(a, b, def.last))
+      .map(([name, list]) => {
+        const key = `${parentKey}${SEP}${name}`
+        const isLeaf = depth === levels.length - 1
+        const node: TreeNode = { key, name, depth, children: [], tickets: [], counts: {}, total: 0 }
+        if (isLeaf) {
+          // oldest first, like the detail report
+          node.tickets = [...list].sort((x, y) => y.ageDays - x.ageDays || byName(x.ticketNo, y.ticketNo))
+          for (const t of node.tickets) { node.counts[t.ageBucket] = (node.counts[t.ageBucket] ?? 0) + 1; used.add(t.ageBucket) }
+        } else {
+          node.children = build(list, depth + 1, key)
+          for (const c of node.children) for (const [k, v] of Object.entries(c.counts)) node.counts[k] = (node.counts[k] ?? 0) + v
+        }
+        node.total = Object.values(node.counts).reduce((a, b) => a + b, 0)
+        return node
+      })
+  }
+
+  const roots = kept.length > 0 ? build(kept, 0, '') : []
+  for (const r of roots) for (const [k, v] of Object.entries(r.counts)) grandCounts[k] = (grandCounts[k] ?? 0) + v
+  return {
+    levels,
+    buckets: AGE_BUCKETS.map((b) => b.label).filter((l) => used.has(l)),
+    roots,
+    grand: { counts: grandCounts, total: Object.values(grandCounts).reduce((a, b) => a + b, 0) },
+  }
+}
+
+// ── What is shown, with headings and stores opened or closed ─────────────────────────────────────
+
+export type TreeToggle = { key: string; name: string; expanded: boolean }
+
+export interface TreeDisplayRow {
+  kind: 'node' | 'ticket' | 'total'
+  key: string
+  /** one entry per heading level: the name on the first line of that heading, '' otherwise */
+  labels: string[]
+  /** the arrow shown next to a label */
+  toggles: (TreeToggle | undefined)[]
+  /** only on a ticket line */
+  ticket?: TicketFact
+  counts: Record<string, number>
+  total: number
+}
+
+export function flattenTree(tree: TicketTree, collapsed: ReadonlySet<string> = new Set()): TreeDisplayRow[] {
   const rows: TreeDisplayRow[] = []
-  for (const g of tree.groups) {
-    if (collapsed.group.has(g.name)) {
-      rows.push({
-        kind: 'group', key: `g|${g.name}`, groupLabel: g.name, storeLabel: '',
-        groupToggle: { type: 'group', key: g.name, expanded: false }, counts: g.counts, total: g.total,
-      })
-      continue
+  const L = tree.levels.length
+  let pending: ({ name: string; toggle: TreeToggle } | undefined)[] = Array(L).fill(undefined)
+
+  const emit = (r: Omit<TreeDisplayRow, 'labels' | 'toggles'>) => {
+    rows.push({ ...r, labels: pending.map((p) => p?.name ?? ''), toggles: pending.map((p) => p?.toggle) })
+    pending = Array(L).fill(undefined)
+  }
+
+  const walk = (node: TreeNode) => {
+    const isCollapsed = collapsed.has(node.key)
+    pending[node.depth] = { name: node.name, toggle: { key: node.key, name: node.name, expanded: !isCollapsed } }
+    if (isCollapsed) { emit({ kind: 'node', key: `n${node.key}`, counts: node.counts, total: node.total }); return }
+    if (node.children.length > 0) node.children.forEach(walk)
+    else for (const t of node.tickets) emit({ kind: 'ticket', key: `t${t.id}`, ticket: t, counts: { [t.ageBucket]: 1 }, total: 1 })
+  }
+
+  for (const root of tree.roots) {
+    walk(root)
+    if (!collapsed.has(root.key)) {
+      // a total line after every outermost heading that is open
+      rows.push({ kind: 'total', key: `g${root.key}`, labels: [`${root.name} Total`, ...Array(L - 1).fill('')], toggles: Array(L).fill(undefined), counts: root.counts, total: root.total })
     }
-    let first = true
-    for (const s of g.stores) {
-      const sk = storeKey(g.name, s.name)
-      const groupToggle: TreeToggle | undefined = first ? { type: 'group', key: g.name, expanded: true } : undefined
-      if (collapsed.store.has(sk)) {
-        rows.push({
-          kind: 'store', key: `s|${sk}`, groupLabel: first ? g.name : '', storeLabel: s.name,
-          groupToggle, storeToggle: { type: 'store', key: sk, expanded: false }, counts: s.counts, total: s.total,
-        })
-        first = false
-        continue
-      }
-      s.tickets.forEach((t, i) => {
-        rows.push({
-          kind: 'ticket', key: `t|${t.id}`, groupLabel: first ? g.name : '', storeLabel: i === 0 ? s.name : '',
-          groupToggle: first ? groupToggle : undefined,
-          storeToggle: i === 0 ? { type: 'store', key: sk, expanded: true } : undefined,
-          ticket: t, counts: { [t.ageBucket]: 1 }, total: 1,
-        })
-        first = false
-      })
-    }
-    rows.push({ kind: 'groupTotal', key: `gt|${g.name}`, groupLabel: `${g.name} Total`, storeLabel: '', counts: g.counts, total: g.total })
   }
   return rows
 }
 
-/** The 1 / 2 / 3 level buttons: how much detail to show everywhere. */
-export function collapsedForTreeLevel(tree: TicketTree, level: TreeLevel): TreeCollapsed {
-  if (level === 'groups') return { group: new Set(tree.groups.map((g) => g.name)), store: new Set() }
-  if (level === 'stores') return { group: new Set(), store: new Set(tree.groups.flatMap((g) => g.stores.map((s) => storeKey(g.name, s.name)))) }
-  return NOTHING_COLLAPSED_TREE
+function allNodes(tree: TicketTree): TreeNode[] {
+  const out: TreeNode[] = []
+  const walk = (n: TreeNode) => { out.push(n); n.children.forEach(walk) }
+  tree.roots.forEach(walk)
+  return out
+}
+
+/** The level buttons: close everything at one depth (so that depth shows as one line each), or open all the way to the tickets. */
+export function collapsedForDepth(tree: TicketTree, depth: TreeDepth): Set<string> {
+  if (depth === 'tickets') return new Set()
+  return new Set(allNodes(tree).filter((n) => n.depth === depth).map((n) => n.key))
 }
 
 /** Which level button matches the current state, or null when the viewer has mixed it by hand. */
-export function treeLevelOf(tree: TicketTree, collapsed: TreeCollapsed): TreeLevel | null {
-  for (const level of ['tickets', 'stores', 'groups'] as TreeLevel[]) {
-    const want = collapsedForTreeLevel(tree, level)
-    const sameGroup = want.group.size === collapsed.group.size && [...want.group].every((k) => collapsed.group.has(k))
-    const sameStore = level === 'groups' ? true : want.store.size === collapsed.store.size && [...want.store].every((k) => collapsed.store.has(k))
-    if (sameGroup && sameStore) return level
+export function depthOf(tree: TicketTree, collapsed: ReadonlySet<string>): TreeDepth | null {
+  const known = new Set(allNodes(tree).map((n) => n.key))
+  const have = [...collapsed].filter((k) => known.has(k)).sort().join('|')
+  if (have === '') return 'tickets'
+  // deepest first, so an exact match is found before a shallower one that contains it
+  for (let d = tree.levels.length - 1; d >= 0; d--) {
+    if ([...collapsedForDepth(tree, d)].sort().join('|') === have) return d
   }
   return null
 }
 
-// ── Ticket columns (shared by the screen and the Excel file) ────────────────────────────────────────
+// ── Ticket columns (shared by the screen and the Excel file) ─────────────────────────────────────
 
-export type TreeColumnKey = 'category' | 'subCategory' | 'subject' | 'ticketNo' | 'technician' | 'oem' | 'status' | 'createdDate' | 'ageDays'
+export type ColumnKey =
+  | 'category' | 'subCategory' | 'subject' | 'ticketNo' | 'technician' | 'oem' | 'status' | 'createdDate' | 'ageDays'
+  | 'acNo' | 'oemTicketNo' | 'oemTicketDate' | 'oemBucket' | 'acResolution' | 'acTotal' | 'storeAcTickets' | 'acPct'
+  | 'cluster' | 'region' | 'priorityList' | 'acAmcBrand' | 'acAmcVendor'
 
-export const TREE_COLUMNS: { key: TreeColumnKey; label: string; width: number; numeric?: boolean }[] = [
-  { key: 'category', label: 'Category', width: 28 },
-  { key: 'subCategory', label: 'Sub Category', width: 30 },
-  { key: 'subject', label: 'Subject', width: 44 },
-  { key: 'ticketNo', label: 'Ticket No', width: 14 },
-  { key: 'technician', label: 'Responsible', width: 22 },
-  { key: 'oem', label: 'OEM', width: 26 },
-  { key: 'status', label: 'Status', width: 16 },
-  { key: 'createdDate', label: 'Created', width: 13 },
-  { key: 'ageDays', label: 'Age (days)', width: 11, numeric: true },
-]
+export const COLUMNS: Record<ColumnKey, { label: string; width: number; numeric?: boolean; acOnly?: boolean }> = {
+  category: { label: 'Category', width: 28 },
+  subCategory: { label: 'Sub Category', width: 30 },
+  subject: { label: 'Subject', width: 44 },
+  ticketNo: { label: 'Ticket No', width: 14 },
+  technician: { label: 'Responsible', width: 22 },
+  oem: { label: 'OEM', width: 26, acOnly: true },
+  status: { label: 'Status', width: 16 },
+  createdDate: { label: 'Created', width: 13 },
+  ageDays: { label: 'Age (days)', width: 11, numeric: true },
+  acNo: { label: 'AC No', width: 11, acOnly: true },
+  oemTicketNo: { label: 'AC OEM Ticket No', width: 20, acOnly: true },
+  oemTicketDate: { label: 'AC OEM Ticket Date', width: 17, acOnly: true },
+  oemBucket: { label: 'OEM Age Bucket', width: 16, acOnly: true },
+  acResolution: { label: 'AC Resolution', width: 22, acOnly: true },
+  acTotal: { label: 'AC Total', width: 10, numeric: true, acOnly: true },
+  storeAcTickets: { label: 'Open AC Tickets', width: 14, numeric: true, acOnly: true },
+  acPct: { label: 'AC Not Working %', width: 15, numeric: true, acOnly: true },
+  cluster: { label: 'Cluster', width: 12 },
+  region: { label: 'Region', width: 11 },
+  priorityList: { label: 'Store priority list as per Ops', width: 18 },
+  acAmcBrand: { label: 'AC-AMC brand', width: 16, acOnly: true },
+  acAmcVendor: { label: 'AC-AMC vendor', width: 26, acOnly: true },
+}
 
-/** The ticket columns for a grouping: the column the report is grouped by is the first column already, so it is not repeated. */
-export function treeColumns(by: TreeGroupBy, showOem = true) {
-  // the OEM column only exists where some service goes to an OEM (AC servicing)
-  return TREE_COLUMNS.filter((c) => c.key !== by && (showOem || c.key !== 'oem'))
+/** A column that repeats a heading level is left out (the heading column already shows it); AC columns only where some service is an AC service. */
+export function columnsFor(wanted: ColumnKey[], levels: LevelKey[], acAvailable: boolean): ColumnKey[] {
+  return wanted.filter((c) => !(levels as string[]).includes(c) && (acAvailable || !COLUMNS[c].acOnly))
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-/** dd Mon yyyy — in the server's local time zone. */
+/** dd Mon yyyy of a timestamp, in the server's local time zone. */
 export function formatCreated(iso: string): string {
   const d = new Date(iso)
   return `${String(d.getDate()).padStart(2, '0')} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
 }
+/** dd Mon yyyy of a plain yyyy-mm-dd day. */
+export function formatDay(day: string | null): string {
+  const m = day ? /^(\d{4})-(\d{2})-(\d{2})/.exec(day) : null
+  return m ? `${m[3]} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : ''
+}
 
-export function treeCell(t: TreeTicket, key: TreeColumnKey, statusLabel: (s: string) => string): string | number {
+export function cellValue(t: TicketFact, key: ColumnKey, statusLabel: (s: string) => string): string | number {
   switch (key) {
     case 'createdDate': return formatCreated(t.createdAt)
     case 'status': return statusLabel(t.status)
     case 'ageDays': return t.ageDays
-    default: return t[key] ?? ''
+    case 'oemTicketDate': return formatDay(t.oemTicketDate)
+    case 'acTotal': return t.acTotal ?? ''
+    case 'storeAcTickets': return t.isStoreAccount && t.isAcTicket ? t.storeAcTickets : ''
+    case 'acPct': return t.acNotWorkingPct == null ? '' : `${Math.round(t.acNotWorkingPct)}%`
+    default: return (t[key as keyof TicketFact] as string | undefined) ?? ''
   }
 }
