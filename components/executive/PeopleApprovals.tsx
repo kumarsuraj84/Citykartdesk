@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Clock, TrendingUp } from 'lucide-react'
 import {
-  DIM_LABEL, UNASSIGNED, applyFilters, approvalMeasure, approvalRows, approvalsBehind, compare, formatApproval, formatMeasure, inWin, keyOf, openAt,
+  AC_DIMS, DIM_LABEL, UNASSIGNED, applyFilters, approvalMeasure, approvalRows, approvalsBehind, compare, formatApproval, formatMeasure, inWin, keyOf, openAt,
   rankItems, type ApprovalMeasure, type Dim,
 } from '@/lib/reporting/executive/engine'
 import { dimsForLevel } from '@/lib/reporting/executive/levels'
@@ -28,7 +28,7 @@ export function PeopleApprovals({ d, onOpen }: { d: DashData; onOpen: OpenDrill 
   const base = useMemo(() => applyFilters(tickets, filters, now), [tickets, filters, now])
   // OEM comparisons only make sense when some ticket in view is an equipment request (e.g. AC), not for an IT or HR group
   const hasOem = useMemo(() => base.some((t) => t.brand !== '(No OEM)'), [base])
-  const dims = useMemo(() => dimsForLevel(level).filter((x) => x !== 'age' && x !== 'status' && (hasOem || (x !== 'brand' && x !== 'oem'))), [level, hasOem])
+  const dims = useMemo(() => dimsForLevel(level).filter((x) => x !== 'age' && x !== 'status' && (hasOem || !AC_DIMS.includes(x))), [level, hasOem])
   const dim: Dim = useMemo(() => (dims.includes(dimPick) ? dimPick : dims.includes('tech') ? 'tech' : dims[0]), [dims, dimPick])
   const ap = useMemo(() => approvalRows(approvals, filters, now), [approvals, filters, now])
 

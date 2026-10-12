@@ -2,15 +2,16 @@
 // worked out from the real tickets (SLA risk, workload concentration, OEM bottleneck, approval bottleneck).
 // Clicking a card opens the drill-down pop-up already pointed at the right slice (see `open`).
 
+import { DEFAULT_RED_FLAG_PERCENT } from '@/lib/reporting/analytics/facts'
 import {
-  applyFilters, approvalMeasure, approvalRows, formatApproval, formatMeasure, measure, openAt, inWin, UNASSIGNED,
+  applyFilters, approvalMeasure, approvalRows, formatApproval, formatMeasure, measure, openAt, inWin, RED_FLAG, UNASSIGNED,
   type ApprovalRow, type Dim, type ExecTicket, type Filters, type Measure, type Win,
 } from './engine'
 
 export type Severity = 'critical' | 'warning' | 'info' | 'action'
 
 export interface Highlight {
-  id: 'sla' | 'workload' | 'oem' | 'approvals'
+  id: 'sla' | 'workload' | 'oem' | 'approvals' | 'redflag' | 'nso'
   category: string
   severity: Severity
   headline: string
@@ -136,6 +137,40 @@ export function highlights(
         keyStat: rate === null ? '-' : `${formatApproval('rate', rate)} approved`,
         detail: approved + rejected === 0 ? 'None decided in this period' : `${approved} approved · ${rejected} rejected`,
         actionLabel: 'Open approvals', open: { metric: 'created', dims: [], stage: 1, approvals: true },
+      })
+    }
+  }
+
+  // 5 - stores whose AC Not Working % is above the limit (Store Master AC total against open AC tickets). Left out when there are none.
+  {
+    const red = new Map<string, ExecTicket>()
+    for (const t of base) if (t.ac === RED_FLAG && !red.has(t.store)) red.set(t.store, t)
+    if (red.size > 0) {
+      const worst = [...red.values()].sort((a, b) => (b.acPct ?? 0) - (a.acPct ?? 0) || a.store.localeCompare(b.store)).slice(0, 2)
+      out.push({
+        id: 'redflag', category: 'AC RED FLAG', severity: 'critical',
+        headline: `${red.size} store${red.size === 1 ? '' : 's'} above ${DEFAULT_RED_FLAG_PERCENT}% AC not working`,
+        keyStat: `${Math.round(worst[0].acPct ?? 0)}% worst`,
+        detail: `Worst: ${worst.map((t) => `${t.store} (${t.acOpen}/${t.acTotal})`).join(' · ')}`,
+        actionLabel: `Inspect ${red.size} red flag store${red.size === 1 ? '' : 's'}`,
+        open: { metric: 'backlog', dims: [{ dim: 'ac', value: RED_FLAG }], stage: 2 },
+      })
+    }
+  }
+
+  // 6 - new stores (NSO): tickets from stores with no open date or opened in the last 9 months. Left out when there are none.
+  {
+    const nso = base.filter((t) => t.stype === 'NSO' && inWin(t.created, W))
+    if (nso.length > 0) {
+      const stores = new Set(nso.map((t) => t.store))
+      const breaches = measure(nso, W, 'breaches') ?? 0
+      out.push({
+        id: 'nso', category: 'NEW STORES (NSO)', severity: 'info',
+        headline: `${nso.length} ticket${nso.length === 1 ? '' : 's'} from ${stores.size} new store${stores.size === 1 ? '' : 's'}`,
+        keyStat: `${breaches} breach${breaches === 1 ? '' : 'es'}`,
+        detail: `Open now: ${nso.filter((t) => openAt(t, W.end)).length} · opened less than 9 months ago, or no open date yet`,
+        actionLabel: 'View new store tickets',
+        open: { metric: 'created', dims: [{ dim: 'stype', value: 'NSO' }], stage: 2 },
       })
     }
   }

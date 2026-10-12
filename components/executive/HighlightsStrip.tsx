@@ -10,7 +10,7 @@ const TONE: Record<Severity, { bar: string; kicker: string; hover: string; icon:
   action: { bar: 'bg-info', kicker: 'text-info', hover: 'hover:border-info/50', icon: <Clock className="h-3.5 w-3.5 shrink-0 text-info" /> },
 }
 
-/** Four short signals (one headline and one line of detail each). A click opens the drill-down pop-up on the right slice. */
+/** Short signals (one headline and one line of detail each). A click opens the drill-down pop-up on the right slice. */
 export function HighlightsStrip({ items, total, onOpen }: { items: Highlight[]; total: number; onOpen: (h: Highlight) => void }) {
   return (
     <section aria-label="Priority intelligence highlights" className="space-y-2">
@@ -20,7 +20,7 @@ export function HighlightsStrip({ items, total, onOpen }: { items: Highlight[]; 
         </h2>
         <span className="text-xs tabular-nums text-muted-foreground">{items.length} signals across {total} ticket{total === 1 ? '' : 's'}</span>
       </div>
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+      <div className={`grid grid-cols-1 gap-2.5 sm:grid-cols-2 ${items.length > 4 ? 'xl:grid-cols-3' : 'xl:grid-cols-4'}`}>
         {items.map((h) => {
           const t = TONE[h.severity]
           return (

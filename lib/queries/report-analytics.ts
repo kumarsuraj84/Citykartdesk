@@ -1,13 +1,13 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getServiceFormFieldsForOrg } from '@/lib/forms/sections'
+import { loadAcContext } from '@/lib/queries/store-ac-stats'
 import { buildAgeSummary, type AgeSummary, type SummaryInputRow, type DayInputRow } from '@/lib/reporting/analytics/age-summary'
 import { sortDetailRows } from '@/lib/reporting/analytics/ticket-detail'
 import {
-  ANALYTICS_REPORTS, DEFAULT_REPORT_STATUSES, findAnalyticsReport, canUseReportAnalytics, selectableGroups, pickGroup, type AnalyticsReportDef,
+  ANALYTICS_REPORTS, findAnalyticsReport, canUseReportAnalytics, selectableGroups, pickGroup, type AnalyticsReportDef,
 } from '@/lib/reporting/analytics/catalog'
 import {
-  makeFact, acFormFields, answerText, isServerRoomAc, DEFAULT_RED_FLAG_PERCENT,
-  type TicketFact, type RawTicket, type AcFormFields, type FactContext,
+  makeFact, DEFAULT_RED_FLAG_PERCENT,
+  type TicketFact, type RawTicket, type FactContext,
 } from '@/lib/reporting/analytics/facts'
 import {
   applyFacets, facetOptions, reconcileSelection, type FacetKey, type FacetOption, type FacetSelection,
@@ -72,38 +72,10 @@ async function fetchAll<T>(build: (from: number, to: number) => PromiseLike<{ da
 
 const FACT_SELECT = 'id, request_no, title, status, priority, created_at, resolved_at, closed_at, form_data, service:services(id, name, auto_oem_routing), category:service_categories(name), sub_category:service_sub_categories(name), assignee:profiles!requests_assigned_to_fkey(full_name), requester:profiles!requests_requester_id_fkey(full_name, store:stores(id, code, city, state, cluster, region, priority_list, festival, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, zenatix, open_date, oem:oems(name)))'
 
-/**
- * What is needed besides the tickets themselves: where the AC form fields of each service are, and how many open AC tickets
- * each store has (Server Room AC excluded). The count covers every open AC ticket of the organisation, whatever the report's
- * own filters are, because it is the store's position: AC Not Working % must not change when the viewer narrows the list.
- */
+/** What is needed besides the tickets themselves: where the AC form fields of each service are, and each store's open AC tickets (see store-ac-stats.ts). */
 async function loadFactContext(orgId: string, redFlagPercent: number): Promise<{ ctx: FactContext; acServiceIds: string[] }> {
   const admin = createAdminClient() as unknown as AnyClient
-  const fields = await getServiceFormFieldsForOrg(admin, orgId)
-  const byService = new Map<string, typeof fields>()
-  for (const f of fields) byService.set(f.serviceId, [...(byService.get(f.serviceId) ?? []), f])
-  const acFields = new Map<string, AcFormFields>([...byService.entries()].map(([id, list]) => [id, acFormFields(list)]))
-
-  const { data: acServices } = await admin.from('services').select('id').eq('org_id', orgId).eq('auto_oem_routing', true)
-  const acServiceIds = ((acServices ?? []) as { id: string }[]).map((s) => s.id)
-
-  const openAcByStore = new Map<string, number>()
-  if (acServiceIds.length > 0) {
-    type Row = { service_id: string; form_data: Record<string, unknown> | null; requester: { store: { code: string } | null } | null }
-    const { rows } = await fetchAll<Row>((from, to) =>
-      admin.from('requests')
-        .select('service_id, form_data, requester:profiles!requests_requester_id_fkey(store:stores(code))')
-        .eq('org_id', orgId).in('service_id', acServiceIds).in('status', DEFAULT_REPORT_STATUSES)
-        .order('id', { ascending: true }).range(from, to))
-    for (const r of rows) {
-      const code = r.requester?.store?.code
-      if (!code) continue
-      const f = acFields.get(r.service_id)?.acNo
-      const acNo = f ? answerText((r.form_data ?? {})[f.id], f.options) : ''
-      if (isServerRoomAc(acNo)) continue
-      openAcByStore.set(code, (openAcByStore.get(code) ?? 0) + 1)
-    }
-  }
+  const { acFields, openAcByStore, acServiceIds } = await loadAcContext(admin, orgId)
   return { ctx: { asOf: new Date(), acFields, openAcByStore, redFlagPercent }, acServiceIds }
 }
 

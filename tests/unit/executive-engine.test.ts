@@ -21,7 +21,7 @@ const withDue = (t: ExecTicket, o: Partial<ExecTicket>): ExecTicket => {
 let n = 0
 const tk = (o: Partial<ExecTicket> = {}): ExecTicket => withDue({
   id: `id${++n}`, no: `CKSD-${1000 + n}`, subject: 'AC not cooling', group: 'ADMIN GROUP', tech: 'Krishan', cat: 'AC ISSUE', sub: 'COOLING', svc: 'Admin repair',
-  req: 'Store A', dept: 'Stores', loc: 'STORES', store: 'Store A', state: 'Delhi', oem: 'BLUE STAR OEM - DL', brand: 'BLUE STAR', src: 'Portal',
+  req: 'Store A', dept: 'Stores', loc: 'STORES', store: 'Store A', state: 'Delhi', oem: 'BLUE STAR OEM - DL', brand: 'BLUE STAR', src: 'Portal', cluster: 'UP2', region: 'R4', stype: 'Regular', plist: 'ROS', acb: 'DAIKIN', amb: 'DAIKIN', amv: 'VENDOR', ac: 'Within limit', acTotal: 10, acOpen: 1, acPct: 10,
   prio: 'medium', status: 'in_progress', created: ago(2), resolved: null, due: null, tatH: null, breached: false, csat: null, reo: [], frH: 1, ...o,
 }, o)
 const done = (created: number, tatH: number, o: Partial<ExecTicket> = {}) => tk({ created, resolved: created + tatH * HOUR, tatH, status: 'resolved', ...o })
@@ -217,7 +217,7 @@ describe('levels and the data rows', () => {
       created_at: new Date(ago(5)).toISOString(), resolved_at: new Date(ago(4)).toISOString(), closed_at: null, updated_at: new Date(ago(4)).toISOString(),
       responded_at: new Date(ago(5, -2)).toISOString(), resolution_due_at: new Date(ago(4, 5)).toISOString(), reopen_count: 0,
       source_metadata: { created_via: 'whatsapp' }, team: { name: 'ADMIN GROUP' }, assignee: null,
-      requester: { full_name: 'Store A', department: null, location: { name: 'STORES' }, store: { name: 'Store A', state: 'Delhi', oem: { name: 'BLUE STAR OEM - DL' } } },
+      requester: { full_name: 'Store A', department: null, location: { name: 'STORES' }, store: { code: 'STA', name: 'Store A', state: 'Delhi', cluster: 'UP2', region: 'R4', priority_list: 'ROS', ac_total: 10, ac_brand: 'DAIKIN', ac_amc_brand: 'DAIKIN', ac_amc_vendor: 'VENDOR', open_date: '2020-01-01', oem: { name: 'BLUE STAR OEM - DL' } } },
       service: { name: 'S', auto_oem_routing: true }, category: { name: 'AC' }, sub_category: null, reopens: [{ created_at: new Date(ago(3)).toISOString() }],
     }
     const a = toExecTicket({ ...base, csat: { rating: 4 } }, NOW)

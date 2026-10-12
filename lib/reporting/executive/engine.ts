@@ -8,6 +8,13 @@ export const UNASSIGNED = 'Unassigned'
 export const NO_CATEGORY = '(No category)'
 export const NO_LOCATION = '(No location)'
 export const RESOLVED_BUCKET = 'Resolved / closed'
+/** a store detail (cluster, region ...) that has not been filled in the Store Master */
+export const NOT_SET = '(Not set)'
+/** the ticket's service does not go to an OEM, so it has no AC details */
+export const NOT_AC = '(Not AC)'
+export const NO_AC_DATA = '(No AC data)'
+export const RED_FLAG = 'Red flag'
+export const WITHIN_LIMIT = 'Within limit'
 
 const DAY = 86_400_000
 const HOUR = 3_600_000
@@ -35,6 +42,21 @@ export interface ExecTicket {
   /** the OEM serving the requester's store (e.g. "BLUE STAR OEM - DL") and its brand ("BLUE STAR") */
   oem: string
   brand: string
+  /** from the Store Master: the store's cluster, region, whether it is a new store (NSO) or regular, and its priority list as per Ops */
+  cluster: string
+  region: string
+  stype: string
+  plist: string
+  /** AC details of the store, only on AC tickets (otherwise "(Not AC)"): AC brand, AC-AMC brand, AC-AMC vendor */
+  acb: string
+  amb: string
+  amv: string
+  /** AC health of the store: "Red flag" (AC Not Working % above the limit), "Within limit", "(No AC data)" or "(Not AC)" */
+  ac: string
+  /** the store's AC total, its open AC tickets, and AC Not Working % (null when the AC total is not known) */
+  acTotal: number | null
+  acOpen: number
+  acPct: number | null
   /** how the ticket was raised (portal, email, WhatsApp ...) */
   src: string
   prio: Priority
@@ -77,11 +99,21 @@ export const needsSample = (m: Measure) => m === 'sla' || m === 'tat' || m === '
 
 export type Dim =
   | 'group' | 'tech' | 'cat' | 'sub' | 'svc' | 'oem' | 'brand' | 'store' | 'state' | 'loc' | 'dept' | 'req' | 'src' | 'prio' | 'status' | 'age'
-export const DIMS: Dim[] = ['group', 'tech', 'cat', 'sub', 'svc', 'oem', 'brand', 'store', 'state', 'loc', 'dept', 'req', 'src', 'prio', 'status', 'age']
+  | 'cluster' | 'region' | 'stype' | 'plist' | 'acb' | 'amb' | 'amv' | 'ac'
+export const DIMS: Dim[] = [
+  'group', 'tech', 'cat', 'sub', 'svc', 'region', 'state', 'cluster', 'stype', 'plist', 'oem', 'brand', 'acb', 'amb', 'amv', 'ac',
+  'store', 'loc', 'dept', 'req', 'src', 'prio', 'status', 'age',
+]
+/** Details of the store the ticket came from (Store Master): where it is and what kind of store it is. */
+export const STORE_DIMS: Dim[] = ['region', 'state', 'cluster', 'stype', 'plist']
+/** Equipment (AC) details: they only exist for tickets of a service that goes to an OEM. */
+export const AC_DIMS: Dim[] = ['oem', 'brand', 'acb', 'amb', 'amv', 'ac']
 export const DIM_LABEL: Record<Dim, string> = {
   group: 'Group', tech: 'Technician', cat: 'Category', sub: 'Sub category', svc: 'Service', oem: 'OEM', brand: 'OEM brand',
   store: 'Store', state: 'State', loc: 'Site type', dept: 'Department', req: 'Requester', src: 'Raised via',
   prio: 'Priority', status: 'Status', age: 'Backlog age',
+  cluster: 'Cluster', region: 'Region', stype: 'Store type', plist: 'Store priority list as per Ops',
+  acb: 'AC brand', amb: 'AC-AMC brand', amv: 'AC-AMC vendor', ac: 'AC health',
 }
 export type DimFilters = Record<Dim, string[]>
 export type SlaState = 'all' | 'breached' | 'ok'
@@ -131,7 +163,7 @@ export function keyOf(dim: Dim, t: ExecTicket, now: number): string {
 export function matchesSearch(t: ExecTicket, q: string): boolean {
   const s = q.trim().toLowerCase()
   if (!s) return true
-  return [t.no, t.subject, t.store, t.group, t.tech, t.brand, t.req, t.cat].some((x) => x.toLowerCase().includes(s))
+  return [t.no, t.subject, t.store, t.cluster, t.region, t.group, t.tech, t.brand, t.req, t.cat].some((x) => x.toLowerCase().includes(s))
 }
 
 /** One-click groups of statuses for the status filter ("see everything on hold"). */
@@ -158,6 +190,47 @@ export function matches(t: ExecTicket, f: Filters, now: number, skip: readonly S
 }
 export const applyFilters = (ts: ExecTicket[], f: Filters, now: number, skip: readonly Skip[] = []) =>
   ts.filter((t) => matches(t, f, now, skip))
+
+// ── The lists behind every filter ────────────────────────────────────────────────────────────────
+
+export interface FilterOpt { value: string; label: string; count: number }
+
+/** The filters that have a list of values to choose from, in the order they are shown. */
+export const FILTER_DIMS: Exclude<Dim, 'age'>[] = ['group', 'tech', 'region', 'state', 'cluster', 'stype', 'plist', 'brand', 'ac', 'acb', 'amb', 'amv', 'status', 'prio']
+
+export interface FilterOptions {
+  /** each filter's values, with how many tickets each has given ALL THE OTHER filters */
+  dims: Partial<Record<Dim, FilterOpt[]>>
+  /** how many tickets are SLA breached / compliant / all, given every other filter */
+  sla: Record<SlaState, number>
+}
+
+/** Values that stand for "this does not apply" (an IT ticket has no OEM) are not offered as a choice. */
+const NOT_A_CHOICE: Partial<Record<Dim, string[]>> = { brand: ['(No OEM)'], acb: [NOT_AC], amb: [NOT_AC], amv: [NOT_AC], ac: [NOT_AC] }
+const PRIO_ORDER: Priority[] = ['urgent', 'high', 'medium', 'low']
+
+/**
+ * The values each filter offers. A filter's list follows every OTHER chosen filter, the search box and the period (pick a cluster and
+ * the store, technician and group lists shrink to what that cluster has), but never its own choice, so more values can be added. Values
+ * that are ticked stay in their list even when the others would hide them, so they can be un-ticked. The filters pop-up calls this with
+ * what is chosen in the pop-up so far, so its lists change as you click, before anything is applied.
+ */
+export function buildFilterOptions(tickets: ExecTicket[], f: Filters, now: number, W: Win): FilterOptions {
+  const dims: Partial<Record<Dim, FilterOpt[]>> = {}
+  for (const dim of FILTER_DIMS) {
+    const pool = applyFilters(tickets, f, now, [dim]).filter((t) => inWin(t.created, W))
+    const counts = new Map<string, number>()
+    for (const t of pool) counts.set(t[dim], (counts.get(t[dim]) ?? 0) + 1)
+    for (const v of f.dims[dim]) if (!counts.has(v)) counts.set(v, 0)
+    for (const skip of NOT_A_CHOICE[dim] ?? []) if (!f.dims[dim].includes(skip)) counts.delete(skip)
+    const label = (v: string) => (dim === 'status' ? statusLabel(v) : dim === 'prio' ? capitalize(v) : v)
+    const rank = (v: string) => (dim === 'status' ? STATUS_ORDER.indexOf(v) : dim === 'prio' ? PRIO_ORDER.indexOf(v as Priority) : 0)
+    dims[dim] = [...counts].map(([value, count]) => ({ value, label: label(value), count }))
+      .sort((a, b) => (dim === 'status' || dim === 'prio' ? rank(a.value) - rank(b.value) : b.count - a.count || a.value.localeCompare(b.value, undefined, { numeric: true })))
+  }
+  const inSla = applyFilters(tickets, f, now, ['sla']).filter((t) => inWin(t.created, W))
+  return { dims, sla: { all: inSla.length, breached: inSla.filter((t) => t.breached).length, ok: inSla.filter((t) => !t.breached).length } }
+}
 
 // ── Time windows ──────────────────────────────────────────────────────────────────────────────────
 

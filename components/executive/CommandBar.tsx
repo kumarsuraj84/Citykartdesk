@@ -1,24 +1,36 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { Building2, Calendar, Check, ChevronDown, Download, Layers, RotateCcw, Search, ShieldAlert, SlidersHorizontal, User, Wrench, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Building2, Calendar, Check, ChevronDown, Download, Layers, RotateCcw, Search, ShieldAlert, SlidersHorizontal, Store, User, Wrench, X } from 'lucide-react'
 import {
-  PERIODS, STATUS_PRESETS, capitalize, emptyFilters, filterCount, isoDay, parseDay, quickRanges,
-  type CustomRange, type Dim, type Filters, type Period, type SlaState,
+  PERIODS, STATUS_PRESETS, buildFilterOptions, capitalize, emptyFilters, filterCount, isoDay, parseDay, periodWindow, quickRanges,
+  type CustomRange, type Dim, type ExecTicket, type FilterOpt, type FilterOptions, type Filters, type Period, type SlaState,
 } from '@/lib/reporting/executive/engine'
 import { dayLabelYear } from '@/lib/reporting/executive/labels'
 import type { ViewMode } from './types'
 import { SelectBox } from './ui'
 
-export interface Opt { value: string; label: string; count: number }
-export interface FilterOptions { groups: Opt[]; techs: Opt[]; brands: Opt[]; statuses: Opt[]; prios: Opt[] }
+type Opt = FilterOpt
 
 const VIEW_TABS: { value: ViewMode; label: string }[] = [
   { value: 'stream', label: 'Full Executive Flow' },
   { value: 'velocity', label: 'Velocity & Queue' },
   { value: 'people', label: 'Workload & Approvals' },
   { value: 'matrices', label: 'Group & OEM Matrix' },
+  { value: 'stores', label: 'Stores & Regions' },
   { value: 'tickets', label: 'Heatmap & Tickets' },
+]
+/** The filters in the bar, in order. The ones that do not apply to the tickets in view (no OEM tickets, no store details) are left out. */
+const BAR_FILTERS: { dim: Dim; label: string; all: string; searchable?: boolean }[] = [
+  { dim: 'group', label: 'Filter by group', all: 'All groups' },
+  { dim: 'tech', label: 'Filter by technician', all: 'All technicians', searchable: true },
+  { dim: 'region', label: 'Filter by region', all: 'All regions' },
+  { dim: 'state', label: 'Filter by state', all: 'All states' },
+  { dim: 'cluster', label: 'Filter by cluster', all: 'All clusters', searchable: true },
+  { dim: 'stype', label: 'Filter by store type', all: 'All store types' },
+  { dim: 'brand', label: 'Filter by OEM brand', all: 'All OEM brands' },
+  { dim: 'ac', label: 'Filter by AC health', all: 'All AC health' },
+  { dim: 'status', label: 'Filter by status', all: 'All statuses' },
 ]
 const SLA_OPTIONS: { value: SlaState; label: string }[] = [
   { value: 'all', label: 'SLA: All tickets' },
@@ -41,6 +53,8 @@ interface Props {
   viewMode: ViewMode
   onViewMode: (v: ViewMode) => void
   options: FilterOptions
+  /** every ticket, so the filters pop-up can work out its own lists as choices are made in it */
+  tickets: ExecTicket[]
   showPeople: boolean
   periodText: string
   totalInPeriod: number
@@ -125,6 +139,7 @@ function MultiSelect({ label, allLabel, options, selected, onChange, display = (
 }
 
 export function CommandBar(p: Props) {
+  const opts = (dim: Dim): Opt[] => p.options.dims[dim] ?? []
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [datesOpen, setDatesOpen] = useState(false)
   const active = filterCount(p.filters)
@@ -201,14 +216,14 @@ export function CommandBar(p: Props) {
             />
           </div>
 
-          <MultiSelect label="Filter by group" allLabel="All groups" options={p.options.groups} selected={f.dims.group} onChange={(v) => p.onFilters(setDim(f, 'group', v))} />
-          {p.showPeople && <MultiSelect label="Filter by technician" allLabel="All technicians" options={p.options.techs} selected={f.dims.tech} onChange={(v) => p.onFilters(setDim(f, 'tech', v))} searchable />}
-          {p.options.brands.length > 0 && <MultiSelect label="Filter by OEM brand" allLabel="All OEM brands" options={p.options.brands} selected={f.dims.brand} onChange={(v) => p.onFilters(setDim(f, 'brand', v))} />}
-          <MultiSelect
-            label="Filter by status" allLabel="All statuses" options={p.options.statuses} selected={f.dims.status} onChange={(v) => p.onFilters(setDim(f, 'status', v))}
-            display={(v) => p.options.statuses.find((s) => s.value === v)?.label ?? v} presets={STATUS_PRESETS.map((s) => ({ label: s.label, values: s.statuses }))}
-          />
-          <SelectBox label="Filter by SLA" value={f.sla} active={f.sla !== 'all'} tone="danger" onChange={(v) => p.onFilters({ ...f, sla: v as SlaState })} options={SLA_OPTIONS} />
+          {BAR_FILTERS.filter((x) => (x.dim !== 'tech' || p.showPeople) && (opts(x.dim).length > 0 || f.dims[x.dim].length > 0)).map((x) => (
+            <MultiSelect
+              key={x.dim} label={x.label} allLabel={x.all} options={opts(x.dim)} selected={f.dims[x.dim]} onChange={(v) => p.onFilters(setDim(f, x.dim, v))}
+              searchable={x.searchable} display={(v) => opts(x.dim).find((o) => o.value === v)?.label ?? v}
+              presets={x.dim === 'status' ? STATUS_PRESETS.map((s) => ({ label: s.label, values: s.statuses })) : undefined}
+            />
+          ))}
+          <SelectBox label="Filter by SLA" value={f.sla} active={f.sla !== 'all'} tone="danger" onChange={(v) => p.onFilters({ ...f, sla: v as SlaState })} options={SLA_OPTIONS.map((o) => ({ ...o, label: `${o.label} (${p.options.sla[o.value]})` }))} />
           {(active > 0 || p.period !== '30d') && (
             <button type="button" onClick={p.onReset} className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive/10">
               <RotateCcw className="h-3.5 w-3.5" /> Reset all
@@ -216,7 +231,7 @@ export function CommandBar(p: Props) {
           )}
         </div>
         <div className="flex items-center gap-1 overflow-x-auto rounded-lg bg-muted p-1">
-          {VIEW_TABS.map((t) => (
+          {VIEW_TABS.filter((t) => t.value !== 'stores' || p.showPeople).map((t) => (
             <button
               key={t.value} type="button" aria-pressed={p.viewMode === t.value} onClick={() => p.onViewMode(t.value)}
               className={`whitespace-nowrap rounded-md px-2.5 py-1 text-xs transition-colors ${p.viewMode === t.value ? 'bg-card font-semibold text-primary shadow-sm' : 'font-medium text-muted-foreground hover:text-foreground'}`}
@@ -229,7 +244,7 @@ export function CommandBar(p: Props) {
 
       {filtersOpen && (
         <FiltersModal
-          now={p.now} filters={p.filters} period={p.period} custom={p.custom} options={p.options} showPeople={p.showPeople}
+          now={p.now} filters={p.filters} period={p.period} custom={p.custom} tickets={p.tickets} showPeople={p.showPeople}
           onClose={() => setFiltersOpen(false)}
           onApply={(nf, per, c) => { p.onFilters(nf); p.onPeriod(per); if (per === 'custom') p.onCustom(c); setFiltersOpen(false) }}
         />
@@ -324,8 +339,21 @@ function OptionGrid({ icon, title, all, value, options, onChange, search = false
   )
 }
 
-function FiltersModal({ now, filters, period, custom, options, showPeople, onClose, onApply }: {
-  now: number; filters: Filters; period: Period; custom: CustomRange; options: FilterOptions; showPeople: boolean
+/** The Store Master details offered in the filters pop-up (a list is left out when no ticket in view has that detail). */
+const STORE_GRIDS: { dim: Dim; title: string; all: string; search?: boolean }[] = [
+  { dim: 'region', title: 'Region', all: 'All regions' },
+  { dim: 'state', title: 'State', all: 'All states' },
+  { dim: 'cluster', title: 'Cluster', all: 'All clusters', search: true },
+  { dim: 'stype', title: 'Store type (NSO = new store)', all: 'All store types' },
+  { dim: 'plist', title: 'Store priority list as per Ops', all: 'All priority lists' },
+  { dim: 'ac', title: 'AC health (red flag = AC Not Working % above 30%)', all: 'All AC health' },
+  { dim: 'acb', title: 'AC brand', all: 'All AC brands' },
+  { dim: 'amb', title: 'AC-AMC brand', all: 'All AC-AMC brands' },
+  { dim: 'amv', title: 'AC-AMC vendor', all: 'All AC-AMC vendors', search: true },
+]
+
+function FiltersModal({ now, filters, period, custom, tickets, showPeople, onClose, onApply }: {
+  now: number; filters: Filters; period: Period; custom: CustomRange; tickets: ExecTicket[]; showPeople: boolean
   onClose: () => void; onApply: (f: Filters, p: Period, c: CustomRange) => void
 }) {
   const [f, setF] = useState<Filters>(filters)
@@ -334,6 +362,11 @@ function FiltersModal({ now, filters, period, custom, options, showPeople, onClo
   const [end, setEnd] = useState(custom.end)
   const today = isoDay(now)
   const validRange = !Number.isNaN(parseDay(start)) && !Number.isNaN(parseDay(end)) && end >= start
+  // The lists in this pop-up follow what is chosen in it so far (filters AND dates), before anything is applied: tick a cluster and the
+  // store, technician, group and every other list shrink to what that cluster has, with the counts for the dates chosen here.
+  const win = useMemo(() => periodWindow(per, now, { start, end }), [per, now, start, end])
+  const options = useMemo(() => buildFilterOptions(tickets, f, now, win), [tickets, f, now, win])
+  const o = (dim: Dim): Opt[] => options.dims[dim] ?? []
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
@@ -382,23 +415,34 @@ function FiltersModal({ now, filters, period, custom, options, showPeople, onClo
           </div>
 
           <div className="grid gap-5 md:grid-cols-2">
-            <OptionGrid icon={<Building2 className="h-3.5 w-3.5" />} title="Technician group" all="All groups" value={f.dims.group} options={options.groups} onChange={(v) => setF(setDim(f, 'group', v))} />
-            {options.brands.length > 0
-              ? <OptionGrid icon={<Wrench className="h-3.5 w-3.5" />} title="OEM brand (store equipment)" all="All OEM brands" value={f.dims.brand} options={options.brands} onChange={(v) => setF(setDim(f, 'brand', v))} />
+            <OptionGrid icon={<Building2 className="h-3.5 w-3.5" />} title="Technician group" all="All groups" value={f.dims.group} options={o('group')} onChange={(v) => setF(setDim(f, 'group', v))} />
+            {o('brand').length > 0 || f.dims.brand.length > 0
+              ? <OptionGrid icon={<Wrench className="h-3.5 w-3.5" />} title="OEM brand (store equipment)" all="All OEM brands" value={f.dims.brand} options={o('brand')} onChange={(v) => setF(setDim(f, 'brand', v))} />
               : <div />}
           </div>
 
+          {STORE_GRIDS.some((g) => o(g.dim).length > 0 || f.dims[g.dim].length > 0) && (
+            <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+              <p className="flex items-center gap-1.5 font-semibold uppercase tracking-wider text-muted-foreground"><Store className="h-3.5 w-3.5 text-primary" />Store details <span className="font-normal normal-case tracking-normal">(from the Store Master; every list follows the other choices)</span></p>
+              <div className="grid gap-5 md:grid-cols-2">
+                {STORE_GRIDS.filter((g) => o(g.dim).length > 0 || f.dims[g.dim].length > 0).map((g) => (
+                  <OptionGrid key={g.dim} icon={<span className="inline-block h-3.5 w-3.5" />} title={g.title} all={g.all} value={f.dims[g.dim]} options={o(g.dim)} onChange={(v) => setF(setDim(f, g.dim, v))} search={g.search} />
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-5 md:grid-cols-2">
             {showPeople
-              ? <OptionGrid icon={<User className="h-3.5 w-3.5" />} title="Assigned technician" all="All technicians" value={f.dims.tech} options={options.techs} onChange={(v) => setF(setDim(f, 'tech', v))} search />
+              ? <OptionGrid icon={<User className="h-3.5 w-3.5" />} title="Assigned technician" all="All technicians" value={f.dims.tech} options={o('tech')} onChange={(v) => setF(setDim(f, 'tech', v))} search />
               : <div />}
             <div className="space-y-4">
-              <OptionGrid icon={<Layers className="h-3.5 w-3.5" />} title="Queue status" all="All statuses" value={f.dims.status} options={options.statuses} onChange={(v) => setF(setDim(f, 'status', v))} presets={STATUS_PRESETS.map((s) => ({ label: s.label, values: s.statuses }))} />
-              <OptionGrid icon={<span className="inline-block h-3.5 w-3.5" />} title="Priority" all="All priorities" value={f.dims.prio} options={options.prios} onChange={(v) => setF(setDim(f, 'prio', v))} />
+              <OptionGrid icon={<Layers className="h-3.5 w-3.5" />} title="Queue status" all="All statuses" value={f.dims.status} options={o('status')} onChange={(v) => setF(setDim(f, 'status', v))} presets={STATUS_PRESETS.map((s) => ({ label: s.label, values: s.statuses }))} />
+              <OptionGrid icon={<span className="inline-block h-3.5 w-3.5" />} title="Priority" all="All priorities" value={f.dims.prio} options={o('prio')} onChange={(v) => setF(setDim(f, 'prio', v))} />
               <div className="space-y-2">
                 <p className="flex items-center gap-1.5 font-semibold uppercase tracking-wider text-muted-foreground"><ShieldAlert className="h-3.5 w-3.5" />SLA state</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {SLA_OPTIONS.map((o) => <button key={o.value} type="button" onClick={() => setF({ ...f, sla: o.value })} className={pill(f.sla === o.value)}>{o.label.replace('SLA: ', '')}</button>)}
+                  {SLA_OPTIONS.map((s) => <button key={s.value} type="button" onClick={() => setF({ ...f, sla: s.value })} className={pill(f.sla === s.value)}>{s.label.replace('SLA: ', '')} <span className="tabular-nums text-muted-foreground">({options.sla[s.value]})</span></button>)}
                 </div>
               </div>
             </div>

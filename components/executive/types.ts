@@ -2,7 +2,7 @@ import type { ApprovalMeasure, ApprovalRow, Dim, ExecTicket, Filters, Measure, W
 import type { DashLevel } from '@/lib/reporting/executive/levels'
 
 /** The five "lenses" that show only some sections of the page. */
-export type ViewMode = 'stream' | 'velocity' | 'people' | 'matrices' | 'tickets'
+export type ViewMode = 'stream' | 'velocity' | 'people' | 'matrices' | 'stores' | 'tickets'
 
 /** What the numbers on the page are worked out from (all sections get the same bundle). */
 export interface DashData {

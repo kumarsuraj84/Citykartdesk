@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Building2, ChevronRight, SlidersHorizontal, Store, Tag, User, Wrench, X } from 'lucide-react'
 import {
-  MEASURES, UNASSIGNED, ageInDays, isOpen, applyFilters, approvalsBehind, TICKET_ONLY, capitalize, formatMeasure, keyOf, measure, statusLabel, ticketsBehind,
+  DIM_LABEL, MEASURES, NOT_SET, RED_FLAG, UNASSIGNED, ageInDays, isOpen, applyFilters, approvalsBehind, TICKET_ONLY, capitalize, formatMeasure, keyOf, measure, statusLabel, ticketsBehind,
   type ApprovalRow, type Dim, type ExecTicket, type Filters, type SlaState, type Win,
 } from '@/lib/reporting/executive/engine'
 import { dateTimeLabel } from '@/lib/reporting/executive/labels'
@@ -76,6 +76,9 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
   const brands = useMemo(() => groupCount(cohort, (t) => t.brand).filter(([b]) => b !== '(No OEM)'), [cohort])
   const cats = useMemo(() => groupCount(cohort, (t) => t.cat), [cohort])
   const stores = useMemo(() => groupCount(cohort, (t) => t.store), [cohort])
+  // Where the tickets come from, from the Store Master; the field to list is picked in the pop-up and only fields with values are offered
+  const [placeDim, setPlaceDim] = useState<'region' | 'state' | 'cluster'>('region')
+  const places = useMemo(() => groupCount(cohort, (t) => t[placeDim]).filter(([v]) => v !== NOT_SET && v !== '(No state)'), [cohort, placeDim])
   const techs = useMemo(() => groupCount(cohort, (t) => t.tech), [cohort])
   const metricValue = ctx.approvals ? String(cohort.length) : formatMeasure(ctx.metric, measure(slice, Wc, ctx.metric))
   const breachedN = cohort.filter((t) => t.breached).length
@@ -200,6 +203,26 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
                   </div>
                 </div>
               </div>
+              {(places.length > 0 || cohort.some((t) => t.stype !== NOT_SET)) && (
+                <div className={`${box} space-y-3 p-4`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="flex items-center gap-1.5 text-sm font-bold text-foreground"><Store className="h-4 w-4 text-primary" />Drill down by {DIM_LABEL[placeDim].toLowerCase()}</h3>
+                    <Seg value={placeDim} onChange={setPlaceDim} label="Place" options={[{ value: 'region', label: 'Region' }, { value: 'state', label: 'State' }, { value: 'cluster', label: 'Cluster' }]} />
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    {places.length === 0 && <p className="py-4 text-center text-xs text-muted-foreground md:col-span-2">No {DIM_LABEL[placeDim].toLowerCase()} set for these tickets.</p>}
+                    {places.slice(0, 8).map(([v, ts]) => (
+                      <button key={v} type="button" onClick={() => pick({ [placeDim]: v }, 2)} className={row}>
+                        <div className="min-w-0 text-left"><div className="truncate font-semibold text-foreground">{v}</div><div className="truncate text-[11px] text-muted-foreground">{new Set(ts.map((t) => t.store)).size} store{new Set(ts.map((t) => t.store)).size === 1 ? '' : 's'}</div></div>
+                        <div className="flex shrink-0 items-center gap-3 tabular-nums">
+                          <div className="text-right"><div className="font-bold text-foreground">{ts.length} total</div><div className="text-[11px] text-warning">{ts.filter(isOpen).length} open{slaOf(ts) !== null ? ` · ${slaOf(ts)}% SLA` : ''}</div></div>
+                          <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -216,7 +239,7 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
                     <button key={s} type="button" onClick={() => pick({ store: s }, 3)} className={`${row} p-3`}>
                       <div className="min-w-0 text-left">
                         <div className="truncate font-semibold text-foreground">{s}</div>
-                        <div className="truncate text-[11px] text-muted-foreground">{[ts[0].state !== '(No state)' ? ts[0].state : '', ts[0].oem !== '(No OEM)' ? `OEM: ${ts[0].oem}` : '', ts[0].dept !== '(No department)' ? ts[0].dept : ''].filter(Boolean).join(' · ') || 'Store details not set'}</div>
+                        <div className="truncate text-[11px] text-muted-foreground">{[ts[0].cluster !== NOT_SET ? ts[0].cluster : '', ts[0].region !== NOT_SET ? ts[0].region : '', ts[0].state !== '(No state)' ? ts[0].state : '', ts[0].stype === 'NSO' ? 'New store' : '', ts[0].oem !== '(No OEM)' ? `OEM: ${ts[0].oem}` : '', ts[0].ac === RED_FLAG ? `AC not working ${Math.round(ts[0].acPct ?? 0)}% (${ts[0].acOpen}/${ts[0].acTotal})` : ''].filter(Boolean).join(' · ') || 'Store details not set'}</div>
                       </div>
                       <div className="flex shrink-0 items-center gap-3 tabular-nums">
                         <div className="text-right"><div className="font-bold text-foreground">{ts.length} ticket{ts.length === 1 ? '' : 's'}</div><div className="text-[11px] text-destructive">{ts.filter((t) => t.breached).length} breached · {ts.filter(isOpen).length} open</div></div>

@@ -1,6 +1,10 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveReportAccess, agentScopeOrFilter, type ReportViewerScope } from '@/lib/reporting/access'
-import { UNASSIGNED, NO_CATEGORY, NO_LOCATION, type ExecTicket, type ExecApproval, type Priority } from '@/lib/reporting/executive/engine'
+import {
+  UNASSIGNED, NO_CATEGORY, NO_LOCATION, NOT_SET, NOT_AC, NO_AC_DATA, RED_FLAG, WITHIN_LIMIT, type ExecTicket, type ExecApproval, type Priority,
+} from '@/lib/reporting/executive/engine'
+import { isNsoStore, DEFAULT_RED_FLAG_PERCENT } from '@/lib/reporting/analytics/facts'
+import { loadAcContext } from '@/lib/queries/store-ac-stats'
 import { levelFor, type DashLevel } from '@/lib/reporting/executive/levels'
 import type { ProfileWithTeams } from '@/types'
 
@@ -58,7 +62,11 @@ interface Raw {
     full_name: string
     department: { name: string } | null
     location: { name: string } | null
-    store: { name: string; state: string | null; oem: { name: string } | null } | null
+    store: {
+      code: string; name: string; state: string | null; oem: { name: string } | null
+      cluster: string | null; region: string | null; priority_list: string | null; ac_total: number | null
+      ac_brand: string | null; ac_amc_brand: string | null; ac_amc_vendor: string | null; open_date: string | null
+    } | null
   } | null
   service: { name: string; auto_oem_routing: boolean | null } | null
   category: { name: string } | null
@@ -72,7 +80,7 @@ const SELECT = [
   'id, request_no, title, status, priority, created_at, updated_at, resolved_at, closed_at, responded_at, resolution_due_at, reopen_count, source_metadata',
   'team:teams(name)',
   'assignee:profiles!requests_assigned_to_fkey(full_name)',
-  'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), location:locations(name), store:stores(name, state, oem:oems(name)))',
+  'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), location:locations(name), store:stores(code, name, state, cluster, region, priority_list, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, open_date, oem:oems(name)))',
   'service:services(name, auto_oem_routing)',
   'category:service_categories(name)',
   'sub_category:service_sub_categories(name)',
@@ -91,7 +99,11 @@ export function oemBrand(oemName: string): string {
   return (i > 0 ? oemName.slice(0, i) : oemName).trim()
 }
 
-export function toExecTicket(r: Raw, now: number): ExecTicket {
+/**
+ * One ticket as the dashboard needs it. `openAcByStore` is each store's open AC tickets (see store-ac-stats.ts): with the store's AC total it gives the
+ * AC Not Working % and the red flag, the same as in the Store AC report.
+ */
+export function toExecTicket(r: Raw, now: number, openAcByStore: ReadonlyMap<string, number> = new Map()): ExecTicket {
   const created = new Date(r.created_at).getTime()
   // resolved time: resolved_at, else closed_at; a ticket whose status says resolved/closed but has neither stamp falls back to its last update
   const doneIso = r.resolved_at ?? r.closed_at ?? (r.status === 'resolved' || r.status === 'closed' ? r.updated_at : null)
@@ -104,6 +116,13 @@ export function toExecTicket(r: Raw, now: number): ExecTicket {
   // ticket from the same store has nothing to do with the store's AC vendor, so it carries no OEM and stays out of every OEM view.
   const oem = r.service?.auto_oem_routing ? (r.requester?.store?.oem?.name ?? '') : ''
   const via = r.source_metadata?.created_via
+  // the store's details from the Store Master; a requester who is not a store (head office staff) has none
+  const st = r.requester?.store ?? null
+  const isAc = !!r.service?.auto_oem_routing
+  const detail = (v: string | null | undefined) => v?.trim() || NOT_SET
+  const acTotal = st?.ac_total ?? null
+  const acOpen = st ? (openAcByStore.get(st.code) ?? 0) : 0
+  const acPct = st && acTotal && acTotal > 0 ? (acOpen / acTotal) * 100 : null
   const responded = r.responded_at ? (new Date(r.responded_at).getTime() - created) / 3_600_000 : null
   return {
     id: r.id,
@@ -121,6 +140,18 @@ export function toExecTicket(r: Raw, now: number): ExecTicket {
     state: r.requester?.store?.state ?? '(No state)',
     oem: oem || '(No OEM)',
     brand: oem ? oemBrand(oem) : '(No OEM)',
+    cluster: detail(st?.cluster),
+    region: detail(st?.region),
+    // NSO = a new store: no open date yet, or opened less than 9 months ago
+    stype: st ? (isNsoStore(st.open_date, new Date(now)) ? 'NSO' : 'Regular') : NOT_SET,
+    plist: detail(st?.priority_list),
+    acb: isAc ? detail(st?.ac_brand) : NOT_AC,
+    amb: isAc ? detail(st?.ac_amc_brand) : NOT_AC,
+    amv: isAc ? detail(st?.ac_amc_vendor) : NOT_AC,
+    ac: !isAc ? NOT_AC : acPct === null ? NO_AC_DATA : acPct > DEFAULT_RED_FLAG_PERCENT ? RED_FLAG : WITHIN_LIMIT,
+    acTotal,
+    acOpen,
+    acPct,
     src: via ? (SOURCE_LABEL[via] ?? titleCase(via)) : 'Portal',
     prio: r.priority,
     status: r.status,
@@ -168,7 +199,9 @@ export async function loadExecutiveData(profile: ProfileWithTeams): Promise<Exec
       .or(`created_at.gte.${since},and(resolved_at.is.null,closed_at.is.null,status.neq.cancelled)`)
     return applyScope(q, scope, '').order('created_at', { ascending: false }).order('id', { ascending: true }).range(from, to)
   })
-  const tickets = rows.map((r) => toExecTicket(r, now))
+  // the AC position of each store is the same whatever the viewer's own scope is, so a store's red flag is the same on every dashboard
+  const { openAcByStore } = await loadAcContext(admin, profile.org_id)
+  const tickets = rows.map((r) => toExecTicket(r, now, openAcByStore))
 
   const approvals = await loadApprovals(admin, profile.org_id, scope, since)
   return { level, me: profile.full_name, now, tickets, approvals, truncated }

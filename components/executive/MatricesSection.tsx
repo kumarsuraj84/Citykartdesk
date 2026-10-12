@@ -12,6 +12,8 @@ import { Chev, DeltaBadge, Panel, PanelTitle, Seg, SlaPercent } from './ui'
 const COLS: Measure[] = ['created', 'resolved', 'backlog', 'breaches', 'sla', 'tat', 'frt', 'reopened', 'csat']
 const HEAD: Record<Measure, string> = { created: 'Created', resolved: 'Resolved', backlog: 'Backlog', breaches: 'Breaches', sla: 'SLA', tat: 'Resolution', frt: 'Response', reopened: 'Re-opened', csat: 'CSAT' }
 const SHOW = 12
+/** Fields whose rows get a small line of the busiest technician / stores next to the name. */
+const SUB_LABEL_DIMS: Dim[] = ['group', 'brand', 'oem', 'region', 'state', 'cluster', 'acb', 'amb', 'amv', 'plist']
 
 function topOf<T>(items: T[], key: (t: T) => string, n: number): string[] {
   const c = new Map<string, number>()
@@ -20,7 +22,7 @@ function topOf<T>(items: T[], key: (t: T) => string, n: number): string[] {
 }
 
 /** One comparison table: every measure for each value of a dimension, sortable, with a risk-tinted row when SLA is low. */
-function Matrix({ d, onOpen, title, caption, dims, defaultDim }: {
+export function Matrix({ d, onOpen, title, caption, dims, defaultDim }: {
   d: DashData; onOpen: OpenDrill; title: string; caption: string; dims: Dim[]; defaultDim: Dim
 }) {
   const { tickets, filters, now, W, P, compareOn } = d
@@ -41,7 +43,7 @@ function Matrix({ d, onOpen, title, caption, dims, defaultDim }: {
   }, [tickets, filters, dim, W, P, now, sort])
   const shown = all ? rows : rows.slice(0, SHOW)
   const sub = useMemo(() => {
-    if (dim !== 'group' && dim !== 'brand' && dim !== 'oem') return new Map<string, string>()
+    if (!SUB_LABEL_DIMS.includes(dim)) return new Map<string, string>()
     const base = applyFilters(tickets, filters, now)
     const out = new Map<string, string>()
     for (const r of shown) {
@@ -136,7 +138,7 @@ export function MatricesSection({ d, onOpen }: { d: DashData; onOpen: OpenDrill 
   const groupDims = (['group', 'tech', 'cat', 'sub', 'svc', 'dept', 'req', 'src', 'prio'] as Dim[]).filter((x) => all.includes(x))
   // OEM views only make sense when some ticket in view is an equipment request (e.g. AC) - for an IT or HR group they would be noise
   const hasOem = useMemo(() => applyFilters(d.tickets, d.filters, d.now).some((t) => t.brand !== '(No OEM)'), [d.tickets, d.filters, d.now])
-  const oemDims = ((hasOem ? ['brand', 'oem', 'store', 'state', 'loc'] : ['store', 'state', 'loc']) as Dim[]).filter((x) => all.includes(x))
+  const oemDims = ((hasOem ? ['brand', 'oem', 'acb', 'amb', 'amv', 'ac', 'store', 'cluster', 'region', 'state', 'loc'] : ['store', 'cluster', 'region', 'state', 'loc']) as Dim[]).filter((x) => all.includes(x))
   return (
     <section id="matrices-section" aria-label="Group and OEM comparison" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">

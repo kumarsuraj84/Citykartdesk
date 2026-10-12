@@ -28,7 +28,7 @@ const NOW = new Date(2026, 9, 8, 17, 0, 0).getTime()
 let n = 0
 const tk = (o: Partial<ExecTicket>): ExecTicket => ({
   id: `t${++n}`, no: `CKSD-${2000 + n}`, subject: 'AC not cooling', group: 'ADMIN GROUP', tech: 'Krishan', cat: 'AC ISSUE', sub: 'COOLING', svc: 'Admin repair',
-  req: 'Store A', dept: 'Stores', loc: 'STORES', store: 'Store A', state: 'Delhi', oem: 'LG OEM - ALL', brand: 'LG', src: 'Portal',
+  req: 'Store A', dept: 'Stores', loc: 'STORES', store: 'Store A', state: 'Delhi', oem: 'LG OEM - ALL', brand: 'LG', src: 'Portal', cluster: 'UP2', region: 'R4', stype: 'Regular', plist: 'ROS', acb: 'VOLTAS', amb: 'CARRIER', amv: 'VENDOR', ac: 'Within limit', acTotal: 10, acOpen: 1, acPct: 10,
   prio: 'medium', status: 'in_progress', created: NOW - 3 * DAY, resolved: null, due: null, tatH: null, breached: false, csat: null, reo: [], frH: 1, ...o,
 })
 const tickets = [
@@ -325,5 +325,65 @@ describe('Smart Dashboard', () => {
     fireEvent.click(kpi(/OPEN BACKLOG/))
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.getByText(/Open backlog - by day/)).toBeTruthy()
+  })
+})
+
+describe('Smart Dashboard - Store Master', () => {
+  const shops = [
+    tk({ store: 'DEL1', region: 'North', state: 'Delhi', cluster: 'N1' }),
+    tk({ store: 'DEL1', region: 'North', state: 'Delhi', cluster: 'N1' }),
+    tk({ store: 'MUM1', region: 'West', state: 'Maharashtra', cluster: 'W1', ac: 'Red flag', acOpen: 5, acTotal: 10, acPct: 50 }),
+  ]
+  const shopView = (level: 'admin' | 'requester' = 'admin') =>
+    render(<ExecutiveDashboard level={level} me="Krishan" now={NOW} tickets={shops} approvals={[]} truncated={false} />)
+
+  it('has a Stores & Regions view with region-wise data and a store table with red flags', () => {
+    shopView()
+    fireEvent.click(screen.getByText('Stores & Regions'))
+    expect(screen.getByRole('region', { name: 'Stores and regions' })).toBeTruthy()
+    expect(screen.getByText('Region, state and cluster wise')).toBeTruthy()
+    const section = document.querySelector('#stores-section') as HTMLElement
+    expect(within(section).getAllByText('North').length).toBeGreaterThan(0)
+    expect(within(section).getAllByText('West').length).toBeGreaterThan(0)
+    expect(within(section).getAllByText(/50%/).length).toBeGreaterThan(0)
+    // the store table lists each store once
+    expect(within(section).getAllByText('DEL1').length).toBeGreaterThan(0)
+    fireEvent.click(within(section).getByLabelText('Red flag stores only'))
+    expect(within(section).queryByText('DEL1')).toBeNull()
+    expect(within(section).getAllByText('MUM1').length).toBeGreaterThan(0)
+  })
+
+  it('does not offer the stores view to a requester', () => {
+    shopView('requester')
+    expect(screen.queryByText('Stores & Regions')).toBeNull()
+  })
+
+  it('shows the red flag highlight and opens its drill-down', () => {
+    shopView()
+    const card = screen.getByText('AC RED FLAG').closest('button')!
+    expect(card.textContent).toContain('1 store above 30% AC not working')
+    fireEvent.click(card)
+    expect(screen.getByRole('dialog')).toBeTruthy()
+  })
+
+  it('makes the lists in the Filters pop-up follow the choices made in it before they are applied', () => {
+    shopView()
+    fireEvent.click(screen.getByText('Filters').closest('button')!)
+    const modal = screen.getByRole('dialog', { name: 'Dashboard filters' })
+    expect(within(modal).getByText('N1')).toBeTruthy()
+    expect(within(modal).getByText('W1')).toBeTruthy()
+    fireEvent.click(within(modal).getByText('West').closest('button')!)
+    // only the West cluster is left in the cluster list; the other region is still offered so another can be added
+    expect(within(modal).queryByText('N1')).toBeNull()
+    expect(within(modal).getByText('W1')).toBeTruthy()
+    expect(within(modal).getByText('North')).toBeTruthy()
+  })
+
+  it('filters the whole dashboard by region from the bar', () => {
+    shopView()
+    const box = screen.getByLabelText('Filter by region')
+    fireEvent.click(box)
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'Filter by region choices' })).getByLabelText(/North/))
+    expect(screen.getByText(/2 of 3 tickets match/)).toBeTruthy()
   })
 })

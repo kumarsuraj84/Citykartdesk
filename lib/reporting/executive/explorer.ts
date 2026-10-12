@@ -23,9 +23,9 @@ export { matchesSearch }
 const csvCell = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`
 
 export function ticketsToCsv(ts: ExecTicket[], now: number): string {
-  const head = ['Ticket', 'Subject', 'Requester', 'Store', 'OEM', 'Group', 'Technician', 'Category', 'Priority', 'Status', 'Created', 'Resolved', 'Age (days)', 'SLA']
+  const head = ['Ticket', 'Subject', 'Requester', 'Store', 'Cluster', 'Region', 'State', 'Store type', 'OEM', 'AC health', 'Group', 'Technician', 'Category', 'Priority', 'Status', 'Created', 'Resolved', 'Age (days)', 'SLA']
   const rows = ts.map((t) => [
-    t.no, t.subject, t.req, t.store, t.oem, t.group, t.tech, t.cat, t.prio, statusLabel(t.status), dateTimeLabel(t.created), t.resolved === null ? '' : dateTimeLabel(t.resolved),
+    t.no, t.subject, t.req, t.store, t.cluster, t.region, t.state, t.stype, t.oem, t.ac, t.group, t.tech, t.cat, t.prio, statusLabel(t.status), dateTimeLabel(t.created), t.resolved === null ? '' : dateTimeLabel(t.resolved),
     ageInDays(t, now), t.breached ? 'Breached' : 'OK',
   ])
   return [head, ...rows].map((r) => r.map(csvCell).join(',')).join('\n')
