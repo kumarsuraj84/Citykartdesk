@@ -11,6 +11,7 @@ import {
   setUserTeams,
   adminSendPasswordReset,
   adminSetPassword,
+  updateUserEmail,
   addMobileNumber,
   removeMobileNumber,
   exportUsersCsv,
@@ -55,6 +56,77 @@ function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' }) {
     <span className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold ${sz} ${color}`}>
       {initials(name || '?')}
     </span>
+  )
+}
+
+// ─── Login e-mail (admin-only) ───────────────────────────────────────────────────
+
+function EmailSection({ userId, email }: { userId: string; email: string | null }) {
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState('')
+  const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null)
+
+  function save() {
+    setMessage(null)
+    startTransition(async () => {
+      const res = await updateUserEmail(userId, value)
+      if (res.error) { setMessage({ type: 'error', text: res.error }); return }
+      if (res.warning) setMessage({ type: 'error', text: res.warning })
+      else setMessage({ type: 'success', text: `E-mail changed to ${res.email}. They sign in with it from now on; their password is unchanged.${res.updated ? ` The old address was also replaced in: ${res.updated}.` : ' The old address was not used anywhere else.'}` })
+      setEditing(false)
+      setValue('')
+      router.refresh()
+    })
+  }
+
+  return (
+    <section className="space-y-3">
+      <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Login e-mail</h3>
+      <div className="flex items-center gap-2">
+        <p className="min-w-0 flex-1 truncate rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-foreground">{email ?? '—'}</p>
+        {!editing && (
+          <button
+            type="button"
+            onClick={() => { setEditing(true); setMessage(null) }}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-muted transition-colors"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Change e-mail
+          </button>
+        )}
+      </div>
+
+      {editing && (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <input
+              type="email"
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              placeholder="New e-mail address"
+              aria-label="New e-mail address"
+              autoFocus
+              className="input-field flex-1"
+            />
+            <button type="button" onClick={save} disabled={pending || !value.trim()} className="btn-gradient disabled:opacity-40 shrink-0">
+              {pending ? 'Saving…' : 'Save'}
+            </button>
+            <button type="button" onClick={() => { setEditing(false); setValue(''); setMessage(null) }} className="shrink-0 rounded-lg border border-border px-3 text-xs text-muted-foreground hover:bg-muted">
+              Cancel
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">The person signs in and receives mail at the new address from now on; the old address stops working and is replaced wherever it was used (OEM lists, rules, reports, e-mail conversations). Their password and tickets stay as they are, and their tickets show their name as it is on their profile.</p>
+        </div>
+      )}
+
+      {message && (
+        <p className={`text-xs rounded-lg px-3 py-2 border ${message.type === 'error' ? 'text-red-600 bg-red-50 border-red-100' : 'text-emerald-700 bg-emerald-50 border-emerald-100'}`}>
+          {message.text}
+        </p>
+      )}
+    </section>
   )
 }
 
@@ -171,6 +243,7 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [savedNote, setSavedNote] = useState<string | null>(null)
 
   const orgUser = user as UserWithTeams & {
     email: string | null
@@ -276,8 +349,11 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
       ])
       const err = r1.error ?? r2.error ?? r3.error
       if (err) { setError(err); return }
-      setSuccess(true)
       router.refresh()
+      // something to tell (a store was renamed with its login, or could not be): stay open so it is read
+      if (r1.warning) { setError(r1.warning); return }
+      if (r1.note) { setSavedNote(r1.note); setSuccess(true); return }
+      setSuccess(true)
       onClose()
     })
   }
@@ -393,7 +469,8 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
             </section>
           )}
 
-          {/* Password */}
+          {/* Login e-mail and password */}
+          {isAdmin && !isSelf && <EmailSection userId={user.id} email={user.email} />}
           {isAdmin && !isSelf && <PasswordSection userId={user.id} email={user.email} />}
 
           {/* Technician Groups — a requester has no use for this, only
@@ -451,7 +528,7 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
           </section>
 
           {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
-          {success && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">Changes saved.</p>}
+          {success && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">Changes saved.{savedNote ? ` ${savedNote}` : ''}</p>}
         </div>
 
         {/* Footer */}

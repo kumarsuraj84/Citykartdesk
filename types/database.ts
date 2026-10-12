@@ -5650,6 +5650,14 @@ export type Database = {
         Returns: undefined
       }
       show_limit: { Args: never; Returns: number }
+      replace_email_in_list: {
+        Args: { p_list: string[]; p_new: string; p_old: string }
+        Returns: string[]
+      }
+      replace_user_email: {
+        Args: { p_new: string; p_old: string; p_org_id: string }
+        Returns: Json
+      }
       show_trgm: { Args: { "": string }; Returns: string[] }
       upsert_field_sla_override: {
         Args: {

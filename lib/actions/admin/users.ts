@@ -9,12 +9,13 @@ import { emailPasswordResetLink, emailInvitation } from '@/lib/email/auth-mail'
 import { logAdminAudit } from './audit'
 import { BULK_RESET_BATCH_SIZE, BULK_RESET_ROLES } from '@/lib/users/bulk-reset'
 import { normalizeMobileNumber } from '@/lib/users/mobile'
+import { isUsableEmail, describeEmailUpdates, type EmailChangeCounts } from '@/lib/users/email-change'
 import { toCSV } from '@/lib/export/csv'
 import { USER_EXPORT_COLUMNS, buildUsersExportRows, type ExportProfile } from '@/lib/export/users'
 import type { UserRole } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyClient = { from: (t: string) => any; auth: any }
+type AnyClient = { from: (t: string) => any; auth: any; rpc: (fn: string, args: Record<string, unknown>) => any }
 
 // ── Mobile number helpers (Stage 2, extended for many-numbers-per-profile
 // by migration 20240101000140) ──────────────────────────────────────────────
@@ -121,7 +122,7 @@ export async function updateUserProfile(
     manager_id?: string | null
     whatsapp_enabled?: boolean
   }
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; warning?: string; note?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
@@ -155,12 +156,55 @@ export async function updateUserProfile(
 
   if (fields.whatsapp_enabled !== undefined) update.whatsapp_enabled = fields.whatsapp_enabled
 
+  // A store's login is named after the store (the store NLD logs in as "NLD"). When such a login is renamed, the store itself is renamed with it,
+  // otherwise the Stores list and the store-wise reports would keep showing the old code.
+  let storeToRename: { id: string; code: string; name: string } | null = null
+  const newName = fields.full_name?.trim()
+  if (newName) {
+    const { data: before } = await admin.from('profiles').select('full_name, store_id').eq('id', userId).eq('org_id', profile.org_id).maybeSingle()
+    const oldName = (before?.full_name ?? '').trim()
+    const storeChangedInThisSave = 'store_id' in fields && (fields.store_id || null) !== (before?.store_id ?? null)
+    if (before?.store_id && oldName && oldName.toLowerCase() !== newName.toLowerCase() && !storeChangedInThisSave) {
+      const { data: st } = await admin.from('stores').select('id, code, name').eq('id', before.store_id).eq('org_id', profile.org_id).maybeSingle()
+      if (st && st.code.trim().toLowerCase() === oldName.toLowerCase()) storeToRename = st
+    }
+  }
+
   const { error } = await admin.from('profiles').update(update).eq('id', userId).eq('org_id', profile.org_id)
   if (error) {
     return { error: error.message }
   }
+
+  let note: string | undefined
+  let warning: string | undefined
+  if (storeToRename && newName) {
+    const newCode = newName.toUpperCase()
+    const { error: storeError } = await admin.from('stores').update({
+      code: newCode,
+      // the store's name follows when it was just the old code
+      name: storeToRename.name.trim().toLowerCase() === storeToRename.code.trim().toLowerCase() ? newName : storeToRename.name,
+    }).eq('id', storeToRename.id).eq('org_id', profile.org_id)
+    if (storeError) {
+      warning = storeError.code === '23505'
+        ? `The name was changed, but another store already has the code ${newCode}, so the store ${storeToRename.code} was not renamed. Rename it in Organization Structure → Stores.`
+        : `The name was changed, but the store ${storeToRename.code} could not be renamed. Rename it in Organization Structure → Stores.`
+    } else {
+      note = `The store ${storeToRename.code} was renamed ${newCode}, so its tickets and reports show ${newCode}.`
+      revalidatePath('/admin/org')
+    }
+  }
+  // Tickets, comments, reports and lists show a person's name from their profile, so a new name appears everywhere by itself. The sign-in
+  // account keeps its own copy of the name; keep that in step (a failure here changes nothing the person sees).
+  if (fields.full_name !== undefined && fields.full_name.trim()) {
+    try {
+      const { data: acct } = await admin.auth.admin.getUserById(userId)
+      if (acct?.user) {
+        await admin.auth.admin.updateUserById(userId, { user_metadata: { ...(acct.user.user_metadata ?? {}), full_name: fields.full_name.trim() } })
+      }
+    } catch { /* best effort */ }
+  }
   revalidatePath('/admin/users')
-  return {}
+  return { ...(note ? { note } : {}), ...(warning ? { warning } : {}) }
 }
 
 /** Adds one mobile number to a profile (many:1 — a profile can have several
@@ -706,6 +750,79 @@ export async function adminSendPasswordReset(email: string): Promise<{ error?: s
   const { error } = await emailPasswordResetLink(email)
   if (error) return { error }
   return {}
+}
+
+// ── updateUserEmail ──────────────────────────────────────────────────────────
+// Changes the e-mail address a person signs in with (and receives mail at), for when theirs has changed. The e-mail lives only in the
+// sign-in account, so this is the one place to change it; the password and everything else stay as they are. The new address is
+// marked confirmed (an admin is vouching for it), so the person can sign in with it straight away and the old address stops working.
+
+/** Whether any account (in any organisation: sign-in addresses are shared by the whole system) already uses this address. */
+async function emailInUse(admin: AnyClient, email: string): Promise<boolean> {
+  const perPage = 1000
+  for (let page = 1; page <= 50; page++) {
+    const { data } = await admin.auth.admin.listUsers({ page, perPage })
+    const users = (data?.users ?? []) as { email?: string | null }[]
+    if (users.some((u) => (u.email ?? '').toLowerCase() === email)) return true
+    if (users.length < perPage) return false
+  }
+  return false
+}
+
+export async function updateUserEmail(userId: string, newEmail: string): Promise<{ error?: string; email?: string; warning?: string; updated?: string }> {
+  const profile = await getCurrentProfile()
+  if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
+
+  const email = newEmail.trim().toLowerCase()
+  if (!email) return { error: 'Enter the new e-mail address.' }
+  if (!isUsableEmail(email)) return { error: 'This does not look like an e-mail address.' }
+  // changing your own sign-in address from here is easy to get wrong (a typo locks you out): ask another admin
+  if (userId === profile.id) return { error: 'Ask another admin to change your own e-mail address.' }
+
+  const admin = createAdminClient() as unknown as AnyClient
+
+  // auth.users has no org concept: the person must belong to the caller's organisation
+  const { data: target } = await admin.from('profiles').select('org_id, role, full_name').eq('id', userId).maybeSingle()
+  if (!target || target.org_id !== profile.org_id) return { error: 'User not found.' }
+  // changing someone's e-mail is a way into their account (then "forgot password"), so an admin or owner's address
+  // can only be changed by a platform owner, the same rule as granting those roles
+  if ((target.role === 'admin' || target.role === 'platform_owner') && profile.role !== 'platform_owner') {
+    return { error: 'Only a platform owner can change the e-mail address of an admin or platform owner.' }
+  }
+
+  const { data: current } = await admin.auth.admin.getUserById(userId)
+  const oldEmail = (current?.user?.email ?? '').toLowerCase()
+  if (!current?.user) return { error: 'User not found.' }
+  if (oldEmail === email) return { error: 'This is already their e-mail address.' }
+
+  // the sign-in service answers a duplicate with a generic failure, so check it here to say what is wrong
+  if (await emailInUse(admin, email)) return { error: 'Another account already uses this e-mail address.' }
+
+  const { error } = await admin.auth.admin.updateUserById(userId, { email, email_confirm: true })
+  if (error) {
+    // (a second admin saving the same address at the same moment lands here too)
+    return { error: 'The e-mail address could not be changed. If another account uses it, choose a different one.' }
+  }
+
+  // the old address is now gone from the sign-in account: take it out of every other place that kept a copy as well
+  let counts: EmailChangeCounts | null = null
+  let copyError: string | null = null
+  if (oldEmail) {
+    const { data, error: rpcError } = await admin.rpc('replace_user_email', { p_org_id: profile.org_id, p_old: oldEmail, p_new: email })
+    if (rpcError) copyError = rpcError.message ?? 'unknown error'
+    else counts = (data ?? {}) as EmailChangeCounts
+  }
+
+  await logAdminAudit({
+    orgId: profile.org_id, actorId: profile.id, entityType: 'user', entityId: userId, action: 'user_email_changed',
+    metadata: { from: oldEmail, to: email, name: target.full_name ?? null, updated: counts, copyError },
+  })
+  revalidatePath('/admin/users')
+  if (copyError) {
+    return { email, warning: 'The sign-in e-mail was changed, but the old address could not be replaced everywhere else (OEM lists, rules, reports). Please tell the system administrator.' }
+  }
+  return { email, updated: describeEmailUpdates(counts) }
 }
 
 // ── adminSetPassword ─────────────────────────────────────────────────────────
