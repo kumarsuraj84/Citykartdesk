@@ -23,7 +23,10 @@ export async function signInWithPassword(formData: FormData) {
     return { error: sanitizeError(error, { route: 'auth.ts#signInWithPassword', fallback: 'Invalid login credentials.' }) }
   }
 
-  redirect('/home')
+  // Coming from an approval e-mail: back to that approval after signing in. Only an approval link is honoured, so this cannot
+  // be used to send people to some other address.
+  const next = String(formData.get('next') ?? '')
+  redirect(next.startsWith('/approve/') && /^[A-Za-z0-9._-]{20,200}$/.test(next.slice('/approve/'.length)) ? next : '/home')
 }
 
 export async function signOut() {

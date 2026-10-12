@@ -20,8 +20,9 @@ export function ApprovalQuickActions({ approvalId, onDecided, onCancel }: Props)
 
   function handleApprove() {
     setError(null)
+    if (!comment.trim()) { setError('Please add a comment: it is required to approve or reject.'); return }
     startTransition(async () => {
-      const result = await approveApproval(approvalId, comment || undefined)
+      const result = await approveApproval(approvalId, comment.trim())
       if (result.error) setError(result.error)
       else onDecided()
     })
@@ -29,8 +30,9 @@ export function ApprovalQuickActions({ approvalId, onDecided, onCancel }: Props)
 
   function handleReject() {
     setError(null)
+    if (!comment.trim()) { setError('Please add a comment: it is required to approve or reject.'); return }
     startTransition(async () => {
-      const result = await rejectApproval(approvalId, comment || undefined)
+      const result = await rejectApproval(approvalId, comment.trim())
       if (result.error) setError(result.error)
       else onDecided()
     })
@@ -44,7 +46,9 @@ export function ApprovalQuickActions({ approvalId, onDecided, onCancel }: Props)
       <textarea
         value={comment}
         onChange={(e) => setComment(e.target.value)}
-        placeholder="Add a comment (optional)…"
+        placeholder="Add a comment (required)…"
+        required
+        aria-required="true"
         rows={2}
         autoFocus
         className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
@@ -54,12 +58,12 @@ export function ApprovalQuickActions({ approvalId, onDecided, onCancel }: Props)
           className="btn-soft px-2.5 py-1.5 text-xs">
           Cancel
         </button>
-        <button type="button" onClick={handleReject} disabled={isPending}
+        <button type="button" onClick={handleReject} disabled={isPending || !comment.trim()}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60">
           <XCircle className="h-3.5 w-3.5" />
           {isPending ? 'Rejecting…' : 'Reject'}
         </button>
-        <button type="button" onClick={handleApprove} disabled={isPending}
+        <button type="button" onClick={handleApprove} disabled={isPending || !comment.trim()}
           className="btn-success flex-1 py-1.5 text-xs">
           <CheckCircle2 className="h-3.5 w-3.5" />
           {isPending ? 'Approving…' : 'Approve'}

@@ -52,8 +52,9 @@ export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: App
 
   function handleApprove() {
     setError(null)
+    if (!comment.trim()) { setError('Please add a comment: it is required to approve or reject.'); return }
     startTransition(async () => {
-      const result = await approveApproval(approval.id, comment || undefined)
+      const result = await approveApproval(approval.id, comment.trim())
       if (result.error) { setError(result.error) }
       else { setShowCommentBox(null); setComment(''); onDecided?.() }
     })
@@ -61,8 +62,9 @@ export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: App
 
   function handleReject() {
     setError(null)
+    if (!comment.trim()) { setError('Please add a comment: it is required to approve or reject.'); return }
     startTransition(async () => {
-      const result = await rejectApproval(approval.id, comment || undefined)
+      const result = await rejectApproval(approval.id, comment.trim())
       if (result.error) { setError(result.error) }
       else { setShowCommentBox(null); setComment(''); onDecided?.() }
     })
@@ -219,7 +221,9 @@ export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: App
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              placeholder="Add a comment (optional)…"
+              placeholder="Add a comment (required)…"
+              required
+              aria-required="true"
               rows={3}
               className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
             />
@@ -228,7 +232,7 @@ export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: App
           <div className="flex gap-2">
             {showCommentBox === 'approve' ? (
               <>
-                <button onClick={handleApprove} disabled={isPending}
+                <button onClick={handleApprove} disabled={isPending || !comment.trim()}
                   className="btn-success flex-1">
                   <CheckCircle2 className="h-4 w-4" />
                   {isPending ? 'Approving…' : 'Confirm Approve'}
@@ -240,7 +244,7 @@ export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: App
               </>
             ) : showCommentBox === 'reject' ? (
               <>
-                <button onClick={handleReject} disabled={isPending}
+                <button onClick={handleReject} disabled={isPending || !comment.trim()}
                   className="btn-danger flex-1">
                   <XCircle className="h-4 w-4" />
                   {isPending ? 'Rejecting…' : 'Confirm Reject'}

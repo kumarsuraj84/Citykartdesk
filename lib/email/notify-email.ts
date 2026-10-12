@@ -1,4 +1,5 @@
 import { sendEmail } from './send'
+import { approvalLinkUrls } from '@/lib/approvals/email-link'
 import {
   requestCreatedEmail,
   requestStatusChangedEmail,
@@ -108,6 +109,11 @@ export async function sendNotificationEmail(opts: {
           requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
           requesterName: data.requesterName || '',
+          // who sent it to this approver; the notification's own title tells the three cases apart
+          senderName: data.actorName || '',
+          // the approver's own Approve / Reject links (omitted when no signing secret is configured)
+          ...(data.approvalId && data.approverId ? (() => { const l = approvalLinkUrls(data.approvalId, data.approverId); return l ? { approveUrl: l.approveUrl, rejectUrl: l.rejectUrl } : {} })() : {}),
+          kind: data.title === 'Approval delegated to you' ? 'delegated' : data.title === 'Approval requested' ? 'next_step' : 'new',
         })
         break
       case 'sla_warning':

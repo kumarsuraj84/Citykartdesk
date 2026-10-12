@@ -55,6 +55,12 @@ describe('approval flow emails: requester + the technician who sent it', () => {
 
     const toApprover = sent.find((e) => e.to.toLowerCase() === fx.manager.email.toLowerCase())
     expect(toApprover).toBeTruthy()
+    // the approver is told BOTH who raised the request and who sent it to them (reported: the requester's name was blank)
+    expect(toApprover!.html).toContain('D03 Requester A')
+    expect(toApprover!.html).toContain('D03 Agent A')
+    expect(toApprover!.html).toContain('<strong>D03 Requester A</strong> has submitted the request')
+    expect(toApprover!.html).toContain('<strong>D03 Agent A</strong> sent it to you for approval. Please check and approve it.')
+    expect(toApprover!.html).not.toContain('<strong></strong> has submitted')
 
     const toRequester = sent.find((e) => e.to.toLowerCase() === fx.requesterA.email.toLowerCase())
     expect(toRequester, 'requester was never told their ticket went for approval').toBeTruthy()

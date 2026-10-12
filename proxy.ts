@@ -50,6 +50,10 @@ export async function proxy(request: NextRequest) {
   // so it works without a login (store users often share a mailbox and are not signed in when they click).
   if (pathname.startsWith('/csat/')) return NextResponse.next({ request })
 
+  // The approve / reject page opened from the approval e-mail. The page itself decides who the visitor is (signed in as the
+  // approver, or holding the code e-mailed to the approver) and shows a visitor who is neither nothing but the approver's name.
+  if (pathname.startsWith('/approve/')) return NextResponse.next({ request })
+
   let supabaseResponse = NextResponse.next({ request })
   let sessionRefreshed = false
 

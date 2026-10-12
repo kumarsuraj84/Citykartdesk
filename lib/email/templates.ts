@@ -1,4 +1,4 @@
-import { escapeEmailFields } from './escape'
+import { escapeEmailFields, escapeHtml } from './escape'
 
 export function layout(body: string): string {
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#ffffff;font-family:sans-serif;">
@@ -102,20 +102,60 @@ export function taskAssignedEmail(d: {
   return { subject, html, text }
 }
 
+/** The sentence that tells an approver why they are being asked: who raised the request, and who sent it to them. */
+export function approvalRequestSentence(d: {
+  requesterName?: string
+  /** the person who sent it for approval (a technician, the previous approver, someone delegating) */
+  senderName?: string
+  requestTitle: string
+  /** new = first ask, next_step = an earlier step was approved, delegated = handed over by another approver */
+  kind?: 'new' | 'next_step' | 'delegated'
+}, bold: (s: string) => string): string {
+  const same = (a?: string, b?: string) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase()
+  const req = d.requesterName?.trim() ? bold(d.requesterName.trim()) : ''
+  const snd = d.senderName?.trim() ? bold(d.senderName.trim()) : ''
+  const ttl = bold(d.requestTitle)
+  if (d.kind === 'delegated') {
+    return `${snd || 'Another approver'} has passed the approval of the request ${ttl}${req ? ` (raised by ${req})` : ''} to you. Please check and approve it.`
+  }
+  if (d.kind === 'next_step') {
+    return `The request ${ttl}${req ? ` raised by ${req}` : ''} now needs your approval${snd ? `; ${snd} has approved the step before yours` : ''}. Please check and approve it.`
+  }
+  if (req && snd && !same(d.requesterName, d.senderName)) {
+    return `${req} has submitted the request ${ttl}, and ${snd} sent it to you for approval. Please check and approve it.`
+  }
+  // the requester sent their own request for approval (e.g. a service that always needs it): they are both the one who logged it and the sender
+  if (req && snd) return `${req} has submitted the request ${ttl} and sent it to you for approval. Please check and approve it.`
+  if (req) return `${req} has submitted the request ${ttl} and it needs your approval. Please check and approve it.`
+  if (snd) return `${snd} has sent you the request ${ttl} for approval. Please check and approve it.`
+  return `The request ${ttl} needs your approval. Please check and approve it.`
+}
+
 export function approvalRequiredEmail(d: {
   approverName: string
   requestTitle: string
   requestUrl: string
-  requesterName: string
+  requesterName?: string
+  senderName?: string
+  kind?: 'new' | 'next_step' | 'delegated'
+  /** this approver's own links: decide straight from the e-mail (after confirming it is them, with a comment) */
+  approveUrl?: string
+  rejectUrl?: string
 }): { subject: string; html: string; text: string } {
-  const e = escapeEmailFields(d, ['requestUrl'])
+  const e = escapeEmailFields(d, ['requestUrl', 'approveUrl', 'rejectUrl'])
   const subject = `Approval required: ${d.requestTitle}`
   const html = layout(`
     <p>Hi ${e.approverName},</p>
-    <p><strong>${e.requesterName}</strong> has submitted a request that requires your approval: <strong>${e.requestTitle}</strong>.</p>
-    ${btn(e.requestUrl, 'Review & Approve')}
+    <p>${approvalRequestSentence(d, (s) => `<strong>${escapeHtml(s)}</strong>`)}</p>
+    ${d.approveUrl && d.rejectUrl
+      ? `<p style="margin:18px 0 6px;">
+           <a href="${e.approveUrl}" style="display:inline-block;background:#16a34a;color:#ffffff;padding:12px 26px;border-radius:6px;text-decoration:none;font-weight:600;margin:0 8px 8px 0;">Approve</a>
+           <a href="${e.rejectUrl}" style="display:inline-block;background:#dc2626;color:#ffffff;padding:12px 26px;border-radius:6px;text-decoration:none;font-weight:600;margin:0 8px 8px 0;">Reject</a>
+         </p>
+         <p style="font-size:13px;color:#6B7280;margin:4px 0 12px;">A comment is required. Only <strong>${e.approverName}</strong> can decide from this e-mail: you will be asked to confirm it is you. Or <a href="${e.requestUrl}" style="color:#2563eb;">open the request in Citykart Desk</a>.</p>`
+      : btn(e.requestUrl, 'Review & Approve')}
   `)
-  const text = `Hi ${d.approverName},\n\n${d.requesterName} submitted "${d.requestTitle}" and it needs your approval.\n\nReview it here: ${d.requestUrl}`
+  const text = `Hi ${d.approverName},\n\n${approvalRequestSentence(d, (s) => s)}\n\n${d.approveUrl && d.rejectUrl ? `Approve: ${d.approveUrl}\nReject: ${d.rejectUrl}\n(A comment is required. Only ${d.approverName} can decide from this e-mail; you will be asked to confirm it is you.)\n\nOr open it in Citykart Desk: ${d.requestUrl}` : `Review it here: ${d.requestUrl}`}`
   return { subject, html, text }
 }
 

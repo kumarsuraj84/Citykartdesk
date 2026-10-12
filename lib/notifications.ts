@@ -79,10 +79,20 @@ export async function notify(inputs: NotifyInput | NotifyInput[]): Promise<void>
   // Give every email the ticket number and the real ticket title (the notification's own title is a
   // sentence like "Request assigned to you", which made a poor subject line).
   const requestIds = [...new Set(active.map((r) => r.requestId).filter((v): v is string => !!v))]
-  const requestInfo = new Map<string, { request_no: string | null; title: string }>()
+  const requestInfo = new Map<string, { request_no: string | null; title: string; requester_name: string }>()
   if (requestIds.length > 0) {
-    const { data: reqRows } = await admin.from('requests').select('id, request_no, title').in('id', requestIds)
-    for (const q of (reqRows ?? []) as { id: string; request_no: string | null; title: string }[]) requestInfo.set(q.id, q)
+    const { data: reqRows } = await admin.from('requests').select('id, request_no, title, requester:profiles!requests_requester_id_fkey(full_name)').in('id', requestIds)
+    for (const q of (reqRows ?? []) as unknown as { id: string; request_no: string | null; title: string; requester: { full_name: string } | { full_name: string }[] | null }[]) {
+      const who = Array.isArray(q.requester) ? q.requester[0] : q.requester
+      requestInfo.set(q.id, { request_no: q.request_no, title: q.title, requester_name: who?.full_name ?? '' })
+    }
+  }
+  // who did it (the sender), for e-mails that say "X sent this to you"
+  const actorIds = [...new Set(active.map((r) => r.actorId).filter((v): v is string => !!v))]
+  const actorNameById = new Map<string, string>()
+  if (actorIds.length > 0) {
+    const { data: actorRows } = await admin.from('profiles').select('id, full_name').in('id', actorIds)
+    for (const a of (actorRows ?? []) as { id: string; full_name: string | null }[]) actorNameById.set(a.id, a.full_name ?? '')
   }
 
   // Org-level channel toggles (Request Configuration → Notification Rules).
@@ -154,6 +164,13 @@ export async function notify(inputs: NotifyInput | NotifyInput[]): Promise<void>
       const { createAdminClient } = await import('@/lib/supabase/admin')
       const { sendNotificationEmail } = await import('@/lib/email/notify-email')
       const adminClient = createAdminClient()
+      // An approver's e-mail gets Approve / Reject buttons: find the approval that is waiting on this request.
+      const approvalByRequest = new Map<string, string>()
+      const approvalRequestIds = [...new Set(emailTargets.filter((r) => r.type === 'approval_requested' && r.requestId).map((r) => r.requestId as string))]
+      if (approvalRequestIds.length > 0) {
+        const { data: pendingApprovals } = await adminClient.from('approvals').select('id, request_id, created_at').in('request_id', approvalRequestIds).eq('status', 'pending').order('created_at', { ascending: true })
+        for (const a of (pendingApprovals ?? []) as { id: string; request_id: string }[]) approvalByRequest.set(a.request_id, a.id) // newest wins
+      }
       // Independent per-recipient — an N-recipient notify() (e.g. a Business
       // Rule notifying every manager) fans out in parallel instead of one at
       // a time, and each attempt is caught individually so one bad address
@@ -176,8 +193,10 @@ export async function notify(inputs: NotifyInput | NotifyInput[]): Promise<void>
             recipientName: (nameByUser.get(r.recipientId) ?? '').split(' ')[0],
             data: {
               ...(r.requestId && requestInfo.get(r.requestId)
-                ? { requestNo: requestInfo.get(r.requestId)!.request_no ?? '', requestTitle: requestInfo.get(r.requestId)!.title }
+                ? { requestNo: requestInfo.get(r.requestId)!.request_no ?? '', requestTitle: requestInfo.get(r.requestId)!.title, ...(requestInfo.get(r.requestId)!.requester_name ? { requesterName: requestInfo.get(r.requestId)!.requester_name } : {}) }
                 : {}),
+              ...(r.actorId && actorNameById.get(r.actorId) ? { actorName: actorNameById.get(r.actorId)! } : {}),
+              ...(r.type === 'approval_requested' && r.requestId && approvalByRequest.get(r.requestId) ? { approvalId: approvalByRequest.get(r.requestId)!, approverId: r.recipientId } : {}),
               ...(r.metadata as Record<string, string> ?? {}),
               title: r.title, body: r.body ?? '', link: r.link ?? '',
             },

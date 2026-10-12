@@ -36,6 +36,7 @@ function LoginForm() {
     const formData = new FormData()
     formData.set('email', data.email)
     formData.set('password', data.password)
+    formData.set('next', searchParams.get('next') ?? '')
 
     startTransition(async () => {
       const result = await signInWithPassword(formData)
