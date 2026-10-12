@@ -8,6 +8,8 @@ import { ReportDetail } from './ReportDetail'
 // The look of the Excel pivot tables these reports replace: blue heading band, peach total columns, the first column in pale blue, bold blue "Total" lines,
 // thin grey grid. Drawn like a sheet of paper (fixed colours, not the app theme), the same as the exported Excel file.
 const COLOR = { head: '#4F81BD', peach: '#FBD9C3', tech: '#DCE6F1', total: '#B8CCE4', grid: '#C9D1DE', text: '#1F2937' }
+/** The columns are drawn this much narrower than their nominal width, with small text and thin rows, so more of the report fits on screen. */
+const SCALE = 0.82
 const SHEET_FONT = "Calibri, Carlito, 'Segoe UI', Arial, sans-serif"
 
 interface Open { refs: number[]; title: string; subtitle: string }
@@ -28,9 +30,10 @@ export function ReportTableView({ table, choice }: { table: ReportTable; choice?
     )
   }
 
-  const left = columns.map((_, i) => columns.slice(0, i).reduce((n, c) => n + c.width, 0))
-  const width = columns.reduce((n, c) => n + c.width, 0)
-  const td = 'border px-2 py-[3px] text-[12px] leading-[18px]'
+  const w = (c: ReportColumn) => Math.round(c.width * SCALE)
+  const left = columns.map((_, i) => columns.slice(0, i).reduce((n, c) => n + w(c), 0))
+  const width = columns.reduce((n, c) => n + w(c), 0)
+  const td = 'border px-1.5 py-0 text-[11px] leading-[16px]'
   const grid = { borderColor: COLOR.grid }
   const frozen = (i: number) => (i < lead ? 'md:sticky md:z-[5]' : '')
   const headStyle: React.CSSProperties = { backgroundColor: COLOR.head, borderColor: '#ffffff55' }
@@ -69,8 +72,8 @@ export function ReportTableView({ table, choice }: { table: ReportTable; choice?
       <td key={ci} className={`${base} p-0`} style={{ ...grid, ...bg }}>
         {r.refs[ci] ? (
           <button type="button" onClick={() => openCell(idx, ci)} aria-label={`${rowLabel(idx)}, ${c.label}: ${text}`} title={text}
-            className={`block w-full truncate px-2 py-[3px] hover:bg-black/10 hover:underline ${align(c)}`}>{text}</button>
-        ) : <span className="block truncate px-2 py-[3px]" title={text}>{text}</span>}
+            className={`block w-full truncate px-1.5 py-0 hover:bg-black/10 hover:underline ${align(c)}`}>{text}</button>
+        ) : <span className="block truncate px-1.5 py-0" title={text}>{text}</span>}
       </td>
     )
   }
@@ -84,15 +87,15 @@ export function ReportTableView({ table, choice }: { table: ReportTable; choice?
 
       <div className="max-h-[78vh] overflow-auto rounded-md border bg-white" style={{ borderColor: COLOR.grid, fontFamily: SHEET_FONT, color: COLOR.text }}>
         <table className="border-collapse" style={{ tableLayout: 'fixed', width, minWidth: '100%' }}>
-          <colgroup>{columns.map((c) => <col key={c.key} style={{ width: c.width }} />)}</colgroup>
+          <colgroup>{columns.map((c) => <col key={c.key} style={{ width: w(c) }} />)}</colgroup>
           <thead className="sticky top-0 z-10">
             {hasGroups && (
               <tr>
                 {columns.map((c, i) => {
                   const g = groupAt(i)
-                  if (g) return <th key={c.key} colSpan={g.span} className="border px-1.5 py-1 text-center text-[12px] font-bold text-white" style={headStyle}>{g.label}</th>
+                  if (g) return <th key={c.key} colSpan={g.span} className="border px-1 py-0.5 text-center text-[11px] font-bold text-white" style={headStyle}>{g.label}</th>
                   if (inGroup(i)) return null
-                  if (c.peach) return <th key={c.key} rowSpan={2} className="border px-1.5 py-1 text-center text-[12px] font-bold" style={peachStyle}>{c.label}</th>
+                  if (c.peach) return <th key={c.key} rowSpan={2} className="border px-1 py-0.5 text-center text-[11px] font-bold" style={peachStyle}>{c.label}</th>
                   return <th key={c.key} className={`border ${frozen(i)} md:z-30`} style={{ ...headStyle, left: left[i] }} />
                 })}
               </tr>
@@ -101,8 +104,8 @@ export function ReportTableView({ table, choice }: { table: ReportTable; choice?
               {columns.map((c, i) => {
                 if (hasGroups && c.peach) return null
                 return c.peach
-                  ? <th key={c.key} className="border px-1.5 py-1 text-center text-[12px] font-bold" style={peachStyle}>{c.label}</th>
-                  : <th key={c.key} className={`border px-2 py-1 text-[12px] font-bold text-white ${align(c)} ${i < lead ? 'md:sticky md:z-30' : 'whitespace-nowrap'}`} style={{ ...headStyle, left: left[i] }}>{c.label}</th>
+                  ? <th key={c.key} className="border px-1 py-0.5 text-center text-[11px] font-bold" style={peachStyle}>{c.label}</th>
+                  : <th key={c.key} className={`border px-1.5 py-0.5 text-[11px] font-bold text-white ${align(c)} ${i < lead ? 'md:sticky md:z-30' : 'whitespace-nowrap'}`} style={{ ...headStyle, left: left[i] }}>{c.label}</th>
               })}
             </tr>
           </thead>
@@ -123,8 +126,8 @@ export function ReportTableView({ table, choice }: { table: ReportTable; choice?
                         <td key={ci} className={`${td} ${frozen(ci)} ${ci === 0 ? 'font-bold' : ''} p-0`} style={{ ...grid, left: left[ci], backgroundColor: bg }}>
                           {text && r.refs[ci] ? (
                             <button type="button" onClick={() => openCell(idx, ci)} aria-label={`${rowLabel(idx)}, ${c.label}: ${text}`} title={text}
-                              className={`block w-full truncate px-2 py-[3px] hover:underline ${align(c)}`}>{text}</button>
-                          ) : <span className="block truncate px-2 py-[3px]" title={text}>{text}</span>}
+                              className={`block w-full truncate px-1.5 py-0 hover:underline ${align(c)}`}>{text}</button>
+                          ) : <span className="block truncate px-1.5 py-0" title={text}>{text}</span>}
                         </td>
                       )
                     }

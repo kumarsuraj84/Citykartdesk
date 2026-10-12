@@ -11,7 +11,7 @@ import {
 } from './report-table'
 
 /** What the section is called in the menu and on its pages. */
-export const REPORTS_NAME = 'Fixed predefined Reports'
+export const REPORTS_NAME = 'Fixed Predefined Reports'
 
 export type ReportLayout = 'summary' | 'status' | 'cluster-list' | 'store-ac' | 'red-flag' | 'amc-vendor'
 

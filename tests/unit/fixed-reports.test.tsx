@@ -26,7 +26,7 @@ describe('the fixed reports are the sheets of the Excel report, under their name
       'Repair & Maintenance Report', 'Admin Requirement Report', 'NSO Status Report', 'NSO Summary Report', 'BD Status Report', 'BD Summary Report', 'Admin Summary Report',
     ])
     expect(new Set(FIXED_REPORTS.map((r) => r.slug)).size).toBe(12)
-    expect(REPORTS_NAME).toBe('Fixed predefined Reports')
+    expect(REPORTS_NAME).toBe('Fixed Predefined Reports')
   })
   it('no name has CKDESK or ckdesk in it', () => {
     for (const r of FIXED_REPORTS) expect(r.title).not.toMatch(/ckdesk/i)
