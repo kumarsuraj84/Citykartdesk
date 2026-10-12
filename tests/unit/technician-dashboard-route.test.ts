@@ -26,6 +26,8 @@ vi.mock('next/navigation', () => ({
   redirect: (target: string) => { throw new RedirectSignal(target) },
 }))
 
+const NO_STORE_CHOICE = { region: [], state: [], cluster: [], stype: [], plist: [], ac: [] }
+
 function profileWith(role: string, overrides: Record<string, unknown> = {}) {
   return { id: 'u1', org_id: 'org-1', role, team_members: [{ team_id: 'bd' }, { team_id: 'admin-group' }], ...overrides }
 }
@@ -58,7 +60,7 @@ describe('/dashboards — the technician dashboard route', () => {
   beforeEach(() => {
     getCurrentProfileMock.mockReset()
     getEnabledModulesMock.mockReset().mockResolvedValue(['requests'])
-    getAnalyticsMock.mockReset().mockResolvedValue({})
+    getAnalyticsMock.mockReset().mockResolvedValue({ stores: { combos: [] } })
     workloadMock.mockReset().mockResolvedValue([])
     workloadReportMock.mockReset().mockResolvedValue([])
   })
@@ -67,7 +69,7 @@ describe('/dashboards — the technician dashboard route', () => {
     getCurrentProfileMock.mockResolvedValue(profileWith('agent'))
     expect(await callPage()).toEqual({ redirected: false })
     const scope = { kind: 'agent', userId: 'u1', teamIds: ['bd', 'admin-group'] }
-    expect(getAnalyticsMock).toHaveBeenCalledWith('org-1', '30d', scope)
+    expect(getAnalyticsMock).toHaveBeenCalledWith('org-1', '30d', scope, NO_STORE_CHOICE)
     expect(workloadMock).toHaveBeenCalledWith('org-1', scope)
   })
 
@@ -79,7 +81,7 @@ describe('/dashboards — the technician dashboard route', () => {
     getCurrentProfileMock.mockResolvedValue(profileWith('agent', { team_members }))
     await callPage({ groups: A + ',' + B })
     const scope = { kind: 'agent', userId: 'u1', teamIds: [A, B] }
-    expect(getAnalyticsMock).toHaveBeenCalledWith('org-1', '30d', scope)
+    expect(getAnalyticsMock).toHaveBeenCalledWith('org-1', '30d', scope, NO_STORE_CHOICE)
     expect(workloadMock).toHaveBeenCalledWith('org-1', scope)
   })
 
@@ -89,7 +91,7 @@ describe('/dashboards — the technician dashboard route', () => {
     const team_members = [A, B].map((id, i) => ({ team_id: id, team: { id, name: 'Group ' + i } }))
     getCurrentProfileMock.mockResolvedValue(profileWith('agent', { team_members }))
     await callPage({ groups: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' })
-    expect(getAnalyticsMock).toHaveBeenCalledWith('org-1', '30d', { kind: 'agent', userId: 'u1', teamIds: [A, B] })
+    expect(getAnalyticsMock).toHaveBeenCalledWith('org-1', '30d', { kind: 'agent', userId: 'u1', teamIds: [A, B] }, NO_STORE_CHOICE)
   })
 
   it('a technician with a SINGLE group still sees the backlog banner (and no picker is needed)', async () => {

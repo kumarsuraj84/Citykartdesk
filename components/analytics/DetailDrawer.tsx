@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition, useRef } from 'react'
 import Link from 'next/link'
 import { X, ExternalLink, Loader2, AlertCircle, Clock, CheckCircle2, Circle, Pause, XCircle } from 'lucide-react'
 import { getFilteredRequests, type DrawerFilter, type DrawerRequest } from '@/lib/actions/analytics'
+import { storeFilterCount, type StoreFilter } from '@/lib/analytics/store-filter'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -92,9 +93,11 @@ interface Props {
   onClose: () => void
   /** Technician groups picked on the dashboard, so the list matches the card that was clicked. */
   groupIds?: string[]
+  /** Store Master choices on the dashboard; a card that sets its own `store` (a region row) overrides them. */
+  storeFilter?: StoreFilter
 }
 
-export function DetailDrawer({ filter, onClose, groupIds }: Props) {
+export function DetailDrawer({ filter, onClose, groupIds, storeFilter }: Props) {
   const [isPending, startTransition] = useTransition()
   const [data, setData]  = useState<DrawerRequest[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -107,16 +110,17 @@ export function DetailDrawer({ filter, onClose, groupIds }: Props) {
     // clearing stale results when the filter is removed is part of that external sync.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!filter) { setData(null); setError(null); return }
-    const key = JSON.stringify({ filter, groupIds })
+    const key = JSON.stringify({ filter, groupIds, storeFilter })
     if (key === prevFilterRef.current) return
     prevFilterRef.current = key
     setData(null); setError(null)
     startTransition(async () => {
-      const res = await getFilteredRequests(groupIds?.length ? { ...filter, groupIds } : filter)
+      const withStore = !filter.store && storeFilter && storeFilterCount(storeFilter) > 0 ? { ...filter, store: storeFilter } : filter
+      const res = await getFilteredRequests(groupIds?.length ? { ...withStore, groupIds } : withStore)
       if (res.error) setError(res.error)
       else setData(res.data)
     })
-  }, [filter, groupIds])
+  }, [filter, groupIds, storeFilter])
 
   // Escape to close
   useEffect(() => {

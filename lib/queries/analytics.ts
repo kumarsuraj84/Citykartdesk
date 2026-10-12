@@ -2,6 +2,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import type { ReportViewerScope } from '@/lib/reporting/access'
 import { isCurrentlyBreached } from '@/lib/sla/breach'
 import { AGE_BUCKETS, ageBucketFor } from '@/lib/reporting/aging'
+import { RED_FLAG } from '@/lib/reporting/executive/engine'
+import { loadStoreDims } from '@/lib/queries/store-dims'
+import {
+  emptyStoreFilter, matchesStoreFilter, storeFilterCount, toCombos, type StoreCombo, type StoreDims, type StoreFilter,
+} from '@/lib/analytics/store-filter'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -145,6 +150,28 @@ export type AgentRow = {
 export type ServiceRow = { name: string; count: number }
 
 /** One count per bucket in lib/reporting/aging.ts's AGE_BUCKETS, same order. */
+/** The Store Master fields the dashboard can break the numbers down by. */
+export type PlaceKey = 'region' | 'state' | 'cluster' | 'stype' | 'plist'
+export type PlaceRow = {
+  name: string
+  created: number
+  resolved: number
+  openNow: number
+  breachedNow: number
+  slaBase: number
+  slaCompliant: number
+  slaRate: number | null
+}
+export type RedFlagStore = { code: string; name: string; region: string; cluster: string; acOpen: number; acTotal: number | null; acPct: number | null }
+export type StoreSection = {
+  /** what is chosen (the numbers on the page already follow it) */
+  filter: StoreFilter
+  /** tickets of the period per distinct store details, before the store choices: the filter pop-up works out its linked lists from these */
+  combos: StoreCombo[]
+  places: Record<PlaceKey, PlaceRow[]>
+  summary: { storesWithTickets: number; redFlagCount: number; redFlagStores: RedFlagStore[]; nsoStores: number; nsoTickets: number }
+}
+
 export type BacklogAging = { bucket: string; label: string; count: number }[]
 
 export type AnalyticsData = {
@@ -192,6 +219,8 @@ export type AnalyticsData = {
   // Rolling 24h/7d/30d inflow (created) and outflow (closed) — also
   // independent of the period selector above
   requestFlow: RequestFlow
+  // Store Master breakdown and the choices behind the store filter
+  stores: StoreSection
   // Task KPIs
   tasksOpen: number
   tasksOverdue: number
@@ -227,7 +256,8 @@ function scopeTeamIds(scope: ReportViewerScope): string[] | null {
 export async function getAnalytics(
   orgId: string,
   period: PeriodParam,
-  scope: ReportViewerScope = { kind: 'all' }
+  scope: ReportViewerScope = { kind: 'all' },
+  storeFilter: StoreFilter = emptyStoreFilter()
 ): Promise<AnalyticsData> {
   const teamScope = scopeTeamIds(scope)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -292,11 +322,12 @@ export async function getAnalytics(
     { data: dailyCreatedRows },
     { data: dailyClosedRows },
     { data: dailyAssignedRows },
+    storeLookup,
   ] = await Promise.all([
     // Requests created in period
     pageAll((from, to) => inScope(admin
       .from('requests')
-      .select('id, status, priority, team_id, service_id, assigned_to, created_at, resolved_at, responded_at, closed_at, resolution_due_at, response_due_at')
+      .select('id, requester_id, status, priority, team_id, service_id, assigned_to, created_at, resolved_at, responded_at, closed_at, resolution_due_at, response_due_at')
       .eq('org_id', orgId)
       .gte('created_at', start)
       .lte('created_at', end))
@@ -305,7 +336,7 @@ export async function getAnalytics(
     // All currently open requests (for backlog aging + SLA breached)
     pageAll((from, to) => inScope(admin
       .from('requests')
-      .select('id, status, priority, team_id, assigned_to, created_at, resolution_due_at, response_due_at, responded_at')
+      .select('id, requester_id, status, priority, team_id, assigned_to, created_at, resolution_due_at, response_due_at, responded_at')
       .eq('org_id', orgId)
       .not('status', 'in', '("resolved","closed","cancelled")'))
       .order('id', { ascending: true }).range(from, to)),
@@ -314,7 +345,7 @@ export async function getAnalytics(
     // resolved/closed but carries neither stamp — its last update). Resolved, SLA compliance and resolution time are counted over these.
     pageAll((from, to) => inScope(admin
       .from('requests')
-      .select('id, status, priority, team_id, assigned_to, created_at, resolved_at, closed_at, updated_at, resolution_due_at')
+      .select('id, requester_id, status, priority, team_id, assigned_to, created_at, resolved_at, closed_at, updated_at, resolution_due_at')
       .eq('org_id', orgId)
       .or(`and(resolved_at.gte.${start},resolved_at.lte.${end}),and(resolved_at.is.null,closed_at.gte.${start},closed_at.lte.${end}),and(resolved_at.is.null,closed_at.is.null,status.in.(resolved,closed),updated_at.gte.${start},updated_at.lte.${end})`))
       .order('id', { ascending: true }).range(from, to)),
@@ -322,7 +353,7 @@ export async function getAnalytics(
     // Every approval request of the organisation (and its decisions) — whole-life, so "waiting" is what is pending right now
     pageAll((from, to) => withinScope(admin
       .from('approvals')
-      .select('id, status, created_at, request_id, decisions:approval_decisions(decision, decided_at), request:requests!inner(org_id, team_id)')
+      .select('id, status, created_at, request_id, decisions:approval_decisions(decision, decided_at), request:requests!inner(org_id, team_id, requester_id)')
       .eq('request.org_id', orgId), 'request.team_id')
       .order('id', { ascending: true }).range(from, to)),
 
@@ -344,30 +375,42 @@ export async function getAnalytics(
     // Daily Activity (today/yesterday) + Req. Inflow/Outflow (24h/7d/30d) both
     // bucket off these same rows — fetched back to the widest window either
     // needs (30 days) so there's one created/closed query, not two.
-    inScope(admin.from('requests').select('created_at').eq('org_id', orgId).gte('created_at', last30dStartIso)),
-    inScope(admin.from('requests').select('closed_at').eq('org_id', orgId).not('closed_at', 'is', null).gte('closed_at', last30dStartIso)),
+    inScope(admin.from('requests').select('created_at, requester_id').eq('org_id', orgId).gte('created_at', last30dStartIso)),
+    inScope(admin.from('requests').select('closed_at, requester_id').eq('org_id', orgId).not('closed_at', 'is', null).gte('closed_at', last30dStartIso)),
     pageAll((from, to) => withinScope(admin
       .from('request_activity')
-      .select('created_at, request:requests!inner(org_id, team_id)')
+      .select('created_at, request:requests!inner(org_id, team_id, requester_id)')
       .eq('action', 'assigned')
       .eq('request.org_id', orgId)
       .gte('created_at', yesterdayStartIso), 'request.team_id')
       .order('created_at', { ascending: true }).range(from, to)),
+
+    // The Store Master details of every requester that is a store, to filter and break the numbers down by
+    loadStoreDims(admin, orgId, now),
   ])
 
-  const reqs = (periodRequests ?? []) as Array<{
-    id: string; status: string; priority: string; team_id: string; service_id: string
+  const reqsAll = (periodRequests ?? []) as Array<{
+    id: string; requester_id: string; status: string; priority: string; team_id: string; service_id: string
     assigned_to: string | null; created_at: string; resolved_at: string | null
     responded_at: string | null; closed_at: string | null
     resolution_due_at: string | null; response_due_at: string | null
   }>
 
-  const open = (allOpen ?? []) as typeof reqs
+  const openAll = (allOpen ?? []) as typeof reqsAll
+  // The store choices narrow every number on the page (a requester with no store passes only when no store choice is made)
+  const storeOf = (requesterId: string | null | undefined): StoreDims | null => (requesterId ? storeLookup.byRequester.get(requesterId) ?? null : null)
+  const storeActive = storeFilterCount(storeFilter) > 0
+  const keep = (requesterId: string | null | undefined) => !storeActive || matchesStoreFilter(storeOf(requesterId), storeFilter)
+  const reqs = reqsAll.filter((r) => keep(r.requester_id))
+  const open = openAll.filter((r) => keep(r.requester_id))
   // when a ticket was resolved: resolved_at, else closed_at, else (status says so) its last update
-  type ResolvedRow = { id: string; status: string; priority: string; team_id: string; assigned_to: string | null; created_at: string; resolved_at: string | null; closed_at: string | null; updated_at: string; resolution_due_at: string | null }
-  const resolvedIn = ((resolvedPeriod ?? []) as ResolvedRow[]).map((r) => ({ ...r, doneAt: (r.resolved_at ?? r.closed_at ?? r.updated_at) as string }))
-  type ApprovalRaw = { id: string; status: string; created_at: string; request_id: string; decisions: { decision: string; decided_at: string }[] | null }
-  const approvalsAll = (approvalRowsRaw ?? []) as ApprovalRaw[]
+  type ResolvedRow = { id: string; requester_id: string; status: string; priority: string; team_id: string; assigned_to: string | null; created_at: string; resolved_at: string | null; closed_at: string | null; updated_at: string; resolution_due_at: string | null }
+  const resolvedIn = ((resolvedPeriod ?? []) as ResolvedRow[]).filter((r) => keep(r.requester_id)).map((r) => ({ ...r, doneAt: (r.resolved_at ?? r.closed_at ?? r.updated_at) as string }))
+  type ApprovalRaw = { id: string; status: string; created_at: string; request_id: string; request: { requester_id: string } | null; decisions: { decision: string; decided_at: string }[] | null }
+  const approvalsAll = ((approvalRowsRaw ?? []) as ApprovalRaw[]).filter((a) => keep(a.request?.requester_id))
+  const createdRows = ((dailyCreatedRows ?? []) as { created_at: string; requester_id: string }[]).filter((r) => keep(r.requester_id))
+  const closedRows = ((dailyClosedRows ?? []) as { closed_at: string; requester_id: string }[]).filter((r) => keep(r.requester_id))
+  const assignedRows = ((dailyAssignedRows ?? []) as { created_at: string; request: { requester_id: string } | null }[]).filter((r) => keep(r.request?.requester_id))
   const teamsArr = (teams ?? []) as Array<{ id: string; name: string }>
   const servicesArr = (services ?? []) as Array<{ id: string; name: string }>
   const profilesArr = (profiles ?? []) as Array<{ id: string; full_name: string; role: string }>
@@ -588,9 +631,9 @@ export async function getAnalytics(
   }
   const dailyActivity: DailyActivity = {
     pendingNow: totalOpenNow,
-    created: bucketByDay(((dailyCreatedRows ?? []) as { created_at: string }[]).map((r) => ({ at: r.created_at }))),
-    closed: bucketByDay(((dailyClosedRows ?? []) as { closed_at: string }[]).map((r) => ({ at: r.closed_at }))),
-    assigned: bucketByDay(((dailyAssignedRows ?? []) as { created_at: string }[]).map((r) => ({ at: r.created_at }))),
+    created: bucketByDay(createdRows.map((r) => ({ at: r.created_at }))),
+    closed: bucketByDay(closedRows.map((r) => ({ at: r.closed_at }))),
+    assigned: bucketByDay(assignedRows.map((r) => ({ at: r.created_at }))),
   }
 
   // ── Req. Inflow / Outflow (rolling 24h/7d/30d, cumulative) ─────────────────
@@ -605,8 +648,47 @@ export async function getAnalytics(
     return { last24h, last7d, last30d }
   }
   const requestFlow: RequestFlow = {
-    inflow: bucketByRollingWindow(((dailyCreatedRows ?? []) as { created_at: string }[]).map((r) => ({ at: r.created_at }))),
-    outflow: bucketByRollingWindow(((dailyClosedRows ?? []) as { closed_at: string }[]).map((r) => ({ at: r.closed_at }))),
+    inflow: bucketByRollingWindow(createdRows.map((r) => ({ at: r.created_at }))),
+    outflow: bucketByRollingWindow(closedRows.map((r) => ({ at: r.closed_at }))),
+  }
+
+  // ── Store Master: the numbers by region / state / cluster / store type / priority list, and the stores that need a look ──
+
+  const placeKeys: PlaceKey[] = ['region', 'state', 'cluster', 'stype', 'plist']
+  const placesOut = {} as Record<PlaceKey, PlaceRow[]>
+  for (const k of placeKeys) {
+    const rows = new Map<string, PlaceRow>()
+    const row = (requesterId: string) => {
+      const name = storeOf(requesterId)?.[k] ?? '(No store)'
+      let r = rows.get(name)
+      if (!r) { r = { name, created: 0, resolved: 0, openNow: 0, breachedNow: 0, slaBase: 0, slaCompliant: 0, slaRate: null }; rows.set(name, r) }
+      return r
+    }
+    reqs.forEach((r) => { row(r.requester_id).created++ })
+    resolvedIn.forEach((r) => {
+      const x = row(r.requester_id)
+      x.resolved++
+      if (r.resolution_due_at) { x.slaBase++; if (new Date(r.doneAt) <= new Date(r.resolution_due_at)) x.slaCompliant++ }
+    })
+    open.forEach((r) => { const x = row(r.requester_id); x.openNow++; if (isCurrentlyBreached(r, now)) x.breachedNow++ })
+    placesOut[k] = [...rows.values()]
+      .map((r) => ({ ...r, slaRate: r.slaBase ? Math.round((r.slaCompliant / r.slaBase) * 100) : null }))
+      .sort((a, b) => b.created - a.created || b.openNow - a.openNow || a.name.localeCompare(b.name, undefined, { numeric: true }))
+  }
+  const seenStores = new Map<string, StoreDims>()
+  for (const r of [...reqs, ...open]) { const d = storeOf(r.requester_id); if (d) seenStores.set(d.code, d) }
+  const redFlag = [...seenStores.values()].filter((d) => d.ac === RED_FLAG).sort((a, b) => (b.acPct ?? 0) - (a.acPct ?? 0) || a.code.localeCompare(b.code))
+  const storeSection: StoreSection = {
+    filter: storeFilter,
+    combos: toCombos(reqsAll.map((r) => storeOf(r.requester_id)).filter((d): d is StoreDims => d !== null)),
+    places: placesOut,
+    summary: {
+      storesWithTickets: seenStores.size,
+      redFlagCount: redFlag.length,
+      redFlagStores: redFlag.slice(0, 8).map((d) => ({ code: d.code, name: d.name, region: d.region, cluster: d.cluster, acOpen: d.acOpen, acTotal: d.acTotal, acPct: d.acPct })),
+      nsoStores: [...seenStores.values()].filter((d) => d.stype === 'NSO').length,
+      nsoTickets: reqs.filter((r) => storeOf(r.requester_id)?.stype === 'NSO').length,
+    },
   }
 
   // ── Task KPIs ─────────────────────────────────────────────────────────────
@@ -649,6 +731,7 @@ export async function getAnalytics(
     backlogAging,
     dailyActivity,
     requestFlow,
+    stores: storeSection,
     tasksOpen,
     tasksOverdue,
     tasksDoneInPeriod,

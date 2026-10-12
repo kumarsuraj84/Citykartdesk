@@ -10,6 +10,8 @@ import { getCurrentProfile, getEnabledModules } from '@/lib/queries/profiles'
 import { autoCloseRequests } from '@/lib/actions/requests'
 import { createClient } from '@/lib/supabase/server'
 import { StatusBadge } from '@/components/requests/RequestBadges'
+import { StoreSnapshotCard } from '@/components/home/StoreSnapshotCard'
+import { resolveReportAccess, type ReportViewerScope } from '@/lib/reporting/access'
 import { SLABadge } from '@/components/requests/SLABadge'
 import { getHomeProjectsSummary, type HomeProjectsSummary } from '@/lib/queries/projects'
 import { getAssignedWorkCounts } from '@/lib/queries/requests'
@@ -302,6 +304,7 @@ async function DashboardBody({
   isManager,
   userId,
   tab,
+  storeScope,
 }: {
   dashPromise: Promise<HomeDashboardData | null>
   projectsSummaryPromise: Promise<HomeProjectsSummary>
@@ -312,6 +315,8 @@ async function DashboardBody({
   isManager: boolean
   userId: string
   tab: string
+  /** managers and admins get a Stores & regions card (limited to their technician groups); everyone else none */
+  storeScope: { orgId: string; scope: ReportViewerScope } | null
 }) {
   const [dashData, projectsSummary, workCounts] = await Promise.all([
     dashPromise,
@@ -491,6 +496,12 @@ async function DashboardBody({
                     <KpiCard label="Pending Approval" value={pendingApprovalCount} sublabel="Awaiting review"  accent="#8B5CF6" href="/approvals" />
                   </>)}
                 </div>
+
+                {storeScope && (
+                  <Suspense fallback={null}>
+                    <StoreSnapshotCard orgId={storeScope.orgId} scope={storeScope.scope} />
+                  </Suspense>
+                )}
 
                 {isAgent && (myQueue.length > 0 || !isManager) && (
                   <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -952,6 +963,8 @@ export default async function HomePage({
       })
       .then((r) => r.data as HomeDashboardData | null)
   )
+  const access = resolveReportAccess(profile, 'requests')
+  const storeScope = isManager && hasRequests && profile.org_id && 'scope' in access ? { orgId: profile.org_id, scope: access.scope } : null
   const projectsSummaryPromise: Promise<HomeProjectsSummary> = hasProjects
     ? getHomeProjectsSummary()
     : Promise.resolve({ activeCount: 0, blockedCount: 0, milestonesOverdue: 0, milestonesDueSoon: 0, atRiskCount: 0, atRisk: [] })
@@ -979,6 +992,7 @@ export default async function HomePage({
           isManager={isManager}
           userId={profile.id}
           tab={tab}
+          storeScope={storeScope}
         />
       </Suspense>
 

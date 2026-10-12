@@ -84,7 +84,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
         ...(has('requests') ? [{ label: 'Report Builder', href: '/reports/pivot', icon: Table2 }] : []),
         // Ready-made, fixed reports per technician group (Report Builder is for building your own).
         // Requesters have no technician group, so they never see it.
-        ...(has('requests') && (isAgent || isManager || isAdmin) ? [{ label: 'Report Analytics', href: '/reports/analytics', icon: FileBarChart }] : []),
+        ...(has('requests') && (isAgent || isManager || isAdmin) ? [{ label: 'Fixed predefined Reports', href: '/reports/analytics', icon: FileBarChart }] : []),
         ...(isManager || isAdmin ? [{ label: 'Audit Logs', href: '/admin/audit',    icon: Activity  }] : []),
         ...(isAdmin ? [{ label: 'Event Log', href: '/admin/event-log', icon: Activity }] : []),
       ],

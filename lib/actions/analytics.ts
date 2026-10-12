@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { authorizeReportAccess, agentScopeOrFilter } from '@/lib/reporting/access'
 import { resolvePeriodParam, type PeriodParam } from '@/lib/queries/analytics'
 import { applyCurrentlyBreachedFilter } from '@/lib/sla/breach'
+import { storeFilterCount, type StoreFilter } from '@/lib/analytics/store-filter'
+import { storeCodesMatching } from '@/lib/queries/store-dims'
 import type { Database } from '@/types/database'
 import type { ProfileWithTeams } from '@/types'
 
@@ -24,6 +26,8 @@ export type DrawerFilter = {
   teamId?: string
   /** Technician groups picked on the dashboard — narrows further, never past the viewer's own scope. */
   groupIds?: string[]
+  /** Store Master choices (region, cluster, ...) picked on the dashboard: only requests of the stores that pass are listed. */
+  store?: StoreFilter
   assignedTo?: string
   slaBreached?: boolean
   frtBreached?: boolean
@@ -106,6 +110,14 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
     const admin = createAdminClient()
     const now   = new Date().toISOString()
 
+    // Store Master choices narrow the list to the requests of the stores that pass them (the same stores the dashboard's numbers count)
+    const storeActive = !!filter.store && storeFilterCount(filter.store) > 0
+    let storeCodes: string[] = []
+    if (storeActive) {
+      storeCodes = await storeCodesMatching(admin as never, profile.org_id!, filter.store!)
+      if (storeCodes.length === 0) return { data: [] }
+    }
+
     let q = admin
       .from('requests')
       .select(`
@@ -113,9 +125,10 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
         assigned_to, team_id, resolution_due_at, response_due_at, responded_at,
         assignee:profiles!requests_assigned_to_fkey(full_name),
         team:teams(name),
-        service:services(name)
+        service:services(name)${storeActive ? ', requester:profiles!requests_requester_id_fkey!inner(store:stores!inner(code))' : ''}
       `)
       .eq('org_id', profile.org_id!)
+    if (storeActive) q = q.in('requester.store.code', storeCodes)
 
     // Caller-supplied filters narrow further, but can never widen past the
     // viewer's own resolved scope — a user/agent passing someone else's
@@ -171,7 +184,7 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
     }
 
     return {
-      data: ((data ?? []) as RequestQueryRow[]).map((r) => ({
+      data: ((data ?? []) as unknown as RequestQueryRow[]).map((r) => ({
         id: r.id, title: r.title, status: r.status, priority: r.priority,
         created_at: r.created_at, resolved_at: r.resolved_at,
         assigned_to: r.assigned_to, team_id: r.team_id,

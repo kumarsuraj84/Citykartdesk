@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { AnalyticsDashboard } from '@/app/(app)/admin/reports/AnalyticsDashboard'
 import { GroupFilter } from '@/components/analytics/GroupFilter'
+import { StoreFilter } from '@/components/analytics/StoreFilter'
+import { parseStoreFilter, storeFilterQS } from '@/lib/analytics/store-filter'
 import { CapacityBanner } from '@/components/analytics/CapacityBanner'
 import { highestOpenAgents } from '@/lib/analytics/highest-open'
 import { getWorkloadReport } from '@/lib/queries/workload'
@@ -40,9 +42,11 @@ export default async function TechnicianDashboardPage({
   const groups = await getSelectableGroups(profile, access.scope)
   const { scope, selected } = narrowScopeToGroups(access.scope, parseGroupsParam(sp.groups), groups.map((g) => g.id))
   const groupsQS = selected.length ? `&groups=${selected.join(',')}` : ''
+  const storeFilter = parseStoreFilter(sp)
+  const storeQS = storeFilterQS(storeFilter)
 
   const [analytics, workload, workloadRows] = await Promise.all([
-    getAnalytics(profile.org_id, period, scope),
+    getAnalytics(profile.org_id, period, scope, storeFilter),
     getTechnicianWorkloadBoard(profile.org_id, scope),
     // Who carries the biggest backlog in the technician's own groups — same banner managers see.
     getWorkloadReport(profile.org_id, teamIdsForScope(scope)),
@@ -58,11 +62,12 @@ export default async function TechnicianDashboardPage({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <GroupFilter groups={groups} selected={selected} />
+          <StoreFilter combos={analytics.stores.combos} selected={storeFilter} />
           <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 gap-0.5">
             {PERIOD_OPTIONS.map((o) => (
               <Link
                 key={o.value}
-                href={`?period=${o.value}${groupsQS}`}
+                href={`?period=${o.value}${groupsQS}${storeQS}`}
                 className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
                   period === o.value ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}

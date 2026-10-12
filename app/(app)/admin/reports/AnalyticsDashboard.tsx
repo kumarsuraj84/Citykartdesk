@@ -19,6 +19,7 @@ import {
 } from '@/components/analytics/Charts'
 import { fmtHours } from '@/lib/utils/fmt'
 import { DetailDrawer } from '@/components/analytics/DetailDrawer'
+import { StoreMasterWidget } from '@/components/analytics/StoreMasterWidget'
 import { TechnicianWorkloadCard } from '@/components/home/TechnicianWorkloadCard'
 import { ACTIVE_TECH_STATUSES, type TechnicianWorkloadRow } from '@/lib/queries/technicianWorkloadShared'
 import type { DrawerFilter } from '@/lib/actions/analytics'
@@ -505,6 +506,15 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds 
       },
     ]
 
+    // Region / state / cluster wise numbers from the Store Master (left out when the organisation has no stores)
+    if (data.stores.combos.length > 0 || data.stores.summary.storesWithTickets > 0) {
+      list.push({
+        id: 'stores-regions',
+        span: 'full',
+        node: <StoreMasterWidget stores={data.stores} period={data.period} onOpen={setDrawer} />,
+      })
+    }
+
     // Moved here from Home; scoped by viewer (a manager only ever gets their
     // own team(s), admin/owner get every team — see lib/reporting/access.ts).
     if (technicianWorkload.length > 0) {
@@ -764,7 +774,7 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds 
 
   return (
     <>
-      <DetailDrawer filter={drawer} onClose={close} groupIds={groupIds} />
+      <DetailDrawer filter={drawer} onClose={close} groupIds={groupIds} storeFilter={data.stores.filter} />
 
       <div className="space-y-4">
 

@@ -3,30 +3,17 @@
 import { useTransition } from 'react'
 import { Download, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { exportStoreAcReportXlsx } from '@/lib/actions/analyticsReportExport'
+import { exportFixedReportXlsx } from '@/lib/actions/fixedReportExport'
 import { downloadXlsxBase64 } from '@/lib/export/xlsx'
 
-export type StoreAcExportProps = {
-  slug: string; group: string; services: string[]; preset: string; from: string; to: string; statuses: string[]
-  /** the chosen filters, as f_<name> -> value */
-  filters: Record<string, string>
-  groupBy: string; redFlagPercent: number
-}
-
-export function ExportStoreAcButton({ collapsed, ...p }: StoreAcExportProps & {
-  /** What the viewer has folded on screen — the Excel file follows it. */
-  collapsed: string[]
-}) {
+export function ExportReportButton({ slug, choice }: { slug: string; choice?: { status?: string; tech?: string } }) {
   const [pending, start] = useTransition()
   return (
     <button
       type="button"
       disabled={pending}
       onClick={() => start(async () => {
-        const res = await exportStoreAcReportXlsx(p.slug, {
-          group: p.group, service: p.services, preset: p.preset, from: p.from, to: p.to, status: p.statuses,
-          filters: p.filters, groupBy: p.groupBy, redFlagPercent: String(p.redFlagPercent), collapsed,
-        })
+        const res = await exportFixedReportXlsx(slug, choice)
         if (res.error || !res.data || !res.filename) { toast.error(res.error || 'Export failed.'); return }
         downloadXlsxBase64(res.filename, res.data)
         toast.success('Report exported.')

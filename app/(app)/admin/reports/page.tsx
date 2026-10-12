@@ -11,6 +11,8 @@ import { ScheduledReportsClient } from './ScheduledReportsClient'
 import { CapacityBanner } from '@/components/analytics/CapacityBanner'
 import { highestOpenAgents } from '@/lib/analytics/highest-open'
 import { GroupFilter } from '@/components/analytics/GroupFilter'
+import { StoreFilter } from '@/components/analytics/StoreFilter'
+import { parseStoreFilter, storeFilterQS, STORE_FILTER_KEYS } from '@/lib/analytics/store-filter'
 import { parseGroupsParam, narrowScopeToGroups, teamIdsForScope } from '@/lib/analytics/group-filter'
 import { getSelectableGroups } from '@/lib/queries/dashboardGroups'
 import { getScheduledReports } from '@/lib/actions/admin/reports'
@@ -58,6 +60,9 @@ export default async function ReportsPage({
     viewerScope, parseGroupsParam(sp.groups), selectableGroups.map((g) => g.id)
   )
   const groupsQS = selectedGroups.length ? `&groups=${selectedGroups.join(',')}` : ''
+  // Store Master choices (region, cluster, ...): narrow every number on the Requests and SLA tabs, kept in every link like the group choice
+  const storeFilter = parseStoreFilter(sp)
+  const storeQS = storeFilterQS(storeFilter)
   const period       = (isPeriod(sp.period) ? sp.period : '30d') as Period
   const hasCustomRange = isValidISODate(sp.from) && isValidISODate(sp.to) && sp.from <= sp.to
   const periodParam: PeriodParam = hasCustomRange ? { from: sp.from, to: sp.to } : period
@@ -97,7 +102,7 @@ export default async function ReportsPage({
     { data: scheduledReports = [] },
     technicianWorkload,
   ] = await Promise.all([
-    (tab === 'requests' || tab === 'sla') && hasRequests ? getAnalytics(profile.org_id, periodParam, dashScope) : Promise.resolve(null),
+    (tab === 'requests' || tab === 'sla') && hasRequests ? getAnalytics(profile.org_id, periodParam, dashScope, storeFilter) : Promise.resolve(null),
     tab === 'tasks'    && hasTasks    ? getTaskAnalytics(profile.org_id, periodParam) : Promise.resolve(null),
     hasRequests || hasTasks ? getWorkloadReport(profile.org_id, teamIdsForScope(dashScope)) : Promise.resolve([]),
     tab === 'projects' && hasProjects ? getProjectAnalytics(profile.org_id) : Promise.resolve(null),
@@ -131,6 +136,7 @@ export default async function ReportsPage({
 
         <div className="flex flex-wrap items-center gap-2">
         <GroupFilter groups={selectableGroups} selected={selectedGroups} />
+        {requestData && (tab === 'requests' || tab === 'sla') && <StoreFilter combos={requestData.stores.combos} selected={storeFilter} />}
         {/* Period toggle */}
         {showPeriod && (
           <div className="flex flex-wrap items-center gap-2">
@@ -138,7 +144,7 @@ export default async function ReportsPage({
               {PERIODS.map((p) => (
                 <Link
                   key={p.value}
-                  href={`?tab=${tab}&period=${p.value}${groupsQS}`}
+                  href={`?tab=${tab}&period=${p.value}${groupsQS}${storeQS}`}
                   className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
                     !hasCustomRange && period === p.value
                       ? 'bg-background shadow-sm text-foreground'
@@ -154,6 +160,7 @@ export default async function ReportsPage({
             <form className={`flex items-center gap-1.5 rounded-lg border p-0.5 pl-2.5 ${hasCustomRange ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/40'}`}>
               <input type="hidden" name="tab" value={tab} />
               {selectedGroups.length > 0 && <input type="hidden" name="groups" value={selectedGroups.join(',')} />}
+              {STORE_FILTER_KEYS.filter((k) => storeFilter[k].length > 0).map((k) => <input key={k} type="hidden" name={`st_${k}`} value={storeFilter[k].join('|')} />)}
               <input
                 type="date"
                 name="from"
@@ -172,7 +179,7 @@ export default async function ReportsPage({
               </button>
             </form>
             {hasCustomRange && (
-              <Link href={`?tab=${tab}&period=30d${groupsQS}`} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+              <Link href={`?tab=${tab}&period=30d${groupsQS}${storeQS}`} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
                 Clear
               </Link>
             )}
@@ -191,7 +198,7 @@ export default async function ReportsPage({
           return (
             <Link
               key={t.id}
-              href={`?tab=${t.id}${showPeriod || t.id === 'requests' || t.id === 'tasks' ? periodQS : ''}${groupsQS}`}
+              href={`?tab=${t.id}${showPeriod || t.id === 'requests' || t.id === 'tasks' ? periodQS : ''}${groupsQS}${storeQS}`}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium border-b-2 transition-colors -mb-px ${
                 active
                   ? 'border-primary text-foreground'

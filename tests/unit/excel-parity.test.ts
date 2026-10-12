@@ -6,7 +6,8 @@
 import { describe, it, expect } from 'vitest'
 import fixture from '../fixtures/zoho-report-parity.json'
 import { ageBucketLabel } from '@/lib/reporting/aging'
-import { buildAgeSummary } from '@/lib/reporting/analytics/age-summary'
+import { buildFixedReport, findFixedReport } from '@/lib/reporting/analytics/fixed-reports'
+import { fact } from './helpers/fact'
 import { ageInDays, daysFrom, isNsoStore, makeFact, monthLabel, weekOfMonth, type AcFormFields, type RawTicket } from '@/lib/reporting/analytics/facts'
 
 type Row = (typeof fixture.tickets)[number]
@@ -186,21 +187,25 @@ describe('AC Not Working % and Red Flag match the Excel', () => {
   })
 })
 
-describe('the Tickets Summary matches the Excel "Admin Zoho Report" pivot', () => {
+describe('the Admin Summary Report matches the Excel "Admin Zoho Report" pivot', () => {
   it('counts the tickets that are still being worked by Responsible, Category and age bucket exactly as the pivot does', () => {
-    const rows = tickets
+    const facts = tickets
       .filter((t) => STILL_OPEN.includes(t.status) && ['Arun Das', 'Krishan', 'Shivanshu'].includes(t.responsible))
-      .map((t) => ({ technician: t.responsible, category: t.category, ageDays: t.age }))
-    const summary = buildAgeSummary(rows)
+      .map((t, i) => fact({ ticketNo: `T${i}`, technician: t.responsible, category: t.category, ageDays: t.age, ageBucket: ageBucketLabel(t.age) }))
+    const table = buildFixedReport({ def: findFixedReport('admin-summary-report')!, facts, statusLabel: (s) => s })
+    const lines = table.rows.filter((r) => r.kind === 'row')
+    const cell = (tech: string, cat: string, key: string) => {
+      const ci = table.columns.findIndex((c) => c.key === key)
+      // a technician's name is only on its first line: walk up to it
+      const idx = table.rows.findIndex((r) => r.kind === 'row' && r.key === `${tech}|${cat}`)
+      return idx < 0 ? undefined : table.rows[idx].cells[ci]
+    }
     expect(fixture.pivot.length).toBeGreaterThan(15)
     for (const p of fixture.pivot) {
-      const tech = summary.technicians.find((x) => x.name === p.responsible)
-      const cat = tech?.categories.find((c) => c.name === p.category)
-      expect(cat, `${p.responsible} / ${p.category}`).toBeTruthy()
-      for (const b of fixture.pivotBuckets) expect(cat!.counts[b] ?? 0, `${p.responsible} / ${p.category} / ${b}`).toBe(p.counts[b as keyof typeof p.counts])
-      expect(cat!.total).toBe(p.total)
+      for (const b of fixture.pivotBuckets) expect(cell(p.responsible, p.category, `b:${b}`) || 0, `${p.responsible} / ${p.category} / ${b}`).toBe(p.counts[b as keyof typeof p.counts])
+      expect(cell(p.responsible, p.category, 'total'), `${p.responsible} / ${p.category}`).toBe(p.total)
     }
-    // and nothing in the summary that the pivot does not have
-    expect(summary.technicians.flatMap((t) => t.categories).length).toBe(fixture.pivot.length)
+    // and nothing in the report that the pivot does not have
+    expect(lines.length).toBe(fixture.pivot.length)
   })
 })

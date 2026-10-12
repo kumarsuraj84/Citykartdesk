@@ -14,9 +14,6 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 
 import { updateUserEmail, updateUserProfile } from '@/lib/actions/admin/users'
-import { loadTicketDetailReport } from '@/lib/queries/report-analytics'
-import { DEFAULT_REPORT_STATUSES } from '@/lib/reporting/analytics/catalog'
-import type { ProfileWithTeams } from '@/types'
 
 vi.setConfig({ testTimeout: 60_000 })
 
@@ -71,12 +68,11 @@ describe('a store login renamed from NLD to NEG, with its e-mail', () => {
     await fx?.cleanup()
   }, 120_000)
 
-  const viewer = () => ({ id: fx.admin.id, role: 'admin', org_id: fx.orgId, team_members: [] }) as unknown as ProfileWithTeams
   const store = async () => (await admin.from('stores').select('code, name').eq('id', made.stores[0]).single()).data!
+  // the requester and store of the tickets, as every report reads them (through the requester's profile)
   const tickets = async () => {
-    const res = await loadTicketDetailReport(viewer(), 'ticket-detail-age-bucket', { group: fx.teamA.id, statuses: DEFAULT_REPORT_STATUSES })
-    if ('error' in res) throw new Error(res.error)
-    return res.rows.map((r) => [r.requester, r.store])
+    const { data } = await admin.from('requests').select('requester:profiles!requests_requester_id_fkey(full_name, store:stores(name))').eq('team_id', fx.teamA.id).in('status', ['open', 'assigned', 'in_progress', 'waiting_user'])
+    return ((data ?? []) as unknown as { requester: { full_name: string; store: { name: string } | null } | null }[]).map((r) => [r.requester?.full_name, r.requester?.store?.name])
   }
 
   it('the new name shows on the previous tickets and in the store lists, because the store is renamed with its login', async () => {
