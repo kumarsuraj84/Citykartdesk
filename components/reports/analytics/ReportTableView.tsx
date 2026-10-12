@@ -9,8 +9,10 @@ import { ReportDetail } from './ReportDetail'
 // thin grey grid. Drawn like a sheet of paper (fixed colours, not the app theme), the same as the exported Excel file.
 const COLOR = { head: '#4F81BD', peach: '#FBD9C3', tech: '#DCE6F1', total: '#B8CCE4', grid: '#C9D1DE', text: '#1F2937' }
 /** Small text and thin rows; each column is only as wide as its longest value (never wider than three quarters of its nominal width, which is where long text is cut). */
-const CHAR_PX = 5.7
-const PAD_PX = 14
+const CHAR_PX = 6.1
+/** Bold capital headings are wider per character than the values. */
+const HEAD_PX = 6.9
+const PAD_PX = 19
 const CAP = 0.75
 const SHEET_FONT = "Calibri, Carlito, 'Segoe UI', Arial, sans-serif"
 
@@ -34,13 +36,17 @@ export function ReportTableView({ table, choice }: { table: ReportTable; choice?
 
   // the width each column needs: its longest value or its heading
   const fit = columns.map((c, ci) => {
-    // a short heading stays on one line; a long one wraps, so only its longest word counts
-    let chars = c.label.length <= 12 ? c.label.length : Math.max(...c.label.split(' ').map((x) => x.length))
+    // a short heading stays on one line; a long one wraps, so only its longest word counts (the column is never narrower than that)
+    const headChars = c.label.length <= 14 ? c.label.length : Math.max(...c.label.split(' ').map((x) => x.length))
+    const headPx = Math.ceil(headChars * HEAD_PX) + PAD_PX
+    let chars = 3
     for (const r of rows) {
       if (r.kind !== 'row' && ci < lead) continue // a Total line's label spans the leading columns
       chars = Math.max(chars, cellText(r.cells[ci], c).length)
     }
-    return Math.min(Math.round(c.width * CAP), Math.ceil(chars * CHAR_PX) + PAD_PX)
+    const bodyPx = Math.ceil(chars * CHAR_PX) + PAD_PX
+    // a short value (a code, a date, a status) always fits; only long text is cut at the cap
+    return Math.max(headPx, chars <= 16 ? bodyPx : Math.min(Math.round(c.width * CAP), bodyPx))
   })
   const w = (c: ReportColumn) => fit[columns.indexOf(c)]
   const left = columns.map((_, i) => fit.slice(0, i).reduce((n, x) => n + x, 0))
@@ -117,7 +123,7 @@ export function ReportTableView({ table, choice }: { table: ReportTable; choice?
                 if (hasGroups && c.peach) return null
                 return c.peach
                   ? <th key={c.key} className="border px-1 py-0.5 text-center text-[11px] font-bold" style={peachStyle}>{c.label}</th>
-                  : <th key={c.key} className={`border px-1.5 py-0.5 text-[11px] font-bold text-white ${align(c)} ${i < lead ? 'md:sticky md:z-30' : 'whitespace-nowrap'}`} style={{ ...headStyle, left: left[i] }}>{c.label}</th>
+                  : <th key={c.key} className={`border px-1.5 py-0.5 text-[11px] font-bold text-white ${align(c)} break-words ${i < lead ? 'md:sticky md:z-30' : ''}`} style={{ ...headStyle, left: left[i] }}>{c.label}</th>
               })}
             </tr>
           </thead>

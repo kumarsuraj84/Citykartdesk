@@ -243,14 +243,12 @@ export function buildFixedReport(input: BuildInput): ReportTable {
       .map((g) => ({ key: g.key, items: g.items, first: g.items[0] }))
       .filter((s) => !red || s.first.redFlag === 'Yes')
     const buckets = red ? [] : usedBuckets(stores.flatMap((s) => s.items))
-    const pctOf = (n: number, ac: number | null) => (ac && ac > 0 ? n / ac : '')
     lead = 1
     columns = [col('store', 'Requester', 70), col('city', 'CITY', 140), col('cluster', 'CLUSTER', 70), col('plist', 'PRIORITY LIST', 100), col('amc', 'AMC BRAND', 100),
       numCol('ac', 'AC TOTAL', 66), col('zen', 'ZENATIX', 72, { align: 'center' }),
       ...bucketCols(buckets),
-      ...buckets.map((b) => numCol(`p:${b}`, b, 62, { align: 'center', pct: true })),
-      numCol('total', 'Total Ticket', 72, { peach: true }), numCol('pct', 'Total Sum of Ticket %', 100, { peach: true, pct: true })]
-    if (!red) headGroups = [{ label: 'Ticket', from: 7, span: buckets.length }, { label: 'Sum of Ticket %', from: 7 + buckets.length, span: buckets.length }]
+      numCol('total', 'Total Ticket', 72, { peach: true })]
+    if (!red) headGroups = [{ label: 'Ticket', from: 7, span: buckets.length }]
     const sorted = [...stores].sort((x, y) => (y.first.acNotWorkingPct ?? -1) - (x.first.acNotWorkingPct ?? -1) || byName(x.key, y.key))
     for (const s of sorted) {
       const f = s.first
@@ -259,21 +257,17 @@ export function buildFixedReport(input: BuildInput): ReportTable {
       const inBucket = (x: string) => s.items.filter((t) => t.ageBucket === x)
       rows.push(row(s.key, 'row', [s.key, f.city || '', f.cluster || NO_CLUSTER, f.priorityList || '', f.acAmcBrand || '', ac ?? '', f.zenatix || '',
         ...buckets.map((x) => inBucket(x).length || ''),
-        ...buckets.map((x) => (inBucket(x).length ? pctOf(inBucket(x).length, ac) : '')),
-        s.items.length, pctOf(s.items.length, ac)],
-      [all, all, all, all, all, all, all, ...buckets.map((x) => refs(inBucket(x))), ...buckets.map((x) => refs(inBucket(x))), all, all]))
+        s.items.length],
+      [all, all, all, all, all, all, all, ...buckets.map((x) => refs(inBucket(x))), all]))
     }
     if (rows.length > 0) {
       const allT = stores.flatMap((s) => s.items)
-      const acSum = (list: typeof stores) => sum(list.map((s) => s.first.acTotal ?? 0))
-      const bucketStores = (x: string) => stores.filter((s) => s.items.some((t) => t.ageBucket === x))
       const countIn = (x: string) => allT.filter((t) => t.ageBucket === x).length
       const grandRefs = refs(allT)
       rows.push(row('grand', 'grand', ['Grand Total', '', '', '', '', '', '',
         ...buckets.map((x) => countIn(x) || ''),
-        ...buckets.map((x) => pctOf(countIn(x), acSum(bucketStores(x)))),
-        allT.length, pctOf(allT.length, acSum(stores))],
-      [undefined, undefined, undefined, undefined, undefined, undefined, undefined, ...buckets.map((x) => refs(allT.filter((t) => t.ageBucket === x))), ...buckets.map((x) => refs(allT.filter((t) => t.ageBucket === x))), grandRefs, grandRefs]))
+        allT.length],
+      [undefined, undefined, undefined, undefined, undefined, undefined, undefined, ...buckets.map((x) => refs(allT.filter((t) => t.ageBucket === x))), grandRefs]))
     }
   }
 

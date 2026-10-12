@@ -115,22 +115,21 @@ describe('AC reports', () => {
   const ac = (no: string, store: string, o: Partial<ReturnType<typeof fact>> = {}) =>
     fact({ ticketNo: no, store, requester: store, acTotal: 10, acAmcBrand: 'DAIKIN', acAmcVendor: 'SHREYASH', ...o })
 
-  it('Store AC Not Working: a line per store with its tickets by age and as a share of its ACs, worst first', () => {
+  it('Store AC Not Working: a line per store with its tickets by age, worst first, with no Sum of Ticket % columns', () => {
     const a = ac('A1', 'LSR', { acNotWorkingPct: 40, redFlag: 'Yes', ageBucket: '0–5 days' })
     const b = ac('A2', 'LSR', { acNotWorkingPct: 40, redFlag: 'Yes', ageBucket: '6–10 days' })
     const c = ac('A3', 'KGP', { acNotWorkingPct: 10, redFlag: 'No', ageBucket: '0–5 days' })
     const t = build('store-ac-not-working-report', [c, a, b])
     expect(t.rows.map((r) => r.cells[0])).toEqual(['LSR', 'KGP', 'Grand Total'])
-    expect(t.headGroups.map((g) => g.label)).toEqual(['Ticket', 'Sum of Ticket %'])
+    expect(t.headGroups.map((g) => g.label)).toEqual(['Ticket'])
+    expect(t.columns.map((c) => c.label).some((l) => /%/.test(l))).toBe(false)
+    expect(t.columns.at(-1)?.label).toBe('Total Ticket')
     const lsr = t.rows[0]
     expect(lsr.cells[col(t, 'total')]).toBe(2)
-    expect(lsr.cells[col(t, 'pct')]).toBeCloseTo(0.2)
-    expect(lsr.cells[col(t, 'p:6–10 days')]).toBeCloseTo(0.1)
-    // the Grand Total share is tickets over the ACs of the stores that have them
+    expect(lsr.cells[col(t, 'b:0–5 days')]).toBe(1)
     const grand = t.rows.at(-1)!
     expect(grand.cells[col(t, 'total')]).toBe(3)
-    expect(grand.cells[col(t, 'pct')]).toBeCloseTo(3 / 20)
-    expect(cellText(lsr.cells[col(t, 'pct')], t.columns[col(t, 'pct')])).toBe('20%')
+    expect(grand.cells.length).toBe(t.columns.length)
   })
   it('Red Flag Store: only stores above 30%, and the Server Room AC is not one of a store’s ACs', () => {
     const red = ac('A1', 'LSR', { acNotWorkingPct: 40, redFlag: 'Yes' })
@@ -139,6 +138,7 @@ describe('AC reports', () => {
     const t = build('red-flag-store-report', [red, fine, server])
     expect(t.rows.map((r) => r.cells[0])).toEqual(['LSR', 'Grand Total'])
     expect(t.headGroups).toEqual([])
+    expect(t.columns.map((c) => c.label).some((l) => /%/.test(l))).toBe(false)
   })
   it('AMC Vendor: a line per ticket by AMC brand and vendor with the OEM ticket and the store’s AC Not Working %', () => {
     const a = ac('A1', 'LSR', { acNo: '9', oemTicketNo: 'B26', oemTicketDate: '2026-10-02', oemBucket: '6-10' })
@@ -225,14 +225,17 @@ describe('Excel is the same table', () => {
     expect(row(XLSX_HEAD_ROW + 3).slice(0, 2)).toEqual(['Arun Das Total', 'Arun Das Total']) // the merged label
     expect(row(ws.rowCount).slice(2)).toEqual([2, 1, 1, 4, '', ''])
   })
-  it('keeps the heading groups and writes percentages as percentages', async () => {
+  it('keeps the heading groups, and writes percentages (the AMC Vendor report’s AC Not Working%) as percentages', async () => {
     const ExcelJS = (await import('exceljs')).default
-    const t = build('store-ac-not-working-report', [fact({ ticketNo: 'A1', store: 'LSR', requester: 'LSR', acNotWorkingPct: 20, ageBucket: '0–5 days' })])
+    const g = build('store-ac-not-working-report', [fact({ ticketNo: 'A0', store: 'LSR', requester: 'LSR', acNotWorkingPct: 20, ageBucket: '0–5 days' })])
+    const gr = new ExcelJS.Workbook()
+    await gr.xlsx.load((await buildReportWorkbook(g).xlsx.writeBuffer()) as ArrayBuffer)
+    expect(gr.worksheets[0].getRow(XLSX_HEAD_ROW).getCell(8).value).toBe('Ticket')
+    const t = build('amc-vendor-report', [fact({ ticketNo: 'A1', store: 'LSR', requester: 'LSR', acNotWorkingPct: 20, ageBucket: '0–5 days' })])
     const read = new ExcelJS.Workbook()
     await read.xlsx.load((await buildReportWorkbook(t).xlsx.writeBuffer()) as ArrayBuffer)
     const ws = read.worksheets[0]
-    expect(ws.getRow(XLSX_HEAD_ROW).getCell(8).value).toBe('Ticket')
-    expect(ws.getRow(XLSX_HEAD_ROW + 2).getCell(col(t, 'pct') + 1).numFmt).toBe('0.0%')
+    expect(ws.getRow(XLSX_HEAD_ROW + 1).getCell(col(t, 'pct') + 1).numFmt).toBe('0.0%')
   })
 })
 
