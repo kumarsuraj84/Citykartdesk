@@ -235,86 +235,173 @@ describe('Excel is the same table', () => {
   })
 })
 
-// ── the status and technician filters ───────────────────────────────────────────────────────────
-import { applyReportFilterToParams, linkedOptions, parseReportFilter, type FilterCombo } from '@/lib/reporting/analytics/report-filter'
+// ── the group, service, technician and status filters ──────────────────────────────────────────
+import {
+  applyReportFilterToParams, choiceFromEffective, effectiveFilter, emptyReportFilter, linkedOptions, parseReportFilter, type FilterCombo, type FilterDefaults,
+} from '@/lib/reporting/analytics/report-filter'
 import { ReportFilters } from '@/components/reports/analytics/ReportFilters'
 
 const push = vi.fn()
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }), usePathname: () => '/reports/analytics/admin-summary-report' }))
 
-const combos: FilterCombo[] = [
-  { status: 'open', tech: 'Krishan', count: 3 }, { status: 'in_progress', tech: 'Krishan', count: 2 },
-  { status: 'open', tech: 'Arun Das', count: 4 }, { status: 'resolved', tech: 'Mukesh', count: 9 },
-]
+const G1 = '11111111-1111-4111-8111-111111111111' // Admin group
+const G2 = '22222222-2222-4222-8222-222222222222' // BD group
+const S1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' // ADMIN - AC (Admin)
+const S2 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' // ADMIN REPAIR (Admin)
+const S3 = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' // BD (BD)
 const OPEN = ['open', 'assigned', 'in_progress', 'waiting_user', 'hold_purchase_ho', 'pending_approval']
+const combos: FilterCombo[] = [
+  { group: G1, service: S1, status: 'open', tech: 'Krishan', count: 3 }, { group: G1, service: S2, status: 'in_progress', tech: 'Shivanshu', count: 2 },
+  { group: G1, service: S2, status: 'open', tech: 'Shivanshu', count: 4 }, { group: G2, service: S3, status: 'open', tech: 'Mukesh', count: 5 },
+  { group: G2, service: S3, status: 'resolved', tech: 'Mukesh', count: 9 },
+]
+const groups = [{ id: G1, name: 'ADMIN GROUP' }, { id: G2, name: 'BD Group' }]
+const services = [{ id: S1, name: 'ADMIN - AC', groupId: G1 }, { id: S2, name: 'ADMIN REPAIR', groupId: G1 }, { id: S3, name: 'BD', groupId: G2 }]
+const noDefaults: FilterDefaults = { statuses: OPEN, groups: [], services: [] }
+const acDefaults: FilterDefaults = { statuses: OPEN, groups: [], services: [S1] }
+const adminDefaults: FilterDefaults = { statuses: OPEN, groups: [G1], services: [] }
+const eff = (o: Partial<ReturnType<typeof effectiveFilter>> = {}) => ({ statuses: OPEN, techs: [], groups: [], services: [], ...o })
 
 describe('filter choices in the page address', () => {
-  it('reads statuses and technicians, dropping anything unknown', () => {
-    const f = parseReportFilter({ status: 'resolved,open,bogus', tech: 'Krishan|Arun Das|Krishan' })
+  it('reads groups, services, technicians and statuses, dropping anything unknown', () => {
+    const f = parseReportFilter({ status: 'resolved,open,bogus', tech: 'Krishan|Arun Das|Krishan', group: `${G1},${G2},not-an-id`, service: S1 })
     expect(f.statuses).toEqual(['open', 'resolved'])
     expect(f.techs).toEqual(['Krishan', 'Arun Das'])
-    expect(parseReportFilter({})).toEqual({ statuses: [], techs: [] })
+    expect(f.groups).toEqual([G1, G2])
+    expect(f.services).toEqual([S1])
+    expect(parseReportFilter({})).toEqual(emptyReportFilter())
+    expect(parseReportFilter({ group: 'all', service: 'all' })).toMatchObject({ groups: [], services: [], allGroups: true, allServices: true })
   })
-  it('writes them back, and a status choice equal to the report’s own is no choice', () => {
-    const p = new URLSearchParams('status=resolved&tech=X')
-    applyReportFilterToParams(p, { statuses: OPEN, techs: ['Krishan'] }, OPEN)
-    expect(p.get('status')).toBeNull()
-    expect(p.get('tech')).toBe('Krishan')
-    applyReportFilterToParams(p, { statuses: ['resolved'], techs: [] }, OPEN)
-    expect(p.get('status')).toBe('resolved')
-    expect(p.get('tech')).toBeNull()
+  it('writes the choices back to the address and reads them again', () => {
+    const p = new URLSearchParams('tab=x&group=old')
+    applyReportFilterToParams(p, { ...emptyReportFilter(), groups: [G1, G2], services: [S1], techs: ['Krishan'], statuses: ['resolved'] })
+    expect(parseReportFilter(Object.fromEntries(p))).toMatchObject({ groups: [G1, G2], services: [S1], techs: ['Krishan'], statuses: ['resolved'] })
+    applyReportFilterToParams(p, emptyReportFilter())
+    expect([...p.keys()]).toEqual(['tab'])
   })
 })
 
-describe('the two filters follow each other', () => {
-  it('shows the technicians who have tickets in the chosen statuses', () => {
-    expect(linkedOptions(combos, OPEN, []).techs.map((t) => t.value)).toEqual(['Krishan', 'Arun Das'])
-    expect(linkedOptions(combos, ['resolved'], []).techs.map((t) => t.value)).toEqual(['Mukesh'])
-    expect(linkedOptions(combos, ['open'], []).techs.map((t) => [t.value, t.count])).toEqual([['Arun Das', 4], ['Krishan', 3]])
+describe('what is in force', () => {
+  it('starts on the report’s own group and services, and a choice replaces them', () => {
+    expect(effectiveFilter(emptyReportFilter(), adminDefaults)).toEqual(eff({ groups: [G1] }))
+    expect(effectiveFilter(emptyReportFilter(), acDefaults)).toEqual(eff({ services: [S1] }))
+    expect(effectiveFilter({ ...emptyReportFilter(), groups: [G2] }, adminDefaults)).toEqual(eff({ groups: [G2] }))
+    expect(effectiveFilter({ ...emptyReportFilter(), statuses: ['resolved'] }, noDefaults).statuses).toEqual(['resolved'])
   })
-  it('shows each status with the tickets the chosen technicians have in it', () => {
-    const all = linkedOptions(combos, OPEN, [])
-    expect(all.statuses.find((s) => s.value === 'open')?.count).toBe(7)
-    const krishan = linkedOptions(combos, OPEN, ['Krishan'])
-    expect(krishan.statuses.find((s) => s.value === 'open')?.count).toBe(3)
-    expect(krishan.statuses.find((s) => s.value === 'resolved')?.count).toBe(0)
+  it('a group chosen selects all its services, unless some are picked', () => {
+    // the AC report starts on the service ADMIN - AC; choosing the BD group means all BD services, not ADMIN - AC
+    expect(effectiveFilter({ ...emptyReportFilter(), groups: [G2] }, acDefaults).services).toEqual([])
+    expect(effectiveFilter({ ...emptyReportFilter(), groups: [G1], services: [S2] }, acDefaults).services).toEqual([S2])
   })
-  it('keeps a ticked technician in the list even when the statuses hide their tickets', () => {
-    expect(linkedOptions(combos, ['resolved'], ['Krishan']).techs.find((t) => t.value === 'Krishan')?.count).toBe(0)
+  it('"all" lifts the report’s own starting point', () => {
+    expect(effectiveFilter({ ...emptyReportFilter(), allServices: true }, acDefaults).services).toEqual([])
+    expect(effectiveFilter({ ...emptyReportFilter(), allGroups: true }, adminDefaults).groups).toEqual([])
+  })
+  it('turns what the bar shows back into a choice that does not repeat the report’s own', () => {
+    expect(choiceFromEffective(eff({ groups: [G1] }), adminDefaults)).toEqual(emptyReportFilter())
+    expect(choiceFromEffective(eff({ groups: [] }), adminDefaults)).toMatchObject({ allGroups: true })
+    expect(choiceFromEffective(eff({ services: [] }), acDefaults)).toMatchObject({ allServices: true })
+    expect(choiceFromEffective(eff({ groups: [G2] }), acDefaults)).toMatchObject({ groups: [G2], services: [], allServices: false })
+  })
+})
+
+describe('the four filters follow each other', () => {
+  const names = (l: { value: string }[]) => l.map((x) => x.value)
+  it('shows every group and service when nothing is chosen', () => {
+    const o = linkedOptions(combos, eff())
+    expect(names(o.groups).sort()).toEqual([G1, G2].sort())
+    expect(names(o.services)).toHaveLength(3)
+  })
+  it('a group narrows the service and technician lists to its own', () => {
+    const o = linkedOptions(combos, eff({ groups: [G1] }))
+    expect(names(o.services).sort()).toEqual([S1, S2].sort())
+    expect(names(o.techs).sort()).toEqual(['Krishan', 'Shivanshu'])
+    // its own list still offers the other group, so several groups can be chosen
+    expect(names(o.groups)).toContain(G2)
+  })
+  it('several groups can be chosen at once', () => {
+    const o = linkedOptions(combos, eff({ groups: [G1, G2] }))
+    expect(names(o.services)).toHaveLength(3)
+    expect(names(o.techs)).toContain('Mukesh')
+  })
+  it('a service narrows the groups, technicians and statuses', () => {
+    const o = linkedOptions(combos, eff({ services: [S2] }))
+    expect(names(o.groups)).toEqual([G1])
+    expect(names(o.techs)).toEqual(['Shivanshu'])
+    expect(o.statuses.find((s) => s.value === 'in_progress')?.count).toBe(2)
+  })
+  it('a technician narrows the groups and services, and statuses count tickets in the chosen statuses only', () => {
+    expect(names(linkedOptions(combos, eff({ techs: ['Mukesh'] })).groups)).toEqual([G2])
+    expect(linkedOptions(combos, eff({ techs: ['Mukesh'] })).statuses.find((s) => s.value === 'resolved')?.count).toBe(9)
+    expect(names(linkedOptions(combos, eff()).techs)).not.toContain('Mukesh-resolved')
+    // resolved tickets are not in the open statuses, so a technician who only has resolved ones is not offered
+    expect(names(linkedOptions(combos.filter((c) => c.status === 'resolved'), eff()).techs)).toEqual([])
+  })
+  it('keeps a ticked value in its list with 0 even when the others hide it', () => {
+    expect(linkedOptions(combos, eff({ groups: [G2], services: [S1] })).services.find((s) => s.value === S1)?.count).toBe(0)
   })
 })
 
 describe('the filter bar', () => {
-  const bar = (selected = { statuses: OPEN, techs: [] as string[] }) => render(<ReportFilters combos={combos} defaultStatuses={OPEN} selected={selected} />)
+  const bar = (effective = eff(), defaults = noDefaults) => render(<ReportFilters combos={combos} groups={groups} services={services} defaults={defaults} effective={effective} />)
 
-  it('has a Status and a Technician filter and nothing else', () => {
+  it('has Group, Service, Technician and Status, in that order, and nothing else', () => {
     bar()
-    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Status', 'Technician'])
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Group', 'Service', 'Technician', 'Status'])
   })
-  it('the technician list follows the statuses ticked so far, before Apply', () => {
+  it('several groups can be ticked, and the service list becomes the services of those groups', () => {
     bar()
-    fireEvent.click(screen.getByRole('button', { name: 'Status' }))
-    const statuses = screen.getByRole('listbox', { name: 'Status choices' })
-    fireEvent.click(within(statuses).getByLabelText(/Resolved/))
-    for (const s of ['Open', 'Assigned', 'In Progress', 'Waiting on User']) fireEvent.click(within(statuses).getByLabelText(new RegExp(`^${s}`)))
-    fireEvent.click(screen.getByRole('button', { name: 'Technician' }))
-    const techs = screen.getByRole('listbox', { name: 'Technician choices' })
-    expect(within(techs).getByText('Mukesh')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Group' }))
+    const g = screen.getByRole('listbox', { name: 'Group choices' })
+    fireEvent.click(within(g).getByLabelText(/ADMIN GROUP/))
+    fireEvent.click(within(g).getByLabelText(/BD Group/))
+    fireEvent.click(screen.getByRole('button', { name: 'Service' }))
+    const sv = screen.getByRole('listbox', { name: 'Service choices' })
+    expect(within(sv).getAllByRole('checkbox')).toHaveLength(3)
+    cleanupPanels()
+    fireEvent.click(screen.getByRole('button', { name: 'Group' }))
   })
-  it('Apply puts the choices in the page address', () => {
+  it('choosing a group leaves only its services to pick from, all of them chosen unless some are ticked', () => {
     push.mockClear()
     bar()
-    fireEvent.click(screen.getByRole('button', { name: 'Technician' }))
-    const techs = screen.getByRole('listbox', { name: 'Technician choices' })
-    fireEvent.click(within(techs).getByLabelText(/Krishan/))
-    fireEvent.click(within(techs).getByRole('button', { name: 'Apply' }))
-    expect(push).toHaveBeenCalledWith('/reports/analytics/admin-summary-report?tech=Krishan')
+    fireEvent.click(screen.getByRole('button', { name: 'Group' }))
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'Group choices' })).getByLabelText(/ADMIN GROUP/))
+    fireEvent.click(screen.getByRole('button', { name: 'Service' }))
+    const sv = screen.getByRole('listbox', { name: 'Service choices' })
+    expect(within(sv).getAllByRole('checkbox')).toHaveLength(2)
+    expect(within(sv).getByText(/ADMIN - AC/)).toBeTruthy()
+    expect(within(sv).queryByText(/^BD/)).toBeNull()
+    // nothing ticked in the service list = all services of the group
+    fireEvent.click(within(sv).getByRole('button', { name: 'Apply' }))
+    expect(push).toHaveBeenCalledWith(`/reports/analytics/admin-summary-report?group=${G1}`)
   })
-  it('shows what is chosen and can reset it', () => {
+  it('picking a service as well narrows it, and Apply puts both in the address', () => {
     push.mockClear()
-    bar({ statuses: ['resolved'], techs: ['Mukesh'] })
-    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Status (1)', 'Technician (1)', 'Reset'])
+    bar()
+    fireEvent.click(screen.getByRole('button', { name: 'Group' }))
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'Group choices' })).getByLabelText(/ADMIN GROUP/))
+    fireEvent.click(screen.getByRole('button', { name: 'Service' }))
+    const sv = screen.getByRole('listbox', { name: 'Service choices' })
+    fireEvent.click(within(sv).getByLabelText(/ADMIN REPAIR/))
+    fireEvent.click(within(sv).getByRole('button', { name: 'Apply' }))
+    expect(push).toHaveBeenCalledWith(`/reports/analytics/admin-summary-report?group=${G1}&service=${S2}`)
+  })
+  it('a report that starts on its own group shows it chosen, and can be reset to it', () => {
+    push.mockClear()
+    bar(eff({ groups: [G2] }), adminDefaults)
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Group (1)', 'Service', 'Technician', 'Status', 'Reset'])
     fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
     expect(push).toHaveBeenCalledWith('/reports/analytics/admin-summary-report')
   })
+  it('the technician list follows the group ticked so far, before Apply', () => {
+    bar()
+    fireEvent.click(screen.getByRole('button', { name: 'Group' }))
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'Group choices' })).getByLabelText(/BD Group/))
+    fireEvent.click(screen.getByRole('button', { name: 'Technician' }))
+    const t = screen.getByRole('listbox', { name: 'Technician choices' })
+    expect(within(t).getByText('Mukesh')).toBeTruthy()
+    expect(within(t).queryByText('Krishan')).toBeNull()
+  })
 })
+
+function cleanupPanels() { fireEvent.keyDown(document, { key: 'Escape' }) }

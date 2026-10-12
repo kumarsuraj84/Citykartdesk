@@ -10,6 +10,7 @@ for (const [k, v] of Object.entries(env)) if (!(k in process.env)) process.env[k
 const sql = (q: string): unknown => JSON.parse(execFileSync('docker', ['exec', 'supabase_db_citykart_desk', 'psql', '-U', 'postgres', '-d', 'postgres', '-tA', '-c', q], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim())
 
 const OPEN_LIST = ['open', 'assigned', 'in_progress', 'waiting_user', 'hold_purchase_ho', 'pending_approval']
+const OPEN = "('open','assigned','in_progress','waiting_user','hold_purchase_ho','pending_approval')"
 const res_total = (t: { columns: { key: string }[] }) => t.columns.findIndex((c) => c.key === 'total')
 
 describe('fixed reports (local database)', () => {
@@ -18,6 +19,7 @@ describe('fixed reports (local database)', () => {
     const { createAdminClient } = await import('@/lib/supabase/admin')
     const { loadFixedReport } = await import('@/lib/queries/fixed-reports')
     const { FIXED_REPORTS } = await import('@/lib/reporting/analytics/fixed-reports')
+    const { emptyReportFilter } = await import('@/lib/reporting/analytics/report-filter')
     const admin = createAdminClient()
     const { data: owner } = await admin.from('profiles').select('*, team_members(team_id, is_lead, joined_at, team:teams(*))').eq('role', 'platform_owner').limit(1).single()
     const profile = owner as never
@@ -46,18 +48,38 @@ describe('fixed reports (local database)', () => {
     const base = await loadFixedReport(profile, 'admin-summary-report')
     if ('error' in base) throw new Error(base.error)
     const tech = base.filters.combos.find((c) => c.tech !== 'Unassigned')!.tech
-    const mine = await loadFixedReport(profile, 'admin-summary-report', { statuses: [], techs: [tech] })
+    const mine = await loadFixedReport(profile, 'admin-summary-report', { ...emptyReportFilter(), techs: [tech] })
     if ('error' in mine) throw new Error(mine.error)
     const ofTech = base.filters.combos.filter((c) => c.tech === tech && OPEN_LIST.includes(c.status)).reduce((n, c) => n + c.count, 0)
     expect(mine.table.rows.at(-1)?.cells[res_total(mine.table)]).toBe(ofTech)
     expect(mine.table.rows.filter((r) => r.kind === 'row').every((r) => r.key.startsWith(tech + '|') || r.cells[0] === '' || r.cells[0] === tech)).toBe(true)
-    const resolved = await loadFixedReport(profile, 'admin-summary-report', { statuses: ['resolved'], techs: [] })
+    const resolved = await loadFixedReport(profile, 'admin-summary-report', { ...emptyReportFilter(), statuses: ['resolved'] })
     if ('error' in resolved) throw new Error(resolved.error)
     const resolvedTruth = sql(`select count(*) from requests r join teams t on t.id = r.team_id where t.name = 'ADMIN GROUP' and r.status = 'resolved'`) as number
     expect(resolved.table.rows.at(-1)?.cells[res_total(resolved.table)] ?? 0).toBe(resolvedTruth)
-    expect(resolved.filters.selected.statuses).toEqual(['resolved'])
+    expect(resolved.filters.effective.statuses).toEqual(['resolved'])
     // the lists count every status of the report's scope
-    expect(base.filters.combos.filter((c) => c.status === 'resolved').reduce((n, c) => n + c.count, 0)).toBe(resolvedTruth)
+    const adminId = base.filters.groups.find((g) => g.name === 'ADMIN GROUP')!.id
+    expect(base.filters.combos.filter((c) => c.status === 'resolved' && c.group === adminId).reduce((n, c) => n + c.count, 0)).toBe(resolvedTruth)
+
+    // a group choice replaces the report's own group and selects all its services; a service choice narrows it
+    const groupsOf = base.filters.groups
+    const bd = groupsOf.find((g) => g.name === 'BD Group')
+    if (bd) {
+      const asBd = await loadFixedReport(profile, 'admin-summary-report', { ...emptyReportFilter(), groups: [bd.id] })
+      if ('error' in asBd) throw new Error(asBd.error)
+      const bdTruth = sql(`select count(*) from requests where team_id = '${bd.id}' and status in ${OPEN}`) as number
+      expect(asBd.table.rows.at(-1)?.cells[res_total(asBd.table)] ?? 0).toBe(bdTruth)
+      expect(asBd.filters.effective.groups).toEqual([bd.id])
+    }
+    const adminTeam = groupsOf.find((g) => g.name === 'ADMIN GROUP')!
+    const repairSvc = base.filters.services.find((x) => x.groupId === adminTeam.id && x.name === 'ADMIN REPAIR')
+    if (repairSvc) {
+      const one = await loadFixedReport(profile, 'admin-summary-report', { ...emptyReportFilter(), groups: [adminTeam.id], services: [repairSvc.id] })
+      if ('error' in one) throw new Error(one.error)
+      const oneTruth = sql(`select count(*) from requests where service_id = '${repairSvc.id}' and status in ${OPEN}`) as number
+      expect(one.table.rows.at(-1)?.cells[res_total(one.table)] ?? 0).toBe(oneTruth)
+    }
 
     // a store-side pending report holds only tickets that are waiting on the user
     const pending = await loadFixedReport(profile, 'store-side-pending-tickets-report')

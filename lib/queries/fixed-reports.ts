@@ -1,14 +1,14 @@
 // Loads one fixed predefined report (see lib/reporting/analytics/fixed-reports.ts): the tickets it counts, limited to the technician groups the viewer may see
-// (admins and owners see every group; a manager or technician only their own), turned into the Excel-style table.
+// (admins and owners see every group; a manager or technician only their own), narrowed by the viewer's group / service / technician / status choices,
+// turned into the Excel-style table.
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadAcContext } from '@/lib/queries/store-ac-stats'
-import { canUseReportAnalytics, selectableGroups } from '@/lib/reporting/analytics/catalog'
+import { canUseReportAnalytics, groupDisplayName, selectableGroups } from '@/lib/reporting/analytics/catalog'
 import { makeFact, isNsoStore, DEFAULT_RED_FLAG_PERCENT, type TicketFact, type RawTicket, type FactContext } from '@/lib/reporting/analytics/facts'
 import { techOf } from '@/lib/reporting/analytics/age-summary'
-import { emptyReportFilter, type FilterCombo, type ReportFilter } from '@/lib/reporting/analytics/report-filter'
 import { buildFixedReport, findFixedReport, normName, type FixedReportDef } from '@/lib/reporting/analytics/fixed-reports'
-import { groupDisplayName } from '@/lib/reporting/analytics/catalog'
+import { effectiveFilter, emptyReportFilter, type EffectiveFilter, type FilterCombo, type FilterDefaults, type ReportFilter } from '@/lib/reporting/analytics/report-filter'
 import { referenceDay, resolveDateRange } from '@/lib/reporting/analytics/date-ranges'
 import type { ReportTable } from '@/lib/reporting/analytics/report-table'
 import { STATUS_LABELS } from '@/lib/constants/requests'
@@ -36,14 +36,20 @@ async function fetchAll<T>(build: (from: number, to: number) => PromiseLike<{ da
   return rows
 }
 
-export interface FixedReportResult {
-  def: FixedReportDef
-  table: ReportTable
-  /** what the filter bar needs: the report's tickets by status and technician, its own statuses, and what is chosen */
-  filters: { combos: FilterCombo[]; defaultStatuses: string[]; selected: ReportFilter }
+export interface FilterOptionsData {
+  /** the report's tickets by group, service, status and technician (every status) */
+  combos: FilterCombo[]
+  /** the groups and services the viewer may choose from, for the lists' labels */
+  groups: { id: string; name: string }[]
+  services: { id: string; name: string; groupId: string }[]
+  defaults: FilterDefaults
+  /** what is in force now (a report's starting point where nothing is chosen) */
+  effective: EffectiveFilter
 }
 
-/** The list of reports: every report is open to anyone who may use Report Analytics at all. */
+export interface FixedReportResult { def: FixedReportDef; table: ReportTable; filters: FilterOptionsData }
+
+/** The list of reports: every report is open to anyone who may use the fixed reports at all. */
 export function canOpenFixedReports(profile: Pick<ProfileWithTeams, 'role' | 'org_id'>): boolean {
   return !!profile.org_id && canUseReportAnalytics(profile.role)
 }
@@ -55,33 +61,42 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
   const orgId = profile.org_id!
   const admin = createAdminClient() as unknown as AnyClient
 
-  // the technician groups this report is about, among the ones the viewer may see
+  // the groups and services the viewer may see
   const { data: teamRows } = await admin.from('teams').select('id, name').eq('org_id', orgId).eq('is_active', true)
-  const teams = (teamRows ?? []) as { id: string; name: string }[]
+  const visible = selectableGroups(profile, (teamRows ?? []) as { id: string; name: string }[])
+  const visibleIds = visible.map((t) => t.id)
   const seesAll = profile.role === 'admin' || profile.role === 'platform_owner'
-  let teamIds: string[] | null = null // null = every group (no filter)
-  if (def.group || !seesAll) {
-    const visible = selectableGroups(profile, teams).filter((t) => !def.group || groupDisplayName(t.name).toLowerCase() === def.group.toLowerCase())
-    teamIds = visible.map((t) => t.id)
-  }
-  const statuses = filter.statuses.length > 0 ? (filter.statuses as FixedReportDef['statuses']) : def.statuses
-  const result = (table: ReportTable, combos: FilterCombo[]): FixedReportResult => ({ def, table, filters: { combos, defaultStatuses: def.statuses, selected: { statuses, techs: filter.techs } } })
-  const empty = () => result(buildFixedReport({ def, facts: [], statusLabel, statuses }), [])
-  if (teamIds && teamIds.length === 0) return empty()
+  const { data: svcRows } = await admin.from('services').select('id, name, team_id').eq('org_id', orgId)
+  const services = ((svcRows ?? []) as { id: string; name: string; team_id: string }[]).filter((s) => visibleIds.includes(s.team_id))
 
-  // services by name
-  let serviceIds: string[] | null = null
-  if (def.services) {
-    const wanted = new Set(def.services.map(normName))
-    const { data: svc } = await admin.from('services').select('id, name, team_id').eq('org_id', orgId)
-    serviceIds = ((svc ?? []) as { id: string; name: string; team_id: string }[])
-      .filter((s) => wanted.has(normName(s.name)) && (!teamIds || teamIds.includes(s.team_id))).map((s) => s.id)
-    if (serviceIds.length === 0) return empty()
-  }
+  // where the report starts when nothing is chosen: its own group and/or services
+  const defGroups = def.group ? visible.filter((t) => groupDisplayName(t.name).toLowerCase() === def.group!.toLowerCase()).map((t) => t.id) : []
+  const wanted = new Set((def.services ?? []).map(normName))
+  const defServices = def.services ? services.filter((s) => wanted.has(normName(s.name)) && (defGroups.length === 0 || defGroups.includes(s.team_id))).map((s) => s.id) : []
+  const defaults: FilterDefaults = { statuses: def.statuses, groups: defGroups, services: defServices }
+
+  // choices that name a group or service the viewer may not see are ignored
+  const clean: ReportFilter = { ...filter, groups: filter.groups.filter((g) => visibleIds.includes(g)), services: filter.services.filter((s) => services.some((x) => x.id === s)) }
+  const eff = effectiveFilter(clean, defaults)
+  const optionsData = (combos: FilterCombo[]): FilterOptionsData => ({
+    combos, groups: visible.map((t) => ({ id: t.id, name: t.name })), services: services.map((s) => ({ id: s.id, name: s.name, groupId: s.team_id })), defaults, effective: eff,
+  })
+  const statuses = eff.statuses as FixedReportDef['statuses']
+  const result = (table: ReportTable, combos: FilterCombo[]): FixedReportResult => ({ def, table, filters: optionsData(combos) })
+  const empty = () => result(buildFixedReport({ def, facts: [], statusLabel, statuses }), [])
+  // a report that starts on a group or service the viewer cannot see has nothing to start from
+  const startsOnGroup = !!def.group && defGroups.length === 0 && clean.groups.length === 0 && !clean.allGroups
+  const startsOnService = !!def.services && defServices.length === 0 && clean.services.length === 0 && !clean.allServices && clean.groups.length === 0 && !clean.allGroups
+  if (startsOnGroup || startsOnService) return empty()
+
+  // the groups and services to read: the effective choice, within what the viewer may see
+  const teamIds: string[] | null = eff.groups.length > 0 ? eff.groups : seesAll ? null : visibleIds
+  if (teamIds && teamIds.length === 0) return empty()
+  const serviceIds: string[] | null = eff.services.length > 0 ? eff.services : null
 
   const { acFields, openAcByStore, acServiceIds } = await loadAcContext(admin, orgId)
   const ctx: FactContext = { asOf: new Date(), acFields, openAcByStore, redFlagPercent: DEFAULT_RED_FLAG_PERCENT }
-  const techOk = (f: TicketFact) => filter.techs.length === 0 || filter.techs.includes(techOf(f.technician))
+  const techOk = (f: TicketFact) => eff.techs.length === 0 || eff.techs.includes(techOf(f.technician))
   const keep = (f: TicketFact) => (!def.acOnly || f.isAcTicket) && (!def.nso || f.storeType === 'NSO') && techOk(f)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const scoped = (q: any) => { let x = q.eq('org_id', orgId); if (teamIds) x = x.in('team_id', teamIds); if (serviceIds) x = x.in('service_id', serviceIds); return x }
@@ -104,12 +119,14 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
     dayFacts = dayRaw.map((r) => makeFact(r, ctx)).filter(keep)
   }
 
-  // the report's tickets by status and technician (every status), for the filter bar's linked lists
+  // the report's kind of tickets by group, service, status and technician (every group the viewer may see, every status): the filter bar's linked lists
   const combos = new Map<string, FilterCombo>()
   if (!def.acOnly || acServiceIds.length > 0) {
-    const light = await fetchAll<{ status: string; assignee: { full_name: string | null } | null; requester?: { store: { open_date: string | null } | null } | null }>((from, to) => {
+    type Light = { status: string; team_id: string; service_id: string; assignee: { full_name: string | null } | null; requester?: { store: { open_date: string | null } | null } | null }
+    const light = await fetchAll<Light>((from, to) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q: any = scoped(admin.from('requests').select(`status, assignee:profiles!requests_assigned_to_fkey(full_name)${def.nso ? ', requester:profiles!requests_requester_id_fkey(store:stores(open_date))' : ''}`))
+      let q: any = admin.from('requests').select(`status, team_id, service_id, assignee:profiles!requests_assigned_to_fkey(full_name)${def.nso ? ', requester:profiles!requests_requester_id_fkey(store:stores(open_date))' : ''}`).eq('org_id', orgId)
+      if (!seesAll) q = q.in('team_id', visibleIds)
       if (def.acOnly) q = q.in('service_id', acServiceIds)
       return q.order('id', { ascending: true }).range(from, to)
     })
@@ -118,10 +135,10 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
       const st = r.requester?.store
       if (def.nso && !(st && isNsoStore(st.open_date, now))) continue
       const tech = techOf(r.assignee?.full_name)
-      const k = `${r.status}|${tech}`
+      const k = `${r.team_id}|${r.service_id}|${r.status}|${tech}`
       const c = combos.get(k)
       if (c) c.count++
-      else combos.set(k, { status: r.status, tech, count: 1 })
+      else combos.set(k, { group: r.team_id, service: r.service_id, status: r.status, tech, count: 1 })
     }
   }
   return result(buildFixedReport({ def, facts, dayFacts, day, statusLabel, statuses }), [...combos.values()])

@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { exportFixedReportXlsx } from '@/lib/actions/fixedReportExport'
 import { downloadXlsxBase64 } from '@/lib/export/xlsx'
 
-export function ExportReportButton({ slug, choice }: { slug: string; choice?: { status?: string; tech?: string } }) {
+export function ExportReportButton({ slug, choice }: { slug: string; choice?: { status?: string; tech?: string; group?: string; service?: string } }) {
   const [pending, start] = useTransition()
   return (
     <button

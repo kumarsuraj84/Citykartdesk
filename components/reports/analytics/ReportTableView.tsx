@@ -18,7 +18,7 @@ interface Open { refs: number[]; title: string; subtitle: string }
  * A fixed report as the Excel pivot shows it. Nothing to choose, nothing to fold: every value that has tickets behind it is clickable and opens them in a
  * pop-up (broken down by sub category, category, technician, store or cluster).
  */
-export function ReportTableView({ table, choice }: { table: ReportTable; choice?: { status?: string; tech?: string } }) {
+export function ReportTableView({ table, choice }: { table: ReportTable; choice?: { status?: string; tech?: string; group?: string; service?: string } }) {
   const [open, setOpen] = useState<Open | null>(null)
   const { columns, rows, headGroups, lead } = table
 

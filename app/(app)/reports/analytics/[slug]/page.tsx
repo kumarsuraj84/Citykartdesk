@@ -9,7 +9,7 @@ import { parseReportFilter } from '@/lib/reporting/analytics/report-filter'
 import { ReportTableView } from '@/components/reports/analytics/ReportTableView'
 import { ReportFilters } from '@/components/reports/analytics/ReportFilters'
 
-// One fixed report, drawn like its Excel sheet. Only the ticket status and the technician can be chosen (for now); every value opens the tickets behind it.
+// One fixed report, drawn like its Excel sheet. Only the technician group, service, technician and ticket status can be chosen (for now); every value opens the tickets behind it.
 export default async function FixedReportPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { slug } = await params
   const sp = await searchParams
@@ -34,7 +34,8 @@ export default async function FixedReportPage({ params, searchParams }: { params
       </div>
     )
   }
-  const choice = { status: typeof sp.status === 'string' ? sp.status : undefined, tech: typeof sp.tech === 'string' ? sp.tech : undefined }
+  const pick = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : undefined)
+  const choice = { status: pick('status'), tech: pick('tech'), group: pick('group'), service: pick('service') }
 
   return (
     <div className="space-y-3">
@@ -44,8 +45,8 @@ export default async function FixedReportPage({ params, searchParams }: { params
         <p className="text-xs text-muted-foreground">{res.def.about} {res.table.scopeText}</p>
       </div>
       <ReportFilters
-        key={`${res.filters.selected.statuses.join(',')}|${res.filters.selected.techs.join('|')}`}
-        combos={res.filters.combos} defaultStatuses={res.filters.defaultStatuses} selected={res.filters.selected}
+        key={JSON.stringify(res.filters.effective)}
+        combos={res.filters.combos} groups={res.filters.groups} services={res.filters.services} defaults={res.filters.defaults} effective={res.filters.effective}
       />
       <ReportTableView table={res.table} choice={choice} />
     </div>
