@@ -70,7 +70,8 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
   const services = ((svcRows ?? []) as { id: string; name: string; team_id: string }[]).filter((s) => visibleIds.includes(s.team_id))
 
   // where the report starts when nothing is chosen: its own group and/or services
-  const defGroups = def.group ? visible.filter((t) => groupDisplayName(t.name).toLowerCase() === def.group!.toLowerCase()).map((t) => t.id) : []
+  // a manager or technician starts on their own groups (admins and owners on every group), a report that is about one group on that group
+  const defGroups = def.group ? visible.filter((t) => groupDisplayName(t.name).toLowerCase() === def.group!.toLowerCase()).map((t) => t.id) : seesAll ? [] : visibleIds
   const wanted = new Set((def.services ?? []).map(normName))
   const defServices = def.services ? services.filter((s) => wanted.has(normName(s.name)) && (defGroups.length === 0 || defGroups.includes(s.team_id))).map((s) => s.id) : []
   const defaults: FilterDefaults = { statuses: def.statuses, groups: defGroups, services: defServices }

@@ -87,4 +87,27 @@ describe('fixed reports (local database)', () => {
     const waiting = sql(`select count(*) from requests where status = 'waiting_user'`) as number
     expect(pending.table.rows.at(-1)?.cells.at(-1) ?? 0).toBe(waiting)
   }, 180_000)
+
+  it('a technician starts on their own groups, and an admin on every group', async () => {
+    const { createAdminClient } = await import('@/lib/supabase/admin')
+    const { loadFixedReport } = await import('@/lib/queries/fixed-reports')
+    const admin = createAdminClient()
+    const { data: agents } = await admin.from('profiles').select('*, team_members(team_id, is_lead, joined_at, team:teams(*))').eq('role', 'agent').limit(40)
+    const tech = ((agents ?? []) as { team_members: { team_id: string; team: { is_active: boolean } | null }[] }[]).find((a) => a.team_members.some((m) => m.team?.is_active))
+    expect(tech, 'a technician with a group exists in the local data').toBeTruthy()
+    const mine = tech!.team_members.filter((m) => m.team?.is_active).map((m) => m.team_id)
+    const res = await loadFixedReport(tech as never, 'store-side-pending-tickets-report')
+    if ('error' in res) throw new Error(res.error)
+    expect([...res.filters.effective.groups].sort()).toEqual([...mine].sort())
+    const list = mine.map((id) => `'${id}'`).join(',')
+    const truth = sql(`select count(*) from requests where status = 'waiting_user' and team_id in (${list})`) as number
+    expect(res.table.rows.at(-1)?.cells.at(-1) ?? 0).toBe(truth)
+    // the lists offer only their own groups
+    expect(res.filters.groups.map((g) => g.id).sort()).toEqual([...mine].sort())
+
+    const { data: owner } = await admin.from('profiles').select('*, team_members(team_id, is_lead, joined_at, team:teams(*))').eq('role', 'platform_owner').limit(1).single()
+    const all = await loadFixedReport(owner as never, 'store-side-pending-tickets-report')
+    if ('error' in all) throw new Error(all.error)
+    expect(all.filters.effective.groups).toEqual([])
+  }, 120_000)
 })
