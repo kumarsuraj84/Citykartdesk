@@ -340,7 +340,7 @@ export async function exportStoresCSV(orgId: string): Promise<string> {
     { key: 'open_date', label: 'Open Date' },
     { key: 'cluster', label: 'Cluster' },
     { key: 'region', label: 'Region' },
-    { key: 'priority_list', label: 'Priority List' },
+    { key: 'priority_list', label: 'Store Priority List as per Ops' },
     { key: 'festival', label: 'Festival' },
   ]
 

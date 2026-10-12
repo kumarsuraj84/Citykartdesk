@@ -20,7 +20,7 @@ export const AC_ONLY_FIELDS: StoreMasterField[] = ['ac_total', 'ac_brand', 'ac_a
 export const STORE_MASTER_HEADINGS: Record<StoreMasterField | 'code', string> = {
   code: 'STORE', name: 'NAME', address: 'ADDRESS', city: 'CITY', state: 'STATE', pincode: 'PIN CODE', oem: 'OEM', active: 'ACTIVE',
   ac_total: 'AC TOTAL', ac_brand: 'AC BRAND', ac_amc_brand: 'AC-AMC BRAND', ac_amc_vendor: 'AC-AMC VENDOR', zenatix: 'ZENATIX', open_date: 'OPEN DATE',
-  cluster: 'CLUSTER', region: 'REGION', priority_list: 'PRIORITY LIST', festival: 'FESTIVAL',
+  cluster: 'CLUSTER', region: 'REGION', priority_list: 'STORE PRIORITY LIST AS PER OPS', festival: 'FESTIVAL',
 }
 
 const ALIASES: Record<string, StoreMasterField | 'code'> = {
@@ -40,7 +40,7 @@ const ALIASES: Record<string, StoreMasterField | 'code'> = {
   'open date': 'open_date', 'opening date': 'open_date',
   'cluster': 'cluster',
   'region': 'region',
-  'priority list': 'priority_list', 'priority': 'priority_list',
+  'store priority list as per ops': 'priority_list', 'store priority list': 'priority_list', 'priority list': 'priority_list', 'priority': 'priority_list',
   'festival': 'festival', 'festivals': 'festival',
 }
 

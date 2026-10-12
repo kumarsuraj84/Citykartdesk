@@ -54,6 +54,10 @@ describe('headings and values', () => {
       expect(p.recognised).toEqual(['ac_amc_brand', 'ac_amc_vendor'])
       expect(p.entries[0].values).toEqual({ ac_amc_brand: 'BLUE STAR', ac_amc_vendor: 'RAS ENGINEERING' })
     }
+    // the priority column is read under its new name and its old one
+    for (const head of ['STORE PRIORITY LIST AS PER OPS', 'Store Priority List', 'PRIORITY LIST']) {
+      expect(prepareStoreMaster(['STORE', head], [['A1', 'Top 50']]).entries[0].values).toEqual({ priority_list: 'Top 50' })
+    }
     expect(AC_ONLY_FIELDS).toEqual(['ac_total', 'ac_brand', 'ac_amc_brand', 'ac_amc_vendor', 'zenatix'])
   })
 

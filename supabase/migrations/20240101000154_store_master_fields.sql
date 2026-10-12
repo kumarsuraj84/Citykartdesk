@@ -22,4 +22,4 @@ COMMENT ON COLUMN stores.ac_amc_brand  IS 'AC service only: brand that holds the
 COMMENT ON COLUMN stores.ac_amc_vendor IS 'AC service only: vendor company that services the ACs under the AMC';
 COMMENT ON COLUMN stores.zenatix       IS 'AC service only: whether the store has Zenatix AC monitoring';
 COMMENT ON COLUMN stores.open_date     IS 'Date the store opened (null while pending)';
-COMMENT ON COLUMN stores.priority_list IS 'e.g. Top 50 / ROS';
+COMMENT ON COLUMN stores.priority_list IS 'Store priority list as per Ops, e.g. Top 50 / ROS';

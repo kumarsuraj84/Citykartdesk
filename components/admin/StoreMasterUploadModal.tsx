@@ -58,7 +58,7 @@ export function StoreMasterUploadModal({ onClose }: { onClose: () => void }) {
 
         <div className="space-y-1 rounded-xl border border-dashed border-border bg-muted/20 p-4 text-xs text-muted-foreground">
           <p>Upload your Store Master sheet (<b>.xlsx</b> or .csv). The first column is the store code, headed <b>STORE</b>; the other columns can be any of:</p>
-          <p className="font-mono text-[11px] text-foreground">CITY · STATE · CLUSTER · REGION · PRIORITY LIST · OPEN DATE · FESTIVAL</p>
+          <p className="font-mono text-[11px] text-foreground">CITY · STATE · CLUSTER · REGION · STORE PRIORITY LIST AS PER OPS · OPEN DATE · FESTIVAL</p>
           <p>and the AC details, used for the AC service only:</p>
           <p className="font-mono text-[11px] text-foreground">AC TOTAL · AC BRAND · AC-AMC BRAND · AC-AMC VENDOR · ZENATIX</p>
           <p>(and optionally NAME, ADDRESS, PIN CODE, OEM, ACTIVE). Only the columns in the file are updated, and an empty cell never wipes what is saved. Stores are matched by their code.</p>

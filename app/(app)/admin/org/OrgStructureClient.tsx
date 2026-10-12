@@ -1147,7 +1147,7 @@ function StoreForm({ f, setF, onSubmit, onCancel, submitLabel, pending, oemOptio
       <div className="grid grid-cols-3 gap-3">
         <ChoiceOrNew label="Cluster" value={f.cluster} onChange={v => setF({ ...f, cluster: v })} options={choices.cluster} placeholder="e.g. UP2" />
         <ChoiceOrNew label="Region" value={f.region} onChange={v => setF({ ...f, region: v })} options={choices.region} placeholder="e.g. R4" />
-        <ChoiceOrNew label="Priority list" value={f.priority_list} onChange={v => setF({ ...f, priority_list: v })} options={choices.priority_list} placeholder="e.g. Top 50 / ROS" />
+        <ChoiceOrNew label="Store Priority list as per Ops" value={f.priority_list} onChange={v => setF({ ...f, priority_list: v })} options={choices.priority_list} placeholder="e.g. Top 50 / ROS" />
         <div className="space-y-1">
           <label className="text-xs font-medium text-muted-foreground" htmlFor="store-open-date">Open date</label>
           <input id="store-open-date" type="date" value={f.open_date} onChange={e => setF({ ...f, open_date: e.target.value })} className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm" />
