@@ -6,6 +6,8 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { exportRequestsCSV, exportTasksCSV, exportApprovalsCSV, type ExportFilters } from '@/lib/export/reports'
 import { sendEmail } from '@/lib/email/send'
 import { escapeHtml } from '@/lib/email/escape'
+import { loadCcBook } from '@/lib/requests/cc-recipients'
+import { checkReportRecipients } from '@/lib/reporting/report-recipients'
 import type { Database, Json } from '@/types/database'
 
 type ScheduledReportRow = Database['public']['Tables']['scheduled_reports']['Row']
@@ -32,6 +34,23 @@ async function requireAdminOrManager() {
   return profile
 }
 
+// D-012: a scheduled report carries the whole organization's tickets / tasks / approvals, which is more than a manager is allowed to see
+// on the other report screens (those are limited to the manager's own groups). Creating, changing, deleting and sending one is therefore
+// for administrators; managers can still look at the list.
+async function requireAdmin() {
+  const profile = await getCurrentProfile()
+  if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return null
+  return profile
+}
+
+const REPORT_TYPES = ['requests', 'tasks', 'approvals'] as const
+const FREQUENCIES = ['daily', 'weekly', 'monthly'] as const
+
+async function checkRecipients(orgId: string, raw: unknown) {
+  const book = await loadCcBook(orgId)
+  return checkReportRecipients(raw, (email) => book.has(email))
+}
+
 export async function getScheduledReports(): Promise<{ data?: ScheduledReport[]; error?: string }> {
   const profile = await requireAdminOrManager()
   if (!profile) return { error: 'Unauthorized.' }
@@ -56,9 +75,14 @@ export async function createScheduledReport(data: {
   filters: Record<string, unknown>
   is_active: boolean
 }): Promise<{ data?: { id: string }; error?: string }> {
-  const profile = await requireAdminOrManager()
+  const profile = await requireAdmin()
   if (!profile) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
+  if (!REPORT_TYPES.includes(data.report_type)) return { error: 'Unknown report type.' }
+  if (!FREQUENCIES.includes(data.frequency)) return { error: 'Unknown frequency.' }
+  if (!data.name?.trim()) return { error: 'A report needs a name.' }
+  const recipients = await checkRecipients(profile.org_id, data.recipients)
+  if (!recipients.ok) return { error: recipients.error }
 
   const admin = createAdminClient()
   const { data: row, error } = await admin
@@ -68,7 +92,7 @@ export async function createScheduledReport(data: {
       name: data.name.trim(),
       report_type: data.report_type,
       frequency: data.frequency,
-      recipients: data.recipients,
+      recipients: recipients.recipients,
       filters: data.filters as unknown as Json,
       is_active: data.is_active,
       created_by: profile.id,
@@ -92,15 +116,25 @@ export async function updateScheduledReport(
     is_active: boolean
   }>
 ): Promise<{ error?: string }> {
-  const profile = await requireAdminOrManager()
+  const profile = await requireAdmin()
   if (!profile) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
-  const admin = createAdminClient()
-  const update: Database['public']['Tables']['scheduled_reports']['Update'] = {
-    ...data,
-    filters: data.filters !== undefined ? (data.filters as unknown as Json) : undefined,
+  // D-013: only these fields can ever be changed; anything else in the request (organization, creator, last-sent time...) is ignored
+  const update: Database['public']['Tables']['scheduled_reports']['Update'] = {}
+  if (data.name !== undefined) { if (!String(data.name).trim()) return { error: 'A report needs a name.' }; update.name = String(data.name).trim() }
+  if (data.report_type !== undefined) { if (!REPORT_TYPES.includes(data.report_type)) return { error: 'Unknown report type.' }; update.report_type = data.report_type }
+  if (data.frequency !== undefined) { if (!FREQUENCIES.includes(data.frequency)) return { error: 'Unknown frequency.' }; update.frequency = data.frequency }
+  if (data.is_active !== undefined) update.is_active = Boolean(data.is_active)
+  if (data.filters !== undefined) update.filters = data.filters as unknown as Json
+  if (data.recipients !== undefined) {
+    const recipients = await checkRecipients(profile.org_id, data.recipients)
+    if (!recipients.ok) return { error: recipients.error }
+    update.recipients = recipients.recipients
   }
+  if (Object.keys(update).length === 0) return {}
+
+  const admin = createAdminClient()
   const { error } = await admin.from('scheduled_reports').update(update).eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.message }
   revalidatePath('/admin/reports')
@@ -108,7 +142,7 @@ export async function updateScheduledReport(
 }
 
 export async function deleteScheduledReport(id: string): Promise<{ error?: string }> {
-  const profile = await requireAdminOrManager()
+  const profile = await requireAdmin()
   if (!profile) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
@@ -120,7 +154,7 @@ export async function deleteScheduledReport(id: string): Promise<{ error?: strin
 }
 
 export async function sendScheduledReport(id: string): Promise<{ error?: string }> {
-  const profile = await requireAdminOrManager()
+  const profile = await requireAdmin()
   if (!profile) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
@@ -160,7 +194,10 @@ export async function sendScheduledReport(id: string): Promise<{ error?: string 
     content: Buffer.from(csv).toString('base64'),
   }
 
-  const recipients: string[] = report.recipients ?? []
+  // the stored list is checked again at send time, so an address saved before this rule existed is not used
+  const checked = await checkRecipients(orgId, report.recipients ?? [])
+  if (!checked.ok) return { error: checked.error }
+  const recipients: string[] = checked.recipients
   for (const to of recipients) {
     const { error: emailErr } = await sendEmail({
       to,
