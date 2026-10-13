@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createClient } from '@/lib/supabase/server'
-import { providerConfig, signState, type OAuthProvider } from '@/lib/intake/oauth'
+import { oauthStateConfigured, providerConfig, signState, type OAuthProvider } from '@/lib/intake/oauth'
 
 // GET /api/intake/oauth/start?channel=<id>&provider=google|microsoft
 // Admin-only. Builds the provider consent URL with signed state and redirects.
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   }
 
   const cfg = providerConfig(provider)
-  if (!cfg.clientId) {
+  if (!cfg.clientId || !oauthStateConfigured()) {
     return NextResponse.redirect(new URL('/intake/channels?oauth=unconfigured', req.nextUrl.origin))
   }
 

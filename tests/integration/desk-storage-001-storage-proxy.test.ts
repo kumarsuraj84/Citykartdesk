@@ -65,7 +65,7 @@ describe('DESK-STORAGE-001: storage proxy routes replace absolute Storage URLs',
 
   it('1. public bucket route (icons) streams the real uploaded bytes back, with the correct content-type', async () => {
     const admin = getAdmin()
-    const storagePath = `${RUN_TAG}-icon.png`
+    const storagePath = `${crypto.randomUUID()}.png` // the shape the app really uploads (lib/actions/admin/icons.ts); the route now refuses anything else
     uploadedIconPaths.push(storagePath)
     // A minimal valid 1x1 PNG (magic bytes + IHDR).
     const pngBytes = Buffer.from(

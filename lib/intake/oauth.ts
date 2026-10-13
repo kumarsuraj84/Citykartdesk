@@ -47,25 +47,35 @@ export function providerConfig(provider: OAuthProvider): ProviderConfig {
   }
 }
 
-function stateSecret(): string {
-  return process.env.OAUTH_STATE_SECRET
-    ?? process.env.INTAKE_WORKER_SECRET
-    ?? process.env.CRON_SECRET
-    ?? ''
+// Audit D-058: the key used to fall back to an EMPTY string (`??` does not skip a blank value), which makes every state value forgeable.
+// A blank value now counts as "not set", and with no usable secret (at least 16 characters) states are neither signed nor accepted.
+const MIN_STATE_SECRET_LENGTH = 16
+function stateSecret(): string | null {
+  const secret = process.env.OAUTH_STATE_SECRET || process.env.INTAKE_WORKER_SECRET || process.env.CRON_SECRET || ''
+  return secret.length >= MIN_STATE_SECRET_LENGTH ? secret : null
+}
+
+/** True when a usable signing secret is configured, so the mailbox connection flow can be started at all. */
+export function oauthStateConfigured(): boolean {
+  return stateSecret() !== null
 }
 
 // Signed, short-lived state so the callback can trust channelId/provider without
 // a server-side session store. Payload is base64url(JSON).HMAC.
 export function signState(payload: { channelId: string; provider: OAuthProvider }): string {
+  const secret = stateSecret()
+  if (!secret) throw new Error('OAuth state secret is not configured')
   const body = Buffer.from(JSON.stringify({ ...payload, ts: Date.now() })).toString('base64url')
-  const sig = crypto.createHmac('sha256', stateSecret()).update(body).digest('base64url')
+  const sig = crypto.createHmac('sha256', secret).update(body).digest('base64url')
   return `${body}.${sig}`
 }
 
 export function verifyState(state: string): { channelId: string; provider: OAuthProvider } | null {
   const [body, sig] = state.split('.')
   if (!body || !sig) return null
-  const expected = crypto.createHmac('sha256', stateSecret()).update(body).digest('base64url')
+  const secret = stateSecret()
+  if (!secret) return null
+  const expected = crypto.createHmac('sha256', secret).update(body).digest('base64url')
   // Constant-time compare; lengths must match or timingSafeEqual throws.
   if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
     return null

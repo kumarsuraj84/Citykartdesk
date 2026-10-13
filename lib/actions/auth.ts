@@ -17,10 +17,19 @@ export async function signInWithPassword(formData: FormData) {
   const { limited } = await rateLimit(`login:${ip}:${email}`, 10, 60_000)
   if (limited) return { error: 'Too many login attempts. Please wait a minute.' }
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  const { data: signedIn, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
     return { error: sanitizeError(error, { route: 'auth.ts#signInWithPassword', fallback: 'Invalid login credentials.' }) }
+  }
+
+  // D-010: a deactivated account does not get a session (accounts deactivated before sign-in was blocked at the authentication service)
+  if (signedIn?.user?.id) {
+    const { data: me } = await supabase.from('profiles').select('is_active').eq('id', signedIn.user.id).maybeSingle()
+    if (me && me.is_active === false) {
+      await supabase.auth.signOut()
+      return { error: 'This account has been deactivated. Please contact your administrator.' }
+    }
   }
 
   // Coming from an approval e-mail: back to that approval after signing in. Only an approval link is honoured, so this cannot

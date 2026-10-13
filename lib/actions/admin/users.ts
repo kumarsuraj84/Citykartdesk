@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { targetGuardError } from '@/lib/admin/target-guard'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { rateLimit } from '@/lib/rate-limit'
@@ -76,6 +77,11 @@ export async function updateUserRole(
   if (roleError) return { error: roleError }
 
   const admin = createAdminClient()
+  // D-009: the person being changed matters too, not only the role being given
+  const { data: target } = await admin.from('profiles').select('id, role, org_id').eq('id', userId).eq('org_id', profile.org_id).maybeSingle()
+  if (!target) return { error: 'User not found.' }
+  const guard = targetGuardError({ id: profile.id, role: profile.role }, { id: target.id, role: target.role }, 'role')
+  if (guard) return { error: guard }
   const { error } = await admin
     .from('profiles')
     .update({ role, updated_at: new Date().toISOString() })
@@ -96,6 +102,11 @@ export async function toggleUserActive(
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const admin = createAdminClient()
+  // D-009: only a platform owner may deactivate an admin / platform owner, and nobody deactivates themselves
+  const { data: target } = await admin.from('profiles').select('id, role, org_id').eq('id', userId).eq('org_id', profile.org_id).maybeSingle()
+  if (!target) return { error: 'User not found.' }
+  const guard = targetGuardError({ id: profile.id, role: profile.role }, { id: target.id, role: target.role }, 'active')
+  if (guard) return { error: guard }
   const { error } = await admin
     .from('profiles')
     .update({ is_active: isActive, updated_at: new Date().toISOString() })
@@ -103,6 +114,10 @@ export async function toggleUserActive(
     .eq('org_id', profile.org_id)
 
   if (error) return { error: error.message }
+  // D-010: the flag alone never stopped anyone signing in. Block (or restore) sign-in at the authentication service as well, so a
+  // deactivated person cannot log in again or renew their session.
+  const { error: banError } = await admin.auth.admin.updateUserById(userId, { ban_duration: isActive ? 'none' : '876000h' })
+  if (banError) return { error: `The account was marked ${isActive ? 'active' : 'inactive'}, but its sign-in could not be ${isActive ? 'restored' : 'blocked'}: ${banError.message}` }
   revalidatePath('/admin/users')
   return {}
 }
@@ -841,8 +856,11 @@ export async function adminSetPassword(userId: string, newPassword: string): Pro
 
   // auth.users has no org concept — verify the target belongs to the
   // caller's org via profiles before touching their auth record.
-  const { data: targetUser } = await admin.from('profiles').select('org_id').eq('id', userId).maybeSingle()
+  const { data: targetUser } = await admin.from('profiles').select('id, role, org_id').eq('id', userId).maybeSingle()
   if (!targetUser || targetUser.org_id !== profile.org_id) return { error: 'User not found.' }
+  // D-009: an admin must not be able to set a platform owner's (or another admin's) password and sign in as them
+  const guard = targetGuardError({ id: profile.id, role: profile.role }, { id: targetUser.id, role: targetUser.role }, 'password')
+  if (guard) return { error: guard }
 
   const { error } = await admin.auth.admin.updateUserById(userId, {
     password: newPassword,

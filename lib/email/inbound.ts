@@ -3,6 +3,7 @@ import { loadDbSmtpConfig } from './mailbox'
 import { isGmailHost } from './thread-tag'
 import { findTaggedRequestNo, resolveKnownSender } from './inbound-match'
 import { stripQuotedReply } from './quote-strip'
+import { senderAddress } from './inbound-sender'
 import { appendEmailReplyComment } from '@/lib/requests/email-reply-comment'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -125,7 +126,13 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
 
           result.checked++
           const subject = parsed.subject ?? ''
-          const fromAddress = addressText(parsed.from).match(/<([^>]+)>/)?.[1] ?? addressText(parsed.from)
+          // the sender is read from the parsed header's structured field; a message without exactly one plain sender address is not trusted (D-057)
+          const fromAddress = senderAddress(parsed.from) ?? ''
+          if (!fromAddress) {
+            result.noMatch++
+            await admin.from('processed_inbound_emails').insert({ message_id: messageId, outcome: 'no_match', from_address: '' })
+            continue
+          }
           const toAddresses = [...splitAddresses(addressText(parsed.to)), ...splitAddresses(addressText(parsed.cc))]
 
           const requestNo = findTaggedRequestNo({ subject, toAddresses, fromAddress })
