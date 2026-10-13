@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { previewXlsx, PreviewError, MAX_PREVIEW_FILE_BYTES } from '@/lib/attachments/xlsx-preview'
+import { pathBelongsToRequest } from '@/lib/attachments/serve'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,10 +17,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const { data: attachment, error } = await supabase
     .from('request_attachments')
-    .select('storage_path, file_name, mime_type, file_size, deleted_at')
+    .select('storage_path, file_name, mime_type, file_size, deleted_at, request_id')
     .eq('id', id)
     .maybeSingle()
   if (error || !attachment || attachment.deleted_at) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
+  if (!pathBelongsToRequest(attachment.storage_path, attachment.request_id)) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   if (attachment.mime_type !== XLSX_MIME) {

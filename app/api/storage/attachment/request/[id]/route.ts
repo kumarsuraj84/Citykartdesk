@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { contentDisposition, contentTypeForFileName, pathBelongsToRequest } from '@/lib/attachments/serve'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,11 +30,15 @@ export async function GET(
   // request (same predicate getRequestAttachments() relied on).
   const { data: attachment, error } = await supabase
     .from('request_attachments')
-    .select('storage_path, file_name, mime_type, deleted_at')
+    .select('storage_path, file_name, mime_type, deleted_at, request_id')
     .eq('id', id)
     .maybeSingle()
 
   if (error || !attachment || attachment.deleted_at) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
+  // D-054: the file must be in its own request's folder; a row pointing anywhere else is never served
+  if (!pathBelongsToRequest(attachment.storage_path, attachment.request_id)) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
 
@@ -47,8 +52,10 @@ export async function GET(
 
   return new NextResponse(data, {
     headers: {
-      'Content-Type': attachment.mime_type || data.type || 'application/octet-stream',
-      'Content-Disposition': `inline; filename="${encodeURIComponent(attachment.file_name)}"`,
+      // D-053: the type comes from the file's own extension (a fixed table), never from the stored column or the stored object's claim
+      'Content-Type': contentTypeForFileName(attachment.file_name),
+      'Content-Disposition': contentDisposition(attachment.file_name, contentTypeForFileName(attachment.file_name)),
+      'X-Content-Type-Options': 'nosniff',
       // Access can be revoked (deleted_at, RLS) at any time — never cache.
       'Cache-Control': 'private, no-store',
     },
