@@ -261,17 +261,20 @@ export async function deleteAttachment(
   }
 
   // ── Soft delete the DB row first ──────────────────────────────────────────
-  const { error: updateError } = await supabase
+  // The permission check above decides who may delete. The update itself is made with the server's client: with the user's own client the
+  // row-security rules reject it, because a deleted row is no longer visible to the user's SELECT rule (D-068).
+  const admin = createAdminClient()
+  const { error: updateError } = await admin
     .from('request_attachments')
     .update({ deleted_at: new Date().toISOString() })
     .eq('id', attachmentId)
+    .is('deleted_at', null)
 
   if (updateError) {
     return { error: 'Failed to delete attachment.' }
   }
 
   // ── Remove from storage (best-effort; DB row is already soft-deleted) ─────
-  const admin = createAdminClient()
   const { error: storageError } = await admin.storage
     .from('request-attachments')
     .remove([attachment.storage_path])
