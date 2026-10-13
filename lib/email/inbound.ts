@@ -4,6 +4,7 @@ import { isGmailHost } from './thread-tag'
 import { findTaggedRequestNo, resolveKnownSender } from './inbound-match'
 import { stripQuotedReply } from './quote-strip'
 import { senderAddress } from './inbound-sender'
+import { postReplyOnce } from './inbound-claim'
 import { appendEmailReplyComment } from '@/lib/requests/email-reply-comment'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -179,11 +180,10 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
               ? { kind: 'profile' as const, profileId: sender.profileId, name: sender.name }
               : { kind: 'oem' as const, name: sender.name, email: fromAddress }
 
-          const appendResult = await appendEmailReplyComment({ requestId: request.id, body, author })
-          if (appendResult.error) result.errors.push(appendResult.error)
-          else result.matched++
-
-          await admin.from('processed_inbound_emails').insert({ message_id: messageId, request_id: request.id, outcome: 'matched', from_address: fromAddress })
+          // D-020: claim the e-mail first, then post; a failed post releases the claim so the next run tries again
+          const posted = await postReplyOnce(admin, { message_id: messageId, request_id: request.id, from_address: fromAddress }, () => appendEmailReplyComment({ requestId: request.id, body, author }))
+          if (posted.outcome === 'posted') result.matched++
+          else if (posted.outcome === 'failed' && posted.error) result.errors.push(posted.error)
         } catch (e) {
           result.errors.push(e instanceof Error ? e.message : String(e))
         }
