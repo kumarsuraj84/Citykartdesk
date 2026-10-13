@@ -63,7 +63,8 @@ export function oauthStateConfigured(): boolean {
 
 // Signed, short-lived state so the callback can trust channelId/provider without
 // a server-side session store. Payload is base64url(JSON).HMAC.
-export function signState(payload: { channelId: string; provider: OAuthProvider }): string {
+// D-059: the state also carries the id of the administrator who started the flow, and the callback only accepts it from that same signed-in user.
+export function signState(payload: { channelId: string; provider: OAuthProvider; userId: string }): string {
   const secret = stateSecret()
   if (!secret) throw new Error('OAuth state secret is not configured')
   const body = Buffer.from(JSON.stringify({ ...payload, ts: Date.now() })).toString('base64url')
@@ -71,7 +72,7 @@ export function signState(payload: { channelId: string; provider: OAuthProvider 
   return `${body}.${sig}`
 }
 
-export function verifyState(state: string): { channelId: string; provider: OAuthProvider } | null {
+export function verifyState(state: string): { channelId: string; provider: OAuthProvider; userId: string | null } | null {
   const [body, sig] = state.split('.')
   if (!body || !sig) return null
   const secret = stateSecret()
@@ -83,11 +84,11 @@ export function verifyState(state: string): { channelId: string; provider: OAuth
   }
   try {
     const parsed = JSON.parse(Buffer.from(body, 'base64url').toString()) as {
-      channelId: string; provider: OAuthProvider; ts: number
+      channelId: string; provider: OAuthProvider; ts: number; userId?: string
     }
     // 15-minute window — the consent round-trip is far shorter in practice.
     if (Date.now() - parsed.ts > 15 * 60 * 1000) return null
-    return { channelId: parsed.channelId, provider: parsed.provider }
+    return { channelId: parsed.channelId, provider: parsed.provider, userId: typeof parsed.userId === 'string' ? parsed.userId : null }
   } catch {
     return null
   }

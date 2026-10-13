@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
 
   const profile = await getCurrentProfile()
   if (!profile) return NextResponse.redirect(new URL('/login', origin))
+  // D-059: connecting a mailbox is an administrator action, checked again here and not only when the flow was started
+  if (profile.role !== 'admin' && profile.role !== 'platform_owner') return back('oauth=forbidden')
 
   const code = req.nextUrl.searchParams.get('code')
   const state = req.nextUrl.searchParams.get('state')
@@ -26,6 +28,8 @@ export async function GET(req: NextRequest) {
   const verified = verifyState(state)
   if (!verified) return back('oauth=badstate')
   const { channelId, provider } = verified
+  // D-059: the state belongs to the administrator who started the flow; another signed-in user cannot complete it (login-CSRF / pasted callback link)
+  if (verified.userId !== profile.id) return back('oauth=badstate')
 
   // Re-check ownership — state is signed but the session must still own the channel.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

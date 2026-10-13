@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     redirect_uri:  redirectUri,
     response_type: 'code',
     scope:         cfg.scopes,
-    state:         signState({ channelId, provider }),
+    state:         signState({ channelId, provider, userId: profile.id }),
     ...cfg.authorizeExtra,
   })
 
