@@ -13,9 +13,14 @@ export async function signInWithPassword(formData: FormData) {
   const email = (formData.get('email') as string ?? '').toLowerCase().trim()
   const password = formData.get('password') as string
 
+  // The limit follows the ACCOUNT being tried, not a client-supplied address, so changing request headers does not buy more guesses (D-017).
+  // A per-address limit is added only when the address can be trusted (see getClientIp).
   const ip = await getClientIp()
-  const { limited } = await rateLimit(`login:${ip}:${email}`, 10, 60_000)
-  if (limited) return { error: 'Too many login attempts. Please wait a minute.' }
+  const [byAccount, byAddress] = await Promise.all([
+    rateLimit(`login:${email}`, 10, 60_000),
+    ip ? rateLimit(`login-ip:${ip}`, 60, 60_000) : Promise.resolve({ limited: false, remaining: 1 }),
+  ])
+  if (byAccount.limited || byAddress.limited) return { error: 'Too many login attempts. Please wait a minute.' }
 
   const { data: signedIn, error } = await supabase.auth.signInWithPassword({ email, password })
 
@@ -47,11 +52,15 @@ export async function signOut() {
 export async function forgotPassword(formData: FormData) {
   const email = (formData.get('email') as string ?? '').trim().toLowerCase()
 
-  const ip = await getClientIp()
-  const { limited } = await rateLimit(`forgot:${ip}`, 5, 300_000)
-  if (limited) return { error: 'Too many requests. Please wait 5 minutes.' }
-
   if (!email) return { error: 'Please enter your email address.' }
+
+  // per address being mailed (a reset e-mail can no longer be sent to one person over and over), plus per caller address when it is trustworthy
+  const ip = await getClientIp()
+  const [byEmail, byAddress] = await Promise.all([
+    rateLimit(`forgot:${email}`, 3, 3_600_000),
+    ip ? rateLimit(`forgot-ip:${ip}`, 5, 300_000) : Promise.resolve({ limited: false, remaining: 1 }),
+  ])
+  if (byEmail.limited || byAddress.limited) return { error: 'Too many requests. Please wait before trying again.' }
 
   // Sent through the app's own mailbox (see lib/email/auth-mail.ts).
   const { error } = await emailPasswordResetLink(email)

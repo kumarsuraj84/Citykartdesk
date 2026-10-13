@@ -80,7 +80,7 @@ export async function verifyApprovalCode(token: string, code: string): Promise<R
   const ip = await getClientIp()
   const [a, b] = await Promise.all([
     rateLimit(`approval-verify:${v.approvalId}:${v.approverId}`, 8, 10 * 60_000),
-    rateLimit(`approval-verify-ip:${ip}`, 30, 10 * 60_000),
+    ip ? rateLimit(`approval-verify-ip:${ip}`, 30, 10 * 60_000) : Promise.resolve({ limited: false, remaining: 1 }),
   ])
   if (a.limited || b.limited) return { error: 'Too many wrong tries. Please wait a few minutes and request a new code.' }
   if (!codeMatches(v.approvalId, v.approverId, code)) return { error: 'That code is not right or has expired.' }
