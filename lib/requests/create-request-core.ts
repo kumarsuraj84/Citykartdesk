@@ -479,8 +479,8 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
       // Section snapshot — the resolved form actually shown/asked to the
       // requester (template's sections if tagged, else the service's own).
       form_sections_snapshot: sections as Json,
-      response_due_at: responseDueAt,
-      resolution_due_at: resolutionDueAt,
+      // response_due_at / resolution_due_at are written below with the server's own client: the database (migration 157, D-008) refuses SLA
+      // deadlines in an insert made as the signed-in user, so a requester cannot choose their own deadline.
       project_id: projectId,
       intake_message_id: intakeMessageId,
       source_metadata: mergedSourceMetadata as Json | undefined,
@@ -490,6 +490,14 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
 
   if (insertError || !request) {
     return { error: sanitizeError(insertError, { route: 'create-request-core.ts#createRequestCore', fallback: 'Failed to create request.' }) }
+  }
+
+  if (responseDueAt || resolutionDueAt) {
+    const { error: slaError } = await admin
+      .from('requests')
+      .update({ response_due_at: responseDueAt, resolution_due_at: resolutionDueAt })
+      .eq('id', request.id)
+    if (slaError) sanitizeError(slaError, { route: 'create-request-core.ts#setSlaDeadlines', fallback: 'Failed to set SLA deadlines.' }) // logged; the ticket itself exists
   }
 
   // Business Rules: "created" trigger — assign/set priority/set status/notify

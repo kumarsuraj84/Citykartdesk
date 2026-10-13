@@ -49,7 +49,8 @@ describe('DESK-STORAGE-001: storage proxy routes replace absolute Storage URLs',
   const uploadedIconPaths: string[] = []
   let requestId: string
   let attachmentId: string
-  const attachmentStoragePath = `${RUN_TAG}/test.txt`
+  // the app stores a request attachment as <request id>/<file> and only serves paths of that shape (audit D-053): set once the request exists
+  let attachmentStoragePath = `${RUN_TAG}/test.txt`
 
   beforeAll(async () => {
     fx = await setupFixtures()
@@ -110,6 +111,7 @@ describe('DESK-STORAGE-001: storage proxy routes replace absolute Storage URLs',
       .single()
     expect(reqError).toBeNull()
     requestId = req!.id
+    attachmentStoragePath = `${requestId}/test.txt`
 
     const fileBytes = Buffer.from('desk-storage-001 test attachment')
     const { error: uploadError } = await admin.storage.from('request-attachments').upload(attachmentStoragePath, fileBytes, { contentType: 'text/plain' })
@@ -166,7 +168,7 @@ describe('DESK-STORAGE-001: storage proxy routes replace absolute Storage URLs',
 
   it('6. intake-attachment route: an agent (role gated by intake_attachments RLS) can fetch it, forced as a download, and a plain requester cannot', async () => {
     const admin = getAdmin()
-    const intakeStoragePath = `${RUN_TAG}/intake-test.txt`
+    let intakeStoragePath = `${RUN_TAG}/intake-test.txt`
     const fileBytes = Buffer.from('desk-storage-001 intake test attachment')
 
     const { data: channel, error: channelError } = await admin
@@ -182,6 +184,7 @@ describe('DESK-STORAGE-001: storage proxy routes replace absolute Storage URLs',
       .select('id')
       .single()
     expect(msgError).toBeNull()
+    intakeStoragePath = `${fx.orgId}/${message!.id}/intake-test.txt` // the stored shape is <org>/<message>/<file> (audit D-052)
 
     const { error: uploadError } = await admin.storage.from('intake-attachments').upload(intakeStoragePath, fileBytes, { contentType: 'text/plain' })
     expect(uploadError).toBeNull()

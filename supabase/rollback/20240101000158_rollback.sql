@@ -30,3 +30,5 @@ CREATE POLICY "requests_update" ON public.requests FOR UPDATE
     AND (service_id = (SELECT r.service_id FROM public.requests r WHERE r.id = requests.id))
     AND (team_id = (SELECT r.team_id FROM public.requests r WHERE r.id = requests.id))
   );
+
+DROP FUNCTION IF EXISTS public.request_identity_unchanged(uuid, uuid, uuid, uuid, uuid);

@@ -24,6 +24,21 @@ CREATE POLICY "requests_select" ON public.requests FOR SELECT
     )
   );
 
+-- ── helper for the update rule: "this update does not change who the ticket belongs to" ───────────────────────────────────────────
+-- The update rule used to compare the new row with the stored row by reading the tickets table inside the rule itself. PostgreSQL refuses a
+-- rule that reads its own table once the select rule above contains sub-selects ("infinite recursion detected in policy"), so the stored row
+-- is read by a SECURITY DEFINER function instead. Same answer: the function sees the row as it was before the update, exactly like the
+-- sub-selects did, and a changed organization / requester / service / team still fails the check.
+CREATE OR REPLACE FUNCTION public.request_identity_unchanged(p_id uuid, p_org uuid, p_requester uuid, p_service uuid, p_team uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.requests r
+    WHERE r.id = p_id AND r.org_id = p_org AND r.requester_id = p_requester AND r.service_id = p_service AND r.team_id = p_team
+  )
+$$;
+
 -- ── who can update a ticket: the same wrapping on the part that does not look at other rows ──────────────────────────────────────
 DROP POLICY IF EXISTS "requests_update" ON public.requests;
 CREATE POLICY "requests_update" ON public.requests FOR UPDATE
@@ -35,14 +50,11 @@ CREATE POLICY "requests_update" ON public.requests FOR UPDATE
     )
   )
   WITH CHECK (
-    (org_id = (SELECT r.org_id FROM public.requests r WHERE r.id = requests.id))
+    public.request_identity_unchanged(id, org_id, requester_id, service_id, team_id)
     AND (
       team_id = ANY ((SELECT current_user_team_ids())::uuid[])
       OR (SELECT current_user_role()) = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])
     )
-    AND (requester_id = (SELECT r.requester_id FROM public.requests r WHERE r.id = requests.id))
-    AND (service_id = (SELECT r.service_id FROM public.requests r WHERE r.id = requests.id))
-    AND (team_id = (SELECT r.team_id FROM public.requests r WHERE r.id = requests.id))
   );
 
 -- ── the manager / admin "latest tickets" list ───────────────────────────────────────────────────────────────────────────────────
