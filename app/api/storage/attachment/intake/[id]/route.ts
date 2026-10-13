@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { isSafeIntakeStoragePath } from '@/lib/attachments/intake-key'
+import { contentTypeForFileName } from '@/lib/attachments/serve'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +30,10 @@ export async function GET(
   if (error || !attachment || !attachment.storage_path) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
+  // D-052: only a path of the exact <org>/<message>/<file> shape is followed with the elevated storage client
+  if (!isSafeIntakeStoragePath(attachment.storage_path)) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
 
   const admin = createAdminClient()
   const { data, error: downloadError } = await admin.storage
@@ -39,7 +45,9 @@ export async function GET(
 
   return new NextResponse(data, {
     headers: {
-      'Content-Type': attachment.mime_type || data.type || 'application/octet-stream',
+      // from the file extension, not the stored columns (D-053)
+      'Content-Type': contentTypeForFileName(attachment.file_name),
+      'X-Content-Type-Options': 'nosniff',
       // Forced download, not inline — defense in depth beyond the upload-time
       // allowlist/magic-byte check, so an inbound attachment can never render
       // inline (and execute, for an HTML/SVG part) in the reviewer's browser

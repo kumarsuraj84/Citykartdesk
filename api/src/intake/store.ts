@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase.js'
 import { log } from '../lib/log.js'
 import { normalizeBody, computeDedupHash } from './normalize.js'
 import { validateInboundAttachment } from './attachmentValidate.js'
+import { attachmentStorageKey } from './storage-key.js'
 
 function addressList(a: AddressObject | AddressObject[] | undefined): string[] {
   if (!a) return []
@@ -182,13 +183,14 @@ async function storeAttachments(orgId: string, messageId: string, parsed: Parsed
       continue
     }
 
-    const storagePath = `${orgId}/${messageId}/${fileName}`
+    // D-052: generated key (the sender's file name stays in the file_name column only), and never overwrite an existing object
+    const storagePath = attachmentStorageKey(orgId, messageId, fileName)
 
     const { error: upErr } = await supabase.storage
       .from('intake-attachments')
       .upload(storagePath, att.content, {
         contentType: att.contentType ?? 'application/octet-stream',
-        upsert: true,
+        upsert: false,
       })
     if (upErr) {
       log.warn(`attachment upload failed (${fileName})`, upErr.message)
