@@ -1,5 +1,6 @@
 'use server'
 
+import { fetchWithTimeout } from '@/lib/http/fetch-timeout'
 import { revalidatePath } from 'next/cache'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -187,7 +188,7 @@ export async function sendFromMessage(
   const workerUrl = (/^https?:\/\//.test(rawUrl) ? rawUrl : `https://${rawUrl}`).replace(/\/$/, '')
 
   try {
-    const res = await fetch(`${workerUrl}/intake/send`, {
+    const res = await fetchWithTimeout(`${workerUrl}/intake/send`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-intake-worker-secret': secret },
       body: JSON.stringify({ messageId, senderId: profile.id, ...payload }),

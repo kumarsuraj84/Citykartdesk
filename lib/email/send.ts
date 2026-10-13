@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '@/lib/http/fetch-timeout'
 import nodemailer, { type Transporter } from 'nodemailer'
 import { getEmailFrom, getEmailSetup, RESEND_API_KEY, type EmailSetup, type SmtpConfig } from './config'
 import { withSubjectTag, isGmailHost, taggedReplyAddress } from './thread-tag'
@@ -82,7 +83,7 @@ async function sendViaSmtp(p: EmailPayload, setup: EmailSetup): Promise<{ error?
 async function sendViaResend(p: EmailPayload, setup: EmailSetup): Promise<{ error?: string }> {
   const from = await getEmailFrom(setup)
   const { subject, replyTo } = applyThreadTag(p, setup)
-  const res = await fetch('https://api.resend.com/emails', {
+  const res = await fetchWithTimeout('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: 'Bearer ' + RESEND_API_KEY,

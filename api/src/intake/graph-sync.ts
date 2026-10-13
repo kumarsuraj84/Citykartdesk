@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/fetch-timeout.js'
 import { simpleParser } from 'mailparser'
 import { supabase } from '../lib/supabase.js'
 import { log } from '../lib/log.js'
@@ -14,7 +15,7 @@ async function fetchGraphMimeMessage(
 ): Promise<Buffer | null> {
   // Graph requires the user to be addressed by email or object-id.
   // Using 'me' doesn't work with app-level tokens, so we use the email.
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(email)}/messages/${encodeURIComponent(graphMessageId)}/$value`,
     {
       headers: {

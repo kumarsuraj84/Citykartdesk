@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '@/lib/http/fetch-timeout'
 import crypto from 'crypto'
 
 // OAuth2 for mailbox access. Microsoft permanently disabled basic-auth IMAP and
@@ -129,7 +130,7 @@ export async function exchangeCode(opts: {
     redirect_uri:  opts.redirectUri,
   })
 
-  const res = await fetch(cfg.tokenUrl, {
+  const res = await fetchWithTimeout(cfg.tokenUrl, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: params.toString(),

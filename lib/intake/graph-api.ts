@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '@/lib/http/fetch-timeout'
 // Microsoft Graph change-notification subscription helpers — used by the OAuth
 // callback to register webhooks so M365 mailboxes use push instead of IMAP polling.
 
@@ -22,7 +23,7 @@ export async function createGraphSubscription(opts: {
   notificationUrl: string // full URL including ?token=SECRET
   clientState: string
 }): Promise<GraphSubscription | { error: string }> {
-  const res = await fetch('https://graph.microsoft.com/v1.0/subscriptions', {
+  const res = await fetchWithTimeout('https://graph.microsoft.com/v1.0/subscriptions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${opts.accessToken}`,
@@ -50,7 +51,7 @@ export async function renewGraphSubscription(
   subscriptionId: string,
   accessToken: string,
 ): Promise<{ expirationDateTime: string } | { error: string }> {
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://graph.microsoft.com/v1.0/subscriptions/${subscriptionId}`,
     {
       method: 'PATCH',
@@ -73,7 +74,7 @@ export async function deleteGraphSubscription(
   subscriptionId: string,
   accessToken: string,
 ): Promise<void> {
-  await fetch(`https://graph.microsoft.com/v1.0/subscriptions/${subscriptionId}`, {
+  await fetchWithTimeout(`https://graph.microsoft.com/v1.0/subscriptions/${subscriptionId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
   }).catch(() => null)

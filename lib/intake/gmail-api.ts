@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '@/lib/http/fetch-timeout'
 // Gmail REST API helpers — used by the OAuth callback (watch setup) and the
 // webhook handler (finding channels). The worker handles actual message fetching
 // via its own gmail-sync route (keeps mailparser / supabase writes in one place).
@@ -17,7 +18,7 @@ export async function setupGmailWatch(
   accessToken: string,
   topicName: string,
 ): Promise<GmailWatchResult | { error: string }> {
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://gmail.googleapis.com/gmail/v1/users/${encodeURIComponent(email)}/watch`,
     {
       method: 'POST',
@@ -39,7 +40,7 @@ export async function setupGmailWatch(
 
 // Tear down Gmail push for a mailbox (called on channel disconnect/delete).
 export async function stopGmailWatch(email: string, accessToken: string): Promise<void> {
-  await fetch(
+  await fetchWithTimeout(
     `https://gmail.googleapis.com/gmail/v1/users/${encodeURIComponent(email)}/stop`,
     { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } },
   ).catch(() => null)

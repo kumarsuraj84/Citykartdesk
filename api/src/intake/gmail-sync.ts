@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/fetch-timeout.js'
 import { simpleParser } from 'mailparser'
 import { supabase } from '../lib/supabase.js'
 import { log } from '../lib/log.js'
@@ -20,7 +21,7 @@ async function listNewMessageIds(email: string, accessToken: string, startHistor
   url.searchParams.set('historyTypes', 'messageAdded')
   url.searchParams.set('labelId', 'INBOX')
 
-  const res = await fetch(url.toString(), {
+  const res = await fetchWithTimeout(url.toString(), {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
 
@@ -51,7 +52,7 @@ async function listNewMessageIds(email: string, accessToken: string, startHistor
 
 // Fetch a single Gmail message in RFC822 (raw MIME) format and return a Buffer.
 async function fetchRawMessage(email: string, messageId: string, accessToken: string): Promise<Buffer | null> {
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://gmail.googleapis.com/gmail/v1/users/${encodeURIComponent(email)}/messages/${messageId}?format=raw`,
     { headers: { Authorization: `Bearer ${accessToken}` } },
   )

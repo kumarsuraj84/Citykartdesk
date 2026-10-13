@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '@/lib/http/fetch-timeout'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 // DeskTime API v2 — server only. Endpoint shapes mirror the org's own
@@ -31,7 +32,7 @@ async function getJson(apiKey: string, path: string, params: Record<string, stri
   url.searchParams.set('apiKey', apiKey)
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
 
-  const res = await fetch(url.toString(), { headers: { Accept: 'application/json' }, cache: 'no-store' })
+  const res = await fetchWithTimeout(url.toString(), { headers: { Accept: 'application/json' }, cache: 'no-store' })
   const text = await res.text()
   if (!res.ok) throw new Error(`DeskTime ${path} failed [${res.status}]: ${text.slice(0, 300)}`)
 

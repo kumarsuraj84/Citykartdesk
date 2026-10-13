@@ -1,5 +1,6 @@
 'use server'
 
+import { fetchWithTimeout } from '@/lib/http/fetch-timeout'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createClient } from '@/lib/supabase/server'
 import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
@@ -176,11 +177,11 @@ export async function reclassifyBacklog(
   if (sinceDate) body.since = sinceDate
 
   try {
-    const res = await fetch(`${workerUrl}/intake/reclassify`, {
+    const res = await fetchWithTimeout(`${workerUrl}/intake/reclassify`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-intake-worker-secret': workerSecret },
       body: JSON.stringify(body),
-    })
+    }, 120_000) // re-classifying many messages can take a while
     const data = (await res.json()) as { ok: boolean; message?: string; processed?: number; error?: string }
     return data
   } catch (err) {

@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/fetch-timeout.js'
 import { supabase } from '../lib/supabase.js'
 import { log } from '../lib/log.js'
 
@@ -58,7 +59,7 @@ async function refreshAccessToken(secret: OAuthSecret): Promise<string | null> {
     grant_type:    'refresh_token',
   })
   try {
-    const res = await fetch(oauthTokenUrl(secret.provider), {
+    const res = await fetchWithTimeout(oauthTokenUrl(secret.provider), {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: params.toString(),

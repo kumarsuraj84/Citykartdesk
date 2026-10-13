@@ -1,5 +1,6 @@
 'use server'
 
+import { fetchWithTimeout } from '@/lib/http/fetch-timeout'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
@@ -410,10 +411,10 @@ export async function pollNow(): Promise<{
   const workerUrl = (/^https?:\/\//.test(rawUrl) ? rawUrl : `https://${rawUrl}`).replace(/\/$/, '')
 
   try {
-    const res = await fetch(`${workerUrl}/intake/poll`, {
+    const res = await fetchWithTimeout(`${workerUrl}/intake/poll`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-intake-worker-secret': workerSecret },
-    })
+    }, 120_000) // a mailbox poll can take a while
     const data = (await res.json()) as {
       ok: boolean; error?: string; channels?: number; stored?: number
       details?: { id: string; fetched: number; stored: number; duplicates: number; error: string | null }[]
@@ -443,11 +444,11 @@ export async function testChannel(channelId: string): Promise<{ ok: boolean; err
   const workerUrl = (/^https?:\/\//.test(rawUrl) ? rawUrl : `https://${rawUrl}`).replace(/\/$/, '')
 
   try {
-    const res = await fetch(`${workerUrl}/intake/test-channel`, {
+    const res = await fetchWithTimeout(`${workerUrl}/intake/test-channel`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-intake-worker-secret': workerSecret },
       body: JSON.stringify({ channelId }),
-    })
+    }, 45_000)
     const data = (await res.json()) as { ok: boolean; error?: string }
     return data
   } catch (err) {

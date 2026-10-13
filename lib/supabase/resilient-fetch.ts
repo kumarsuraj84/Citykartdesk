@@ -31,6 +31,19 @@ function isRetryableError(err: unknown): boolean {
   return code === 'ECONNRESET' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT' || code === 'EADDRINUSE'
 }
 
+/**
+ * Whether a failed attempt may be sent again (audit D-043). A read can always be repeated. A write (POST / PATCH / PUT / DELETE) may have been
+ * applied before the connection broke or the time ran out, so repeating it could create a second row or apply a change twice; it is only
+ * repeated when the failure proves the server never received it (the connection was refused, or no local port was available to connect with).
+ */
+export function canRetry(method: string | undefined, err: unknown): boolean {
+  if (!isRetryableError(err)) return false
+  const m = (method ?? 'GET').toUpperCase()
+  if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return true
+  const code = (err as { cause?: { code?: string } } | undefined)?.cause?.code
+  return code === 'ECONNREFUSED' || code === 'EADDRINUSE'
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -54,7 +67,7 @@ export const resilientFetch: typeof fetch = async (input, init) => {
       clearTimeout(timeout)
       lastError = err
 
-      if (!isRetryableError(err) || attempt === MAX_RETRIES) {
+      if (!canRetry(init?.method ?? (input instanceof Request ? input.method : undefined), err) || attempt === MAX_RETRIES) {
         throw err
       }
       await sleep(RETRY_DELAY_MS[attempt])
