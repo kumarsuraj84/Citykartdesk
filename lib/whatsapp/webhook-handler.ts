@@ -263,6 +263,11 @@ export type WebhookRunResult = { outcomes: WebhookProcessOutcome[] }
  * single message's own processing) since there is no background queue in
  * this deployment (Step 16 — documented Phase-1 synchronous design).
  */
+/** True once an unauthenticated event kind has been audited ten times in a minute for one phone number id (the rest are dropped). */
+async function auditFloodLimited(kind: string, phoneNumberId: string): Promise<boolean> {
+  return (await rateLimit(`wa-audit:${kind}:${phoneNumberId}`, 10, 60_000)).limited
+}
+
 export async function processWhatsAppWebhookPayload(params: {
   admin: AnyClient
   rawBody: string
@@ -284,16 +289,26 @@ export async function processWhatsAppWebhookPayload(params: {
   const phoneNumberId = firstValue?.metadata.phone_number_id
   if (!phoneNumberId) return { outcome: { kind: 'unsupported' } }
 
+  // D-062: the signature secret belongs to ONE channel (phone number). A payload that mixes phone numbers is refused instead of being handled
+  // under the channel of its first entry.
+  const phoneNumberIds = new Set(payload.data.entry.flatMap((e) => e.changes.map((c) => c.value.metadata.phone_number_id)))
+  if (phoneNumberIds.size > 1) return { outcome: { kind: 'unsupported' } }
+
   const channelResult = await findActiveWhatsAppChannelByPhoneNumberId(admin, phoneNumberId)
   if (!channelResult.ok) {
-    await logWhatsAppAudit(admin, { orgId: null, action: `whatsapp_channel_${channelResult.reason}`, metadata: { phoneNumberId } })
+    if (!(await auditFloodLimited(`whatsapp_channel_${channelResult.reason}`, phoneNumberId))) {
+      await logWhatsAppAudit(admin, { orgId: null, action: `whatsapp_channel_${channelResult.reason}`, metadata: { phoneNumberId } })
+    }
     return { outcome: channelResult.reason === 'conflict' ? { kind: 'channel_conflict' } : { kind: 'channel_not_found' } }
   }
   const { channel } = channelResult
 
   const secret = await loadWhatsAppSecret(admin, channel)
   if (!secret || !verifyMetaSignature(rawBody, signatureHeader, secret.app_secret)) {
-    await logWhatsAppAudit(admin, { orgId: channel.orgId, entityId: channel.id, action: 'whatsapp_invalid_signature' })
+    // an unauthenticated flood must not become a flood of audit rows: the first few per minute are kept
+    if (!(await auditFloodLimited('whatsapp_invalid_signature', phoneNumberId))) {
+      await logWhatsAppAudit(admin, { orgId: channel.orgId, entityId: channel.id, action: 'whatsapp_invalid_signature' })
+    }
     return { outcome: { kind: 'invalid_signature' } }
   }
 
