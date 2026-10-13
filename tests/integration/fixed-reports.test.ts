@@ -38,7 +38,7 @@ describe('fixed reports (local database)', () => {
     for (const [slug, group] of [['admin-summary-report', 'ADMIN GROUP'], ['bd-summary-report', 'BD Group']] as const) {
       const res = await loadFixedReport(profile, slug)
       if ('error' in res) throw new Error(res.error)
-      const truth = sql(`select count(*) from requests r join teams t on t.id = r.team_id where t.name = '${group}' and r.status in ${OPEN}`) as number
+      const truth = sql(`select count(*) from requests r join teams t on t.id = r.team_id where upper(t.name) = upper('${group}') and r.status in ${OPEN}`) as number
       const grand = res.table.rows.at(-1)
       const total = res.table.columns.findIndex((c) => c.key === 'total')
       expect(grand?.cells[total] ?? 0, slug).toBe(truth)
@@ -65,7 +65,7 @@ describe('fixed reports (local database)', () => {
 
     // a group choice replaces the report's own group and selects all its services; a service choice narrows it
     const groupsOf = base.filters.groups
-    const bd = groupsOf.find((g) => g.name === 'BD Group')
+    const bd = groupsOf.find((g) => g.name.toUpperCase() === 'BD GROUP') // the team's name is 'BD GROUP' in some databases, 'BD Group' in others
     if (bd) {
       const asBd = await loadFixedReport(profile, 'admin-summary-report', { ...emptyReportFilter(), groups: [bd.id] })
       if ('error' in asBd) throw new Error(asBd.error)
