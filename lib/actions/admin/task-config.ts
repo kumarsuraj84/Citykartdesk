@@ -1,5 +1,6 @@
 'use server'
 
+import { pickFields } from '@/lib/utils/pick-fields'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
@@ -59,7 +60,8 @@ export async function updateTaskStatus(
   if (!profile) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
-  const payload: Record<string, unknown> = { ...data }
+  // D-013: only the status's own settings are written
+  const payload: Record<string, unknown> = { ...pickFields(data, ['name', 'value', 'color', 'display_order', 'is_terminal', 'is_active'] as const) }
   if (data.name) payload.name = data.name.trim()
   if (data.value) payload.value = data.value.trim().toLowerCase().replace(/\s+/g, '_')
 
@@ -138,7 +140,7 @@ export async function updateTaskPriority(
   if (!profile) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
-  const payload: Record<string, unknown> = { ...data }
+  const payload: Record<string, unknown> = { ...pickFields(data, ['name', 'value', 'color', 'display_order', 'is_active'] as const) }
   if (data.name) payload.name = data.name.trim()
   if (data.value) payload.value = data.value.trim().toLowerCase().replace(/\s+/g, '_')
 

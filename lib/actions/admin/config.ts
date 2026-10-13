@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { pickFields } from '@/lib/utils/pick-fields'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { sendEmail } from '@/lib/email/send'
@@ -409,7 +410,10 @@ export async function updateAlertRule(
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('alert_rules').update(data).eq('id', id).eq('org_id', profile.org_id)
+  // D-013: only the rule's own settings can be changed (never its organization or id)
+  const update = pickFields(data, ['name', 'alert_type', 'entity_type', 'threshold_minutes', 'notify_roles', 'notify_assignee', 'notify_requester', 'channels', 'is_active'] as const)
+  if (Object.keys(update).length === 0) return {}
+  const { error } = await admin.from('alert_rules').update(update).eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.message }
   revalidatePath('/admin/request-config')
   return {}
@@ -449,7 +453,9 @@ export async function updateRequestPriority(
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
 
   const admin = createAdminClient() as unknown as AnyClient
-  const { error } = await admin.from('request_priorities').update(data).eq('id', id)
+  const update = pickFields(data, ['name', 'color', 'sla_multiplier', 'is_active', 'display_order'] as const)
+  if (Object.keys(update).length === 0) return {}
+  const { error } = await admin.from('request_priorities').update(update).eq('id', id)
   if (error) return { error: error.message }
   revalidatePath('/admin/master-data')
   return {}
