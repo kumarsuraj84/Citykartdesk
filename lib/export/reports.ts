@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { toCSV } from './csv'
+import { fetchAllPages } from '@/lib/queries/paging'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -352,21 +353,21 @@ export async function exportStoresCSV(orgId: string): Promise<string> {
 export async function exportApprovalsCSV(orgId: string, f?: ExportFilters): Promise<string> {
   const admin = createAdminClient() as unknown as AnyClient
 
-  let query = admin
-    .from('approvals')
-    .select(
-      'id,status,current_step,created_at,updated_at,request:requests!inner(request_no,title,org_id),workflow:approval_workflows(name)'
-    )
-    .eq('request.org_id', orgId)
+  const makeQuery = () => {
+    let q = admin
+      .from('approvals')
+      .select(
+        'id,status,current_step,created_at,updated_at,request:requests!inner(request_no,title,org_id),workflow:approval_workflows(name)'
+      )
+      .eq('request.org_id', orgId)
+    if (f?.status)    q = q.eq('status', f.status)
+    if (f?.date_from) q = q.gte('created_at', f.date_from)
+    if (f?.date_to)   q = q.lte('created_at', f.date_to)
+    return q.order('id', { ascending: true })
+  }
 
-  if (f?.status)    query = query.eq('status', f.status)
-  if (f?.date_from) query = query.gte('created_at', f.date_from)
-  if (f?.date_to)   query = query.lte('created_at', f.date_to)
-
-  query = query.limit(MAX_EXPORT_ROWS + 1)
-
-  const { data, error } = await query
-  if (error) throw new Error(error.message)
+  // D-021: read in pages (a database that caps a response at 1000 rows no longer cuts the export short unnoticed); errors throw
+  const { rows: data } = await fetchAllPages<unknown>((from, to) => makeQuery().range(from, to), { maxRows: MAX_EXPORT_ROWS + 1 })
 
   if ((data ?? []).length > MAX_EXPORT_ROWS) {
     throw new Error(
@@ -390,13 +391,18 @@ export async function exportApprovalsCSV(orgId: string, f?: ExportFilters): Prom
 
   // Fetch decisions for the selected approvals and summarise them per row.
   const ids = ((data ?? []) as ApprovalExportRow[]).map((a) => a.id)
-  const { data: decisions } = ids.length
-    ? await admin
-        .from('approval_decisions')
-        .select('approval_id,step_order,decision,decided_at,decider:profiles!approval_decisions_decided_by_fkey(full_name)')
-        .in('approval_id', ids)
-        .order('step_order', { ascending: true })
-    : { data: [] as DecisionRow[] }
+  // D-021: the ids go in batches of 200 (one request with up to 10,000 ids is longer than the web address limit and failed silently,
+  // leaving the Decisions column empty), and a failed batch throws
+  const decisions: DecisionRow[] = []
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data: part, error: decisionsError } = await admin
+      .from('approval_decisions')
+      .select('approval_id,step_order,decision,decided_at,decider:profiles!approval_decisions_decided_by_fkey(full_name)')
+      .in('approval_id', ids.slice(i, i + 200))
+      .order('step_order', { ascending: true })
+    if (decisionsError) throw new Error(`Could not read the approval decisions: ${decisionsError.message}`)
+    decisions.push(...((part ?? []) as DecisionRow[]))
+  }
 
   const decisionsByApproval = new Map<string, DecisionRow[]>()
   for (const d of (decisions ?? []) as DecisionRow[]) {
