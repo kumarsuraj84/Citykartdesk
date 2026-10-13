@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { ReportViewerScope } from '@/lib/reporting/access'
+import { fetchAllPages } from '@/lib/queries/paging'
 import { isCurrentlyBreached } from '@/lib/sla/breach'
 import { AGE_BUCKETS, ageBucketFor } from '@/lib/reporting/aging'
 import { RED_FLAG } from '@/lib/reporting/executive/engine'
@@ -271,14 +272,9 @@ export async function getAnalytics(
   // Reads every page of a query: PostgREST returns at most 1000 rows per request, and a bigger window used to be cut off silently.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pageAll = async (build: (from: number, to: number) => any): Promise<{ data: any[] }> => {
+    // D-019: an error on any page throws instead of returning the rows read so far
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rows: any[] = []
-    for (let o = 0; ; o += 1000) {
-      const { data, error } = await build(o, o + 999)
-      if (error || !data) break
-      rows.push(...data)
-      if (data.length < 1000) break
-    }
+    const { rows } = await fetchAllPages<any>(build, { maxRows: 200_000 })
     return { data: rows }
   }
   const withinScope = (q: any, col: string) => (teamScope ? q.in(col, teamScope) : q) // eslint-disable-line @typescript-eslint/no-explicit-any

@@ -43,6 +43,11 @@ export default async function FixedReportPage({ params, searchParams }: { params
       <div>
         <h1 className="text-xl font-bold tracking-tight text-foreground">{res.def.title}</h1>
         <p className="text-xs text-muted-foreground">{res.def.about} {res.table.scopeText}</p>
+        {res.truncated && (
+          <p role="status" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+            This report is too large to show in full: the numbers below cover only the first 50,000 tickets. Narrow it with the filters above for complete figures.
+          </p>
+        )}
       </div>
       <ReportFilters
         key={JSON.stringify(res.filters.effective)}

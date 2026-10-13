@@ -3,6 +3,7 @@
 // tickets against its AC total, the same figure as the Store AC report and the Smart Dashboard.
 
 import { isNsoStore, DEFAULT_RED_FLAG_PERCENT } from '@/lib/reporting/analytics/facts'
+import { fetchAllPages } from '@/lib/queries/paging'
 import { NOT_SET, NO_AC_DATA, RED_FLAG, WITHIN_LIMIT } from '@/lib/reporting/executive/engine'
 import { loadAcContext } from '@/lib/queries/store-ac-stats'
 import { matchesStoreFilter, type StoreDims, type StoreFilter } from '@/lib/analytics/store-filter'
@@ -10,7 +11,6 @@ import { matchesStoreFilter, type StoreDims, type StoreFilter } from '@/lib/anal
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
 
-const PAGE = 1000
 const MAX_ROWS = 50_000
 
 interface RawStore {
@@ -48,19 +48,16 @@ export async function loadStoreDims(admin: AnyClient, orgId: string, asOf: Date 
   const { openAcByStore } = await loadAcContext(admin, orgId)
   const byRequester = new Map<string, StoreDims>()
   const byCode = new Map<string, StoreDims>()
-  for (let offset = 0; offset < MAX_ROWS; offset += PAGE) {
-    const { data } = await admin.from('profiles')
-      .select('id, store:stores(code, name, state, cluster, region, priority_list, ac_total, open_date)')
-      .eq('org_id', orgId).not('store_id', 'is', null)
-      .order('id', { ascending: true }).range(offset, offset + PAGE - 1)
-    const page = (data ?? []) as { id: string; store: RawStore | null }[]
-    for (const p of page) {
-      if (!p.store) continue
-      let d = byCode.get(p.store.code)
-      if (!d) { d = storeDimsOf(p.store, openAcByStore.get(p.store.code) ?? 0, asOf); byCode.set(p.store.code, d) }
-      byRequester.set(p.id, d)
-    }
-    if (page.length < PAGE) break
+  // D-019: every page is read; an error on any page throws (an empty store list used to make every store filter match nothing)
+  const { rows } = await fetchAllPages<{ id: string; store: RawStore | null }>((from, to) => admin.from('profiles')
+    .select('id, store:stores(code, name, state, cluster, region, priority_list, ac_total, open_date)')
+    .eq('org_id', orgId).not('store_id', 'is', null)
+    .order('id', { ascending: true }).range(from, to), { maxRows: MAX_ROWS })
+  for (const p of rows) {
+    if (!p.store) continue
+    let d = byCode.get(p.store.code)
+    if (!d) { d = storeDimsOf(p.store, openAcByStore.get(p.store.code) ?? 0, asOf); byCode.set(p.store.code, d) }
+    byRequester.set(p.id, d)
   }
   return { byRequester, byCode }
 }

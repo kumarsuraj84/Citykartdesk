@@ -3,6 +3,7 @@
 // turned into the Excel-style table.
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { fetchAllPages } from '@/lib/queries/paging'
 import { loadAcContext } from '@/lib/queries/store-ac-stats'
 import { canUseReportAnalytics, groupDisplayName, selectableGroups } from '@/lib/reporting/analytics/catalog'
 import { makeFact, isNsoStore, DEFAULT_RED_FLAG_PERCENT, type TicketFact, type RawTicket, type FactContext } from '@/lib/reporting/analytics/facts'
@@ -17,7 +18,6 @@ import type { ProfileWithTeams } from '@/types'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
 
-const PAGE = 1000
 /** Safety cap: the open tickets of the whole company never get near this; it only stops a runaway query. */
 const MAX_TICKETS = 50_000
 
@@ -25,14 +25,10 @@ const FACT_SELECT = 'id, request_no, title, status, priority, created_at, resolv
 
 const statusLabel = (s: string) => (STATUS_LABELS as Record<string, string>)[s] ?? s
 
-async function fetchAll<T>(build: (from: number, to: number) => PromiseLike<{ data: unknown }>): Promise<T[]> {
-  const rows: T[] = []
-  for (let offset = 0; offset < MAX_TICKETS; offset += PAGE) {
-    const { data } = await build(offset, offset + PAGE - 1)
-    const page = (data ?? []) as T[]
-    rows.push(...page)
-    if (page.length < PAGE) break
-  }
+// D-019: an error on any page throws; reaching the cap is reported to the screen (FixedReportResult.truncated) instead of being hidden
+async function fetchAll<T>(build: (from: number, to: number) => PromiseLike<{ data: unknown; error?: { message: string } | null }>, onTruncated?: () => void): Promise<T[]> {
+  const { rows, truncated } = await fetchAllPages<T>(build, { maxRows: MAX_TICKETS })
+  if (truncated) onTruncated?.()
   return rows
 }
 
@@ -47,7 +43,7 @@ export interface FilterOptionsData {
   effective: EffectiveFilter
 }
 
-export interface FixedReportResult { def: FixedReportDef; table: ReportTable; filters: FilterOptionsData }
+export interface FixedReportResult { def: FixedReportDef; table: ReportTable; filters: FilterOptionsData; /** true when the report stopped at the row cap: the numbers cover only the first rows */ truncated?: boolean }
 
 /** The list of reports: every report is open to anyone who may use the fixed reports at all. */
 export function canOpenFixedReports(profile: Pick<ProfileWithTeams, 'role' | 'org_id'>): boolean {
@@ -102,8 +98,9 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const scoped = (q: any) => { let x = q.eq('org_id', orgId); if (teamIds) x = x.in('team_id', teamIds); if (serviceIds) x = x.in('service_id', serviceIds); return x }
 
+  let truncated = false
   const raw = await fetchAll<RawTicket>((from, to) =>
-    scoped(admin.from('requests').select(FACT_SELECT)).in('status', statuses).order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to))
+    scoped(admin.from('requests').select(FACT_SELECT)).in('status', statuses).order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to), () => { truncated = true })
   const facts = raw.map((r) => makeFact(r, ctx)).filter(keep)
 
   // a summary also shows what was created and resolved today, whatever the status is now
@@ -142,5 +139,5 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
       else combos.set(k, { group: r.team_id, service: r.service_id, status: r.status, tech, count: 1 })
     }
   }
-  return result(buildFixedReport({ def, facts, dayFacts, day, statusLabel, statuses }), [...combos.values()])
+  return { ...result(buildFixedReport({ def, facts, dayFacts, day, statusLabel, statuses }), [...combos.values()]), truncated }
 }

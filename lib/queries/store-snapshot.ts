@@ -2,6 +2,7 @@
 // AC red-flag limit, and how many tickets new stores raised in the last 30 days. Limited to the viewer's own technician groups, like every report.
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { fetchAllPages } from '@/lib/queries/paging'
 import { isCurrentlyBreached } from '@/lib/sla/breach'
 import { loadStoreDims } from '@/lib/queries/store-dims'
 import { RED_FLAG } from '@/lib/reporting/executive/engine'
@@ -11,7 +12,6 @@ import type { ReportViewerScope } from '@/lib/reporting/access'
 type AnyClient = { from: (t: string) => any }
 
 const NO_TEAM_ID = '00000000-0000-0000-0000-000000000000'
-const PAGE = 1000
 const MAX_ROWS = 50_000
 const DAY = 86_400_000
 
@@ -39,16 +39,7 @@ export async function getStoreSnapshot(orgId: string, scope: ReportViewerScope, 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const inScope = (q: any) => (teamIds ? q.in('team_id', teamIds) : q)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pageAll = async <T,>(build: (from: number, to: number) => any): Promise<T[]> => {
-    const rows: T[] = []
-    for (let o = 0; o < MAX_ROWS; o += PAGE) {
-      const { data, error } = await build(o, o + PAGE - 1)
-      if (error || !data) break
-      rows.push(...(data as T[]))
-      if (data.length < PAGE) break
-    }
-    return rows
-  }
+  const pageAll = async <T,>(build: (from: number, to: number) => any): Promise<T[]> => (await fetchAllPages<T>(build, { maxRows: MAX_ROWS })).rows // D-019: errors throw
 
   const since = new Date(now.getTime() - 30 * DAY).toISOString()
   const [open, recent, lookup] = await Promise.all([
