@@ -6,6 +6,5 @@ export function isSafeIntakeStoragePath(path: unknown): boolean {
   if (typeof path !== 'string') return false
   const parts = path.split('/')
   if (parts.length !== 3) return false
-  // eslint-disable-next-line no-control-regex
   return parts.every((p) => p !== '' && p !== '.' && p !== '..' && !/[\\%?#\u0000-\u001f]/.test(p))
 }

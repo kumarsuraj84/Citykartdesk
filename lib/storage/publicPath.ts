@@ -24,7 +24,6 @@ export function safePublicStoragePath(bucket: string, segments: string[]): strin
   const shape = SHAPES[bucket]
   if (!shape || !Array.isArray(segments) || segments.length === 0 || segments.length > 2) return null
   for (const seg of segments) {
-    // eslint-disable-next-line no-control-regex
     if (typeof seg !== 'string' || seg === '' || seg === '.' || seg === '..' || /[\/%?#\u0000-\u001f]/.test(seg)) return null
   }
   const path = segments.join('/')

@@ -23,7 +23,6 @@ export function contentTypeForFileName(fileName: string): string {
 export function contentDisposition(fileName: string, contentType: string): string {
   const kind = OPEN_IN_BROWSER.has(contentType) ? 'inline' : 'attachment'
   const safe = (fileName || 'file').replace(/[\r\n]/g, ' ')
-  // eslint-disable-next-line no-control-regex
   const ascii = safe.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_')
   const encoded = encodeURIComponent(safe).replace(/['()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase())
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${encoded}`
