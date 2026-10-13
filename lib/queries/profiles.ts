@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import { headers } from 'next/headers'
+import { readVerifiedUserId } from '@/lib/auth/verified-user'
 import { createClient } from '@/lib/supabase/server'
 import { OPEN_REQUEST_STATUSES } from '@/lib/constants/requests'
 import { getActionableApprovalsForUser } from '@/lib/queries/approvals'
@@ -13,10 +14,12 @@ export const getCurrentProfile = cache(async function (): Promise<ProfileWithTea
   // supabase.auth.getUser() network round-trip (proxy.ts always sets it, even to ''
   // when unauthenticated, so a *missing* header only happens for requests that
   // somehow bypassed middleware — fall back to a real check in that case).
-  const forwardedUserId = (await headers()).get('x-verified-user-id')
+  // Only a header the proxy SIGNED is believed (lib/auth/verified-user.ts); a missing, unsigned or wrongly-signed one is ignored and the
+  // session is checked here instead, so a client can never choose who it is.
+  const forwardedUserId = readVerifiedUserId(await headers())
   let userId: string | null
-  if (forwardedUserId !== null) {
-    userId = forwardedUserId || null
+  if (forwardedUserId !== undefined) {
+    userId = forwardedUserId
   } else {
     const {
       data: { user },

@@ -1,5 +1,16 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { VERIFIED_USER_HEADER, VERIFIED_USER_SIG_HEADER, signVerifiedUser } from '@/lib/auth/verified-user'
+
+// Every request that passes through without a session check (assets, the public API routes, the e-mailed approve / rating pages) is
+// forwarded WITHOUT any client-supplied copy of the verified-user headers: only the main path below may set them, and it signs them.
+// (Audit finding D-001 / SEC-01: these paths used to forward the caller's own header untouched, and getCurrentProfile() believed it.)
+function passThrough(request: NextRequest) {
+  const clean = new Headers(request.headers)
+  clean.delete(VERIFIED_USER_HEADER)
+  clean.delete(VERIFIED_USER_SIG_HEADER)
+  return NextResponse.next({ request: { headers: clean } })
+}
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -10,7 +21,7 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon') ||
     /\.(svg|png|jpg|jpeg|gif|webp|ico)$/.test(pathname)
-  if (isPublicAsset) return NextResponse.next({ request })
+  if (isPublicAsset) return passThrough(request)
 
   // ── Fast path: cron/webhook/health API routes authenticate themselves ──────
   // These are called by Railway's cron-tick.mjs, Google Pub/Sub, Microsoft
@@ -44,15 +55,15 @@ export async function proxy(request: NextRequest) {
     '/api/email/inbound-sync',
     '/api/csat/run',
   ])
-  if (PUBLIC_API_ROUTES.has(pathname)) return NextResponse.next({ request })
+  if (PUBLIC_API_ROUTES.has(pathname)) return passThrough(request)
 
   // The rating / reopen page opened from the CSAT e-mail: the signed link in the URL is the proof of who the requester is,
   // so it works without a login (store users often share a mailbox and are not signed in when they click).
-  if (pathname.startsWith('/csat/')) return NextResponse.next({ request })
+  if (pathname.startsWith('/csat/')) return passThrough(request)
 
   // The approve / reject page opened from the approval e-mail. The page itself decides who the visitor is (signed in as the
   // approver, or holding the code e-mailed to the approver) and shows a visitor who is neither nothing but the approver's name.
-  if (pathname.startsWith('/approve/')) return NextResponse.next({ request })
+  if (pathname.startsWith('/approve/')) return passThrough(request)
 
   let supabaseResponse = NextResponse.next({ request })
   let sessionRefreshed = false
@@ -128,7 +139,13 @@ export async function proxy(request: NextRequest) {
   // (not merge) overwrites any client-forged copy of this header on the
   // incoming request — the value here is always ours, never the caller's.
   const requestHeaders = new Headers(request.headers)
-  requestHeaders.set('x-verified-user-id', userId ?? '')
+  requestHeaders.delete(VERIFIED_USER_HEADER)
+  requestHeaders.delete(VERIFIED_USER_SIG_HEADER)
+  const sig = signVerifiedUser(userId ?? '')
+  if (sig) {
+    requestHeaders.set(VERIFIED_USER_HEADER, userId ?? '')
+    requestHeaders.set(VERIFIED_USER_SIG_HEADER, sig)
+  }
   // When the session was just refreshed (token expired while the tab sat idle), the
   // page render below must see the NEW cookies. Otherwise it tries to refresh again
   // with the already-used refresh token, fails, and looks signed-out — which is what

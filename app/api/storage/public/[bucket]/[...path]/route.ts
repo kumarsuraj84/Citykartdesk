@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { contentTypeForPath, safePublicStoragePath } from '@/lib/storage/publicPath'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +35,10 @@ export async function GET(
   if (!PUBLIC_BUCKETS.has(bucket)) {
     return NextResponse.json({ error: 'unknown bucket' }, { status: 404 })
   }
-  const storagePath = path.join('/')
+  // Only the exact file shapes the app uploads are served; anything else (including path-traversal shaped input) is refused before
+  // the elevated storage client is ever called (audit D-051).
+  const storagePath = safePublicStoragePath(bucket, path)
+  if (!storagePath) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const admin = createAdminClient()
   const { data, error } = await admin.storage.from(bucket).download(storagePath)
@@ -54,7 +58,9 @@ export async function GET(
 
   return new NextResponse(data, {
     headers: {
-      'Content-Type': data.type || 'application/octet-stream',
+      // from the validated file extension, never from the stored object's own claim
+      'Content-Type': contentTypeForPath(storagePath),
+      'X-Content-Type-Options': 'nosniff',
       'Cache-Control': cacheControl,
     },
   })

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { headers } from 'next/headers'
+import { readVerifiedUserId } from '@/lib/auth/verified-user'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { recordEvents, type AppEventInput } from '@/lib/events/record'
 
@@ -11,7 +12,7 @@ const hits = new Map<string, { start: number; n: number }>()
 
 export async function POST(req: Request) {
   const h = await headers()
-  const userId = h.get('x-verified-user-id')
+  const userId = readVerifiedUserId(h)
   if (!userId) return NextResponse.json({ ok: false }, { status: 401 })
 
   const now = Date.now()
