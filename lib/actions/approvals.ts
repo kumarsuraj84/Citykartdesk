@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { isolateStepForDelegation } from '@/lib/approvals/isolate-workflow'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { getRequestPreviewSummary, getRequestComments } from '@/lib/queries/requests'
 import { getApprovalForRequest, type ApprovalWithDetails } from '@/lib/queries/approvals'
@@ -426,10 +427,13 @@ export async function delegateApproval(
     .maybeSingle()
   if (!newApprover) return { error: 'Selected user was not found in your organisation.' }
 
+  // D-016: only THIS approval changes. A workflow that a service or other approvals also use is copied for this approval first.
+  const isolated = await isolateStepForDelegation(admin as never, { id: approvalId, workflow_id: approval.workflow_id }, currentStep.step_order)
+  if ('error' in isolated) return { error: isolated.error }
   const { error: updateError } = await admin
     .from('approval_workflow_steps')
     .update({ approver_user_id: newApproverId, approver_type: 'specific_user' })
-    .eq('id', currentStep.id)
+    .eq('id', isolated.stepId)
 
   if (updateError) return { error: sanitizeError(updateError, { route: 'approvals.ts#delegateApproval', fallback: 'Failed to delegate approval.' }) }
 
