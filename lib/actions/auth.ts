@@ -1,6 +1,7 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { safeNextPath } from '@/lib/auth/safe-next'
 import { createClient } from '@/lib/supabase/server'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { getCurrentProfile } from '@/lib/queries/profiles'
@@ -37,10 +38,9 @@ export async function signInWithPassword(formData: FormData) {
     }
   }
 
-  // Coming from an approval e-mail: back to that approval after signing in. Only an approval link is honoured, so this cannot
-  // be used to send people to some other address.
-  const next = String(formData.get('next') ?? '')
-  redirect(next.startsWith('/approve/') && /^[A-Za-z0-9._-]{20,200}$/.test(next.slice('/approve/'.length)) ? next : '/home')
+  // Back to the page the person was trying to open (an approval e-mail, a bookmarked ticket...). Only a path inside this site is honoured
+  // (safeNextPath, audit D-034), so this cannot be used to send people to some other address.
+  redirect(safeNextPath(String(formData.get('next') ?? ''), '/home'))
 }
 
 export async function signOut() {
