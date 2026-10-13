@@ -117,7 +117,7 @@ describe('reliability simulations', () => {
     expect(await objectsOf(t.id)).toHaveLength(0)
   })
 
-  it('files that are not what they claim to be, or too large, or empty are refused', async () => {
+  it('files that are not what they claim to be, or empty, or an SVG are refused', async () => {
     const t = await ticket()
     actAs(fx.requesterA)
     const fake = new FormData(); fake.append('file', new File([Buffer.from('<html><script>alert(1)</script></html>')], 'evil.png', { type: 'image/png' }))
