@@ -32,3 +32,6 @@ CREATE POLICY "requests_update" ON public.requests FOR UPDATE
   );
 
 DROP FUNCTION IF EXISTS public.request_identity_unchanged(uuid, uuid, uuid, uuid, uuid);
+
+DROP FUNCTION IF EXISTS public.current_user_collab_request_ids();
+DROP FUNCTION IF EXISTS public.current_user_approver_request_ids();

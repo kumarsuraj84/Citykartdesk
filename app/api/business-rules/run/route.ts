@@ -188,8 +188,19 @@ async function fireRule(admin: AnyClient, rule: BusinessRuleRow, request: RawReq
       template: request.service?.template ?? null,
     },
   }
-  await executeActions(admin, actionRequest, rule.actions ?? [], { ruleId: rule.id, ruleName: rule.name })
-  await admin.from('business_rule_events').insert({ rule_id: rule.id, request_id: request.id })
+  // D-042 / D-063: the "already fired" record is written FIRST, as a claim (the table is unique on rule + ticket). Two overlapping runs can no
+  // longer both act: the one that loses the claim skips. If the actions throw, the claim is removed so the next run tries again.
+  const { error: claimError } = await admin.from('business_rule_events').insert({ rule_id: rule.id, request_id: request.id })
+  if (claimError) {
+    if (claimError.code === '23505') return false
+    throw new Error(`Could not record rule ${rule.id} as fired: ${claimError.message ?? 'unknown error'}`)
+  }
+  try {
+    await executeActions(admin, actionRequest, rule.actions ?? [], { ruleId: rule.id, ruleName: rule.name })
+  } catch (e) {
+    await admin.from('business_rule_events').delete().eq('rule_id', rule.id).eq('request_id', request.id)
+    throw e
+  }
   return true
 }
 

@@ -8,6 +8,28 @@
 -- manager's "latest first" list is added. The rule says exactly what it said before (same people, same tickets): only how often the answers are
 -- looked up changes. tests/remediation/70-rls-equivalence.test.ts proves identical visibility for every kind of user.
 
+-- ── two set-based helpers: "the tickets I collaborate on" and "the tickets I am a named approver of" ────────────────────────────────
+-- The old rule asked is_request_collaborator(id) / is_request_approver(id) separately for EVERY ticket row, which made even a requester's own
+-- list scan every ticket row and call a function for each one (about 7 s for an unfiltered requester count at 500,000 tickets). These return
+-- the same sets once per query as an id list, so the rule can compare each row with a list. The meaning is the same as the per-ticket functions.
+CREATE OR REPLACE FUNCTION public.current_user_collab_request_ids()
+RETURNS uuid[]
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
+AS $$
+  SELECT COALESCE(array_agg(c.request_id), '{}'::uuid[]) FROM request_collaborators c WHERE c.user_id = auth.uid()
+$$;
+
+CREATE OR REPLACE FUNCTION public.current_user_approver_request_ids()
+RETURNS uuid[]
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
+AS $$
+  SELECT COALESCE(array_agg(DISTINCT a.request_id), '{}'::uuid[])
+  FROM approvals a
+  JOIN approval_workflow_steps aws ON aws.workflow_id = a.workflow_id
+  JOIN requests r ON r.id = a.request_id
+  WHERE aws.approver_type = 'specific_user' AND aws.approver_user_id = auth.uid() AND r.org_id = current_org_id()
+$$;
+
 -- ── who can see a ticket (same conditions as before, helpers evaluated once per query) ───────────────────────────────────────────
 DROP POLICY IF EXISTS "requests_select" ON public.requests;
 CREATE POLICY "requests_select" ON public.requests FOR SELECT
@@ -17,8 +39,8 @@ CREATE POLICY "requests_select" ON public.requests FOR SELECT
       requester_id = (SELECT auth.uid())
       OR team_id = ANY ((SELECT current_user_team_ids())::uuid[])
       OR (SELECT current_user_role()) = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])
-      OR is_request_collaborator(id)
-      OR is_request_approver(id)
+      OR id = ANY ((SELECT current_user_collab_request_ids())::uuid[])
+      OR id = ANY ((SELECT current_user_approver_request_ids())::uuid[])
       OR requester_id = ANY ((SELECT current_user_subordinate_ids())::uuid[])
       OR assigned_to = ANY ((SELECT current_user_subordinate_ids())::uuid[])
     )

@@ -37,14 +37,23 @@ export async function sendDueCsatReminders(admin: AnyClient, limit = 100): Promi
       await admin.from('csat_surveys').update({ reminder_sent_at: new Date().toISOString() }).eq('id', s.id)
       continue
     }
-    const ok = await sendCsatReminder(admin, {
-      surveyId: s.id, requestId: req.id, requestNo: req.request_no, title: req.title, requesterId: s.requester_id,
-      resolvedAtMs: new Date(req.resolved_at ?? s.sent_at).getTime(), reopenDeadlineIso: req.reopen_deadline_at,
-    })
-    if (ok) {
-      await admin.from('csat_surveys').update({ reminder_sent_at: new Date().toISOString() }).eq('id', s.id)
-      sent++
+    // D-063: claim the reminder BEFORE sending it (only the run that finds reminder_sent_at empty gets it), so two overlapping runs cannot both
+    // e-mail the requester. If sending fails the claim is released and the next run tries again.
+    const { data: claimed } = await admin.from('csat_surveys').update({ reminder_sent_at: new Date().toISOString() }).eq('id', s.id).is('reminder_sent_at', null).select('id')
+    if (!claimed?.length) continue
+    const release = () => admin.from('csat_surveys').update({ reminder_sent_at: null }).eq('id', s.id)
+    let ok = false
+    try {
+      ok = await sendCsatReminder(admin, {
+        surveyId: s.id, requestId: req.id, requestNo: req.request_no, title: req.title, requesterId: s.requester_id,
+        resolvedAtMs: new Date(req.resolved_at ?? s.sent_at).getTime(), reopenDeadlineIso: req.reopen_deadline_at,
+      })
+    } catch (e) {
+      await release()
+      throw e
     }
+    if (ok) sent++
+    else await release()
   }
   return sent
 }
