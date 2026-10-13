@@ -6,13 +6,14 @@
 // It runs against the LOCAL database only (it refuses anything else) and works on whatever data is there.
 
 import { describe, it, expect } from 'vitest'
+import { dbContainer } from '../setup/db-container'
 import fs from 'fs'
 import { execFileSync } from 'child_process'
 
 const env = Object.fromEntries(fs.readFileSync('.env.local', 'utf8').split(/\r?\n/).filter((l) => l.includes('=') && !l.startsWith('#')).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1).trim()]))
 for (const [k, v] of Object.entries(env)) if (!(k in process.env)) process.env[k] = v
 
-const DB = 'supabase_db_citykart_desk'
+const DB = dbContainer()
 const sql = (q: string): unknown => {
   const out = execFileSync('docker', ['exec', DB, 'psql', '-U', 'postgres', '-d', 'postgres', '-tA', '-c', q], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
   return JSON.parse(out.trim())

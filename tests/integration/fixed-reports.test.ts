@@ -3,11 +3,12 @@
 import { describe, it, expect } from 'vitest'
 import fs from 'fs'
 import { execFileSync } from 'child_process'
+import { dbContainer } from '../setup/db-container'
 
 const env = Object.fromEntries(fs.readFileSync('.env.local', 'utf8').split(/\r?\n/).filter((l) => l.includes('=') && !l.startsWith('#')).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1).trim()]))
 for (const [k, v] of Object.entries(env)) if (!(k in process.env)) process.env[k] = v
 
-const sql = (q: string): unknown => JSON.parse(execFileSync('docker', ['exec', 'supabase_db_citykart_desk', 'psql', '-U', 'postgres', '-d', 'postgres', '-tA', '-c', q], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim())
+const sql = (q: string): unknown => JSON.parse(execFileSync('docker', ['exec', dbContainer(), 'psql', '-U', 'postgres', '-d', 'postgres', '-tA', '-c', q], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim())
 
 const OPEN_LIST = ['open', 'assigned', 'in_progress', 'waiting_user', 'hold_purchase_ho', 'pending_approval']
 const OPEN = "('open','assigned','in_progress','waiting_user','hold_purchase_ho','pending_approval')"
