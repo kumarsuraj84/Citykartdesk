@@ -135,15 +135,15 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
       <NewVersionBanner />
 
       {/* ── Dark top bar (full width) ─────────────────────────────────────── */}
-      <header className="flex h-16 shrink-0 items-center gap-4 px-4 border-b border-black/10 bg-[image:var(--gradient-nav)] z-40">
+      <header className="flex h-16 shrink-0 items-center gap-2 px-2 sm:gap-4 sm:px-4 border-b border-black/10 bg-[image:var(--gradient-nav)] z-40">
 
         {/* Brand — matches sidebar width */}
-        <Link href="/home" prefetch={false} className="flex w-[196px] shrink-0 items-center">
-          <BrandLogo height={44} className="rounded-lg bg-white px-2.5 py-1.5 shadow-sm" priority />
+        <Link href="/home" prefetch={false} className="flex shrink-0 items-center lg:w-[196px]">
+          <BrandLogo height={44} className="rounded-lg bg-white px-2 py-1 shadow-sm sm:px-2.5 sm:py-1.5" imgClassName="max-sm:!h-7 max-sm:!w-auto" priority />
         </Link>
 
         {/* Search — centred in remaining space */}
-        <div className="flex-1 max-w-xl">
+        <div className="min-w-0 flex-1 max-w-xl">
           <GlobalSearch dark />
         </div>
 

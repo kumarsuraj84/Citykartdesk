@@ -172,6 +172,7 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
       >
         <textarea
           ref={textareaRef}
+          aria-label={isInternal ? 'Internal note' : 'Public comment'}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder={

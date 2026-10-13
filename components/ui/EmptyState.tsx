@@ -16,7 +16,7 @@ export function EmptyState({ icon: Icon, title, description, action }: EmptyStat
       <div className="space-y-1">
         <p className="text-[13px] font-semibold text-[#0F0F1A]">{title}</p>
         {description && (
-          <p className="text-[12px] text-[#8A8AA8] leading-relaxed">{description}</p>
+          <p className="text-[12px] text-[#6B6B88] leading-relaxed">{description}</p>
         )}
       </div>
       {action && <div className="mt-1">{action}</div>}

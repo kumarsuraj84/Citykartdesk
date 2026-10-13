@@ -131,7 +131,7 @@ export function GlobalSearch({ dark = false }: { dark?: boolean }) {
     <div ref={wrapperRef} className="relative">
       {/* Search input */}
       {dark ? (
-        <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-2.5 h-9 w-64 transition-all focus-within:border-white/30 focus-within:bg-white/15">
+        <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-2.5 h-9 w-full min-w-0 sm:w-64 transition-all focus-within:border-white/30 focus-within:bg-white/15">
           <Search className="h-3.5 w-3.5 shrink-0 text-white/50" />
           <input
             ref={inputRef}
@@ -143,7 +143,7 @@ export function GlobalSearch({ dark = false }: { dark?: boolean }) {
             placeholder="Search requests, services…"
             aria-label="Global search"
             autoComplete="off"
-            className="flex-1 min-w-0 bg-transparent text-sm text-white placeholder:text-white/50 outline-none"
+            className="flex-1 min-w-0 h-full bg-transparent text-sm text-white placeholder:text-white/50 outline-none"
           />
           {loading
             ? <Loader2 className="h-3 w-3 shrink-0 animate-spin text-white/50" />

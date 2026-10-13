@@ -8,12 +8,14 @@ interface BrandLogoProps {
   /** Rendered height in px — width follows the logo's native aspect ratio. */
   height?: number
   className?: string
+  /** Extra classes for the image itself (e.g. a smaller size on phones) */
+  imgClassName?: string
   priority?: boolean
 }
 
 /** The complete Citykart Desk logo — used everywhere the brand identity
  * appears: the app header and auth screens. */
-export function BrandLogo({ height = 32, className, priority }: BrandLogoProps) {
+export function BrandLogo({ height = 32, className, imgClassName, priority }: BrandLogoProps) {
   const width = Math.round(height / ASPECT)
   return (
     <div className={cn('inline-flex items-center', className)}>
@@ -24,7 +26,7 @@ export function BrandLogo({ height = 32, className, priority }: BrandLogoProps) 
         height={height}
         priority={priority}
         style={{ width, height }}
-        className="rounded-xl object-contain"
+        className={cn('rounded-xl object-contain', imgClassName)}
       />
     </div>
   )
