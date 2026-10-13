@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { safeNextPath } from '@/lib/auth/safe-next'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/home'
+  const next = safeNextPath(searchParams.get('next')) // D-034: in-site paths only
 
   if (code) {
     const supabase = await createClient()

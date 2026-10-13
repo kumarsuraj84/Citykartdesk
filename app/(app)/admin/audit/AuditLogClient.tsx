@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Download, ChevronDown, Copy, Check } from 'lucide-react'
 import type { AuditEntry } from '@/lib/queries/admin'
 import type { Profile } from '@/types'
+import { toCSV } from '@/lib/export/csv'
 
 interface AuditLogClientProps {
   initialEntries: AuditEntry[]
@@ -194,18 +195,11 @@ export function AuditLogClient({ initialEntries, profiles }: AuditLogClientProps
   }
 
   function exportCSV() {
-    const headers = ['Timestamp', 'Entity Type', 'Entity Title', 'Action', 'Actor', 'Metadata']
-    const rows = entries.map((e) => [
-      e.created_at,
-      e.entity_type,
-      e.entity_title ?? e.entity_id,
-      e.action,
-      e.actor_name,
-      JSON.stringify(e.metadata),
-    ])
-    const csv = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n')
+    // D-056: the shared writer neutralises cells that start with = + - @ (ticket titles are typed by users)
+    const csv = toCSV(
+      entries.map((e) => ({ at: e.created_at, type: e.entity_type, title: e.entity_title ?? e.entity_id, action: e.action, actor: e.actor_name, metadata: JSON.stringify(e.metadata) })),
+      [{ key: 'at', label: 'Timestamp' }, { key: 'type', label: 'Entity Type' }, { key: 'title', label: 'Entity Title' }, { key: 'action', label: 'Action' }, { key: 'actor', label: 'Actor' }, { key: 'metadata', label: 'Metadata' }],
+    )
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { safeNextPath } from '@/lib/auth/safe-next'
 
 // Landing point for the links in our password-reset / invitation emails.
 // GET only shows a "Continue" button; the one-time token is used on POST, so a mail
@@ -8,7 +9,7 @@ import { createClient } from '@/lib/supabase/server'
 const ALLOWED_TYPES = new Set(['recovery', 'invite'])
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
-const safeNext = (raw: string | null) => (raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : '/reset-password')
+const safeNext = (raw: string | null) => safeNextPath(raw, '/reset-password')
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)

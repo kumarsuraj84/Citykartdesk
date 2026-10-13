@@ -68,6 +68,20 @@ const nextConfig: NextConfig = {
     // during local dev. No effect on production.
     serverComponentsHmrCache: false,
   },
+  // Basic browser protections on every response (audit D-033). The site's own pages may frame its own attachment previews
+  // (SAMEORIGIN); nothing else may frame it. A Content-Security-Policy and HSTS are deliberately NOT set here: a policy needs a
+  // page-by-page test, and HSTS only makes sense once the site is served over HTTPS (audit D-018, a deployment decision).
+  async headers() {
+    return [{
+      source: '/:path*',
+      headers: [
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
+      ],
+    }]
+  },
   typescript: {
     // Tables added in migrations after types were generated — safe to skip
     ignoreBuildErrors: true,

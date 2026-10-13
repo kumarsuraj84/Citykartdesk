@@ -1,6 +1,8 @@
 'use server'
 
 import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
+import { getCurrentProfile } from '@/lib/queries/profiles'
+import { canReview } from '@/lib/actions/intake/_shared'
 
 const DEFAULT_BASE_URL = 'https://api.groq.com/openai/v1'
 const DEFAULT_MODEL    = 'llama-3.3-70b-versatile'
@@ -20,11 +22,9 @@ export async function generateEmailBrief(
   bodyText: string | null,
   fromAddress: string | null,
 ): Promise<{ brief: string | null; error?: string }> {
-  // NOTE: unlike every other intake action, this one has no getCurrentProfile()
-  // auth check at all — out of scope for the module-gate fix this pass is
-  // making (see CITYKART-DESK-CONSOLIDATED-REMEDIATION-REPORT-2026-09-10.md,
-  // "Intake Module Guard" section), flagged there as a separate follow-up
-  // rather than fixed here to stay within this pass's assigned scope.
+  // D-027: only staff who can review intake messages may send email text to the language-model service (it costs money and relays content)
+  const profile = await getCurrentProfile()
+  if (!profile || !canReview(profile.role)) return { brief: null, error: 'Not allowed.' }
   const moduleError = await requireModuleEnabled('intake')
   if (moduleError) return { brief: null, error: moduleError }
 

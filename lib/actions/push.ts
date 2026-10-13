@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { isAcceptablePushEndpoint } from '@/lib/push/endpoint'
 
 export type PushSubscriptionInput = {
   endpoint: string
@@ -13,6 +14,7 @@ export async function subscribeToPush(sub: PushSubscriptionInput): Promise<{ err
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
   if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) return { error: 'Invalid subscription.' }
+  if (!isAcceptablePushEndpoint(sub.endpoint)) return { error: 'Invalid subscription.' } // D-025: public https push services only
 
   const supabase = await createClient()
   // Upsert on endpoint: the same browser/device re-subscribing (e.g. after
