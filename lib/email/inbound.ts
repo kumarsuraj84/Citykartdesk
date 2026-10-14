@@ -4,6 +4,7 @@ import { isGmailHost } from './thread-tag'
 import { findTaggedRequestNo, resolveKnownSender } from './inbound-match'
 import { stripQuotedReply } from './quote-strip'
 import { senderAddress } from './inbound-sender'
+import { senderAuthenticity } from './inbound-auth'
 import { postReplyOnce } from './inbound-claim'
 import { appendEmailReplyComment } from '@/lib/requests/email-reply-comment'
 
@@ -147,6 +148,21 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
           if (!request?.org_id) {
             result.noMatch++
             await admin.from('processed_inbound_emails').insert({ message_id: messageId, outcome: 'no_match', from_address: fromAddress })
+            continue
+          }
+
+          // D-028: a message the receiving server saw FAIL authentication is not attributed to anyone, whoever its From line names
+          const auth = senderAuthenticity(parsed.headers?.get('authentication-results'), fromAddress)
+          if (auth.verdict === 'failed') {
+            result.senderNotRecognized++
+            await admin.from('processed_inbound_emails').insert({ message_id: messageId, request_id: request.id, outcome: 'sender_not_recognized', from_address: fromAddress })
+            try {
+              const { recordEvents } = await import('@/lib/events/record')
+              await recordEvents(
+                [{ kind: 'system', target: fromAddress, message: `Reply to ${requestNo} was not added: the message failed sender checks (${auth.reason}).` }],
+                { orgId: request.org_id, userId: null },
+              )
+            } catch { /* logging must never break the sync */ }
             continue
           }
 
