@@ -295,7 +295,6 @@ export async function getAnalytics(
   const yesterdayStart = new Date(todayStart)
   yesterdayStart.setDate(yesterdayStart.getDate() - 1)
   const yesterdayStartIso = yesterdayStart.toISOString()
-  const todayStartIso = todayStart.toISOString()
 
   // Rolling windows for the Req. Inflow/Outflow cards — also absolute, not
   // scoped to the period selector. Calendar-day granularity (midnight N days
