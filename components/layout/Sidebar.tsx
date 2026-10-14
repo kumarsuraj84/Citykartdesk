@@ -52,7 +52,8 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
   // A ticket opened from Agent Requests lives at /requests/<id>, which would light up "Requests";
   // its ?from= says which list it belongs to (see lib/requests/origin.ts).
   const pathname = navActivePath(rawPathname, useSearchParams().get('from'))
-  const { isAdmin, isManager, isAgent, enabledModules } = navVisibility
+  const { isAdmin, isManager, isAgent, hasTeam, enabledModules } = navVisibility
+  const isRequester = profile.role === 'user'
   const has = (m: string) => enabledModules.includes(m as never)
 
   // Order follows how each role actually opens this nav: Home is always the
@@ -76,11 +77,12 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
       // layer instead (Requester → own tickets, Technician → own+assigned+groups,
       // Manager → team, Admin/Owner → everything),
       // so it's available to every role that has the Requests module enabled.
-      show: isManager || isAdmin || has('requests'),
+      show: isManager || isAdmin || has('requests') || !!hasTeam,
       items: [
-        ...(isAgent || isManager || isAdmin ? [{ label: 'Dashboards', href: isManager || isAdmin ? '/admin/reports' : '/dashboards', icon: BarChart3, exactMatch: true }] : []),
+        ...(isAgent || isManager || isAdmin || hasTeam ? [{ label: 'Dashboards', href: isManager || isAdmin ? '/admin/reports' : '/dashboards', icon: BarChart3, exactMatch: true }] : []),
         // Click-through dashboard for every level (Requester → own requests, Technician / Manager → their groups, Admin / Owner → everything).
-        ...(has('requests') ? [{ label: 'Smart Dashboard', href: '/dashboards/executive', icon: LayoutDashboard }] : []),
+        // (not for a normal user: they have no Smart Dashboard)
+        ...(has('requests') && !isRequester ? [{ label: 'Smart Dashboard', href: '/dashboards/executive', icon: LayoutDashboard }] : []),
         ...(has('requests') ? [{ label: 'Report Builder', href: '/reports/pivot', icon: Table2 }] : []),
         // Ready-made, fixed reports per technician group (Report Builder is for building your own).
         // Requesters have no technician group, so they never see it.

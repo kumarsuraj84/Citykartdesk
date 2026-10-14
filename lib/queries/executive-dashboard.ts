@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { resolveReportAccess, agentScopeOrFilter, type ReportViewerScope } from '@/lib/reporting/access'
+import { resolveReportAccess, agentScopeOrFilter, reportsScopeOrFilter, type ReportViewerScope } from '@/lib/reporting/access'
+import { getDirectReportIds } from '@/lib/queries/profiles'
 import {
   UNASSIGNED, NO_CATEGORY, NO_LOCATION, NOT_SET, NOT_AC, NO_AC_DATA, RED_FLAG, WITHIN_LIMIT, type ExecTicket, type ExecApproval, type Priority,
 } from '@/lib/reporting/executive/engine'
@@ -178,6 +179,7 @@ export function applyScope(q: any, scope: ReportViewerScope, prefix: '' | 'reque
     case 'own': return q.eq(col('requester_id'), scope.userId)
     case 'team': return q.in(col('team_id'), scope.teamIds.length ? scope.teamIds : [NO_TEAM_ID])
     case 'agent': return opt ? q.or(agentScopeOrFilter(scope), opt) : q.or(agentScopeOrFilter(scope))
+    case 'reports': return opt ? q.or(reportsScopeOrFilter(scope), opt) : q.or(reportsScopeOrFilter(scope))
   }
 }
 
@@ -191,7 +193,12 @@ export async function loadExecutiveData(profile: ProfileWithTeams, opts: { fresh
   if (!level || !profile.org_id) return { error: "You don't have access to this dashboard." }
   const access = resolveReportAccess(profile, 'requests')
   if ('error' in access) return { error: access.error }
-  const scope = access.scope
+  let scope = access.scope
+  // a normal user who has people reporting to them sees the tickets of those people (not their own)
+  if (profile.role === 'user') {
+    const reportIds = await getDirectReportIds(profile.id)
+    if (reportIds.length > 0) scope = { kind: 'reports', userId: profile.id, reportIds }
+  }
   const orgId: string = profile.org_id
 
   // the key holds everything that decides which rows this viewer may see
@@ -199,7 +206,7 @@ export async function loadExecutiveData(profile: ProfileWithTeams, opts: { fresh
   return { ...shared, me: profile.full_name }
 }
 
-async function loadExecutiveRows(orgId: string, level: DashLevel, scope: ReportViewerScope): Promise<Omit<ExecutiveData, 'me'>> {
+export async function loadExecutiveRows(orgId: string, level: DashLevel, scope: ReportViewerScope): Promise<Omit<ExecutiveData, 'me'>> {
   const admin = createAdminClient() as unknown as AnyClient
   const nowDate = new Date()
   const now = nowDate.getTime()

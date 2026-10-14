@@ -6,14 +6,15 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { getCurrentProfileMock, getEnabledModulesMock, getAnalyticsMock, workloadMock, workloadReportMock } = vi.hoisted(() => ({
+const { getCurrentProfileMock, getEnabledModulesMock, getAnalyticsMock, workloadMock, workloadReportMock, reportIdsMock } = vi.hoisted(() => ({
   workloadReportMock: vi.fn(),
+  reportIdsMock: vi.fn(),
   getCurrentProfileMock: vi.fn(),
   getEnabledModulesMock: vi.fn(),
   getAnalyticsMock: vi.fn(),
   workloadMock: vi.fn(),
 }))
-vi.mock('@/lib/queries/profiles', () => ({ getCurrentProfile: getCurrentProfileMock, getEnabledModules: getEnabledModulesMock }))
+vi.mock('@/lib/queries/profiles', () => ({ getCurrentProfile: getCurrentProfileMock, getEnabledModules: getEnabledModulesMock, getDirectReportIds: reportIdsMock }))
 vi.mock('@/lib/queries/analytics', async () => { const real = await vi.importActual<typeof import('@/lib/queries/analytics')>('@/lib/queries/analytics'); return { getAnalytics: getAnalyticsMock, isPeriod: real.isPeriod, PERIOD_OPTIONS: real.PERIOD_OPTIONS } })
 vi.mock('@/lib/queries/requests', () => ({ getTechnicianWorkloadBoard: workloadMock }))
 vi.mock('@/lib/queries/workload', () => ({ getWorkloadReport: workloadReportMock }))
@@ -63,6 +64,22 @@ describe('/dashboards — the technician dashboard route', () => {
     getAnalyticsMock.mockReset().mockResolvedValue({ stores: { combos: [] } })
     workloadMock.mockReset().mockResolvedValue([])
     workloadReportMock.mockReset().mockResolvedValue([])
+    reportIdsMock.mockReset().mockResolvedValue([])
+  })
+
+  it('a normal user who has people reporting to them reaches it: analytics are scoped to those people, with no technician workload', async () => {
+    getCurrentProfileMock.mockResolvedValue(profileWith('user'))
+    reportIdsMock.mockResolvedValue(['r1', 'r2'])
+    expect(await callPage()).toEqual({ redirected: false })
+    expect(getAnalyticsMock).toHaveBeenCalledWith('org-1', '30d', { kind: 'reports', userId: 'u1', reportIds: ['r1', 'r2'] }, NO_STORE_CHOICE)
+    expect(workloadMock).not.toHaveBeenCalled()
+    expect(workloadReportMock).not.toHaveBeenCalled()
+  })
+
+  it('a normal user with nobody reporting to them is sent home', async () => {
+    getCurrentProfileMock.mockResolvedValue(profileWith('user'))
+    expect(await callPage()).toEqual({ redirected: true, target: '/home' })
+    expect(getAnalyticsMock).not.toHaveBeenCalled()
   })
 
   it('a technician reaches it, and analytics + workload are scoped to their own work plus their groups', async () => {

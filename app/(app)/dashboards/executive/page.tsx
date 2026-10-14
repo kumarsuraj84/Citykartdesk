@@ -10,7 +10,8 @@ import { ExecutiveDashboard } from '@/components/executive/ExecutiveDashboard'
 export default async function ExecutiveDashboardPage() {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
-  if (!profile.org_id || !levelFor(profile.role)) redirect('/home')
+  // (a normal user has no Smart Dashboard: a user who has a team gets the Dashboard for the team's tickets instead)
+  if (!profile.org_id || !levelFor(profile.role) || profile.role === 'user') redirect('/home')
   if (!(await getEnabledModules()).includes('requests')) redirect('/home')
 
   const data = await loadExecutiveData(profile)

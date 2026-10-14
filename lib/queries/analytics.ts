@@ -6,6 +6,7 @@ import { AGE_BUCKETS, ageBucketFor } from '@/lib/reporting/aging'
 import { RED_FLAG } from '@/lib/reporting/executive/engine'
 import { loadStoreDims } from '@/lib/queries/store-dims'
 import { momentOf } from '@/lib/analytics/moment'
+import { applyScope } from '@/lib/queries/executive-dashboard'
 import { istDay, istWeekStart } from '@/lib/reporting/ist'
 import {
   emptyStoreFilter, matchesStoreFilter, storeFilterCount, toCombos, type StoreCombo, type StoreDims, type StoreFilter,
@@ -268,8 +269,11 @@ export async function getAnalytics(
   storeFilter: StoreFilter = emptyStoreFilter()
 ): Promise<AnalyticsData> {
   const teamScope = scopeTeamIds(scope)
+  // a person's team (the people who report to them) is limited by who raised or works each ticket, not by technician group
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const inScope = (q: any) => (teamScope ? q.in('team_id', teamScope) : q)
+  const inScope = (q: any) => (scope.kind === 'reports' ? applyScope(q, scope, '') : teamScope ? q.in('team_id', teamScope) : q)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const inTaskScope = (q: any) => (scope.kind === 'reports' ? q.in('assignee_id', scope.reportIds.length > 0 ? scope.reportIds : [NO_TEAM_ID]) : inScope(q))
   const admin = createAdminClient() as unknown as AnyClient
   const { start: startDate, end: endDate, label: periodLabel, days } = resolvePeriodParam(period)
   const start = startDate.toISOString()
@@ -284,7 +288,7 @@ export async function getAnalytics(
     const { rows } = await fetchAllPages<any>(build, { maxRows: 200_000 })
     return { data: rows }
   }
-  const withinScope = (q: any, col: string) => (teamScope ? q.in(col, teamScope) : q) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const withinScope = (q: any, col: string) => (scope.kind === 'reports' ? applyScope(q, scope, 'request.') : teamScope ? q.in(col, teamScope) : q) // eslint-disable-line @typescript-eslint/no-explicit-any
 
   // Today/yesterday window for the Daily Activity widget -- always the last
   // two calendar days regardless of the dashboard's own 7d/30d/90d/custom
@@ -369,7 +373,7 @@ export async function getAnalytics(
     admin.from('profiles').select('id, full_name, role').eq('org_id', orgId),
 
     // Tasks
-    inScope(admin
+    inTaskScope(admin
       .from('tasks')
       .select('id, status, priority, due_date, assignee_id, team_id, created_at, updated_at')
       .eq('org_id', orgId)),

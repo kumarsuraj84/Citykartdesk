@@ -416,5 +416,7 @@ export type NavVisibility = {
   isManager: boolean
   isAdmin: boolean
   hasPendingApprovals: boolean
+  /** the person has people reporting to them (the Manager box on their accounts): they get the Dashboard for their team's tickets */
+  hasTeam?: boolean
   enabledModules: ModuleSlug[]
 }

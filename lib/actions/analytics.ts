@@ -1,7 +1,8 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { authorizeReportAccess, agentScopeOrFilter } from '@/lib/reporting/access'
+import { authorizeReportAccess, agentScopeOrFilter, reportsScopeOrFilter, type ReportViewerScope } from '@/lib/reporting/access'
+import { getDirectReportIds } from '@/lib/queries/profiles'
 import { resolvePeriodParam, type PeriodParam } from '@/lib/queries/analytics'
 import { applyCurrentlyBreachedFilter } from '@/lib/sla/breach'
 import { storeFilterCount, type StoreFilter } from '@/lib/analytics/store-filter'
@@ -75,7 +76,13 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
   // defined in exactly one place instead of a second, divergent copy.
   const access = await authorizeReportAccess('requests')
   if ('error' in access) return { data: [], error: access.error }
-  const { profile, scope } = access
+  const { profile } = access
+  let scope: ReportViewerScope = access.scope
+  // a normal user who has people reporting to them sees those people's tickets (the Dashboard they get is about them)
+  if (profile.role === 'user') {
+    const reportIds = await getDirectReportIds(profile.id)
+    if (reportIds.length > 0) scope = { kind: 'reports', userId: profile.id, reportIds }
+  }
 
   // Route to task query if module = tasks
   if (filter._module === 'tasks') {
@@ -136,6 +143,7 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
     if (scope.kind === 'own')        q = q.eq('requester_id', scope.userId)
     else if (scope.kind === 'agent') q = q.or(agentScopeOrFilter(scope))
     else if (scope.kind === 'team')  q = q.in('team_id', scope.teamIds)
+    else if (scope.kind === 'reports') q = q.or(reportsScopeOrFilter(scope))
 
     if (filter.status?.length)   q = q.in('status', filter.status as RequestStatus[])
     if (filter.priority)         q = q.eq('priority', filter.priority as RequestPriority)

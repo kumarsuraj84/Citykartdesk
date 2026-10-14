@@ -9,7 +9,7 @@ import { highestOpenAgents } from '@/lib/analytics/highest-open'
 import { getWorkloadReport } from '@/lib/queries/workload'
 import { getAnalytics, isPeriod, PERIOD_OPTIONS, type Period } from '@/lib/queries/analytics'
 import { getTechnicianWorkloadBoard } from '@/lib/queries/requests'
-import { getCurrentProfile, getEnabledModules } from '@/lib/queries/profiles'
+import { getCurrentProfile, getEnabledModules, getDirectReportIds } from '@/lib/queries/profiles'
 import { getSelectableGroups } from '@/lib/queries/dashboardGroups'
 import { resolveReportAccess } from '@/lib/reporting/access'
 import { parseGroupsParam, narrowScopeToGroups, teamIdsForScope } from '@/lib/analytics/group-filter'
@@ -29,9 +29,12 @@ export default async function TechnicianDashboardPage({
   if (!profile) redirect('/login')
   if (!profile.org_id) redirect('/home')
   if (['admin', 'manager', 'platform_owner'].includes(profile.role)) redirect('/admin/reports')
-  if (profile.role !== 'agent') redirect('/home')
+  // a normal user who has people reporting to them sees the Dashboard for those people's tickets; any other normal user has none
+  const reportIds = profile.role === 'user' ? await getDirectReportIds(profile.id) : []
+  const isTeamView = profile.role === 'user' && reportIds.length > 0
+  if (profile.role !== 'agent' && !isTeamView) redirect('/home')
 
-  const access = resolveReportAccess(profile, 'requests')
+  const access = isTeamView ? { scope: { kind: 'reports' as const, userId: profile.id, reportIds } } : resolveReportAccess(profile, 'requests')
   if ('error' in access) redirect('/home')
   if (!(await getEnabledModules()).includes('requests')) redirect('/home')
 
@@ -39,17 +42,18 @@ export default async function TechnicianDashboardPage({
   const period = isPeriod(sp.period) ? (sp.period as Period) : '30d'
 
   // A technician in several groups can pick which of them the dashboard shows.
-  const groups = await getSelectableGroups(profile, access.scope)
-  const { scope, selected } = narrowScopeToGroups(access.scope, parseGroupsParam(sp.groups), groups.map((g) => g.id))
+  const groups = isTeamView ? [] : await getSelectableGroups(profile, access.scope)
+  const { scope, selected } = isTeamView ? { scope: access.scope, selected: [] as string[] } : narrowScopeToGroups(access.scope, parseGroupsParam(sp.groups), groups.map((g) => g.id))
   const groupsQS = selected.length ? `&groups=${selected.join(',')}` : ''
   const storeFilter = parseStoreFilter(sp)
   const storeQS = storeFilterQS(storeFilter)
 
   const [analytics, workload, workloadRows] = await Promise.all([
     getAnalytics(profile.org_id, period, scope, storeFilter),
-    getTechnicianWorkloadBoard(profile.org_id, scope),
+    // (a team view has no technician workload board or capacity banner: those are about technician groups)
+    isTeamView ? Promise.resolve([]) : getTechnicianWorkloadBoard(profile.org_id, scope),
     // Who carries the biggest backlog in the technician's own groups — same banner managers see.
-    getWorkloadReport(profile.org_id, teamIdsForScope(scope)),
+    isTeamView ? Promise.resolve([]) : getWorkloadReport(profile.org_id, teamIdsForScope(scope)),
   ])
   const topOpenAgents = highestOpenAgents(workloadRows)
 
@@ -58,10 +62,10 @@ export default async function TechnicianDashboardPage({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-foreground">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Activity and performance for your technician groups.</p>
+          <p className="text-sm text-muted-foreground">{isTeamView ? 'Tickets raised by and assigned to the people who report to you.' : 'Activity and performance for your technician groups.'}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <GroupFilter groups={groups} selected={selected} />
+          {!isTeamView && <GroupFilter groups={groups} selected={selected} />}
           <StoreFilter combos={analytics.stores.combos} selected={storeFilter} />
           <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 gap-0.5">
             {PERIOD_OPTIONS.map((o) => (

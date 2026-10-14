@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { AppShell } from '@/components/layout/AppShell'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
-import { getCurrentProfile, getEnabledModules, getTrialInfo, getNavCounts } from '@/lib/queries/profiles'
+import { getCurrentProfile, getEnabledModules, getTrialInfo, getNavCounts, getDirectReportIds } from '@/lib/queries/profiles'
 import { getNotifications } from '@/lib/queries/notifications'
 import { getActionableApprovalsForUser } from '@/lib/queries/approvals'
 import { TrialBanner } from '@/components/layout/TrialBanner'
@@ -53,8 +53,12 @@ export default async function AppLayout({
   const isManager = profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'
   const isAdmin = profile.role === 'admin' || profile.role === 'platform_owner'
 
+  // a normal user who has people reporting to them gets the Dashboard for their team's tickets
+  const hasTeam = profile.role === 'user' ? (await getDirectReportIds(profile.id)).length > 0 : false
+
   const navVisibility: NavVisibility = {
     isAgent,
+    hasTeam,
     isTeamLead,
     isManager,
     isAdmin,

@@ -231,6 +231,13 @@ export const hasSubordinates = cache(async function (userId: string): Promise<bo
   return (count ?? 0) > 0
 })
 
+/** The people who report directly to this user (the Manager box on their accounts: profiles.manager_id). */
+export const getDirectReportIds = cache(async function (userId: string): Promise<string[]> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('profiles').select('id').eq('manager_id', userId)
+  return (data ?? []).map((r) => r.id)
+})
+
 export type NavCounts = {
   requests: number
   tasks: number
