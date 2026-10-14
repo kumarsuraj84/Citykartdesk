@@ -82,7 +82,7 @@ async function readFileLines(path, cursor, fromStart) {
   const end = buf.lastIndexOf(0x0a)
   if (end < 0) return { lines: [], next: { offset: length >= MAX_READ ? offset + length : offset } }   // a partial line: wait for the rest (unless absurdly long)
   const text = buf.subarray(0, end + 1).toString('utf8').replace(/^\uFEFF/, '')
-  return { lines: text.split('\n').map((l) => l.replace(/\r$/, '')), next: { offset: offset + end + 1 } }
+  return { lines: text.slice(0, -1).split('\n').map((l) => l.replace(/\r$/, '')), next: { offset: offset + end + 1 } }
 }
 
 const TS = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?Z /

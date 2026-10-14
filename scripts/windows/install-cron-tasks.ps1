@@ -4,6 +4,8 @@
 #   CitykartDesk-Cron-BusinessRules  every 15 min  (scheduled business rules / SLA escalation)
 #   CitykartDesk-Cron-EmailReplySync every 1 min   (poll IMAP for replies to outbound emails)
 #   CitykartDesk-Cron-Csat           every 30 min  (auto-close resolved tickets past their reopen window + the one CSAT reminder)
+#   CitykartDesk-Cron-SystemLogArchive every 6 hours (moves old System Log records to the archive; never deletes)
+#   CitykartDesk-LogShipper          every 2 min   (copies problems from the PostgREST / auth / storage logs into the System Log)
 $runner = Join-Path $PSScriptRoot 'run-cron-tick.ps1'
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
@@ -18,3 +20,11 @@ Install-Job 'CitykartDesk-Cron-Alerts' 'alerts' 30
 Install-Job 'CitykartDesk-Cron-BusinessRules' 'business-rules' 15
 Install-Job 'CitykartDesk-Cron-EmailReplySync' 'email-reply-sync' 1
 Install-Job 'CitykartDesk-Cron-Csat' 'csat' 30
+Install-Job 'CitykartDesk-Cron-SystemLogArchive' 'system-log-archive' 360
+
+# the log shipper has its own runner
+$shipRunner = Join-Path $PSScriptRoot 'run-log-shipper.ps1'
+$shipAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$shipRunner`""
+$shipTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Minutes 2)
+Register-ScheduledTask -TaskName 'CitykartDesk-LogShipper' -Action $shipAction -Trigger $shipTrigger -Principal $principal -Settings $settings -Force | Out-Null
+Write-Output 'Installed CitykartDesk-LogShipper (every 2 min)'

@@ -2,7 +2,6 @@
 // ordinary traffic and people's mistakes do not, and nothing sensitive is copied.
 
 import { describe, it, expect } from 'vitest'
-// @ts-expect-error plain .mjs module without types (it is shared with a standalone script)
 import { parsePostgrestLine, parseAuthLine, parseStorageLine, createPostgresParser, createParser, collapseEntries } from '../../scripts/lib/log-parsers.mjs'
 
 type Entry = { source: string; severity: string; action: string; message?: string; errorCode?: string; path?: string; at?: number; detail?: Record<string, unknown>; stack?: string }
