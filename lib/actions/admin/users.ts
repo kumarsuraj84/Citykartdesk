@@ -326,6 +326,11 @@ export async function setUserTeams(
   return {}
 }
 
+/** A step after the account was created failed (D-048): remove the new account again so no half-set-up user is left behind (its profile goes with it). */
+async function undoInvite(admin: AnyClient, userId: string): Promise<void> {
+  try { await admin.auth.admin.deleteUser(userId) } catch { /* nothing more can be done; the error the admin sees is the original one */ }
+}
+
 export async function inviteUser(fields: {
   email: string
   full_name: string
@@ -447,6 +452,7 @@ export async function inviteUser(fields: {
 
   const { error: profileErr } = await admin.from('profiles').update(profileUpdate).eq('id', uid)
   if (profileErr) {
+    await undoInvite(admin, uid)
     return { error: profileErr.message }
   }
 
@@ -461,6 +467,7 @@ export async function inviteUser(fields: {
       mobile_number: normalizedMobile,
     })
     if (mobileErr) {
+      await undoInvite(admin, uid)
       if (mobileErr.code === '23505') return { error: 'This mobile number is already registered to another user in this organization.' }
       return { error: mobileErr.message }
     }
