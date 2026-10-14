@@ -6,6 +6,7 @@ import {
 import { isNsoStore, DEFAULT_RED_FLAG_PERCENT } from '@/lib/reporting/analytics/facts'
 import { loadAcContext } from '@/lib/queries/store-ac-stats'
 import { levelFor, type DashLevel } from '@/lib/reporting/executive/levels'
+import { createShortCache } from '@/lib/cache/short-ttl'
 import type { ProfileWithTeams } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -179,14 +180,25 @@ export function applyScope(q: any, scope: ReportViewerScope, prefix: '' | 'reque
   }
 }
 
-/** Loads the compact ticket and approval rows the Executive Dashboard works from, limited to the viewer's level. */
-export async function loadExecutiveData(profile: ProfileWithTeams): Promise<ExecutiveData | { error: string }> {
+/** The dashboard's figures may be up to this old (D-040): it is a view of the whole year, not a live queue. */
+export const EXECUTIVE_CACHE_MS = 60_000
+const executiveCache = createShortCache<Omit<ExecutiveData, 'me'>>(EXECUTIVE_CACHE_MS, 40)
+
+/** Loads the compact ticket and approval rows the Executive Dashboard works from, limited to the viewer's level. Shared for a minute between viewers with the same organization, level and scope. */
+export async function loadExecutiveData(profile: ProfileWithTeams, opts: { fresh?: boolean } = {}): Promise<ExecutiveData | { error: string }> {
   const level = levelFor(profile.role)
   if (!level || !profile.org_id) return { error: "You don't have access to this dashboard." }
   const access = resolveReportAccess(profile, 'requests')
   if ('error' in access) return { error: access.error }
   const scope = access.scope
+  const orgId: string = profile.org_id
 
+  // the key holds everything that decides which rows this viewer may see
+  const shared = await executiveCache.get(`exec|${orgId}|${level}|${JSON.stringify(scope)}`, () => loadExecutiveRows(orgId, level, scope), opts)
+  return { ...shared, me: profile.full_name }
+}
+
+async function loadExecutiveRows(orgId: string, level: DashLevel, scope: ReportViewerScope): Promise<Omit<ExecutiveData, 'me'>> {
   const admin = createAdminClient() as unknown as AnyClient
   const nowDate = new Date()
   const now = nowDate.getTime()
@@ -194,17 +206,17 @@ export async function loadExecutiveData(profile: ProfileWithTeams): Promise<Exec
 
   const { rows, truncated } = await fetchAll<Raw>((from, to) => {
     // Cancelled tickets are loaded too (the normal dashboard counts them as created); they only come from inside the look-back.
-    const q = admin.from('requests').select(SELECT).eq('org_id', profile.org_id)
+    const q = admin.from('requests').select(SELECT).eq('org_id', orgId)
       .eq('reopens.action', 'reopened')
       .or(`created_at.gte.${since},and(resolved_at.is.null,closed_at.is.null,status.neq.cancelled)`)
     return applyScope(q, scope, '').order('created_at', { ascending: false }).order('id', { ascending: true }).range(from, to)
   })
   // the AC position of each store is the same whatever the viewer's own scope is, so a store's red flag is the same on every dashboard
-  const { openAcByStore } = await loadAcContext(admin, profile.org_id)
+  const { openAcByStore } = await loadAcContext(admin, orgId)
   const tickets = rows.map((r) => toExecTicket(r, now, openAcByStore))
 
-  const approvals = await loadApprovals(admin, profile.org_id, scope, since)
-  return { level, me: profile.full_name, now, tickets, approvals, truncated }
+  const approvals = await loadApprovals(admin, orgId, scope, since)
+  return { level, now, tickets, approvals, truncated }
 }
 
 interface RawApproval {

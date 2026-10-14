@@ -50,7 +50,7 @@ export async function exportReportXlsx(
   const { profile, scope } = auth
 
   const [allRows, fields] = await Promise.all([
-    fetchReportData(entity, profile.org_id!, scope),
+    fetchReportData(entity, profile.org_id!, scope, { fresh: true }),
     getReportFieldsForEntity(entity, profile.org_id!),
   ])
   const fieldsWithCount = [...fields, RECORD_COUNT_FIELD]

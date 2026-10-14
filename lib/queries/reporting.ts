@@ -7,6 +7,7 @@ import { flattenLeafOptions } from '@/lib/forms/options'
 import { sourceChannelOf } from '@/lib/sources'
 import { isEverBreached, isEverResponseBreached } from '@/lib/sla/breach'
 import { ageBucketLabel } from '@/lib/reporting/aging'
+import { createShortCache } from '@/lib/cache/short-ttl'
 import type { Database } from '@/types/database'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -703,10 +704,24 @@ async function fetchApprovalRows(admin: AnyClient, orgId: string): Promise<{ row
   return { rows, truncated }
 }
 
+/** Report Builder / pivot data may be up to this old (D-040); exports always read fresh. */
+export const REPORT_CACHE_MS = 60_000
+const reportCache = createShortCache<ReportDataResult>(REPORT_CACHE_MS, 30)
+
 export async function fetchReportData(
   entity: EntityKey,
   orgId: string,
-  scope: ReportViewerScope = { kind: 'all' }
+  scope: ReportViewerScope = { kind: 'all' },
+  opts: { fresh?: boolean } = {},
+): Promise<ReportDataResult> {
+  // the key holds everything that decides which rows this viewer may see
+  return reportCache.get(`report|${orgId}|${entity}|${JSON.stringify(scope)}`, () => loadReportData(entity, orgId, scope), opts)
+}
+
+async function loadReportData(
+  entity: EntityKey,
+  orgId: string,
+  scope: ReportViewerScope,
 ): Promise<ReportDataResult> {
   const admin = createAdminClient() as unknown as AnyClient
 
