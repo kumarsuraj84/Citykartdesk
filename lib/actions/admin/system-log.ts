@@ -6,7 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { toCSV } from '@/lib/export/csv'
 import { recordAudit } from '@/lib/syslog/audit'
 import { buildClaudeBundle, groupErrors, type ErrorGroup, type LogRowLite } from '@/lib/syslog/bundle'
-import { CATEGORIES, SEVERITIES, SOURCES, OUTCOMES } from '@/lib/syslog/shape'
+import { CATEGORIES, SEVERITIES, SOURCES, OUTCOMES, SYSTEM_LOG_PAGE_SIZE } from '@/lib/syslog/shape'
 
 // The System Log screen. Reads go through the signed-in administrator's OWN session, so row security (administrators and platform owners of
 // the same organization only) is what limits them, not just the checks here.
@@ -60,7 +60,6 @@ export interface SystemLogEntry {
   row_hash: string | null
 }
 
-export const SYSTEM_LOG_PAGE_SIZE = 100
 const EXPORT_LIMIT = 50_000
 const GROUP_SCAN_LIMIT = 5000
 const COLUMNS = 'id, created_at, category, source, severity, outcome, action, actor_id, actor_role, entity_type, entity_id, entity_label, message, error_code, stack, fingerprint, path, method, request_id, correlation_id, session_id, ip, user_agent, from_click, click_target, before_data, after_data, detail, row_hash'

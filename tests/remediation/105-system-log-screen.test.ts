@@ -15,7 +15,8 @@ vi.mock('next/headers', () => ({ headers: vi.fn().mockResolvedValue(new Headers(
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn(), refresh: vi.fn() }))
 
 import { createClient } from '@/lib/supabase/server'
-import { listSystemLog, listErrorGroups, buildErrorBundle, exportSystemLog, verifyLogIntegrity, SYSTEM_LOG_PAGE_SIZE } from '@/lib/actions/admin/system-log'
+import { listSystemLog, listErrorGroups, buildErrorBundle, exportSystemLog, verifyLogIntegrity } from '@/lib/actions/admin/system-log'
+import { SYSTEM_LOG_PAGE_SIZE } from '@/lib/syslog/shape'
 import { flushSystemLog } from '@/lib/syslog/record'
 
 const mockedCreateClient = vi.mocked(createClient)

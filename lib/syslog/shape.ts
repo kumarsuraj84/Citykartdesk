@@ -1,6 +1,9 @@
 // System Log: the pure, dependency-free pieces (types, redaction, fingerprints, classification of failed HTTP calls).
 // Nothing here touches the database, the network or Next, so it is safe to import anywhere and easy to test.
 
+/** Rows per page on the System Log screen. */
+export const SYSTEM_LOG_PAGE_SIZE = 100
+
 export const CATEGORIES = ['audit', 'security', 'error', 'event'] as const
 export const SOURCES = ['browser', 'app_server', 'server_action', 'api_route', 'cron', 'database', 'storage', 'auth', 'integration', 'admin', 'process', 'shipper'] as const
 export const SEVERITIES = ['debug', 'info', 'warning', 'error', 'critical'] as const
