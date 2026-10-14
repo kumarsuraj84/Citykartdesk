@@ -19,6 +19,7 @@ import {
 } from '@/components/analytics/Charts'
 import { fmtHours } from '@/lib/utils/fmt'
 import { DetailDrawer } from '@/components/analytics/DetailDrawer'
+import { useRequestDrill } from '@/components/analytics/useRequestDrill'
 import { StoreMasterWidget } from '@/components/analytics/StoreMasterWidget'
 import { TechnicianWorkloadCard } from '@/components/home/TechnicianWorkloadCard'
 import { ACTIVE_TECH_STATUSES, type TechnicianWorkloadRow } from '@/lib/queries/technicianWorkloadShared'
@@ -149,11 +150,23 @@ function SortableWidget({ id, span, children }: { id: string; span: WidgetSpan; 
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds }: {
-  data: AnalyticsData; technicianWorkload: TechnicianWorkloadRow[]; userId: string; groupIds?: string[]
+export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds, groups }: {
+  data: AnalyticsData; technicianWorkload: TechnicianWorkloadRow[]; userId: string; groupIds?: string[]; groups?: { id: string; name: string }[]
 }) {
-  const [drawer, setDrawer] = useState<DrawerFilter | null>(null)
-  const close = useCallback(() => setDrawer(null), [])
+  // The plain side list is kept for the few numbers the Smart Dashboard pop-up cannot show exactly (tasks) and as the fallback if its data cannot load.
+  const [drawer, setSideList] = useState<DrawerFilter | null>(null)
+  const close = useCallback(() => setSideList(null), [])
+
+  // Names of the groups and technicians on this page, so a clicked row can be found among the Smart Dashboard's tickets (which carry names).
+  const groupName = useCallback((id: string) => groups?.find((g) => g.id === id)?.name ?? data.byTeam.find((t) => t.teamId === id)?.teamName, [groups, data.byTeam])
+  const techName = useCallback((id: string) => data.agentLeaderboard.find((a) => a.agentId === id)?.agentName, [data.agentLeaderboard])
+  const drill = useRequestDrill(
+    { period: data.period, periodWindow: data.periodWindow, periodLabel: data.periodLabel, groupIds: groupIds ?? [], groupName, techName, store: data.stores.filter },
+    setSideList,
+  )
+  const openDrill = drill.open
+  // every number on the page opens through here: the pop-up when it can, otherwise the side list
+  const setDrawer = useCallback((f: DrawerFilter | null) => { if (f && openDrill(f)) return; setSideList(f) }, [openDrill])
 
   const periodLabel = data.periodLabel
 
@@ -738,7 +751,7 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds 
 
     return list
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, technicianWorkload, periodLabel])
+  }, [data, technicianWorkload, periodLabel, setDrawer])
 
   const widgetById = useMemo(() => new Map(widgets.map((w) => [w.id, w])), [widgets])
   const defaultOrder = useMemo(() => widgets.map((w) => w.id), [widgets])
@@ -775,6 +788,7 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds 
   return (
     <>
       <DetailDrawer filter={drawer} onClose={close} groupIds={groupIds} storeFilter={data.stores.filter} />
+      {drill.modal}
 
       <div className="space-y-4">
 

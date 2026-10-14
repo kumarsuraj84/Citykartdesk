@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Building2, ChevronRight, SlidersHorizontal, Store, Tag, User, Wrench, X } from 'lucide-react'
 import {
-  DIM_LABEL, MEASURES, NOT_SET, RED_FLAG, UNASSIGNED, ageInDays, isOpen, applyFilters, approvalsBehind, TICKET_ONLY, capitalize, formatMeasure, keyOf, measure, statusLabel, ticketsBehind,
+  DIM_LABEL, MEASURES, NOT_SET, RED_FLAG, UNASSIGNED, ageInDays, isOpen, applyFilters, approvalsBehind, TICKET_ONLY, capitalize, formatMeasure, keyOf, measure, statusLabel, drillCohort,
   type ApprovalRow, type Dim, type ExecTicket, type Filters, type SlaState, type Win,
 } from '@/lib/reporting/executive/engine'
 import { dateTimeLabel } from '@/lib/reporting/executive/labels'
@@ -22,8 +22,8 @@ interface Props {
   W: Win
   periodText: string
   onClose: () => void
-  /** copies the slice picked in the pop-up into the dashboard's filters */
-  onApply: (dims: DrillDims, sla: SlaState) => void
+  /** copies the slice picked in the pop-up into the dashboard's filters; left out where the page has no such filters (the normal Dashboards page) */
+  onApply?: (dims: DrillDims, sla: SlaState) => void
 }
 
 function groupCount<T>(items: T[], key: (t: T) => string): [string, T[]][] {
@@ -67,7 +67,11 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
     return ts
   }, [tickets, approvals, filters, now, selDims, sel, ctx.approvals, Wc])
 
-  const behind = useMemo(() => (ctx.approvals ? slice : ticketsBehind(slice, Wc, ctx.metric, !!sel.age)), [slice, ctx.approvals, ctx.metric, Wc, sel.age])
+  // (the same calculation the normal Dashboards page's numbers are tested against: engine.drillCohort)
+  const behind = useMemo(
+    () => (ctx.approvals ? slice : drillCohort(tickets, filters, now, Wc, { metric: ctx.metric, only: ctx.only, dims: sel }).behind),
+    [slice, tickets, filters, now, ctx.approvals, ctx.only, ctx.metric, Wc, sel],
+  )
   const cohort = useMemo(() => behind.filter((t) => (lens === 'breached' ? t.breached : lens === 'ok' ? !t.breached : true)), [behind, lens])
 
   const groups = useMemo(() => groupCount(cohort, (t) => t.group).slice(0, 8), [cohort])
@@ -319,9 +323,11 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-6 py-3.5 text-xs">
-          <button type="button" onClick={() => { onApply(sel, lens); onClose() }} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2 font-semibold text-foreground transition-colors hover:bg-muted">
-            <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />Apply this slice to the dashboard filters
-          </button>
+          {onApply ? (
+            <button type="button" onClick={() => { onApply(sel, lens); onClose() }} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2 font-semibold text-foreground transition-colors hover:bg-muted">
+              <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />Apply this slice to the dashboard filters
+            </button>
+          ) : <span />}
           <div className="flex items-center gap-2">
             {stage < 4 && (
               <button type="button" onClick={() => goStage((stage + 1) as 2 | 3 | 4)} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground transition-colors hover:bg-primary/90">

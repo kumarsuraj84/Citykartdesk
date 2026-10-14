@@ -65,6 +65,8 @@ export interface ExecTicket {
   created: number
   /** resolved (or, failing that, closed) time — null while the ticket is still open */
   resolved: number | null
+  /** when the ticket was closed (the automatic close after the reopen window), null if it never was */
+  closed: number | null
   /** resolution due time, or null when the ticket has no SLA deadline */
   due: number | null
   /** hours from created to resolved; null when not resolved or when the dates are inconsistent */
@@ -465,6 +467,32 @@ export function heatmap(ts: ExecTicket[], w: Win): { cells: Map<string, number>;
 }
 
 /** The tickets "behind the numbers" for a measure: oldest first for backlog, newest first otherwise. */
+/**
+ * Two slices that have no measure of their own but are numbers on the normal Dashboards page, so its clicks can open this pop-up too:
+ *  - 'closed'      tickets closed (automatically, after the reopen window) inside the window;
+ *  - 'no_response' tickets still open that nobody has answered yet ("first response overdue").
+ */
+export type SliceOnly = 'closed' | 'no_response'
+export function ticketsBehindOnly(ts: ExecTicket[], w: Win, only: SliceOnly): ExecTicket[] {
+  if (only === 'closed') return ts.filter((t) => t.closed !== null && inWin(t.closed, w)).sort((a, b) => b.created - a.created)
+  return ts.filter((t) => isOpen(t) && t.frH === null).sort((a, b) => a.created - b.created)
+}
+
+/**
+ * The tickets behind a number in the pop-up, for a plain (non-approval) slice: every dashboard filter stays on, the picked slice narrows further,
+ * then the measure (or the special slice) says which of those the number counts. The pop-up and the tests of the normal Dashboards page's
+ * numbers both use this, so a number and the list behind it cannot drift apart.
+ */
+export function drillCohort(
+  tickets: ExecTicket[], filters: Filters, now: number, w: Win,
+  pick: { metric: Measure; only?: SliceOnly; dims: Partial<Record<Dim, string>> },
+): { slice: ExecTicket[]; behind: ExecTicket[] } {
+  const selDims = (Object.keys(pick.dims) as Dim[]).filter((k) => pick.dims[k])
+  const slice = applyFilters(tickets, filters, now).filter((t) => selDims.every((k) => keyOf(k, t, now) === pick.dims[k]))
+  const behind = pick.only ? ticketsBehindOnly(slice, w, pick.only) : ticketsBehind(slice, w, pick.metric, !!pick.dims.age)
+  return { slice, behind }
+}
+
 export function ticketsBehind(ts: ExecTicket[], w: Win, m: Measure, onlyOpen = false): ExecTicket[] {
   let out: ExecTicket[]
   if (onlyOpen) out = ts.filter(isOpen)

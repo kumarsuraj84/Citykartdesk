@@ -178,6 +178,8 @@ export type BacklogAging = { bucket: string; label: string; count: number }[]
 export type AnalyticsData = {
   period: PeriodParam
   periodLabel: string
+  /** the period as the numbers were counted (epoch ms), so a click can open a list over exactly the same window */
+  periodWindow: { start: number; end: number }
   // Volume
   totalCreated: number
   totalResolved: number
@@ -700,6 +702,7 @@ export async function getAnalytics(
   return {
     period,
     periodLabel,
+    periodWindow: { start: startDate.getTime(), end: endDate.getTime() },
     totalCreated,
     totalResolved,
     totalClosed,

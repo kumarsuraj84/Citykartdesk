@@ -15,7 +15,7 @@ const tk = (o: Partial<ExecTicket> = {}): ExecTicket => ({
   id: `s${++n}`, no: `CKSD-${3000 + n}`, subject: 'AC not cooling', group: 'ADMIN GROUP', tech: 'Krishan', cat: 'AC ISSUE', sub: 'COOLING', svc: 'Admin repair',
   req: 'Store A', dept: 'Stores', loc: 'STORES', store: 'Store A', state: 'Delhi', oem: 'LG OEM - ALL', brand: 'LG', src: 'Portal',
   cluster: 'UP2', region: 'R4', stype: 'Regular', plist: 'ROS', acb: 'VOLTAS', amb: 'CARRIER', amv: 'VENDOR', ac: WITHIN_LIMIT, acTotal: 10, acOpen: 1, acPct: 10,
-  prio: 'medium', status: 'in_progress', created: ago(2), resolved: null, due: NOW + DAY, tatH: null, breached: false, csat: null, reo: [], frH: 1, ...o,
+  prio: 'medium', status: 'in_progress', created: ago(2), resolved: null, closed: null, due: NOW + DAY, tatH: null, breached: false, csat: null, reo: [], frH: 1, ...o,
 })
 
 // three regions with their own clusters, states, stores and technicians

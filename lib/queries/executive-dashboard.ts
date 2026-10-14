@@ -158,6 +158,7 @@ export function toExecTicket(r: Raw, now: number, openAcByStore: ReadonlyMap<str
     status: r.status,
     created,
     resolved,
+    closed: r.closed_at ? new Date(r.closed_at).getTime() : null,
     due,
     tatH: tat !== null && Number.isFinite(tat) && tat >= 0 ? tat : null,
     breached,

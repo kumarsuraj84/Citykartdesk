@@ -1,4 +1,4 @@
-import type { ApprovalMeasure, ApprovalRow, Dim, ExecTicket, Filters, Measure, Win } from '@/lib/reporting/executive/engine'
+import type { ApprovalMeasure, ApprovalRow, Dim, ExecTicket, Filters, Measure, SliceOnly, Win } from '@/lib/reporting/executive/engine'
 import type { DashLevel } from '@/lib/reporting/executive/levels'
 
 /** The five "lenses" that show only some sections of the page. */
@@ -35,6 +35,8 @@ export interface DrillContext {
   winLabel?: string
   ticketId?: string
   sla?: 'all' | 'breached' | 'ok'
+  /** a slice with no measure of its own (closed in the window, open with no first response); the normal Dashboards page opens these */
+  only?: SliceOnly
 }
 
 /** Opens the drill-down pop-up. Only the title, subtitle and stage are required; everything else defaults. */

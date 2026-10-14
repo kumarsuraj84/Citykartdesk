@@ -79,7 +79,7 @@ export default async function TechnicianDashboardPage({
         </div>
       </div>
       {topOpenAgents.length > 0 && <CapacityBanner agents={topOpenAgents} />}
-      <AnalyticsDashboard data={analytics} technicianWorkload={workload} userId={profile.id} groupIds={selected} />
+      <AnalyticsDashboard data={analytics} technicianWorkload={workload} userId={profile.id} groupIds={selected} groups={groups} />
     </div>
   )
 }

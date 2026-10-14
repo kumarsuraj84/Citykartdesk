@@ -22,7 +22,7 @@ let n = 0
 const tk = (o: Partial<ExecTicket> = {}): ExecTicket => withDue({
   id: `id${++n}`, no: `CKSD-${1000 + n}`, subject: 'AC not cooling', group: 'ADMIN GROUP', tech: 'Krishan', cat: 'AC ISSUE', sub: 'COOLING', svc: 'Admin repair',
   req: 'Store A', dept: 'Stores', loc: 'STORES', store: 'Store A', state: 'Delhi', oem: 'BLUE STAR OEM - DL', brand: 'BLUE STAR', src: 'Portal', cluster: 'UP2', region: 'R4', stype: 'Regular', plist: 'ROS', acb: 'DAIKIN', amb: 'DAIKIN', amv: 'VENDOR', ac: 'Within limit', acTotal: 10, acOpen: 1, acPct: 10,
-  prio: 'medium', status: 'in_progress', created: ago(2), resolved: null, due: null, tatH: null, breached: false, csat: null, reo: [], frH: 1, ...o,
+  prio: 'medium', status: 'in_progress', created: ago(2), resolved: null, closed: null, due: null, tatH: null, breached: false, csat: null, reo: [], frH: 1, ...o,
 }, o)
 const done = (created: number, tatH: number, o: Partial<ExecTicket> = {}) => tk({ created, resolved: created + tatH * HOUR, tatH, status: 'resolved', ...o })
 

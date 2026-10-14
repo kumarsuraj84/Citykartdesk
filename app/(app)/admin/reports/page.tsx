@@ -229,7 +229,7 @@ export default async function ReportsPage({
       )}
 
       {tab === 'requests' && hasRequests && requestData && (
-        <AnalyticsDashboard data={requestData} technicianWorkload={technicianWorkload} userId={profile.id} groupIds={selectedGroups} />
+        <AnalyticsDashboard data={requestData} technicianWorkload={technicianWorkload} userId={profile.id} groupIds={selectedGroups} groups={selectableGroups} />
       )}
 
       {tab === 'sla' && hasRequests && requestData && (
