@@ -108,7 +108,9 @@ describe('browser events route', () => {
     await flushSystemLog()
     const list = (await svc<Row[]>('GET', `/system_log?message=like.*${tag}*&source=eq.browser&order=id.asc`)).json
     expect(list).toHaveLength(2)
-    expect(list[0]).toMatchObject({ category: 'error', source: 'browser', action: 'browser.js_error', actor_id: user.id, path: '/requests/abc', from_click: true, click_target: 'button:Start Working', user_agent: 'Browser/9', session_id: `sess-${tag}` })
-    expect(list[1]).toMatchObject({ action: 'browser.render_error', from_click: false, org_id: ORG_A })
+    // the two rows are written together, so which one gets the lower id is not defined: find each by what it is
+    const byAction = (name: string) => list.find((r) => r.action === name)
+    expect(byAction('browser.js_error')).toMatchObject({ category: 'error', source: 'browser', action: 'browser.js_error', actor_id: user.id, path: '/requests/abc', from_click: true, click_target: 'button:Start Working', user_agent: 'Browser/9', session_id: `sess-${tag}` })
+    expect(byAction('browser.render_error')).toMatchObject({ action: 'browser.render_error', from_click: false, org_id: ORG_A })
   })
 })
