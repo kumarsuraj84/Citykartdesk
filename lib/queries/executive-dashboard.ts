@@ -179,7 +179,13 @@ export function applyScope(q: any, scope: ReportViewerScope, prefix: '' | 'reque
     case 'own': return q.eq(col('requester_id'), scope.userId)
     case 'team': return q.in(col('team_id'), scope.teamIds.length ? scope.teamIds : [NO_TEAM_ID])
     case 'agent': return opt ? q.or(agentScopeOrFilter(scope), opt) : q.or(agentScopeOrFilter(scope))
-    case 'reports': return opt ? q.or(reportsScopeOrFilter(scope), opt) : q.or(reportsScopeOrFilter(scope))
+    case 'reports': {
+      // the team's tickets, then narrowed to the technicians (assigned to them) and / or requesters (raised by them) picked on the Dashboard
+      let r = opt ? q.or(reportsScopeOrFilter(scope), opt) : q.or(reportsScopeOrFilter(scope))
+      if (scope.techIds && scope.techIds.length > 0) r = r.in(col('assigned_to'), scope.techIds)
+      if (scope.requesterIds && scope.requesterIds.length > 0) r = r.in(col('requester_id'), scope.requesterIds)
+      return r
+    }
   }
 }
 
@@ -188,7 +194,7 @@ export const EXECUTIVE_CACHE_MS = 60_000
 const executiveCache = createShortCache<Omit<ExecutiveData, 'me'>>(EXECUTIVE_CACHE_MS, 40)
 
 /** Loads the compact ticket and approval rows the Executive Dashboard works from, limited to the viewer's level. Shared for a minute between viewers with the same organization, level and scope. */
-export async function loadExecutiveData(profile: ProfileWithTeams, opts: { fresh?: boolean } = {}): Promise<ExecutiveData | { error: string }> {
+export async function loadExecutiveData(profile: ProfileWithTeams, opts: { fresh?: boolean; people?: { techIds?: string[]; requesterIds?: string[] } } = {}): Promise<ExecutiveData | { error: string }> {
   const level = levelFor(profile.role)
   if (!level || !profile.org_id) return { error: "You don't have access to this dashboard." }
   const access = resolveReportAccess(profile, 'requests')
@@ -197,7 +203,11 @@ export async function loadExecutiveData(profile: ProfileWithTeams, opts: { fresh
   // a normal user who has people reporting to them sees the tickets of those people (not their own)
   if (profile.role === 'user') {
     const reportIds = await getDirectReportIds(profile.id)
-    if (reportIds.length > 0) scope = { kind: 'reports', userId: profile.id, reportIds }
+    if (reportIds.length > 0) {
+      // (only people who really report to them can be picked)
+      const within = (ids?: string[]) => (ids ?? []).filter((id) => reportIds.includes(id))
+      scope = { kind: 'reports', userId: profile.id, reportIds, techIds: within(opts.people?.techIds), requesterIds: within(opts.people?.requesterIds) }
+    }
   }
   const orgId: string = profile.org_id
 

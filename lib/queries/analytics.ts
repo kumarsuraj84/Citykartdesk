@@ -273,7 +273,7 @@ export async function getAnalytics(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const inScope = (q: any) => (scope.kind === 'reports' ? applyScope(q, scope, '') : teamScope ? q.in('team_id', teamScope) : q)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const inTaskScope = (q: any) => (scope.kind === 'reports' ? q.in('assignee_id', scope.reportIds.length > 0 ? scope.reportIds : [NO_TEAM_ID]) : inScope(q))
+  const inTaskScope = (q: any) => (scope.kind === 'reports' ? q.in('assignee_id', scope.techIds && scope.techIds.length > 0 ? scope.techIds : scope.reportIds.length > 0 ? scope.reportIds : [NO_TEAM_ID]) : inScope(q))
   const admin = createAdminClient() as unknown as AnyClient
   const { start: startDate, end: endDate, label: periodLabel, days } = resolvePeriodParam(period)
   const start = startDate.toISOString()

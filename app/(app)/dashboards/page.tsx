@@ -9,7 +9,8 @@ import { highestOpenAgents } from '@/lib/analytics/highest-open'
 import { getWorkloadReport } from '@/lib/queries/workload'
 import { getAnalytics, isPeriod, PERIOD_OPTIONS, type Period } from '@/lib/queries/analytics'
 import { getTechnicianWorkloadBoard } from '@/lib/queries/requests'
-import { getCurrentProfile, getEnabledModules, getDirectReportIds } from '@/lib/queries/profiles'
+import { getCurrentProfile, getEnabledModules, getDirectReports } from '@/lib/queries/profiles'
+import { PeopleFilter } from '@/components/analytics/PeopleFilter'
 import { getSelectableGroups } from '@/lib/queries/dashboardGroups'
 import { resolveReportAccess } from '@/lib/reporting/access'
 import { parseGroupsParam, narrowScopeToGroups, teamIdsForScope } from '@/lib/analytics/group-filter'
@@ -30,15 +31,24 @@ export default async function TechnicianDashboardPage({
   if (!profile.org_id) redirect('/home')
   if (['admin', 'manager', 'platform_owner'].includes(profile.role)) redirect('/admin/reports')
   // a normal user who has people reporting to them sees the Dashboard for those people's tickets; any other normal user has none
-  const reportIds = profile.role === 'user' ? await getDirectReportIds(profile.id) : []
+  const reports = profile.role === 'user' ? await getDirectReports(profile.id) : []
+  const reportIds = reports.map((r) => r.id)
   const isTeamView = profile.role === 'user' && reportIds.length > 0
   if (profile.role !== 'agent' && !isTeamView) redirect('/home')
 
-  const access = isTeamView ? { scope: { kind: 'reports' as const, userId: profile.id, reportIds } } : resolveReportAccess(profile, 'requests')
-  if ('error' in access) redirect('/home')
   if (!(await getEnabledModules()).includes('requests')) redirect('/home')
 
   const sp = await searchParams
+  // a person with a team can narrow it to some of their technicians (tickets assigned to them) and / or requesters (tickets raised by them)
+  const technicians = reports.filter((r) => r.role !== 'user').map((r) => ({ id: r.id, name: r.full_name }))
+  const requesters = reports.filter((r) => r.role === 'user').map((r) => ({ id: r.id, name: r.full_name }))
+  const pickedTech = parseGroupsParam(sp.tech).filter((id) => technicians.some((t) => t.id === id))
+  const pickedRequesters = parseGroupsParam(sp.requester).filter((id) => requesters.some((r) => r.id === id))
+  const peopleQS = `${pickedTech.length ? `&tech=${pickedTech.join(',')}` : ''}${pickedRequesters.length ? `&requester=${pickedRequesters.join(',')}` : ''}`
+  const access = isTeamView
+    ? { scope: { kind: 'reports' as const, userId: profile.id, reportIds, techIds: pickedTech, requesterIds: pickedRequesters } }
+    : resolveReportAccess(profile, 'requests')
+  if ('error' in access) redirect('/home')
   const period = isPeriod(sp.period) ? (sp.period as Period) : '30d'
 
   // A technician in several groups can pick which of them the dashboard shows.
@@ -66,12 +76,14 @@ export default async function TechnicianDashboardPage({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {!isTeamView && <GroupFilter groups={groups} selected={selected} />}
+          {isTeamView && <PeopleFilter param="tech" noun="technicians" people={technicians} selected={pickedTech} />}
+          {isTeamView && <PeopleFilter param="requester" noun="requesters" people={requesters} selected={pickedRequesters} />}
           <StoreFilter combos={analytics.stores.combos} selected={storeFilter} />
           <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 gap-0.5">
             {PERIOD_OPTIONS.map((o) => (
               <Link
                 key={o.value}
-                href={`?period=${o.value}${groupsQS}${storeQS}`}
+                href={`?period=${o.value}${groupsQS}${peopleQS}${storeQS}`}
                 className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
                   period === o.value ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}
@@ -83,7 +95,7 @@ export default async function TechnicianDashboardPage({
         </div>
       </div>
       {topOpenAgents.length > 0 && <CapacityBanner agents={topOpenAgents} />}
-      <AnalyticsDashboard data={analytics} technicianWorkload={workload} userId={profile.id} groupIds={selected} groups={groups} />
+      <AnalyticsDashboard data={analytics} technicianWorkload={workload} userId={profile.id} groupIds={selected} groups={groups} people={isTeamView ? { techIds: pickedTech, requesterIds: pickedRequesters } : undefined} />
     </div>
   )
 }

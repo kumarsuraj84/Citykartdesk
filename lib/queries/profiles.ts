@@ -238,6 +238,13 @@ export const getDirectReportIds = cache(async function (userId: string): Promise
   return (data ?? []).map((r) => r.id)
 })
 
+/** The people who report directly to this user, with their names and roles (the Manager box on their accounts). */
+export const getDirectReports = cache(async function (userId: string): Promise<{ id: string; full_name: string; role: string }[]> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('profiles').select('id, full_name, role').eq('manager_id', userId).order('full_name', { ascending: true })
+  return (data ?? []) as { id: string; full_name: string; role: string }[]
+})
+
 export type NavCounts = {
   requests: number
   tasks: number

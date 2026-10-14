@@ -14,7 +14,7 @@ const { getCurrentProfileMock, getEnabledModulesMock, getAnalyticsMock, workload
   getAnalyticsMock: vi.fn(),
   workloadMock: vi.fn(),
 }))
-vi.mock('@/lib/queries/profiles', () => ({ getCurrentProfile: getCurrentProfileMock, getEnabledModules: getEnabledModulesMock, getDirectReportIds: reportIdsMock }))
+vi.mock('@/lib/queries/profiles', () => ({ getCurrentProfile: getCurrentProfileMock, getEnabledModules: getEnabledModulesMock, getDirectReports: reportIdsMock }))
 vi.mock('@/lib/queries/analytics', async () => { const real = await vi.importActual<typeof import('@/lib/queries/analytics')>('@/lib/queries/analytics'); return { getAnalytics: getAnalyticsMock, isPeriod: real.isPeriod, PERIOD_OPTIONS: real.PERIOD_OPTIONS } })
 vi.mock('@/lib/queries/requests', () => ({ getTechnicianWorkloadBoard: workloadMock }))
 vi.mock('@/lib/queries/workload', () => ({ getWorkloadReport: workloadReportMock }))
@@ -26,6 +26,16 @@ class RedirectSignal extends Error {
 vi.mock('next/navigation', () => ({
   redirect: (target: string) => { throw new RedirectSignal(target) },
 }))
+
+const T1 = '11111111-1111-4111-8111-111111111111'
+const T2 = '22222222-2222-4222-8222-222222222222'
+const R1 = '33333333-3333-4333-8333-333333333333'
+const R2 = '44444444-4444-4444-8444-444444444444'
+const OUTSIDER = '55555555-5555-4555-8555-555555555555'
+const TEAM = [
+  { id: T1, full_name: 'Arvind', role: 'agent' }, { id: T2, full_name: 'Kapil', role: 'agent' },
+  { id: R1, full_name: 'Store A', role: 'user' }, { id: R2, full_name: 'Store B', role: 'user' },
+]
 
 const NO_STORE_CHOICE = { region: [], state: [], cluster: [], stype: [], plist: [], ac: [] }
 
@@ -69,11 +79,29 @@ describe('/dashboards — the technician dashboard route', () => {
 
   it('a normal user who has people reporting to them reaches it: analytics are scoped to those people, with no technician workload', async () => {
     getCurrentProfileMock.mockResolvedValue(profileWith('user'))
-    reportIdsMock.mockResolvedValue(['r1', 'r2'])
+    reportIdsMock.mockResolvedValue(TEAM)
     expect(await callPage()).toEqual({ redirected: false })
-    expect(getAnalyticsMock).toHaveBeenCalledWith('org-1', '30d', { kind: 'reports', userId: 'u1', reportIds: ['r1', 'r2'] }, NO_STORE_CHOICE)
+    expect(getAnalyticsMock).toHaveBeenCalledWith('org-1', '30d', { kind: 'reports', userId: 'u1', reportIds: [T1, T2, R1, R2], techIds: [], requesterIds: [] }, NO_STORE_CHOICE)
     expect(workloadMock).not.toHaveBeenCalled()
     expect(workloadReportMock).not.toHaveBeenCalled()
+  })
+
+  it('a team Dashboard can be narrowed to some technicians and / or requesters, and only to people who report to the viewer', async () => {
+    getCurrentProfileMock.mockResolvedValue(profileWith('user'))
+    reportIdsMock.mockResolvedValue(TEAM)
+    await callPage({ tech: `${T2},${OUTSIDER}`, requester: `${R1},${T1}` })        // the outsider is not on the team, and a technician is not a requester
+    expect(getAnalyticsMock).toHaveBeenCalledWith('org-1', '30d', { kind: 'reports', userId: 'u1', reportIds: [T1, T2, R1, R2], techIds: [T2], requesterIds: [R1] }, NO_STORE_CHOICE)
+  })
+
+  it('the page offers both a technician and a requester filter to a team Dashboard', async () => {
+    getCurrentProfileMock.mockResolvedValue(profileWith('user'))
+    reportIdsMock.mockResolvedValue(TEAM)
+    const tree = await renderTree()
+    const params: string[] = []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const walk = (n: any) => { if (!n || typeof n !== 'object') return; if (Array.isArray(n)) return n.forEach(walk); if (typeof n.type === 'function' && n.type.name === 'PeopleFilter') params.push(n.props.param); walk(n.props?.children) }
+    walk(tree)
+    expect(params).toEqual(['tech', 'requester'])
   })
 
   it('a normal user with nobody reporting to them is sent home', async () => {

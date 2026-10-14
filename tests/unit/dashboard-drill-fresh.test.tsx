@@ -50,6 +50,6 @@ describe('loadDrillData reads fresh', () => {
     exec.mockResolvedValue({ now: 1, tickets: [], approvals: [], truncated: false })
     const { loadDrillData } = await import('@/lib/actions/analytics-drill')
     await loadDrillData()
-    expect(exec).toHaveBeenCalledWith({ id: 'u1' }, { fresh: true })
+    expect(exec).toHaveBeenCalledWith({ id: 'u1' }, { fresh: true, people: undefined })
   })
 })

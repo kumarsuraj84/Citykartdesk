@@ -13,7 +13,7 @@ export type ReportViewerScope =
   | { kind: 'agent'; userId: string; teamIds: string[] }
   | { kind: 'team'; teamIds: string[] }
   /** a person who has people reporting to them (the Manager box on an account): the tickets those people raised or work on */
-  | { kind: 'reports'; userId: string; reportIds: string[] }
+  | { kind: 'reports'; userId: string; reportIds: string[]; /** only tickets assigned to these (technician-wise) */ techIds?: string[]; /** only tickets raised by these (requester-wise) */ requesterIds?: string[] }
 
 /** PostgREST `or()` filter for an agent: their own tickets plus every technician group they belong to. */
 export function agentScopeOrFilter(scope: Extract<ReportViewerScope, { kind: 'agent' }>): string {

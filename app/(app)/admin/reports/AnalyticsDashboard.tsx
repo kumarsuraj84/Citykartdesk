@@ -154,8 +154,10 @@ function SortableWidget({ id, span, children }: { id: string; span: WidgetSpan; 
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds, groups }: {
+export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds, groups, people }: {
   data: AnalyticsData; technicianWorkload: TechnicianWorkloadRow[]; userId: string; groupIds?: string[]; groups?: { id: string; name: string }[]
+  /** a team Dashboard narrowed to some technicians / requesters: its pop-ups hold exactly their tickets */
+  people?: { techIds: string[]; requesterIds: string[] }
 }) {
   // The plain side list is kept for the few numbers the Smart Dashboard pop-up cannot show exactly (tasks) and as the fallback if its data cannot load.
   const [drawer, setSideList] = useState<DrawerFilter | null>(null)
@@ -165,7 +167,7 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds,
   const groupName = useCallback((id: string) => groups?.find((g) => g.id === id)?.name ?? data.byTeam.find((t) => t.teamId === id)?.teamName, [groups, data.byTeam])
   const techName = useCallback((id: string) => data.agentLeaderboard.find((a) => a.agentId === id)?.agentName, [data.agentLeaderboard])
   const drill = useRequestDrill(
-    { asOf: data.asOf, period: data.period, periodWindow: data.periodWindow, periodLabel: data.periodLabel, groupIds: groupIds ?? [], groupName, techName, store: data.stores.filter },
+    { people, asOf: data.asOf, period: data.period, periodWindow: data.periodWindow, periodLabel: data.periodLabel, groupIds: groupIds ?? [], groupName, techName, store: data.stores.filter },
     setSideList,
   )
   const openDrill = drill.open

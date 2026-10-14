@@ -74,3 +74,22 @@ describe("the Dashboard of a person with a team counts exactly the team's ticket
     expect(a.requestFlow.inflow.last30d).toBe(0)
   })
 })
+
+describe('narrowed to some technicians or requesters of the team', () => {
+  it('technician-wise counts only tickets assigned to them, requester-wise only tickets raised by them, both together only the overlap', async () => {
+    const [a, b] = reportIds
+    const team = `&or=(requester_id.in.(${reportIds.join(',')}),assigned_to.in.(${reportIds.join(',')}))`
+    const base = { kind: 'reports' as const, userId: 'nobody', reportIds }
+    const flow = async (scope: typeof base & { techIds?: string[]; requesterIds?: string[] }) => (await getAnalytics(orgId, '30d', scope)).requestFlow.inflow.last30d
+    const midnight = new Date(); midnight.setHours(0, 0, 0, 0); midnight.setDate(midnight.getDate() - 30)
+    const since = `&created_at=gte.${midnight.toISOString()}`
+
+    expect(await flow({ ...base, techIds: [a] })).toBe(await count(`${team}&assigned_to=eq.${a}${since}`))
+    expect(await flow({ ...base, requesterIds: [b] })).toBe(await count(`${team}&requester_id=eq.${b}${since}`))
+    expect(await flow({ ...base, techIds: [a], requesterIds: [b] })).toBe(await count(`${team}&assigned_to=eq.${a}&requester_id=eq.${b}${since}`))
+
+    // the pop-up's tickets are narrowed the same way
+    const rows = await loadExecutiveRows(orgId, 'requester', { ...base, techIds: [a] })
+    expect(rows.tickets.length).toBe(await count(`${team}&assigned_to=eq.${a}`))
+  })
+})
