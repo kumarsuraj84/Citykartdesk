@@ -108,7 +108,18 @@ export async function runOemAutoRouting(params: {
 
   // ONE email addressed to every OEM contact — not one email per address — so the OEM's
   // team gets a single message they can all see and reply-all to.
-  await sendEmail({ to: oem.emails as string[], subject, html: bodyHtml, text: bodyText, threadRequestNo: request.request_no })
+  const sent = await sendEmail({ to: oem.emails as string[], subject, html: bodyHtml, text: bodyText, threadRequestNo: request.request_no })
+  if (sent.error) {
+    // The e-mail did not go (D-045): do not tell the requester it was sent, and do not move the ticket on as if it had been. Leave it open for a
+    // technician, with an internal note saying what to do.
+    await admin.from('request_comments').insert({
+      request_id: request.id,
+      author_id: actorId,
+      body: `The automatic e-mail to ${oem.name} could not be sent. Please send this ticket to them yourself.`,
+      is_internal: true,
+    })
+    return
+  }
 
   await admin.from('request_comments').insert({
     request_id: request.id,

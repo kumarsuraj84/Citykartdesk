@@ -169,6 +169,13 @@ export async function approveAndCreate(
     was_overridden: wasOverridden,
   })
 
+  // One e-mail makes one ticket (D-045): if a ticket from this message already exists (another reviewer finished first, or a double click), say so
+  // instead of creating a second one. A unique index on requests.intake_message_id backs this up where the data allows it (migration 162).
+  if (payload.type === 'request' || payload.type === 'approval') {
+    const { data: already } = await admin.from('requests').select('id, request_no').eq('intake_message_id', review.message_id).eq('org_id', review.org_id).limit(1).maybeSingle()
+    if (already) return { ok: false, error: `A ticket was already created from this message (${already.request_no}).` }
+  }
+
   if (payload.type === 'request' || payload.type === 'approval') {
     // Verify service and team exist in this org. Pull the form schema so we can
     // pre-fill form_data (F3) — createRequestCore() re-resolves the service
@@ -289,7 +296,12 @@ export async function approveAndCreate(
         // the portal's own submitForApproval() is already a separate step
         // from creation, not folded into the shared core.
         if (approvalId) {
-          await admin.from('requests').update({ status: 'pending_approval' }).eq('id', req.id)
+          const { error: holdErr } = await admin.from('requests').update({ status: 'pending_approval' }).eq('id', req.id)
+          if (holdErr) {
+            // the ticket did not move to "pending approval": withdraw the approval so the ticket is not blocked by one nobody can decide (D-045)
+            await admin.from('approvals').delete().eq('id', approvalId)
+            approvalId = null
+          }
         }
       }
     }
