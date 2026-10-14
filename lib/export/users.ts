@@ -3,6 +3,8 @@
 // and re-imported to add people; passwords are never exported. The columns after
 // it are reference-only and ignored by the importer.
 
+import { istDay } from '@/lib/reporting/ist'
+
 export const USER_EXPORT_COLUMNS: { key: string; label: string }[] = [
   { key: 'full_name', label: 'full_name' },
   { key: 'email', label: 'email' },
@@ -87,7 +89,7 @@ export function buildUsersExportRows(input: UsersExportInput): Record<string, st
       job_function: (p.function_id && fn.get(p.function_id)) || '',
       designation: (p.designation_id && desig.get(p.designation_id)) || '',
       cost_center: (p.cost_center_id && cc.get(p.cost_center_id)) || '',
-      created_at: p.created_at ? p.created_at.slice(0, 10) : '',
+      created_at: p.created_at ? istDay(p.created_at) : '',
     }
   })
 }

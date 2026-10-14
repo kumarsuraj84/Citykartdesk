@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { istStamp, istTime } from '@/lib/reporting/ist'
+import { istStamp, istTime, istDay, istWeekStart } from '@/lib/reporting/ist'
 
 // A ticket created at 03:00 on 3 October India time is 21:30 on 2 October UTC. The Report Builder shows the first 10 characters of the timestamp as the date,
 // so it must be given the India time, or the ticket is listed on 2 October while its time column says 03:00.
@@ -32,5 +32,18 @@ describe('Report Builder dates are India dates', () => {
     expect(istStamp('not a date at all')).toBe('not a date at all')
     expect(istTime(null)).toBeNull()
     expect(istTime('nope')).toBeNull()
+  })
+})
+
+describe('trend charts and the users export use the India day', () => {
+  it('istDay: 03:00 IST on 3 Oct is 3 Oct, 23:59 IST on 2 Oct is 2 Oct', () => {
+    expect(istDay('2026-10-02T21:30:00+00:00')).toBe('2026-10-03')
+    expect(istDay(new Date('2026-10-02T18:29:00Z'))).toBe('2026-10-02')
+  })
+  it('istWeekStart: the Sunday that starts the India week', () => {
+    // 3 Oct 2026 is a Saturday: its week starts Sunday 27 Sep
+    expect(istWeekStart('2026-10-02T21:30:00+00:00')).toBe('2026-09-27')
+    // 04:00 IST on Sunday 4 Oct (22:30 UTC on Saturday) starts the new week
+    expect(istWeekStart('2026-10-03T22:30:00+00:00')).toBe('2026-10-04')
   })
 })

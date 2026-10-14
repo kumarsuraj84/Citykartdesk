@@ -20,3 +20,15 @@ export function istTime(v: string | null | undefined): string | null {
   if (Number.isNaN(ms)) return null
   return new Date(ms + IST_OFFSET_MS).toISOString().slice(11, 16)
 }
+
+/** The India calendar day of a moment, "2026-10-03". */
+export function istDay(v: Date | string): string {
+  return new Date(new Date(v).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10)
+}
+
+/** The Sunday that starts the India week of a moment, "2026-09-27" (the trend charts group long periods by this). */
+export function istWeekStart(v: Date | string): string {
+  const d = new Date(new Date(v).getTime() + IST_OFFSET_MS)
+  d.setUTCDate(d.getUTCDate() - d.getUTCDay())
+  return d.toISOString().slice(0, 10)
+}

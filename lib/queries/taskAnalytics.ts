@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolvePeriodParam, type PeriodParam } from '@/lib/queries/analytics'
+import { istDay, istWeekStart } from '@/lib/reporting/ist'
 
 function avg(arr: number[]): number | null {
   if (!arr.length) return null
@@ -162,13 +163,8 @@ export async function getTaskAnalytics(orgId: string, period: PeriodParam): Prom
 
   // Trend
   const buckets: Record<string, { created: number; completed: number }> = {}
-  const bucketKey = (d: string) => {
-    const dt = new Date(d)
-    if (days <= 7) return dt.toISOString().slice(0, 10)
-    if (days <= 30) return dt.toISOString().slice(0, 10)
-    const week = new Date(dt); week.setDate(week.getDate() - week.getDay())
-    return week.toISOString().slice(0, 10)
-  }
+  // (a day is the India day, not the UTC day)
+  const bucketKey = (d: string) => (days <= 30 ? istDay(d) : istWeekStart(d))
   for (const t of tasks) {
     if (inPeriod(t.created_at)) {
       const k = bucketKey(t.created_at)

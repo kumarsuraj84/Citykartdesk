@@ -5,6 +5,7 @@ import { isCurrentlyBreached } from '@/lib/sla/breach'
 import { AGE_BUCKETS, ageBucketFor } from '@/lib/reporting/aging'
 import { RED_FLAG } from '@/lib/reporting/executive/engine'
 import { loadStoreDims } from '@/lib/queries/store-dims'
+import { istDay, istWeekStart } from '@/lib/reporting/ist'
 import {
   emptyStoreFilter, matchesStoreFilter, storeFilterCount, toCombos, type StoreCombo, type StoreDims, type StoreFilter,
 } from '@/lib/analytics/store-filter'
@@ -576,12 +577,8 @@ export async function getAnalytics(
 
   const byWeek = days > 60
   const trendMap: Record<string, { created: number; resolved: number }> = {}
-  const bucketKey = (d: Date) => {
-    if (!byWeek) return d.toISOString().slice(0, 10)
-    const week = new Date(d)
-    week.setDate(week.getDate() - week.getDay())
-    return week.toISOString().slice(0, 10)
-  }
+  // (a day is the India day, not the UTC day: a ticket created at 03:00 IST belongs to that day, not the day before)
+  const bucketKey = (d: Date) => (byWeek ? istWeekStart(d) : istDay(d))
   for (let i = 0; i < days; i++) {
     const d = new Date(startDate)
     d.setDate(d.getDate() + i)
