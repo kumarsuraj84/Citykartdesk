@@ -14,6 +14,7 @@ import { Pagination } from '@/components/ui/Pagination'
 import type { RequestStatus, RequestPriority } from '@/types'
 import type { AssignedToFilter } from '@/lib/queries/requests'
 import { resolveQueueStatusFilter } from '@/lib/requests/queue-status-filter'
+import { queueParams, queueTabParams } from '@/lib/requests/queue-url'
 
 // ── Agent Requests — a page for working tickets, not raising them ──────────────
 // Deliberately separate from /requests (which is purely "what did I raise as a
@@ -148,30 +149,18 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
     return scoped.length > 0 ? scoped : await getAgentTierProfiles()
   })()
 
+  // (keeps the tab: a filter chosen on the Team Queue stays on the Team Queue)
   function currentParams(): URLSearchParams {
-    const p = new URLSearchParams()
-    if (layout !== 'table') p.set('layout', layout)
-    if (rawStatus && rawStatus !== 'active') p.set('status', rawStatus)
-    if (q) p.set('q', q)
-    if (requesterParam) p.set('requester', requesterParam)
-    if (rawTab === 'team' && assignedTo) p.set('assigned', assignedTo)
-    if (breachedOnly) p.set('sla', 'breached')
-    if (priorityFilter) p.set('priority', priorityFilter)
-    if (serviceFilter) p.set('service', serviceFilter)
-    if (categoryFilter) p.set('category', categoryFilter)
-    if (subCategoryFilter) p.set('subcategory', subCategoryFilter)
-    if (params.sort) p.set('sort', params.sort)
-    if (params.dir) p.set('dir', params.dir)
-    return p
+    return queueParams({
+      layout, tab: rawTab, status: rawStatus, q, requester: requesterParam, assigned: assignedTo, breachedOnly,
+      priority: priorityFilter, service: serviceFilter, category: categoryFilter, subcategory: subCategoryFilter, sort: params.sort, dir: params.dir,
+    })
   }
   const currentSearch = currentParams().toString()
 
+  // each tab has its own filters: moving to the other tab starts it clean, so the filters of one do not follow you to the other
   function tabHref(tab: 'mine' | 'team') {
-    const p = currentParams()
-    p.set('tab', tab)
-    if (tab === 'mine') p.delete('assigned')
-    p.delete('page')
-    return `/requests/queue?${p.toString()}`
+    return `/requests/queue?${queueTabParams(tab, layout).toString()}`
   }
 
   function assignedHref(a: AssignedToFilter | '') {
