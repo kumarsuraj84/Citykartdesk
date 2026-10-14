@@ -3,6 +3,8 @@
 import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { queueEvent } from '@/lib/events/client'
+import { setFailureReporter } from '@/lib/syslog/failure-reporter'
+import { errorCodeOfBody, judgeResponse, sourceOfUrl } from '@/lib/syslog/shape'
 
 const CLICKABLE = 'button, a, [role="button"], [role="menuitem"], [role="tab"], input[type="submit"], input[type="checkbox"], summary'
 
@@ -44,6 +46,17 @@ export function EventTracker() {
         detail: { type: 'unhandledrejection', stack: r instanceof Error ? r.stack?.slice(0, 800) : undefined },
       })
     }
+    // failed calls the browser itself makes to the database / storage / auth service (a page that fails to load its data shows up here)
+    setFailureReporter((r) => {
+      const path = (() => { try { return new URL(r.url, location.href).pathname } catch { return r.url.slice(0, 120) } })()
+      if (r.error !== undefined) {
+        queueEvent({ kind: 'js_error', path: location.pathname, message: `${r.method} ${path}: the call failed`, detail: { type: 'service_call', service: sourceOfUrl(r.url), url: path } })
+        return
+      }
+      const { code, message } = errorCodeOfBody(r.body ?? '')
+      const v = judgeResponse(r.status ?? 0, sourceOfUrl(r.url), code, r.method)
+      if (v.record && v.category === 'error') queueEvent({ kind: 'js_error', path: location.pathname, message: `${r.method} ${path} -> ${r.status}${message ? ': ' + message : ''}`, detail: { type: 'service_call', service: sourceOfUrl(r.url), status: r.status, code } })
+    })
     document.addEventListener('click', onClick, true)
     window.addEventListener('error', onError)
     window.addEventListener('unhandledrejection', onRejection)
@@ -51,6 +64,7 @@ export function EventTracker() {
       document.removeEventListener('click', onClick, true)
       window.removeEventListener('error', onError)
       window.removeEventListener('unhandledrejection', onRejection)
+      setFailureReporter(null)
     }
   }, [])
 

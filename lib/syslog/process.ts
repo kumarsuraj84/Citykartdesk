@@ -79,6 +79,43 @@ export function reportFailedCall(r: FailureReport): void {
   })
 }
 
+/** Turn the arguments of a console.error call into one message and (when one of them is an Error) a stack. Exported for tests. */
+export function describeConsoleArgs(args: unknown[]): { message: string; stack: string | null } | null {
+  const first = args[0]
+  // lines written by the structured logger are already recorded through it
+  if (typeof first === 'string' && /^\{"(ts|level)":/.test(first)) return null
+  let stack: string | null = null
+  const parts = args.map((a) => {
+    if (a instanceof Error) { stack = stack ?? a.stack ?? null; return a.message }
+    if (typeof a === 'string') return a
+    try { return JSON.stringify(a) } catch { return String(a) }
+  })
+  const message = parts.join(' ').trim()
+  if (!message) return null
+  return { message: message.slice(0, 2000), stack }
+}
+
+let tapped = false
+let inTap = false
+
+/** Everything the application prints with console.error — including the ~75 places that only did that — is also stored in the System Log. */
+export function installConsoleTap(): void {
+  if (tapped) return
+  tapped = true
+  const original = console.error.bind(console)
+  console.error = (...args: unknown[]) => {
+    original(...args)
+    if (inTap) return
+    inTap = true
+    try {
+      const d = describeConsoleArgs(args)
+      if (d) {
+        void recordSystemLog({ category: 'error', source: 'app_server', severity: 'error', action: 'console.error', message: d.message, stack: d.stack })
+      }
+    } catch { /* never affect the caller */ } finally { inTap = false }
+  }
+}
+
 let installed = false
 
 /** Observe crashes of the Node process. Adds no behaviour of its own: the process still exits exactly as it would have. */
@@ -86,6 +123,7 @@ export function installProcessHandlers(): void {
   if (installed) return
   installed = true
   setFailureReporter(reportFailedCall)
+  installConsoleTap()
 
   // 'uncaughtExceptionMonitor' observes without taking over (a normal 'uncaughtException' listener would stop the process from exiting).
   // The row is appended to the spool SYNCHRONOUSLY, because the process may be gone before any database write finishes; it is sent

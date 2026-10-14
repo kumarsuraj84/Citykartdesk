@@ -68,6 +68,8 @@ export async function proxy(request: NextRequest) {
     '/api/intake/webhook/whatsapp',
     '/api/email/inbound-sync',
     '/api/csat/run',
+    '/api/system-log/ingest',     // shared-secret endpoints (cron runner, log shipper)
+    '/api/system-log/archive',
   ])
   if (PUBLIC_API_ROUTES.has(pathname)) return passThrough(request)
 

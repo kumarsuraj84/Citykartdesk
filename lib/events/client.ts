@@ -57,8 +57,18 @@ export function flushEvents(): void {
   if (queue.length) timer = setTimeout(flushEvents, 500)
 }
 
+// The last control the person clicked, so an error that follows within a few seconds can be recorded as "caused by a click" (and which one).
+let lastClick: { target: string; at: number } | null = null
+const CLICK_WINDOW_MS = 3000
+
 export function queueEvent(e: ClientEvent): void {
   if (typeof window === 'undefined') return
+  if (e.kind === 'click' && e.target) lastClick = { target: e.target, at: Date.now() }
+  if (e.kind === 'js_error' || e.kind === 'render_error') {
+    const ms = lastClick ? Date.now() - lastClick.at : null
+    const click = lastClick && ms !== null && ms <= CLICK_WINDOW_MS ? { target: lastClick.target, ms } : null
+    e = { ...e, detail: { ...((e.detail && typeof e.detail === 'object' ? e.detail : {}) as object), click, ...(click ? {} : { lastClickMsAgo: ms }) } }
+  }
   if (!hooked) {
     hooked = true
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushEvents() })

@@ -1,6 +1,7 @@
 'use client'
 import { Component, type ReactNode } from 'react'
 import { reportError } from '@/lib/error-reporting'
+import { queueEvent, flushEvents } from '@/lib/events/client'
 
 interface Props { children: ReactNode }
 interface State { hasError: boolean; error?: Error }
@@ -16,6 +17,8 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error) {
+    queueEvent({ kind: 'render_error', path: typeof location !== 'undefined' ? location.pathname : undefined, message: error.message, detail: { stack: error.stack?.slice(0, 800), type: 'react_boundary' } })
+    flushEvents()
     reportError({
       error_type: 'crash',
       message: error.message,

@@ -30,6 +30,7 @@ const JOB_PATHS = {
   'intake-classify': '/api/intake/cron/classify',
   'email-reply-sync': '/api/email/inbound-sync',
   csat: '/api/csat/run',
+  'system-log-archive': '/api/system-log/archive',
 }
 
 const secret = process.env.CRON_SECRET
@@ -50,6 +51,18 @@ if (!baseUrl) {
 
 let failed = 0
 
+// A failed job is also written to the System Log (best effort: if the app itself is down this cannot reach it, and the line above is all there is).
+async function reportFailure(job, message, detail) {
+  try {
+    await fetch(`${baseUrl}/api/system-log/ingest`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-cron-secret': secret },
+      body: JSON.stringify({ entries: [{ category: 'error', source: 'cron', severity: 'error', action: 'cron.job_failed', message: `${job}: ${message}`, errorCode: detail?.status ? String(detail.status) : 'unreachable', detail: { job, ...detail } }] }),
+      signal: AbortSignal.timeout(8000),
+    })
+  } catch { /* the app is probably down */ }
+}
+
 for (const job of jobs) {
   const path = JOB_PATHS[job] ?? `/api/${job}/run`
   const url = `${baseUrl}${path}`
@@ -66,10 +79,12 @@ for (const job of jobs) {
     } else {
       failed++
       console.error(`✗ ${job} (${res.status}, ${ms}ms): ${body.slice(0, 200)}`)
+      await reportFailure(job, `HTTP ${res.status}: ${body.slice(0, 200)}`, { status: res.status, ms })
     }
   } catch (err) {
     failed++
     console.error(`✗ ${job} — request failed:`, err instanceof Error ? err.message : err)
+    await reportFailure(job, `request failed: ${err instanceof Error ? err.message : err}`, { ms: Date.now() - startedAt })
   }
 }
 
