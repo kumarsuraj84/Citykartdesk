@@ -105,6 +105,8 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
   const serviceIds: string[] | null = eff.services.length > 0 ? eff.services : null
 
   const { acFields, openAcByStore, acServiceIds } = await loadAcContext(admin, orgId)
+  // a weekly / monthly report shows AC tickets by AMC brand while every service in force is an AC service, any other tickets by category
+  const acView = eff.services.length > 0 && eff.services.every((id) => acServiceIds.includes(id))
   const ctx: FactContext = { asOf: new Date(), acFields, openAcByStore, redFlagPercent: DEFAULT_RED_FLAG_PERCENT }
   const techOk = (f: TicketFact) => eff.techs.length === 0 || eff.techs.includes(techOf(f.technician))
   // (a weekly report counts the ACs of stores, so the Server Room AC is left out, as in the other AC reports)
@@ -129,7 +131,7 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
   // a weekly report's store and AC counts per AMC brand come from the Store Master (active stores), whatever the filters are
   // (a Priority Wise Report groups them by the Store Master's priority list instead)
   let amcStores: { brand: string; stores: number; acs: number }[] | undefined
-  if (month || months) {
+  if ((month || months) && (acView || def.rowBy === 'priority')) {
     const stores = await fetchAll<{ ac_amc_brand: string | null; priority_list: string | null; ac_total: number | null }>((from, to) =>
       admin.from('stores').select('ac_amc_brand, priority_list, ac_total').eq('org_id', orgId).eq('is_active', true).order('id', { ascending: true }).range(from, to))
     const byBrand = new Map<string, { brand: string; stores: number; acs: number }>()
@@ -181,5 +183,5 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
       else combos.set(k, { group: r.team_id, service: r.service_id, status: r.status, tech, count: 1 })
     }
   }
-  return { ...result(buildFixedReport({ def, facts, dayFacts, day, statusLabel, statuses, month, months, amcStores }), [...combos.values()]), truncated }
+  return { ...result(buildFixedReport({ def, facts, dayFacts, day, statusLabel, statuses, month, months, amcStores, acView }), [...combos.values()]), truncated }
 }

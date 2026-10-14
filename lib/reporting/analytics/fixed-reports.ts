@@ -73,12 +73,12 @@ export const FIXED_REPORTS: FixedReportDef[] = [
     about: 'Open tickets of the BD group, by technician and category.' },
   { slug: 'admin-summary-report', title: 'Admin Summary Report', layout: 'summary', group: 'Admin', statuses: OPEN_STATUSES,
     about: 'Open tickets of the Admin group, by technician and category.' },
-  { slug: 'weekly-admin-report', title: 'Weekly Admin Report', layout: 'weekly', group: 'Admin', services: [ADMIN_AC], acOnly: true, statuses: ALL_STATUSES,
-    about: 'AC tickets of the Admin group by AMC brand and week of the month (Monday to Sunday): opened that week and resolved that week.' },
-  { slug: 'monthly-admin-report', title: 'Monthly Admin Report', layout: 'monthly', group: 'Admin', services: [ADMIN_AC], acOnly: true, statuses: ALL_STATUSES,
-    about: 'AC tickets of the Admin group by AMC brand and month (choose any months): opened in that month and resolved in that month.' },
-  { slug: 'priority-wise-report', title: 'Priority Wise Report', layout: 'monthly', rowBy: 'priority', group: 'Admin', services: [ADMIN_AC], acOnly: true, statuses: ALL_STATUSES,
-    about: 'AC tickets of the Admin group by priority store list (as per Ops: TOP 40, ROS) and month (choose any months): opened in that month and resolved in that month.' },
+  { slug: 'weekly-admin-report', title: 'Weekly Admin Report', layout: 'weekly', group: 'Admin', services: [ADMIN_AC], statuses: ALL_STATUSES,
+    about: 'By week of the month (Monday to Sunday): tickets opened that week and tickets resolved that week. Starts on the Admin group\'s AC tickets by AMC brand; choose any group, service or technician (other tickets are shown by category).' },
+  { slug: 'monthly-admin-report', title: 'Monthly Admin Report', layout: 'monthly', group: 'Admin', services: [ADMIN_AC], statuses: ALL_STATUSES,
+    about: 'By month (choose any months): tickets opened in that month and tickets resolved in that month. Starts on the Admin group\'s AC tickets by AMC brand; choose any group, service or technician (other tickets are shown by category).' },
+  { slug: 'priority-wise-report', title: 'Priority Wise Report', layout: 'monthly', rowBy: 'priority', group: 'Admin', services: [ADMIN_AC], statuses: ALL_STATUSES,
+    about: 'By priority store list (as per Ops: TOP 40, ROS) and month (choose any months): tickets opened and tickets resolved in that month. Starts on the Admin group\'s AC tickets; choose any group, service or technician.' },
 ]
 
 export const findFixedReport = (slug: string) => FIXED_REPORTS.find((r) => r.slug === slug)
@@ -103,6 +103,8 @@ export interface BuildInput {
   month?: WeekMonth
   /** the months a monthly report shows, oldest first */
   months?: WeekMonth[]
+  /** a weekly / monthly report on AC tickets only (the default; rows by AMC brand with the store and AC counts); false = any other tickets, rows by category */
+  acView?: boolean
   /** the Store Master's stores and ACs per AMC brand (a weekly report's first two columns) */
   amcStores?: { brand: string; stores: number; acs: number }[]
 }
@@ -164,7 +166,13 @@ export function buildFixedReport(input: BuildInput): ReportTable {
     const m = def.layout === 'weekly' ? input.month : input.months?.[0]
     if (m) {
       const byPriority = def.rowBy === 'priority'
-      const NO_BRAND = byPriority ? '(No priority list)' : '(No AMC brand)'
+      // AC tickets are shown by AMC brand (or priority list) with the Store Master's store and AC counts; any other tickets by category
+      // (a priority list is the store's, so it stays, without the AC count)
+      const acView = input.acView !== false
+      const byCategory = !acView && !byPriority
+      const showStores = !byCategory
+      const showAcs = acView
+      const NO_BRAND = byCategory ? '(No category)' : byPriority ? '(No priority list)' : '(No AMC brand)'
       type Brand = { name: string; stores: number; acs: number; facts: TicketFact[] }
       const brands = new Map<string, Brand>()
       const brand = (name: string) => {
@@ -173,8 +181,8 @@ export function buildFixedReport(input: BuildInput): ReportTable {
         if (!b) { b = { name, stores: 0, acs: 0, facts: [] }; brands.set(k, b) }
         return b
       }
-      for (const s of input.amcStores ?? []) { const b = brand(s.brand); b.stores += s.stores; b.acs += s.acs }
-      for (const f of facts) brand((byPriority ? f.priorityList : f.acAmcBrand).trim() || NO_BRAND).facts.push(f)
+      if (!byCategory) for (const s of input.amcStores ?? []) { const b = brand(s.brand); b.stores += s.stores; b.acs += s.acs }
+      for (const f of facts) brand((byCategory ? f.category : byPriority ? f.priorityList : f.acAmcBrand).trim() || NO_BRAND).facts.push(f)
 
       // The columns come in Open / Resolved pairs: one pair per week of the month (Weekly Admin Report), or one per chosen month (Monthly Admin Report).
       type Period = { head: string; opened: (f: TicketFact) => boolean; done: (f: TicketFact) => boolean }
@@ -190,15 +198,17 @@ export function buildFixedReport(input: BuildInput): ReportTable {
       const diff = (o: number, c: number): Cell => (o > 0 ? (c - o) / o : c === 0 ? 0 : '')
 
       lead = 1
+      const first = 1 + (showStores ? 1 : 0) + (showAcs ? 1 : 0)
       columns = [
-        col('amc', byPriority ? 'PRIORITY STORE' : 'AMC BRAND', 130), numCol('stores', 'Total Store Count', 70), numCol('acs', 'Total AC Count', 70),
+        col('amc', byCategory ? 'CATEGORY' : byPriority ? 'PRIORITY STORE' : 'AMC BRAND', 130),
+        ...(showStores ? [numCol('stores', 'Total Store Count', 70)] : []), ...(showAcs ? [numCol('acs', 'Total AC Count', 70)] : []),
         ...periods.flatMap((_, i) => [numCol(`o${i}`, 'Open', 58, { align: 'center' }), numCol(`c${i}`, 'Resolved', 66, { align: 'center', tint: 'green' })]),
         numCol('to', 'Open', 58, { align: 'center', headTone: 'peach' }), numCol('tc', 'Resolved', 66, { align: 'center', tint: 'green', headTone: 'peach' }),
         numCol('pct', '% Diff', 66, { align: 'center', pct: true, pctWhole: true, diff: true, headTone: 'peach' }),
       ]
       headGroups = [
-        ...periods.map((p, i) => ({ label: p.head, from: 3 + 2 * i, span: 2 })),
-        { label: 'Total', from: 3 + 2 * periods.length, span: 3, peach: true },
+        ...periods.map((p, i) => ({ label: p.head, from: first + 2 * i, span: 2 })),
+        { label: 'Total', from: first + 2 * periods.length, span: 3, peach: true },
       ]
       const list = [...brands.values()].filter((b) => b.name !== NO_BRAND || b.facts.length > 0).sort((x, y) => (byPriority && /^top/i.test(x.name) !== /^top/i.test(y.name) && x.name !== NO_BRAND && y.name !== NO_BRAND ? (/^top/i.test(x.name) ? -1 : 1) : nameOrder(x.name, y.name, NO_BRAND)))
       const line = (key: string, kind: RowKind, name: string, stores: number, acs: number, mine: TicketFact[]) => {
@@ -206,8 +216,8 @@ export function buildFixedReport(input: BuildInput): ReportTable {
         const o = sum(per.map((x) => x.o.length))
         const c = sum(per.map((x) => x.c.length))
         rows.push(row(key, kind,
-          [name, stores, acs, ...per.flatMap((x) => [x.o.length, x.c.length]), o, c, diff(o, c)],
-          [undefined, undefined, undefined, ...per.flatMap((x) => [refs(x.o), refs(x.c)]), refs(per.flatMap((x) => x.o)), refs(per.flatMap((x) => x.c)), undefined]))
+          [name, ...(showStores ? [stores] : []), ...(showAcs ? [acs] : []), ...per.flatMap((x) => [x.o.length, x.c.length]), o, c, diff(o, c)],
+          [...Array<undefined>(first).fill(undefined), ...per.flatMap((x) => [refs(x.o), refs(x.c)]), refs(per.flatMap((x) => x.o)), refs(per.flatMap((x) => x.c)), undefined]))
       }
       for (const b of list) line(b.name, 'row', b.name, b.stores, b.acs, b.facts)
       if (list.length > 0) line('grand', 'grand', 'Grand Total', sum(list.map((b) => b.stores)), sum(list.map((b) => b.acs)), list.flatMap((b) => b.facts))
