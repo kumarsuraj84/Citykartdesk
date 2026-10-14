@@ -73,6 +73,33 @@ describe('Monthly Admin Report and Priority Wise Report', () => {
     expect(cell(t, 'ROS', 'o0')).toBe(2)
   })
 
+  it('other tickets (a group that has no AMC brand) are shown by category, without the store and AC counts', () => {
+    const a = fact({ ticketNo: 'CKSD-7', category: 'HANGERS', acAmcBrand: '', openMonth: 'Apr-26', createdAt: at('2026-04-08T10:00:00') })
+    const b = fact({ ticketNo: 'CKSD-8', category: 'MAT', acAmcBrand: '', openMonth: 'Apr-26', createdAt: at('2026-04-09T10:00:00'), status: 'resolved', doneAt: at('2026-04-12T10:00:00') })
+    const t = buildFixedReport({ def: def('monthly-admin-report'), facts: [a, b], statusLabel: (s) => s, months, amcStores: stores, acView: false })
+    expect(t.columns.map((c) => c.label)).toEqual(['CATEGORY', 'Open', 'Resolved', 'Open', 'Resolved', 'Open', 'Resolved', '% Diff'])
+    expect(t.headGroups).toEqual([
+      { label: '01-Apr-26', from: 1, span: 2 }, { label: '01-May-26', from: 3, span: 2 }, { label: 'Total', from: 5, span: 3, peach: true },
+    ])
+    expect(t.rows.map((r) => r.key)).toEqual(['HANGERS', 'MAT', 'grand'])
+    expect([cell(t, 'HANGERS', 'o0'), cell(t, 'MAT', 'c0'), cell(t, 'grand', 'to'), cell(t, 'grand', 'tc')]).toEqual([1, 1, 2, 1])
+  })
+
+  it('the Priority Wise Report on other tickets keeps the priority rows and the store count, without the AC count', () => {
+    const t = buildFixedReport({ def: def('priority-wise-report'), facts: [hit1], statusLabel: (s) => s, months, amcStores: [{ brand: 'ROS', stores: 184, acs: 1706 }], acView: false })
+    expect(t.columns.slice(0, 3).map((c) => c.label)).toEqual(['PRIORITY STORE', 'Total Store Count', 'Open'])
+    expect(t.headGroups[0].from).toBe(2)
+    expect(cell(t, 'ROS', 'stores')).toBe(184)
+  })
+
+  it('the three reports start on the Admin group\'s AC service but are not limited to AC tickets', () => {
+    for (const slug of ['weekly-admin-report', 'monthly-admin-report', 'priority-wise-report']) {
+      expect(def(slug).acOnly).toBeFalsy()
+      expect(def(slug).group).toBe('Admin')
+      expect(def(slug).services).toHaveLength(1)
+    }
+  })
+
   it('the Weekly Admin Report has a pair per week of the month, Week-1 starting on the 1st', () => {
     const month = resolveMonth('2026-05', now)
     const t = buildFixedReport({ def: def('weekly-admin-report'), facts: [hit2], statusLabel: (s) => s, month, amcStores: stores })
