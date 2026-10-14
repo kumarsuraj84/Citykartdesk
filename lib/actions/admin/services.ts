@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logAdminAudit } from './audit'
+import { assertRefsInOrg } from './orgScopeGuard'
 import type { FormSection } from '@/types'
 
 type ActionResult = { error?: string }
@@ -189,6 +190,18 @@ function slugify(name: string): string {
     .replace(/^-|-$/g, '')
 }
 
+/** The group, owners, SLA policy and form template a service points at must all belong to the administrator's own organisation (D-031). */
+async function serviceRefsProblem(orgId: string, data: Partial<ServiceInput>): Promise<string | null> {
+  const admin = createAdminClient() as unknown as { from: (t: string) => any }  // eslint-disable-line @typescript-eslint/no-explicit-any
+  return assertRefsInOrg(admin, orgId, [
+    ...(data.team_id ? [{ table: 'teams', id: data.team_id, label: 'technician group' }] : []),
+    ...(data.owner_id ? [{ table: 'profiles', id: data.owner_id, label: 'owner' }] : []),
+    ...(data.backup_owner_id ? [{ table: 'profiles', id: data.backup_owner_id, label: 'backup owner' }] : []),
+    ...(data.sla_policy_id ? [{ table: 'sla_policies', id: data.sla_policy_id, label: 'SLA policy' }] : []),
+    ...(data.template_id ? [{ table: 'form_templates', id: data.template_id, label: 'form template' }] : []),
+  ])
+}
+
 export async function createService(
   data: ServiceInput
 ): Promise<ActionResult & { id?: string }> {
@@ -199,6 +212,8 @@ export async function createService(
   if (!data.team_id) return { error: 'Technician group is required.' }
 
   const supabase = await createClient()
+  const refError = await serviceRefsProblem(guard.profile!.org_id!, data)
+  if (refError) return { error: refError }
 
   // Generate a unique slug
   const baseSlug = slugify(data.name.trim())
@@ -285,6 +300,8 @@ export async function updateService(
   if ('error' in guard) return guard
 
   const supabase = await createClient()
+  const refError = await serviceRefsProblem(guard.profile!.org_id!, data)
+  if (refError) return { error: refError }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updatePayload: any = {

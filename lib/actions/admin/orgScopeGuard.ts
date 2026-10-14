@@ -26,3 +26,24 @@ export async function assertRefsInOrg(
   }
   return null
 }
+
+/**
+ * The same check for the teams and people a business rule names in its actions (set_team, assign): a rule saved with another organisation's
+ * ids would later write them onto this organisation's tickets with the service-role client (audit D-031).
+ */
+export async function assertRuleActionsInOrg(
+  admin: AnyClient,
+  orgId: string,
+  actions: { type: string; params?: Record<string, unknown> }[] | null | undefined
+): Promise<string | null> {
+  const teams = new Set<string>()
+  const people = new Set<string>()
+  for (const a of actions ?? []) {
+    if (a.type === 'set_team' && typeof a.params?.teamId === 'string' && a.params.teamId) teams.add(a.params.teamId)
+    if (a.type === 'assign' && Array.isArray(a.params?.assigneeIds)) for (const id of a.params.assigneeIds) if (typeof id === 'string' && id) people.add(id)
+  }
+  return assertRefsInOrg(admin, orgId, [
+    ...[...teams].map((id) => ({ table: 'teams', id, label: 'technician group' })),
+    ...[...people].map((id) => ({ table: 'profiles', id, label: 'technician' })),
+  ])
+}

@@ -6,6 +6,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logAdminAudit } from '@/lib/actions/admin/audit'
 import type { RuleCondition, RuleConditionsLogic } from '@/lib/rules/evaluate'
 import type { RuleAction } from '@/lib/rules/actions'
+import { assertRuleActionsInOrg } from '@/lib/actions/admin/orgScopeGuard'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -42,6 +43,8 @@ export async function createBusinessRule(data: BusinessRuleInput): Promise<{ id?
   }
 
   const admin = createAdminClient() as unknown as AnyClient
+  const refError = await assertRuleActionsInOrg(admin, profile.org_id, data.actions as never)
+  if (refError) return { error: refError }
   const { data: rule, error } = await admin
     .from('business_rules')
     .insert({
@@ -88,6 +91,10 @@ export async function updateBusinessRule(id: string, data: BusinessRuleInput): P
   }
 
   const admin = createAdminClient() as unknown as AnyClient
+  if (profile.org_id) {
+    const refError = await assertRuleActionsInOrg(admin, profile.org_id, data.actions as never)
+    if (refError) return { error: refError }
+  }
   const { error } = await admin
     .from('business_rules')
     .update({

@@ -336,6 +336,10 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
 
 async function runSetTeam(admin: AnyClient, request: ActionRequest, teamId: string, ctx: RuleActionContext): Promise<void> {
   if (!teamId) return // rule saved with no team selected yet — nothing to do
+  // the team must belong to the ticket's own organisation, whatever the saved rule says (D-031)
+  if (!request.org_id) return
+  const { data: team } = await admin.from('teams').select('id').eq('id', teamId).eq('org_id', request.org_id).maybeSingle()
+  if (!team) return
   const { error } = await admin.from('requests').update({ team_id: teamId }).eq('id', request.id)
   if (error) return
   await logActivity({

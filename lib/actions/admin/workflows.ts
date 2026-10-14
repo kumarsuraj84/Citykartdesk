@@ -130,6 +130,12 @@ export async function upsertWorkflowStep(input: UpsertStepInput): Promise<Action
     .maybeSingle()
   if (!workflow) return { error: 'Workflow not found.' }
 
+  // the approver must be an active person of this organisation (D-031)
+  if (input.approverType === 'specific_user' && input.approverUserId) {
+    const { data: approver } = await admin.from('profiles').select('id').eq('id', input.approverUserId).eq('org_id', guard.profile!.org_id!).eq('is_active', true).maybeSingle()
+    if (!approver) return { error: 'Selected approver not found in your organisation.' }
+  }
+
   const payload = {
     workflow_id: input.workflowId,
     step_order: input.stepOrder,
