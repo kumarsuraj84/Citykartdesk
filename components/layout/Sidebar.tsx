@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { navActivePath } from '@/lib/requests/origin'
 import {
   Home, Inbox, ListTodo, ShieldCheck, Bell, LayoutGrid, FolderKanban,
-  BarChart3, Activity, ScrollText, Settings, Monitor, BookOpenText,
+  BarChart3, ScrollText, Settings, Monitor, BookOpenText,
   Users, Tag, GitBranch, Building2, Database, Workflow,
   LogOut, BookOpen, KeyRound, ChevronDown, Sparkles, Filter,
   PanelLeftClose, PanelLeftOpen, Table2, Zap, Headset, FileText, Clock, Library, FileBarChart, LayoutDashboard,
@@ -85,9 +85,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
         // Ready-made, fixed reports per technician group (Report Builder is for building your own).
         // Requesters have no technician group, so they never see it.
         ...(has('requests') && (isAgent || isManager || isAdmin) ? [{ label: 'Predefined Reports', href: '/reports/analytics', icon: FileBarChart }] : []),
-        ...(isManager || isAdmin ? [{ label: 'Audit Logs', href: '/admin/audit',    icon: Activity  }] : []),
-        ...(isAdmin ? [{ label: 'System Log', href: '/admin/system-log', icon: ScrollText }] : []),
-        ...(isAdmin ? [{ label: 'Event Log', href: '/admin/event-log', icon: Activity }] : []),
+        ...(isManager || isAdmin ? [{ label: 'Logs', href: '/admin/logs', icon: ScrollText }] : []),
       ],
     },
     {

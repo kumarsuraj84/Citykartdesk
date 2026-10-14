@@ -7,7 +7,7 @@
  * details" expand + copy in AuditDetailsCell, so no audit fidelity is lost.
  */
 import { describe, it, expect } from 'vitest'
-import { metadataSummary } from '@/app/(app)/admin/audit/AuditLogClient'
+import { metadataSummary } from '@/app/(app)/admin/logs/AuditLogClient'
 
 describe('metadataSummary()', () => {
   it('a from/to transition (the most common shape, e.g. status_changed) reads as a sentence', () => {

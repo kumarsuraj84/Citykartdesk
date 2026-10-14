@@ -1,8 +1,8 @@
 # System Log (audit trail + error capture)
 
 One append-only record of **who changed what** (with before/after values), **security events**, and **every error** from the
-browser, the app, the database, storage, sign-in service, scheduled jobs and outside services. Screen: **Admin → System Log**
-(`/admin/system-log`, administrators and platform owners only). Design: `docs/superpowers/specs/2026-10-14-system-log-design.md`.
+browser, the app, the database, storage, sign-in service, scheduled jobs and outside services. Screen: **Logs** in the sidebar (`/admin/logs`, tabs **System Log**, **Audit Log**, **Event Log**; the old `/admin/system-log`, `/admin/audit` and `/admin/event-log` addresses redirect there)
+(administrators and platform owners; managers see only the Audit Log tab, as before). Design: `docs/superpowers/specs/2026-10-14-system-log-design.md`.
 
 ## What is recorded
 
