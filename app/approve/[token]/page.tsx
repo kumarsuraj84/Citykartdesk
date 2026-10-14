@@ -3,6 +3,7 @@ import { CheckCircle2, Clock, Link2Off, ShieldAlert, XCircle } from 'lucide-reac
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { describeApprovalLink } from '@/lib/approvals/email-state'
+import { OWN_REQUEST_MESSAGE } from '@/lib/approvals/decision'
 import { isVerified, notAuthorisedMessage, verifiedCookieName, verifyApprovalToken } from '@/lib/approvals/email-link'
 import { ApprovalDecisionForm } from './ApprovalDecisionForm'
 import { ApprovalGate } from './ApprovalGate'
@@ -47,7 +48,7 @@ export default async function ApprovePage({
     return <Shell><Notice icon={<Link2Off className="h-6 w-6 text-muted-foreground" />} title="This link is not valid">Please use the buttons in the latest e-mail we sent you, or open the request in Citykart Desk.</Notice></Shell>
   }
 
-  const state = await describeApprovalLink(createAdminClient(), v.approvalId, v.approverId)
+  const state = await describeApprovalLink(createAdminClient(), v.approvalId, v.approverId, v)
   if (state.kind === 'invalid') {
     return <Shell><Notice icon={<Link2Off className="h-6 w-6 text-muted-foreground" />} title="This link is not valid">The approval could not be found.</Notice></Shell>
   }
@@ -69,6 +70,27 @@ export default async function ApprovePage({
   }
   if (state.kind === 'closed') {
     return <Shell>{heading}<Notice icon={<Clock className="h-6 w-6 text-muted-foreground" />} title={state.title}>{sentLine}<p>This request is no longer waiting for approval.</p></Notice></Shell>
+  }
+  if (state.kind === 'expired') {
+    return (
+      <Shell>
+        {heading}
+        <Notice icon={<Clock className="h-6 w-6 text-muted-foreground" />} title="This link has expired">
+          {sentLine}
+          <p>Please open the request in Citykart Desk to approve or reject it there.</p>
+        </Notice>
+      </Shell>
+    )
+  }
+  if (state.kind === 'own_request') {
+    return (
+      <Shell>
+        {heading}
+        <Notice icon={<ShieldAlert className="h-6 w-6 text-red-600" />} title="You cannot decide this request">
+          <p>{OWN_REQUEST_MESSAGE}</p>
+        </Notice>
+      </Shell>
+    )
   }
   if (state.kind === 'already_by_you') {
     return <Shell>{heading}<Notice icon={<CheckCircle2 className="h-6 w-6 text-emerald-600" />} title={state.title}>{sentLine}<p>{state.approverName} already responded on {state.at}. The request is moving along.</p></Notice></Shell>

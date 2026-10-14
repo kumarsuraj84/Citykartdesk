@@ -4,6 +4,7 @@
 
 import { resolveApprovalContextFor, type ApprovalDb } from '@/lib/approvals/decision'
 import { pdfDateTime } from '@/lib/requests/ticket-pdf-model'
+import { linkIsExpired, type VerifiedLink } from '@/lib/approvals/email-link'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -25,6 +26,8 @@ export type LinkState =
   | { kind: 'invalid' }
   | ({ kind: 'decided'; outcome: 'approved' | 'rejected'; by: string; at: string; comment: string | null } & Common)
   | ({ kind: 'closed' } & Common)
+  | ({ kind: 'expired' } & Common)
+  | ({ kind: 'own_request' } & Common)
   | ({ kind: 'already_by_you'; at: string } & Common)
   | ({ kind: 'not_current'; waitingOn: string[] } & Common)
   | ({ kind: 'pending'; approverId: string; detail: PendingDetail } & Common)
@@ -32,7 +35,7 @@ export type LinkState =
 const clip = (s: string | null | undefined, n: number) => { const t = (s ?? '').replace(/\r\n?/g, '\n').trim(); return t.length > n ? `${t.slice(0, n)} ...` : t }
 const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null))
 
-export async function describeApprovalLink(admin: AnyClient, approvalId: string, approverId: string): Promise<LinkState> {
+export async function describeApprovalLink(admin: AnyClient, approvalId: string, approverId: string, link?: Pick<VerifiedLink, 'expiresAt' | 'expired'>): Promise<LinkState> {
   const { data: approval } = await admin.from('approvals').select('id, request_id, workflow_id, current_step, status, requested_by, created_at').eq('id', approvalId).maybeSingle()
   const { data: me } = await admin.from('profiles').select('id, full_name, role, is_active').eq('id', approverId).maybeSingle()
   if (!approval || !me || !me.is_active) return { kind: 'invalid' }
@@ -58,8 +61,12 @@ export async function describeApprovalLink(admin: AnyClient, approvalId: string,
   }
   if (approval.status !== 'pending' || req.status === 'cancelled' || req.status === 'closed') return { kind: 'closed', ...common }
 
+  // a link that is past its time no longer lets anyone decide from the e-mail (the request can still be decided in Citykart Desk)
+  if (link && linkIsExpired(link, approval.created_at)) return { kind: 'expired', ...common }
+
   const ctx = await resolveApprovalContextFor(approvalId, { id: me.id, role: me.role, full_name: me.full_name }, admin as unknown as ApprovalDb)
   if ('error' in ctx) {
+    if ('reason' in ctx && ctx.reason === 'own_request') return { kind: 'own_request', ...common }
     const mine = decList.find((d) => d.decided_by === approverId)
     if (mine) return { kind: 'already_by_you', ...common, at: pdfDateTime(mine.decided_at) }
     const decided = new Set(decList.map((d) => d.step_order))

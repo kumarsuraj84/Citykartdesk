@@ -1,4 +1,5 @@
 import { escapeEmailFields, escapeHtml } from './escape'
+import { LINK_DAYS } from '@/lib/approvals/email-link'
 
 export function layout(body: string): string {
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#ffffff;font-family:sans-serif;">
@@ -152,10 +153,10 @@ export function approvalRequiredEmail(d: {
            <a href="${e.approveUrl}" style="display:inline-block;background:#16a34a;color:#ffffff;padding:12px 26px;border-radius:6px;text-decoration:none;font-weight:600;margin:0 8px 8px 0;">Approve</a>
            <a href="${e.rejectUrl}" style="display:inline-block;background:#dc2626;color:#ffffff;padding:12px 26px;border-radius:6px;text-decoration:none;font-weight:600;margin:0 8px 8px 0;">Reject</a>
          </p>
-         <p style="font-size:13px;color:#6B7280;margin:4px 0 12px;">A comment is required. Only <strong>${e.approverName}</strong> can decide from this e-mail: you will be asked to confirm it is you. Or <a href="${e.requestUrl}" style="color:#2563eb;">open the request in Citykart Desk</a>.</p>`
+         <p style="font-size:13px;color:#6B7280;margin:4px 0 12px;">A comment is required. Only <strong>${e.approverName}</strong> can decide from this e-mail: you will be asked to confirm it is you. The buttons work for ${LINK_DAYS} days. Or <a href="${e.requestUrl}" style="color:#2563eb;">open the request in Citykart Desk</a>.</p>`
       : btn(e.requestUrl, 'Review & Approve')}
   `)
-  const text = `Hi ${d.approverName},\n\n${approvalRequestSentence(d, (s) => s)}\n\n${d.approveUrl && d.rejectUrl ? `Approve: ${d.approveUrl}\nReject: ${d.rejectUrl}\n(A comment is required. Only ${d.approverName} can decide from this e-mail; you will be asked to confirm it is you.)\n\nOr open it in Citykart Desk: ${d.requestUrl}` : `Review it here: ${d.requestUrl}`}`
+  const text = `Hi ${d.approverName},\n\n${approvalRequestSentence(d, (s) => s)}\n\n${d.approveUrl && d.rejectUrl ? `Approve: ${d.approveUrl}\nReject: ${d.rejectUrl}\n(A comment is required. Only ${d.approverName} can decide from this e-mail; you will be asked to confirm it is you. The links work for ${LINK_DAYS} days.)\n\nOr open it in Citykart Desk: ${d.requestUrl}` : `Review it here: ${d.requestUrl}`}`
   return { subject, html, text }
 }
 

@@ -17,7 +17,8 @@ export type ApprovalDb = ReturnType<typeof createAdminClient>
 /** The person deciding. */
 export interface ApprovalActor { id: string; role: string; full_name: string }
 
-export const COMMENT_REQUIRED = 'Please add a comment: it is required to approve or reject.'
+export const OWN_REQUEST_MESSAGE = 'You raised or sent this request, so you cannot approve or reject it yourself. Another approver has to decide it.'
+export const COMMENT_REQUIRED ='Please add a comment: it is required to approve or reject.'
 
 export async function archiveApprovalNotifications(requestId: string, opts: { onlyUserId?: string } = {}) {
   const admin = createAdminClient()
@@ -46,6 +47,10 @@ export async function resolveApprovalContextFor(approvalId: string, profile: App
 
   if (!approval) return { error: 'Approval not found.' } as const
   if (approval.status !== 'pending') return { error: 'This approval is no longer pending.' } as const
+
+  // Separation of duties (D-030): nobody approves or rejects a request they raised or sent for approval themselves.
+  const { data: own } = await createAdminClient().from('requests').select('requester_id').eq('id', approval.request_id).maybeSingle()
+  if (own?.requester_id === profile.id || approval.requested_by === profile.id) return { error: OWN_REQUEST_MESSAGE, reason: 'own_request' } as const
 
   const { data: steps } = await supabase
     .from('approval_workflow_steps')

@@ -11,10 +11,11 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { sendEmail } from '@/lib/email/send'
 import { layout } from '@/lib/email/templates'
 import { escapeHtml } from '@/lib/email/escape'
-import { decideApproval, type ApprovalDb } from '@/lib/approvals/decision'
+import { decideApproval, OWN_REQUEST_MESSAGE, type ApprovalDb } from '@/lib/approvals/decision'
+import { consumeApprovalCode, issueApprovalCode } from '@/lib/approvals/email-code'
 import { describeApprovalLink } from '@/lib/approvals/email-state'
 import {
-  VERIFIED_MINUTES, notAuthorisedMessage, approvalCode, codeMatches, isVerified, signVerified, verifiedCookieName, verifyApprovalToken,
+  CODE_MINUTES, LINK_EXPIRED_MESSAGE, VERIFIED_MINUTES, notAuthorisedMessage, isVerified, signVerified, verifiedCookieName, verifyApprovalToken,
 } from '@/lib/approvals/email-link'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,11 +36,12 @@ async function identify(token: string): Promise<
 > {
   const v = verifyApprovalToken(token)
   if (!v) return { ok: false, error: 'This link is not valid.' }
+  const admin = createAdminClient() as unknown as AnyClient
+  if ((await describeApprovalLink(admin, v.approvalId, v.approverId, v)).kind === 'expired') return { ok: false, error: LINK_EXPIRED_MESSAGE }
   const viewer = await getCurrentProfile()
   if (viewer?.id === v.approverId) return { ok: true, ...v }
   const proof = (await cookies()).get(verifiedCookieName(v.approvalId))?.value
   if (isVerified(proof, v.approvalId, v.approverId)) return { ok: true, ...v }
-  const admin = createAdminClient() as unknown as AnyClient
   if (viewer) return { ok: false, error: notAuthorisedMessage(await approverName(admin, v.approverId)) }
   return { ok: false, error: 'Please confirm it is you first.', unverified: true }
 }
@@ -49,7 +51,9 @@ export async function requestApprovalCode(token: string): Promise<Result & { sen
   const v = verifyApprovalToken(token)
   if (!v) return { error: 'This link is not valid.' }
   const admin = createAdminClient() as unknown as AnyClient
-  const state = await describeApprovalLink(admin, v.approvalId, v.approverId)
+  const state = await describeApprovalLink(admin, v.approvalId, v.approverId, v)
+  if (state.kind === 'expired') return { error: LINK_EXPIRED_MESSAGE }
+  if (state.kind === 'own_request') return { error: OWN_REQUEST_MESSAGE }
   if (state.kind !== 'pending') return { error: 'This approval is no longer waiting for your decision.' }
 
   const { limited } = await rateLimit(`approval-code:${v.approvalId}:${v.approverId}`, 3, 10 * 60_000)
@@ -59,16 +63,17 @@ export async function requestApprovalCode(token: string): Promise<Result & { sen
   const email: string | undefined = data?.user?.email
   if (!email) return { error: 'No e-mail address is set for this approver.' }
 
-  const code = approvalCode(v.approvalId, v.approverId)
+  const code = await issueApprovalCode(admin, v.approvalId, v.approverId)
+  if (!code) return { error: 'The code could not be created. Please try again.' }
   const html = layout(`
     <p>Hi ${escapeHtml(state.approverName.split(' ')[0] || 'there')},</p>
     <p>Your verification code to approve or reject <strong>${escapeHtml(`${state.requestNo}: ${state.title}`)}</strong> is:</p>
     <p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:16px 0;">${code}</p>
-    <p style="font-size:13px;color:#6B7280;">It works for the next 10 minutes. If you did not open the approval link, ignore this e-mail and do not share the code.</p>
+    <p style="font-size:13px;color:#6B7280;">It works once, for the next ${CODE_MINUTES} minutes. If you did not open the approval link, ignore this e-mail and do not share the code.</p>
   `)
   const res = await sendEmail({
     to: email, subject: `Your Citykart Desk code: ${code}`, html,
-    text: `Your verification code to approve or reject ${state.requestNo} is ${code}. It works for the next 10 minutes. If you did not open the approval link, ignore this e-mail and do not share the code.`,
+    text: `Your verification code to approve or reject ${state.requestNo} is ${code}. It works once, for the next ${CODE_MINUTES} minutes. If you did not open the approval link, ignore this e-mail and do not share the code.`,
   })
   if (res.error) return { error: 'The code could not be sent. Please try again.' }
   return { sentTo: mask(email) }
@@ -83,7 +88,10 @@ export async function verifyApprovalCode(token: string, code: string): Promise<R
     ip ? rateLimit(`approval-verify-ip:${ip}`, 30, 10 * 60_000) : Promise.resolve({ limited: false, remaining: 1 }),
   ])
   if (a.limited || b.limited) return { error: 'Too many wrong tries. Please wait a few minutes and request a new code.' }
-  if (!codeMatches(v.approvalId, v.approverId, code)) return { error: 'That code is not right or has expired.' }
+  const admin = createAdminClient() as unknown as AnyClient
+  const check = await consumeApprovalCode(admin, v.approvalId, v.approverId, code)
+  if (check === 'locked') return { error: 'Too many wrong tries for this code. Please request a new code.' }
+  if (check !== 'ok') return { error: 'That code is not right or has expired.' }
 
   const value = signVerified(v.approvalId, v.approverId)
   if (!value) return { error: 'Verification is not available right now.' }
