@@ -62,11 +62,11 @@ export function resolveMonth(value: string | undefined | null, now: Date = new D
 /** The most months the Monthly Admin Report shows at once. */
 export const MAX_REPORT_MONTHS = 12
 
-/** "2026-04,2026-05" → those months, oldest first (repeats and anything else dropped, at most 12); nothing valid → this month and the 2 before it. */
-export function resolveMonths(value: string | undefined | null, now: Date = new Date()): WeekMonth[] {
+/** "2026-04,2026-05" → those months, oldest first (repeats and anything else dropped, at most 12); nothing valid → this month and the 2 before it (`fallback` months in all). */
+export function resolveMonths(value: string | undefined | null, now: Date = new Date(), fallback = 3): WeekMonth[] {
   const picked = [...new Set((value ?? '').split(',').map((s) => s.trim()).filter((s) => /^\d{4}-(0[1-9]|1[0-2])$/.test(s)))].sort().slice(-MAX_REPORT_MONTHS)
   if (picked.length > 0) return picked.map((v) => resolveMonth(v, now))
-  return [2, 1, 0].map((back) => {
+  return Array.from({ length: fallback }, (_, i) => fallback - 1 - i).map((back) => {
     const d = new Date(now.getFullYear(), now.getMonth() - back, 1)
     return resolveMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, now)
   })

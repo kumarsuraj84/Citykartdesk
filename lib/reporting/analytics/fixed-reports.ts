@@ -18,7 +18,7 @@ export const REPORTS_NAME = 'Predefined Reports'
 /** The folder the reports are kept in. */
 export const REPORTS_FOLDER = 'Admin/NSO/BD Reports'
 
-export type ReportLayout = 'summary' | 'status' | 'cluster-list' | 'store-ac' | 'red-flag' | 'amc-vendor' | 'weekly' | 'monthly'
+export type ReportLayout = 'summary' | 'status' | 'cluster-list' | 'store-ac' | 'red-flag' | 'amc-vendor' | 'weekly' | 'monthly' | 'repeat-ac'
 
 export interface FixedReportDef {
   slug: string
@@ -33,6 +33,8 @@ export interface FixedReportDef {
   acOnly?: boolean
   /** a weekly / monthly report's rows: one per AMC brand (the default) or one per Store Master priority list (TOP 40, ROS) */
   rowBy?: 'amc' | 'priority'
+  /** how many months a month-choosing report shows when none is chosen (this month and the ones before it); 3 when not said */
+  defaultMonths?: number
   /** only tickets raised by new stores (NSO) */
   nso?: boolean
   /** the statuses counted; the six "still being worked" statuses unless the report says otherwise */
@@ -79,6 +81,8 @@ export const FIXED_REPORTS: FixedReportDef[] = [
     about: 'By month (choose any months): tickets opened in that month and tickets resolved in that month. Starts on the Admin group\'s AC tickets by AMC brand; choose any group, service or technician (other tickets are shown by category).' },
   { slug: 'priority-wise-report', title: 'Priority Wise Report', layout: 'monthly', rowBy: 'priority', group: 'Admin', services: [ADMIN_AC], statuses: ALL_STATUSES,
     about: 'By priority store list (as per Ops: TOP 40, ROS) and month (choose any months): tickets opened and tickets resolved in that month. Starts on the Admin group\'s AC tickets; choose any group, service or technician.' },
+  { slug: 'repeated-ac-complain-report', title: 'Repeated AC Complain Report', layout: 'repeat-ac', acOnly: true, defaultMonths: 1, statuses: ALL_STATUSES.filter((s) => s !== 'cancelled'),
+    about: 'AC complaints by requester, AMC brand, AC total and sub category, with the number of tickets raised in each chosen month (this month unless others are chosen).' },
 ]
 
 export const findFixedReport = (slug: string) => FIXED_REPORTS.find((r) => r.slug === slug)
@@ -357,6 +361,33 @@ export function buildFixedReport(input: BuildInput): ReportTable {
     }
   }
 
+  if (def.layout === 'repeat-ac') {
+    // The AC complaints of the chosen months (by the month the ticket was raised): one line per requester, sub category and AMC brand, how many tickets were
+    // raised in each month, and the line's total. A requester that complained about several things has a line for each.
+    const months = input.months ?? []
+    const acTickets = facts.filter((f) => f.isAcTicket && !isServerRoomAc(f.acNo) && months.some((m) => m.label === f.openMonth))
+    const lines = groupBy(acTickets, (f) => `${f.store || f.requester}|${f.acAmcBrand}|${subOf(f.subCategory)}`, byName)
+    lead = 4
+    columns = [
+      col('store', 'Requester', 70), col('amc', 'AMC BRAND', 100), numCol('ac', 'AC TOTAL', 66), col('sub', 'Sub Category', 160),
+      ...months.map((m, i) => numCol(`m${i}`, m.label, 62, { align: 'center' })),
+      numCol('total', 'Grand Total', 72, { align: 'center', peach: true }),
+    ]
+    if (months.length > 0) headGroups = [{ label: 'Assign Month', from: 4, span: months.length }]
+    const sorted = lines.map((g) => ({ g, f: g.items[0] }))
+      .sort((x, y) => byName(x.f.store || x.f.requester, y.f.store || y.f.requester) || byName(x.f.acAmcBrand, y.f.acAmcBrand) || byName(subOf(x.f.subCategory), subOf(y.f.subCategory)))
+    const inMonth = (items: TicketFact[], label: string) => items.filter((t) => t.openMonth === label)
+    for (const { g, f } of sorted) {
+      const all = refs(g.items)
+      rows.push(row(g.key, 'row', [f.store || f.requester, f.acAmcBrand || '', f.acTotal ?? '', subOf(f.subCategory), ...months.map((m) => inMonth(g.items, m.label).length || ''), g.items.length],
+        [all, all, all, all, ...months.map((m) => refs(inMonth(g.items, m.label))), all]))
+    }
+    if (rows.length > 0) {
+      rows.push(row('grand', 'grand', ['Grand Total', '', '', '', ...months.map((m) => inMonth(acTickets, m.label).length || ''), acTickets.length],
+        [undefined, undefined, undefined, undefined, ...months.map((m) => refs(inMonth(acTickets, m.label))), refs(acTickets)]))
+    }
+  }
+
   if (def.layout === 'amc-vendor') {
     const list = facts.filter((f) => f.isAcTicket && !isServerRoomAc(f.acNo))
       .sort((x, y) => byName(x.acAmcBrand, y.acAmcBrand) || byName(x.acAmcVendor, y.acAmcVendor) || byName(x.cluster, y.cluster) || byName(x.store || x.requester, y.store || y.requester) || byName(x.ticketNo, y.ticketNo))
@@ -388,9 +419,11 @@ export function buildFixedReport(input: BuildInput): ReportTable {
   // the tickets the report counts (a summary also lists the ones created or resolved today, which are not counted)
   const counted = def.layout === 'summary' ? facts.length : new Set(rows.filter((r) => r.kind === 'row').flatMap((r) => r.refs.flatMap((x) => x ?? []))).size
   return {
-    slug: def.slug, title: def.title, columns, headGroups, rows, tickets: tk.list, lead, dayWord, compact: def.layout === 'weekly' || def.layout === 'monthly',
+    slug: def.slug, title: def.title, columns, headGroups, rows, tickets: tk.list, lead, dayWord, compact: def.layout === 'weekly' || def.layout === 'monthly' || def.layout === 'repeat-ac',
     scopeText: def.layout === 'weekly' && input.month
       ? `${input.month.name} · ${counted} ticket${counted === 1 ? '' : 's'} opened or resolved · ${weekNote}`
+      : def.layout === 'repeat-ac' && input.months
+      ? `${input.months.map((x) => x.label).join(', ')} · ${counted} ticket${counted === 1 ? '' : 's'} raised`
       : def.layout === 'monthly' && input.months
       ? `${input.months.map((x) => x.label).join(', ')} · ${counted} ticket${counted === 1 ? '' : 's'} opened or resolved`
       : `${statusText} · ${counted} ticket${counted === 1 ? '' : 's'}`,

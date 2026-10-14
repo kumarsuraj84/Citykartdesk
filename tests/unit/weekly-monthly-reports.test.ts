@@ -107,3 +107,34 @@ describe('Monthly Admin Report and Priority Wise Report', () => {
     expect(cell(t, 'HITACHI', 'o0')).toBe(1)
   })
 })
+
+describe('Repeated AC Complain Report', () => {
+  const oct = resolveMonths('2026-10', now, 1)
+  const sbp = (no: string, sub: string) => fact({ ticketNo: no, store: 'SBP', requester: 'SBP', acAmcBrand: 'BLUE STAR', acTotal: 12, subCategory: sub, openMonth: 'Oct-26' })
+  const tickets = [
+    fact({ ticketNo: 'CKSD-11', store: 'BNK', requester: 'BNK', acAmcBrand: 'L.G', acTotal: 9, subCategory: 'COOLING ISSUE', openMonth: 'Oct-26' }),
+    fact({ ticketNo: 'CKSD-12', store: 'LSR', requester: 'LSR', acAmcBrand: 'DAIKIN', acTotal: 11, subCategory: 'OTHER AC ISSUE', openMonth: 'Oct-26' }),
+    fact({ ticketNo: 'CKSD-13', store: 'LSR', requester: 'LSR', acAmcBrand: 'DAIKIN', acTotal: 11, subCategory: 'OTHER AC ISSUE', openMonth: 'Oct-26' }),
+    sbp('CKSD-14', 'FACE REVERSE'), sbp('CKSD-15', 'OTHER AC ISSUE'),
+    fact({ ticketNo: 'CKSD-16', store: 'SAH', requester: 'SAH', openMonth: 'Sep-26', acAmcBrand: 'BLUE STAR', acTotal: 13 }),
+    fact({ ticketNo: 'CKSD-17', store: 'SAH', requester: 'SAH', acNo: 'Server Room AC', openMonth: 'Oct-26', acAmcBrand: 'BLUE STAR', acTotal: 13 }),
+  ]
+  const t = buildFixedReport({ def: def('repeated-ac-complain-report'), facts: tickets, statusLabel: (s) => s, months: oct })
+
+  it('one line per requester, AMC brand and sub category with the month\'s tickets and a Grand Total', () => {
+    expect(t.columns.map((c) => c.label)).toEqual(['Requester', 'AMC BRAND', 'AC TOTAL', 'Sub Category', 'Oct-26', 'Grand Total'])
+    expect(t.headGroups).toEqual([{ label: 'Assign Month', from: 4, span: 1 }])
+    expect(t.lead).toBe(4)
+    expect(t.rows.filter((r) => r.kind === 'row').map((r) => r.cells.join('/'))).toEqual([
+      'BNK/L.G/9/COOLING ISSUE/1/1', 'LSR/DAIKIN/11/OTHER AC ISSUE/2/2', 'SBP/BLUE STAR/12/FACE REVERSE/1/1', 'SBP/BLUE STAR/12/OTHER AC ISSUE/1/1',
+    ])
+    expect(t.rows[t.rows.length - 1].cells).toEqual(['Grand Total', '', '', '', 5, 5])
+  })
+  it('leaves out other months and the Server Room AC, and every number opens its tickets', () => {
+    expect(t.tickets.map((x) => x.no).sort()).toEqual(['CKSD-11', 'CKSD-12', 'CKSD-13', 'CKSD-14', 'CKSD-15'])
+  })
+  it('starts on this month only', () => {
+    expect(def('repeated-ac-complain-report').defaultMonths).toBe(1)
+    expect(resolveMonths('', now, 1).map((m) => m.value)).toEqual(['2026-10'])
+  })
+})

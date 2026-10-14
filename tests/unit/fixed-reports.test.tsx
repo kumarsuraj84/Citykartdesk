@@ -20,13 +20,13 @@ const col = (t: ReportTable, key: string) => t.columns.findIndex((c) => c.key ==
 const lines = (t: ReportTable) => t.rows.map((r) => `${r.kind}:${t.columns.slice(0, t.lead).map((_, i) => r.cells[i]).filter((v) => v !== '').join('/')}`)
 
 describe('the fixed reports are the sheets of the Excel report, under their names', () => {
-  it('has exactly the fifteen reports, in the order of the sheets (the last three are the weekly, monthly and priority-wise ones)', () => {
+  it('has exactly the sixteen reports, in the order of the sheets (the last four are the weekly, monthly, priority-wise and repeated-AC ones)', () => {
     expect(FIXED_REPORTS.map((r) => r.title)).toEqual([
       '🚩Red Flag Store Report', 'Store AC Not Working Report', 'AMC Vendor Report', 'Store Side Pending Tickets Report', 'AC Issues Report',
       'Repair & Maintenance Report', 'Admin Requirement Report', 'NSO Status Report', 'NSO Summary Report', 'BD Status Report', 'BD Summary Report', 'Admin Summary Report',
-      'Weekly Admin Report', 'Monthly Admin Report', 'Priority Wise Report',
+      'Weekly Admin Report', 'Monthly Admin Report', 'Priority Wise Report', 'Repeated AC Complain Report',
     ])
-    expect(new Set(FIXED_REPORTS.map((r) => r.slug)).size).toBe(15)
+    expect(new Set(FIXED_REPORTS.map((r) => r.slug)).size).toBe(16)
     expect(REPORTS_NAME).toBe('Predefined Reports')
     expect(REPORTS_FOLDER).toBe('Admin/NSO/BD Reports')
   })

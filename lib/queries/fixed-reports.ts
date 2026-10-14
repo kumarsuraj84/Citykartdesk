@@ -45,7 +45,7 @@ export interface FilterOptionsData {
 }
 
 /** The month a monthly report (the Weekly Admin Report) is about, and the months to choose from. */
-export interface MonthChoice { /** the month chosen, or the months chosen joined by commas ('2026-04,2026-05') */ value: string; name: string; /** the Monthly reports let several months be chosen */ multi?: boolean; options: { value: string; label: string }[] }
+export interface MonthChoice { /** the month chosen, or the months chosen joined by commas ('2026-04,2026-05') */ value: string; name: string; /** the Monthly reports let several months be chosen */ multi?: boolean; /** the words of the button that goes back to the report's own months */ resetLabel?: string; options: { value: string; label: string }[] }
 
 export interface FixedReportResult { def: FixedReportDef; table: ReportTable; filters: FilterOptionsData; month?: MonthChoice; /** true when the report stopped at the row cap: the numbers cover only the first rows */ truncated?: boolean }
 
@@ -86,12 +86,12 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
   // a monthly report is about one month (this month unless another is chosen), and counts tickets whatever their status is now
   const month = def.layout === 'weekly' ? resolveMonth(clean.month?.split(',')[0]) : undefined
   // a monthly report (Monthly Admin Report, Priority Wise Report) shows any months chosen (this month and the 2 before it when none)
-  const months = def.layout === 'monthly' ? resolveMonths(clean.month) : undefined
+  const months = def.layout === 'monthly' || def.layout === 'repeat-ac' ? resolveMonths(clean.month, new Date(), def.defaultMonths ?? 3) : undefined
   const allMonths = monthOptions(new Date())
   const withChosen = (chosen: { value: string; name: string }[]) => [...allMonths, ...chosen.filter((c) => !allMonths.some((o) => o.value === c.value)).map((c) => ({ value: c.value, label: c.name }))]
   const monthChoice: MonthChoice | undefined = month
     ? { value: month.value, name: month.name, options: withChosen([month]) }
-    : months && { value: months.map((x) => x.value).join(','), name: months.map((x) => x.name).join(', '), multi: true, options: withChosen(months) }
+    : months && { value: months.map((x) => x.value).join(','), name: months.map((x) => x.name).join(', '), multi: true, resetLabel: def.defaultMonths === 1 ? 'This month' : `Last ${def.defaultMonths ?? 3} months`, options: withChosen(months) }
   const result = (table: ReportTable, combos: FilterCombo[]): FixedReportResult => ({ def, table, filters: optionsData(combos), month: monthChoice })
   const empty = () => result(buildFixedReport({ def, facts: [], statusLabel, statuses, month, months }), [])
   // a report that starts on a group or service the viewer cannot see has nothing to start from
@@ -110,7 +110,7 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
   const ctx: FactContext = { asOf: new Date(), acFields, openAcByStore, redFlagPercent: DEFAULT_RED_FLAG_PERCENT }
   const techOk = (f: TicketFact) => eff.techs.length === 0 || eff.techs.includes(techOf(f.technician))
   // (a weekly report counts the ACs of stores, so the Server Room AC is left out, as in the other AC reports)
-  const keep = (f: TicketFact) => (!def.acOnly || f.isAcTicket) && (!def.nso || f.storeType === 'NSO') && techOk(f) && ((def.layout !== 'weekly' && def.layout !== 'monthly') || !isServerRoomAc(f.acNo))
+  const keep = (f: TicketFact) => (!def.acOnly || f.isAcTicket) && (!def.nso || f.storeType === 'NSO') && techOk(f) && ((def.layout !== 'weekly' && def.layout !== 'monthly' && def.layout !== 'repeat-ac') || !isServerRoomAc(f.acNo))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const scoped = (q: any) => { let x = q.eq('org_id', orgId); if (teamIds) x = x.in('team_id', teamIds); if (serviceIds) x = x.in('service_id', serviceIds); return x }
 
@@ -122,7 +122,8 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
       // the tickets created in the month(s) and the ones resolved (or, failing that, closed) in them, whatever their status is now
       const a = span.start.toISOString()
       const b = span.end.toISOString()
-      q = q.or(`and(created_at.gte.${a},created_at.lte.${b}),and(resolved_at.gte.${a},resolved_at.lte.${b}),and(resolved_at.is.null,closed_at.gte.${a},closed_at.lte.${b})`)
+      if (def.layout === 'repeat-ac') q = q.gte('created_at', a).lte('created_at', b).in('status', statuses)
+      else q = q.or(`and(created_at.gte.${a},created_at.lte.${b}),and(resolved_at.gte.${a},resolved_at.lte.${b}),and(resolved_at.is.null,closed_at.gte.${a},closed_at.lte.${b})`)
     } else q = q.in('status', statuses)
     return q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to)
   }, () => { truncated = true })
@@ -131,7 +132,7 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
   // a weekly report's store and AC counts per AMC brand come from the Store Master (active stores), whatever the filters are
   // (a Priority Wise Report groups them by the Store Master's priority list instead)
   let amcStores: { brand: string; stores: number; acs: number }[] | undefined
-  if ((month || months) && (acView || def.rowBy === 'priority')) {
+  if ((month || months) && def.layout !== 'repeat-ac' && (acView || def.rowBy === 'priority')) {
     const stores = await fetchAll<{ ac_amc_brand: string | null; priority_list: string | null; ac_total: number | null }>((from, to) =>
       admin.from('stores').select('ac_amc_brand, priority_list, ac_total').eq('org_id', orgId).eq('is_active', true).order('id', { ascending: true }).range(from, to))
     const byBrand = new Map<string, { brand: string; stores: number; acs: number }>()

@@ -18,7 +18,7 @@ export interface ReportFiltersProps {
   /** what is in force now (a report's starting point where nothing is chosen); an empty list means everything */
   effective: EffectiveFilter
   /** a monthly report (the Weekly Admin Report): the month it is about and the months to choose from; it has no Status filter */
-  month?: { value: string; multi?: boolean; options: { value: string; label: string }[] }
+  month?: { value: string; multi?: boolean; resetLabel?: string; options: { value: string; label: string }[] }
 }
 
 /**
@@ -140,7 +140,7 @@ export function ReportFilters({ combos, groups, services, defaults, effective, m
                 ))}
               </ul>
               <div className="mt-1 flex justify-between border-t border-border px-2 pt-2">
-                <button type="button" onClick={() => setMonthDraft([])} className="text-[11px] font-medium text-primary hover:underline">Last 3 months</button>
+                <button type="button" onClick={() => setMonthDraft([])} className="text-[11px] font-medium text-primary hover:underline">{month.resetLabel ?? 'Last 3 months'}</button>
                 <button type="button" onClick={() => go(effective, [...monthDraft].sort().slice(-12).join(','))} className="btn-gradient px-3 py-1 text-xs">Apply</button>
               </div>
             </div>
