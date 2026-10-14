@@ -9,6 +9,7 @@ import { getEmailFrom, getEmailSetup } from '@/lib/email/config'
 import { invalidateMailboxCache } from '@/lib/email/mailbox'
 import { logAdminAudit } from './audit'
 import { EMAIL_REGEX } from '@/lib/validation/formFields'
+import { mailHostProblem } from '@/lib/validation/mail-host'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -110,9 +111,8 @@ export async function saveMailboxSettings(input: {
   const password = input.password ?? ''
   const port = Number(input.port)
 
-  if (!host || host.length > 253 || !/^[A-Za-z0-9.-]+$/.test(host)) {
-    return { error: 'Enter a valid mail server address, e.g. smtp.gmail.com.' }
-  }
+  const hostProblem = mailHostProblem(host)
+  if (hostProblem) return { error: hostProblem }
   if (!Number.isInteger(port) || port < 1 || port > 65535) return { error: 'Enter a valid port number (587 for Gmail).' }
   if (username && !EMAIL_REGEX.test(username)) return { error: 'Enter the mailbox as an email address.' }
   if (password && !username) return { error: 'Enter the mailbox address that this password belongs to.' }
@@ -121,6 +121,15 @@ export async function saveMailboxSettings(input: {
 
   const { data: hasPw } = await admin.rpc('email_smtp_has_password')
   if (username && !password && hasPw !== true) return { error: 'Enter the mailbox password (a Google App Password).' }
+
+  // A saved password belongs to the server and login it was saved for. Leaving the box empty keeps it, but only while those stay the same:
+  // otherwise the old secret would be sent to a different server (D-026).
+  if (username && !password) {
+    const { data: current } = await admin.from('email_smtp_settings').select('host, port, username').eq('id', true).maybeSingle()
+    if (current && (String(current.host).toLowerCase() !== host.toLowerCase() || current.port !== port || String(current.username ?? '').toLowerCase() !== username.toLowerCase())) {
+      return { error: 'You changed the mail server, port or mailbox: please enter the mailbox password again. The saved password is not reused for a different server.' }
+    }
+  }
 
   if (password) {
     const { error } = await admin.rpc('email_smtp_store_password', { p_secret: password })
