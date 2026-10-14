@@ -24,7 +24,7 @@ const oem = (id: string, name: string, emails: string[]) => ({ id, name, emails,
 
 const stores = [store('1', 'BNK', 'Bhagalpur Nath', { city: 'Bhagalpur', oem_name: 'HITACHI OEM' }), store('2', 'LSR', 'Lakhisarai', { city: 'Lakhisarai', oem_name: 'DAIKIN OEM' }), store('3', 'SBP', 'Sambalpur', { city: 'Sambalpur' })]
 const oems = [oem('o1', 'HITACHI OEM', ['service@hitachi.test']), oem('o2', 'DAIKIN OEM', ['help@daikin.test'])]
-const props = { departments: [], locations: [], costCenters: [], jobFunctions: [], designations: [], allUsers: [], oems, stores } as never
+const props = { departments: [], locations: [], costCenters: [], jobFunctions: [], designations: [], allUsers: [], oems, stores } as unknown as React.ComponentProps<typeof OrgStructureClient>
 
 describe('searching stores and OEMs in Org Structure', () => {
   it('matches a store by code, name, city or OEM, and an OEM by name or e-mail', () => {
