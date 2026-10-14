@@ -181,6 +181,8 @@ export type AnalyticsData = {
   periodLabel: string
   /** the period as the numbers were counted (epoch ms), so a click can open a list over exactly the same window */
   periodWindow: { start: number; end: number }
+  /** the moment these numbers were counted (epoch ms): the page says so, and its pop-ups are read afresh when it changes */
+  asOf: number
   // Volume
   totalCreated: number
   totalResolved: number
@@ -700,6 +702,7 @@ export async function getAnalytics(
     period,
     periodLabel,
     periodWindow: { start: startDate.getTime(), end: endDate.getTime() },
+    asOf: now.getTime(),
     totalCreated,
     totalResolved,
     totalClosed,

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { OPEN_REQUEST_STATUSES } from '@/lib/constants/requests'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
@@ -43,6 +44,9 @@ function Section({ title, icon: Icon, children, className = '' }: {
 }
 
 function Divider() { return <div className="h-px bg-border my-1" /> }
+
+/** How often the dashboard counts its numbers again. */
+const AUTO_REFRESH_MS = 60_000
 
 /** A single-day DateRange (local calendar day), daysAgo=0 is today, 1 is yesterday. */
 function dayRange(daysAgo: number): { from: string; to: string } {
@@ -161,10 +165,20 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds,
   const groupName = useCallback((id: string) => groups?.find((g) => g.id === id)?.name ?? data.byTeam.find((t) => t.teamId === id)?.teamName, [groups, data.byTeam])
   const techName = useCallback((id: string) => data.agentLeaderboard.find((a) => a.agentId === id)?.agentName, [data.agentLeaderboard])
   const drill = useRequestDrill(
-    { period: data.period, periodWindow: data.periodWindow, periodLabel: data.periodLabel, groupIds: groupIds ?? [], groupName, techName, store: data.stores.filter },
+    { asOf: data.asOf, period: data.period, periodWindow: data.periodWindow, periodLabel: data.periodLabel, groupIds: groupIds ?? [], groupName, techName, store: data.stores.filter },
     setSideList,
   )
   const openDrill = drill.open
+
+  // The numbers are counted when the page loads, so the page counts again by itself every minute (while this tab is on screen and no pop-up or list is open),
+  // and says when it last did. Otherwise a number could be one ticket behind the pop-up opened from it.
+  const router = useRouter()
+  const popupOpen = drawer !== null || drill.modal !== null
+  useEffect(() => {
+    if (popupOpen) return
+    const id = window.setInterval(() => { if (document.visibilityState === 'visible') router.refresh() }, AUTO_REFRESH_MS)
+    return () => window.clearInterval(id)
+  }, [popupOpen, router])
   // every number on the page opens through here: the pop-up when it can, otherwise the side list
   const setDrawer = useCallback((f: DrawerFilter | null) => { if (f && openDrill(f)) return; setSideList(f) }, [openDrill])
 
@@ -791,6 +805,9 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds,
       {drill.modal}
 
       <div className="space-y-4">
+        <p className="text-right text-[11px] text-muted-foreground" data-testid="dashboard-updated" suppressHydrationWarning>
+          Updated at {new Date(data.asOf).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · counts again every minute
+        </p>
 
         {/* ── KPI Strip (fixed — a row of small stat tiles, not a movable widget) ── */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">

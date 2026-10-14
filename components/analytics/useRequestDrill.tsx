@@ -8,7 +8,7 @@ import { joinApprovals, type ApprovalRow } from '@/lib/reporting/executive/engin
 import { loadDrillData, type DrillData } from '@/lib/actions/analytics-drill'
 import type { DrawerFilter } from '@/lib/actions/analytics'
 
-type Env = Omit<BridgeEnv, 'now'>
+type Env = Omit<BridgeEnv, 'now'> & { /** when the page's numbers were counted: a new moment means the tickets loaded for an earlier click are old */ asOf?: number }
 
 type Open =
   | { phase: 'loading'; filter: DrawerFilter; title: string }
@@ -28,6 +28,9 @@ export function useRequestDrill(env: Env, fallback: (f: DrawerFilter) => void): 
   useEffect(() => { envRef.current = env; fallbackRef.current = fallback })
   const dataRef = useRef<(DrillData & { joined: ApprovalRow[] }) | null>(null)
   const seq = useRef(0)
+  // when the page's numbers are counted again (it refreshes itself every minute, or another period is chosen) the tickets loaded for an earlier click are
+  // old: forget them, so the next click loads the tickets the new numbers were counted from
+  useEffect(() => { dataRef.current = null }, [env.asOf, env.periodWindow.start, env.periodWindow.end])
 
   const open = useCallback((f: DrawerFilter): boolean => {
     // can it be shown this way at all? (answered at once, with the clock of this moment)
