@@ -183,7 +183,10 @@ export async function sendAdHocApproval(
     approver_user_id: uid,
   }))
   const { error: stepErr } = await admin.from('approval_workflow_steps').insert(stepRows)
-  if (stepErr) return { error: sanitizeError(stepErr, { route: 'approvals.ts#sendAdHocApproval', fallback: 'Failed to create approval steps.' }) }
+  if (stepErr) {
+    await admin.from('approval_workflows').delete().eq('id', workflow.id)   // nothing half-made is left behind (D-045)
+    return { error: sanitizeError(stepErr, { route: 'approvals.ts#sendAdHocApproval', fallback: 'Failed to create approval steps.' }) }
+  }
 
   // current_step = 0 means parallel — everyone acts simultaneously
   const { data: approval, error: approvalErr } = await admin
@@ -191,7 +194,10 @@ export async function sendAdHocApproval(
     .insert({ request_id: requestId, workflow_id: workflow.id, status: 'pending', current_step: 0, requested_by: profile.id })
     .select('id')
     .single()
-  if (approvalErr || !approval) return { error: sanitizeError(approvalErr, { route: 'approvals.ts#sendAdHocApproval', fallback: 'Failed to create approval.' }) }
+  if (approvalErr || !approval) {
+    await admin.from('approval_workflows').delete().eq('id', workflow.id)
+    return { error: sanitizeError(approvalErr, { route: 'approvals.ts#sendAdHocApproval', fallback: 'Failed to create approval.' }) }
+  }
 
   // Put request on hold — SLA pauses the same way "Waiting on User" does.
   // If it was already paused (e.g. sent while waiting on the user), keep the
@@ -209,7 +215,12 @@ export async function sendAdHocApproval(
       waiting_since: req.waiting_since ?? new Date().toISOString(),
     })
     .eq('id', requestId)
-  if (stErr) return { error: sanitizeError(stErr, { route: 'approvals.ts#sendAdHocApproval', fallback: 'Failed to update request status.' }) }
+  if (stErr) {
+    // The ticket never moved to "pending approval": withdraw the approval and its workflow so the ticket is not left blocked by an approval nobody can decide.
+    await admin.from('approvals').delete().eq('id', approval.id)
+    await admin.from('approval_workflows').delete().eq('id', workflow.id)
+    return { error: sanitizeError(stErr, { route: 'approvals.ts#sendAdHocApproval', fallback: 'Failed to update request status.' }) }
+  }
 
   await logActivity({
     requestId,

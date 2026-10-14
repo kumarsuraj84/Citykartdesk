@@ -245,11 +245,14 @@ export async function assignRequest(
   updateQuery = request.assigned_to === null
     ? updateQuery.is('assigned_to', null)
     : updateQuery.eq('assigned_to', request.assigned_to)
+  // ...and the status must still be the one we read (D-044): a ticket resolved, closed or put on hold in the same instant must not be
+  // quietly moved to "assigned" by a stale read.
+  updateQuery = updateQuery.eq('status', request.status)
   const { data: updatedRow, error: updateError } = await updateQuery.select('id').maybeSingle()
 
   if (updateError) return { error: sanitizeError(updateError, { route: 'requests.ts#assignRequest', fallback: 'Failed to assign request.' }) }
   if (!updatedRow) {
-    return { error: 'This request was just assigned by someone else — please refresh and try again.' }
+    return { error: 'This request was just changed by someone else — please refresh and try again.' }
   }
 
   const action = assigneeId ? 'assigned' : 'unassigned'
@@ -823,15 +826,20 @@ export async function addComment(
       autoUpdatePayload.paused_ms_total = Number(request.paused_ms_total ?? 0) + pausedMs
     }
 
-    const { error: transitionError } = await admin
+    // Only while it is STILL waiting on the user (D-044): if the technician moved it on in the meantime (hold, resolved...), this must not
+    // force it back to in progress or extend the deadlines a second time.
+    const { data: resumed, error: transitionError } = await admin
       .from('requests')
       .update(autoUpdatePayload)
       .eq('id', requestId)
       .eq('requester_id', profile.id)
+      .eq('status', 'waiting_user')
+      .select('id')
+      .maybeSingle()
 
     if (transitionError) {
       console.error('[addComment] Auto-transition failed', transitionError.message)
-    } else {
+    } else if (resumed) {
       const transitionActivity = await logActivity({
         requestId,
         actorId: profile.id,
@@ -949,9 +957,12 @@ export async function changePriority(
   newResponseDue = withPauseCredit(newResponseDue, request.paused_ms_total, request.waiting_since)
   newResolutionDue = withPauseCredit(newResolutionDue, request.paused_ms_total, request.waiting_since)
 
+  // A finished ticket (resolved, closed, cancelled) keeps the deadlines it finished with: changing its priority afterwards must not
+  // move them, or reports would show it as breached/not breached for a clock that had already stopped (D-044).
+  const finished = request.status === 'resolved' || request.status === 'closed' || request.status === 'cancelled'
   const { error: updateError } = await supabase
     .from('requests')
-    .update({
+    .update(finished ? { priority: newPriority } : {
       priority: newPriority,
       response_due_at: newResponseDue,
       resolution_due_at: newResolutionDue,
@@ -1532,19 +1543,14 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
     return { error: 'This request’s approval workflow is not fully configured (no approval steps set up). Contact an admin to complete its setup before submitting for approval.' }
   }
 
-  if (!workflowId) {
-    const { error: wfErr } = await admin
-      .from('approvals')
-      .insert({ request_id: requestId, workflow_id: usedWorkflowId, status: 'pending' })
-    // 23505 = the approvals_one_pending_per_request unique index rejected a
-    // second concurrent submission that slipped past the check above.
-    if (wfErr) return { error: wfErr.code === '23505' ? 'An approval is already in progress for this request.' : sanitizeError(wfErr, { route: 'requests.ts#submitForApproval', fallback: 'Failed to submit for approval.' }) }
-  } else {
-    const { error: wfErr } = await admin
-      .from('approvals')
-      .insert({ request_id: requestId, workflow_id: workflowId, status: 'pending' })
-    if (wfErr) return { error: wfErr.code === '23505' ? 'An approval is already in progress for this request.' : sanitizeError(wfErr, { route: 'requests.ts#submitForApproval', fallback: 'Failed to submit for approval.' }) }
-  }
+  const { data: createdApproval, error: wfErr } = await admin
+    .from('approvals')
+    .insert({ request_id: requestId, workflow_id: workflowId || usedWorkflowId, status: 'pending' })
+    .select('id')
+    .single()
+  // 23505 = the approvals_one_pending_per_request unique index rejected a
+  // second concurrent submission that slipped past the check above.
+  if (wfErr || !createdApproval) return { error: wfErr?.code === '23505' ? 'An approval is already in progress for this request.' : sanitizeError(wfErr, { route: 'requests.ts#submitForApproval', fallback: 'Failed to submit for approval.' }) }
 
   // Put the request on hold — SLA pauses the same way sendAdHocApproval()
   // does (and "Waiting on User" does): without this, a request submitted for
@@ -1561,7 +1567,12 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
       waiting_since: req.waiting_since ?? new Date().toISOString(),
     })
     .eq('id', requestId)
-  if (stErr) return { error: sanitizeError(stErr, { route: 'requests.ts#submitForApproval', fallback: 'Failed to submit for approval.' }) }
+  if (stErr) {
+    // The approval exists but the ticket never moved to "pending approval": take the approval back, otherwise the ticket would be blocked
+    // ("an approval is already in progress") with nobody to decide it (D-045).
+    await admin.from('approvals').delete().eq('id', createdApproval.id)
+    return { error: sanitizeError(stErr, { route: 'requests.ts#submitForApproval', fallback: 'Failed to submit for approval.' }) }
+  }
 
   await logActivity({
     requestId,

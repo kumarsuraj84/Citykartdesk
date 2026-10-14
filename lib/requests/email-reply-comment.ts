@@ -91,7 +91,8 @@ export async function appendEmailReplyComment(params: {
       if (request.resolution_due_at) update.resolution_due_at = new Date(new Date(request.resolution_due_at).getTime() + pausedMs).toISOString()
       update.paused_ms_total = Number(request.paused_ms_total ?? 0) + pausedMs
     }
-    await admin.from('requests').update(update).eq('id', requestId)
+    // only while it is still waiting: a technician who has moved it on meanwhile must not be overruled (D-044)
+    await admin.from('requests').update(update).eq('id', requestId).eq('status', 'waiting_user')
   }
 
   return { commentId: inserted.id }

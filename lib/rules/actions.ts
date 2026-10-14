@@ -172,6 +172,12 @@ async function runSetPriority(admin: AnyClient, request: ActionRequest, priority
   // does — from created_at, field override > the service's mapped SLA Policy,
   // business-hours aware — instead of leaving the old priority's due dates in
   // place under a new priority.
+  // A finished ticket keeps the deadlines it finished with (D-044): only its priority is recorded.
+  if (request.status === 'resolved' || request.status === 'closed' || request.status === 'cancelled') {
+    await admin.from('requests').update({ priority }).eq('id', request.id)
+    await logActivity({ requestId: request.id, actorId: request.requester_id, action: 'priority_changed', metadata: { priority_to: priority, via: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName } })
+    return
+  }
   const allFields = resolveServiceFormSections(request.service).flatMap((s) => s.fields)
   let { responseDueAt, resolutionDueAt } = await resolveSlaDeadlines(admin, {
     serviceId: request.service_id,
@@ -203,8 +209,9 @@ async function runSetPriority(admin: AnyClient, request: ActionRequest, priority
   })
 }
 
-async function runSetStatus(admin: AnyClient, request: ActionRequest, status: string, ctx: RuleActionContext): Promise<void> {
-  if (!(status in STATUS_LABELS)) return // guard against a stale/invalid status baked into an old rule
+/** Returns true when the ticket was actually moved (false: invalid status, or someone else changed it first). */
+async function runSetStatus(admin: AnyClient, request: ActionRequest, status: string, ctx: RuleActionContext): Promise<boolean> {
+  if (!(status in STATUS_LABELS)) return false // guard against a stale/invalid status baked into an old rule
 
   const now = new Date()
   const nowIso = now.toISOString()
@@ -241,7 +248,10 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
   // clear waiting_since, and credit the ledger — same bookkeeping
   // updateRequestStatus does, so a later priority/category change doesn't
   // discard this pause once it's no longer the active one.
-  if (request.status === 'waiting_user' && status !== 'waiting_user' && request.waiting_since) {
+  // ("paused" = Waiting on User or Hold due to Purchase from HO, exactly as in lib/requests/status-change.ts)
+  const pausedNow = request.status === 'waiting_user' || request.status === 'hold_purchase_ho'
+  const pausedNext = status === 'waiting_user' || status === 'hold_purchase_ho'
+  if (pausedNow && !pausedNext && request.waiting_since) {
     const pausedMs = now.getTime() - new Date(request.waiting_since).getTime()
     if (request.response_due_at) {
       update.response_due_at = new Date(new Date(request.response_due_at).getTime() + pausedMs).toISOString()
@@ -252,7 +262,7 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
     update.waiting_since = null
     update.paused_ms_total = request.paused_ms_total + pausedMs
   }
-  if (status === 'waiting_user') update.waiting_since = nowIso
+  if (pausedNext && !pausedNow) update.waiting_since = nowIso   // entering a pause; moving between pauses keeps the original start
 
   // responded_at: same "first time this request left the untouched state"
   // bookkeeping updateRequestStatus() captures — a rule that moves a fresh
@@ -282,7 +292,9 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
     update.paused_ms_total = 0
   }
 
-  await admin.from('requests').update(update).eq('id', request.id)
+  // Only if the ticket is still in the status this rule read (D-044): when someone changed it in between, the rule does not overwrite that.
+  const { data: changed } = await admin.from('requests').update(update).eq('id', request.id).eq('status', request.status).select('id').maybeSingle()
+  if (!changed) return false
 
   // CSAT: same as updateRequestStatus() — a rule-resolved ticket gets a survey and the same
   // "resolved + how did we do?" e-mail, or the requester never hears about it or gets asked to rate it.
@@ -319,6 +331,7 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
     action: 'status_changed',
     metadata: { to: status, via: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName },
   })
+  return true
 }
 
 async function runSetTeam(admin: AnyClient, request: ActionRequest, teamId: string, ctx: RuleActionContext): Promise<void> {
@@ -449,7 +462,10 @@ export async function executeActions(
     try {
       if (action.type === 'assign') await runAssign(admin, request, action.params, ctx)
       else if (action.type === 'set_priority') await runSetPriority(admin, request, action.params.priority, ctx)
-      else if (action.type === 'set_status') await runSetStatus(admin, request, action.params.status, ctx)
+      else if (action.type === 'set_status') {
+        // later actions of the same rule see the status this one just set
+        if (await runSetStatus(admin, request, action.params.status, ctx)) request = { ...request, status: action.params.status }
+      }
       else if (action.type === 'set_team') await runSetTeam(admin, request, action.params.teamId, ctx)
       else if (action.type === 'notify') await runNotify(admin, request, action.params, ctx)
     } catch (e) {
