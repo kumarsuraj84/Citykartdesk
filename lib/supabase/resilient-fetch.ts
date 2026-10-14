@@ -10,6 +10,8 @@
  * "we don't know if the server even saw this yet" is worth retrying.
  */
 
+import { reportFailure, reportResponse } from '@/lib/syslog/failure-reporter'
+
 const TIMEOUT_MS = 20_000
 const MAX_RETRIES = 2
 const RETRY_DELAY_MS = [250, 750]
@@ -59,15 +61,21 @@ export const resilientFetch: typeof fetch = async (input, init) => {
     // alongside our own timeout - either can abort the request.
     init?.signal?.addEventListener('abort', () => controller.abort())
 
+    const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+    const started = Date.now()
     try {
       const response = await fetch(input, { ...init, signal: controller.signal })
       clearTimeout(timeout)
+      // a failed answer from the database / auth / storage service is recorded (in the background) in the System Log
+      reportResponse(response, { url, method, ms: Date.now() - started })
       return response
     } catch (err) {
       clearTimeout(timeout)
       lastError = err
 
       if (!canRetry(init?.method ?? (input instanceof Request ? input.method : undefined), err) || attempt === MAX_RETRIES) {
+        reportFailure({ url, method, error: err, ms: Date.now() - started })
         throw err
       }
       await sleep(RETRY_DELAY_MS[attempt])

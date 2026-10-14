@@ -76,6 +76,10 @@ function emit(payload: Record<string, unknown>): void {
   if (payload.level === 'error') console.error(line)
   else if (payload.level === 'warn') console.warn(line)
   else console.log(line)
+  // Warnings and errors are also stored in the System Log (queued and sent in the background; never throws, never waits).
+  if (payload.level === 'error' || payload.level === 'warn') {
+    void import('@/lib/syslog/record').then((m) => m.recordFromLogger(payload as Parameters<typeof m.recordFromLogger>[0])).catch(() => {})
+  }
 }
 
 export function log(evt: LogEvent): void {

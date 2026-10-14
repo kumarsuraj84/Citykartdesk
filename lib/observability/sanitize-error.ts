@@ -78,6 +78,7 @@ export function sanitizeError(err: unknown, opts: SanitizeErrorOptions = {}): st
     event: 'error_sanitized',
     message: 'Raw error intercepted at the client boundary and replaced with a safe message',
     route: opts.route,
+    errorCode: isPgErrorLike(err) && typeof err.code === 'string' ? err.code : undefined,
     context: opts.context,
     error: err,
   })

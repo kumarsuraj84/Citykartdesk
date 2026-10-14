@@ -5,11 +5,25 @@ import { VERIFIED_USER_HEADER, VERIFIED_USER_SIG_HEADER, signVerifiedUser } from
 // Every request that passes through without a session check (assets, the public API routes, the e-mailed approve / rating pages) is
 // forwarded WITHOUT any client-supplied copy of the verified-user headers: only the main path below may set them, and it signs them.
 // (Audit finding D-001 / SEC-01: these paths used to forward the caller's own header untouched, and getCurrentProfile() believed it.)
+// Every request is also stamped with an id, path and method that the System Log attaches to anything recorded while handling it. A client-supplied
+// copy is always replaced.
+function stampRequest(headers: Headers, request: NextRequest): string {
+  let id: string
+  try { id = crypto.randomUUID() } catch { id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}` }
+  headers.set('x-request-id', id)
+  headers.set('x-request-path', request.nextUrl.pathname)
+  headers.set('x-request-method', request.method)
+  return id
+}
+
 function passThrough(request: NextRequest) {
   const clean = new Headers(request.headers)
   clean.delete(VERIFIED_USER_HEADER)
   clean.delete(VERIFIED_USER_SIG_HEADER)
-  return NextResponse.next({ request: { headers: clean } })
+  const id = stampRequest(clean, request)
+  const res = NextResponse.next({ request: { headers: clean } })
+  res.headers.set('x-request-id', id)
+  return res
 }
 
 export async function proxy(request: NextRequest) {
@@ -151,7 +165,9 @@ export async function proxy(request: NextRequest) {
   // with the already-used refresh token, fails, and looks signed-out — which is what
   // used to bounce users /home -> /login -> /home until the browser went blank.
   if (sessionRefreshed) requestHeaders.set('cookie', request.cookies.toString())
+  const requestId = stampRequest(requestHeaders, request)
   const finalResponse = NextResponse.next({ request: { headers: requestHeaders } })
+  finalResponse.headers.set('x-request-id', requestId)
   // Carry forward any session-refresh cookies getClaims() queued via setAll()
   // above — without this, replacing supabaseResponse here would silently drop
   // the refreshed auth cookie and the browser would never receive it.
