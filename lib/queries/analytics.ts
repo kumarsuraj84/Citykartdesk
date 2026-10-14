@@ -5,6 +5,7 @@ import { isCurrentlyBreached } from '@/lib/sla/breach'
 import { AGE_BUCKETS, ageBucketFor } from '@/lib/reporting/aging'
 import { RED_FLAG } from '@/lib/reporting/executive/engine'
 import { loadStoreDims } from '@/lib/queries/store-dims'
+import { momentOf } from '@/lib/analytics/moment'
 import { istDay, istWeekStart } from '@/lib/reporting/ist'
 import {
   emptyStoreFilter, matchesStoreFilter, storeFilterCount, toCombos, type StoreCombo, type StoreDims, type StoreFilter,
@@ -249,6 +250,7 @@ export type RollingStat = { last24h: number; last7d: number; last30d: number }
 export type RequestFlow = { inflow: RollingStat; outflow: RollingStat }
 
 // ── Main query ─────────────────────────────────────────────────────────────────
+
 
 // A viewer who isn't org-wide only sees their own technician groups' data; no groups → nothing.
 const NO_TEAM_ID = '00000000-0000-0000-0000-000000000000'
@@ -565,10 +567,10 @@ export async function getAnalytics(
   }
   const decidedInPeriod = approvalsAll
     .map((a) => ({ a, at: finalOf(a) }))
-    .filter((x): x is { a: ApprovalRaw; at: string } => x.at !== null && x.at >= start && x.at <= end && (x.a.status === 'approved' || x.a.status === 'rejected'))
+    .filter((x): x is { a: ApprovalRaw; at: string } => x.at !== null && momentOf(x.at) >= startDate.getTime() && momentOf(x.at) <= endDate.getTime() && (x.a.status === 'approved' || x.a.status === 'rejected'))
   const approvalsApproved = decidedInPeriod.filter((x) => x.a.status === 'approved').length
   const approvalsRejected = decidedInPeriod.filter((x) => x.a.status === 'rejected').length
-  const approvalsPending = approvalsAll.filter((a) => a.status === 'pending' && a.created_at <= end).length
+  const approvalsPending = approvalsAll.filter((a) => a.status === 'pending' && momentOf(a.created_at) <= endDate.getTime()).length
   const totalDecided = approvalsApproved + approvalsRejected
   const approvalRate = totalDecided ? Math.round((approvalsApproved / totalDecided) * 100) : null
   const avgApprovalCycleHours = avg(decidedInPeriod.map((x) => hours(x.a.created_at, x.at)))
@@ -621,8 +623,9 @@ export async function getAnalytics(
   const bucketByDay = (rows: { at: string }[]): DailyStat => {
     let today = 0, yesterday = 0
     for (const r of rows) {
-      if (r.at >= todayStartIso) today++
-      else if (r.at >= yesterdayStartIso) yesterday++
+      const t = momentOf(r.at)
+      if (t >= todayStart.getTime()) today++
+      else if (t >= yesterdayStart.getTime()) yesterday++
     }
     return { today, yesterday }
   }
@@ -638,9 +641,10 @@ export async function getAnalytics(
   const bucketByRollingWindow = (rows: { at: string }[]): RollingStat => {
     let last24h = 0, last7d = 0, last30d = 0
     for (const r of rows) {
-      if (r.at >= last30dStartIso) last30d++
-      if (r.at >= last7dStartIso) last7d++
-      if (r.at >= last24hStartIso) last24h++
+      const t = momentOf(r.at)
+      if (t >= Date.parse(last30dStartIso)) last30d++
+      if (t >= Date.parse(last7dStartIso)) last7d++
+      if (t >= Date.parse(last24hStartIso)) last24h++
     }
     return { last24h, last7d, last30d }
   }
@@ -695,7 +699,7 @@ export async function getAnalytics(
     (t) => t.due_date && new Date(t.due_date) < now && !['done', 'cancelled'].includes(t.status)
   ).length
   const tasksDoneInPeriod = tasksArr.filter(
-    (t) => t.status === 'done' && t.updated_at >= start && t.updated_at <= end
+    (t) => t.status === 'done' && momentOf(t.updated_at) >= startDate.getTime() && momentOf(t.updated_at) <= endDate.getTime()
   ).length
 
   return {
