@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { VERIFIED_USER_HEADER, VERIFIED_USER_SIG_HEADER, signVerifiedUser } from '@/lib/auth/verified-user'
+import { publicActionBodyTooLarge } from '@/lib/http/public-body-limit'
 
 // Every request that passes through without a session check (assets, the public API routes, the e-mailed approve / rating pages) is
 // forwarded WITHOUT any client-supplied copy of the verified-user headers: only the main path below may set them, and it signs them.
@@ -36,6 +37,11 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/favicon') ||
     /\.(svg|png|jpg|jpeg|gif|webp|ico)$/.test(pathname)
   if (isPublicAsset) return passThrough(request)
+
+  // A public page only ever posts a small form: refuse a large body before any action reads it (D-039).
+  if (publicActionBodyTooLarge(request.method, pathname, request.headers)) {
+    return new NextResponse('Request too large', { status: 413 })
+  }
 
   // ── Fast path: cron/webhook/health API routes authenticate themselves ──────
   // These are called by Railway's cron-tick.mjs, Google Pub/Sub, Microsoft
