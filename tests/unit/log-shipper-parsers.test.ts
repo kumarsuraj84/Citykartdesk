@@ -2,7 +2,7 @@
 // ordinary traffic and people's mistakes do not, and nothing sensitive is copied.
 
 import { describe, it, expect } from 'vitest'
-import { parsePostgrestLine, parseAuthLine, parseStorageLine, createPostgresParser, createParser, collapseEntries } from '../../scripts/lib/log-parsers.mjs'
+import { parsePostgrestLine, parseAuthLine, parseStorageLine, parseBackupLine, createPostgresParser, createParser, collapseEntries } from '../../scripts/lib/log-parsers.mjs'
 
 type Entry = { source: string; severity: string; action: string; message?: string; errorCode?: string; path?: string; at?: number; detail?: Record<string, unknown>; stack?: string }
 
@@ -99,6 +99,16 @@ describe('PostgreSQL', () => {
   })
   it('an unknown time-zone name leaves the time to the server', () => {
     expect(feed(['2026-10-14 01:25:01.557 XYZ [7] ERROR:  boom'])[0].at).toBeUndefined()
+  })
+})
+
+describe('backup log', () => {
+  it('a failed backup becomes a critical row; a good run and blank lines do not', () => {
+    expect(parseBackupLine('2026-10-14 02:31:07 CK_CKDESK_DBBACKUP: FAILED pg_dump exited with code 1')).toMatchObject({ source: 'process', severity: 'critical', action: 'backup.failed' })
+    expect(parseBackupLine('2026-10-14 02:30:02 ERROR: could not connect to server')).toMatchObject({ action: 'backup.failed' })
+    expect(parseBackupLine('2026-10-14 02:44:50 CK_CKDESK_DBBACKUP: OK 412 MB, integrity checked')).toBeNull()
+    expect(parseBackupLine('')).toBeNull()
+    expect((createParser('backup').push('x: FAILED')).length).toBe(1)
   })
 })
 

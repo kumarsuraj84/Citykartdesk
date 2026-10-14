@@ -37,7 +37,7 @@ The old `event_log` / `audit_log` tables are left in place (their rows were back
 
 ## Log shipper
 
-`scripts/log-shipper.mjs` (no dependencies, Node 18+) reads the **problem lines only** of PostgREST, Supabase Auth, Supabase Storage and
+`scripts/log-shipper.mjs` (no dependencies, Node 18+) reads the **problem lines only** of PostgREST, Supabase Auth, Supabase Storage, the nightly backup log and
 PostgreSQL logs and posts them to `/api/system-log/ingest` (shared secret; the endpoint can only add `error`/`event` rows).
 Ordinary traffic, 4xx answers (people's mistakes) and unique-key clashes are ignored; identical problems in a batch collapse into one
 row with a repeat count; request headers/bodies are never copied. It keeps a cursor file, starts at the **end** of each log on its

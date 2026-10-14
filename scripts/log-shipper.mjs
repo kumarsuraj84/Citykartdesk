@@ -11,7 +11,7 @@
  *   SYSTEM_LOG_TARGET_URL      base URL of the app (falls back to CRON_TARGET_URL)
  *   SYSTEM_LOG_INGEST_SECRET   shared secret, at least 16 characters (falls back to CRON_SECRET) — never put it on the command line
  *
- * Options (repeat --file / --docker for several sources; kind is one of postgrest, auth, storage, postgres):
+ * Options (repeat --file / --docker for several sources; kind is one of postgrest, auth, storage, postgres, backup):
  *   --file   <kind>=<path>         e.g. --file postgrest=C:\CitykartDesk\logs\CkDeskPostgrest.err.log
  *   --docker <kind>=<container>    e.g. --docker postgres=supabase_db_ckdesk_audit
  *   --audit-stack                  shorthand for the four containers of the local audit stack

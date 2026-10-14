@@ -161,12 +161,22 @@ export function createPostgresParser() {
   }
 }
 
-export const PARSER_KINDS = ['postgrest', 'auth', 'storage', 'postgres']
+// ── Nightly backup log (backup.log on the database server) ──────────────────────────────────────────────────────────────────────
+// One line per step / run; the log records OK or FAILED for each run. A failed backup is the kind of thing nobody notices until the day it is
+// needed, so it becomes an error row. Lines that merely say OK (or anything else) are ignored.
+export function parseBackupLine(raw) {
+  const line = stripAnsi(raw).trim()
+  if (!line || !/\b(FAILED|FAILURE|ERROR|EXCEPTION|could not|denied)\b/i.test(line)) return null
+  if (/\bOK\b/.test(line) && !/\b(FAILED|FAILURE|ERROR)\b/i.test(line)) return null
+  return { category: 'error', source: 'process', severity: 'critical', action: 'backup.failed', message: clip(line, 2000) }
+}
+
+export const PARSER_KINDS = ['postgrest', 'auth', 'storage', 'postgres', 'backup']
 
 /** One parser object per log source, with the same push / flush shape whatever the format. */
 export function createParser(kind) {
   if (kind === 'postgres') return createPostgresParser()
-  const single = kind === 'postgrest' ? parsePostgrestLine : kind === 'auth' ? parseAuthLine : kind === 'storage' ? parseStorageLine : null
+  const single = kind === 'postgrest' ? parsePostgrestLine : kind === 'auth' ? parseAuthLine : kind === 'storage' ? parseStorageLine : kind === 'backup' ? parseBackupLine : null
   if (!single) throw new Error(`Unknown log kind "${kind}" (use ${PARSER_KINDS.join(', ')})`)
   return { push: (line) => { const e = single(line); return e ? [e] : [] }, flush: () => [] }
 }
