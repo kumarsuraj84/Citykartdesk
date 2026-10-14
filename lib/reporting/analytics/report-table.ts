@@ -70,6 +70,8 @@ export interface ReportTable {
   scopeText: string
   /** the day the "today" columns are about, when the report has them ("today" or "on 7 Oct 2026") */
   dayWord?: string
+  /** a narrow table (few columns): drawn only as wide as its columns need, not stretched to the page */
+  compact?: boolean
 }
 
 // ── Small helpers every report builder uses ──────────────────────────────────────────────────────

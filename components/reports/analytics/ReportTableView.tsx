@@ -108,8 +108,8 @@ export function ReportTableView({ table, choice }: { table: ReportTable; choice?
         <ExportReportButton slug={table.slug} choice={choice} />
       </div>
 
-      <div className="max-h-[78vh] overflow-auto rounded-md border bg-white" style={{ borderColor: COLOR.grid, fontFamily: SHEET_FONT, color: COLOR.text }}>
-        <table className="border-collapse" style={{ tableLayout: 'fixed', width, minWidth: '100%' }}>
+      <div className={`max-h-[78vh] overflow-auto rounded-md border bg-white ${table.compact ? 'w-fit max-w-full' : ''}`} style={{ borderColor: COLOR.grid, fontFamily: SHEET_FONT, color: COLOR.text }}>
+        <table className="border-collapse" style={{ tableLayout: 'fixed', width, minWidth: table.compact ? undefined : '100%' }}>
           <colgroup>{columns.map((c) => <col key={c.key} style={{ width: w(c) }} />)}</colgroup>
           <thead className="sticky top-0 z-10">
             {hasGroups && (

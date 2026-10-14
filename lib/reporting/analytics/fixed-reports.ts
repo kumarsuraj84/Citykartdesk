@@ -388,7 +388,7 @@ export function buildFixedReport(input: BuildInput): ReportTable {
   // the tickets the report counts (a summary also lists the ones created or resolved today, which are not counted)
   const counted = def.layout === 'summary' ? facts.length : new Set(rows.filter((r) => r.kind === 'row').flatMap((r) => r.refs.flatMap((x) => x ?? []))).size
   return {
-    slug: def.slug, title: def.title, columns, headGroups, rows, tickets: tk.list, lead, dayWord,
+    slug: def.slug, title: def.title, columns, headGroups, rows, tickets: tk.list, lead, dayWord, compact: def.layout === 'weekly' || def.layout === 'monthly',
     scopeText: def.layout === 'weekly' && input.month
       ? `${input.month.name} · ${counted} ticket${counted === 1 ? '' : 's'} opened or resolved · ${weekNote}`
       : def.layout === 'monthly' && input.months
