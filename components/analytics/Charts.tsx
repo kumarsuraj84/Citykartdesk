@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import { fmtHours } from '@/lib/utils/fmt'
+import { STATUS_LABELS as REQUEST_STATUS_LABELS } from '@/lib/constants/requests'
 
 // ── Colour palette ─────────────────────────────────────────────────────────────
 
@@ -29,17 +30,7 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled:         'color-mix(in oklab, var(--muted-foreground) 65%, transparent)',
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  open:             'Open',
-  assigned:         'Assigned',
-  in_progress:      'In Progress',
-  waiting_user:     'Waiting on User',
-  hold_purchase_ho: 'Hold due to Purchase from HO',
-  pending_approval: 'Pending Approval',
-  resolved:         'Resolved',
-  closed:           'Closed',
-  cancelled:        'Cancelled',
-}
+const STATUS_LABELS: Record<string, string> = REQUEST_STATUS_LABELS
 
 const PROJECT_STATUS_COLORS: Record<string, string> = {
   not_started: 'var(--muted-foreground)',

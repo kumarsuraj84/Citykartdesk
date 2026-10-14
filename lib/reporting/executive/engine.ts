@@ -3,6 +3,7 @@
 // comparison in the browser, so a click on any bar or name re-filters the whole page instantly.
 
 import { AGE_BUCKETS, ageBucketFor } from '@/lib/reporting/aging'
+import { STATUS_LABELS as REQUEST_STATUS_LABELS } from '@/lib/constants/requests'
 
 export const UNASSIGNED = 'Unassigned'
 export const NO_CATEGORY = '(No category)'
@@ -134,10 +135,8 @@ export function toggleFilter(f: Filters, dim: Dim, value: string): Filters {
   return { ...f, dims: { ...f.dims, [dim]: cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value] } }
 }
 
-export const STATUS_LABEL: Record<string, string> = {
-  open: 'Open', assigned: 'Assigned', in_progress: 'In Progress', waiting_user: 'Waiting on User',
-  hold_purchase_ho: 'Hold - Purchase from HO', pending_approval: 'Pending Approval', resolved: 'Resolved', closed: 'Closed', cancelled: 'Cancelled',
-}
+// The names are the app's own (lib/constants/requests.ts); only the Hold status keeps the shorter form this dashboard's filter chips were designed with.
+export const STATUS_LABEL: Record<string, string> = { ...REQUEST_STATUS_LABELS, hold_purchase_ho: 'Hold - Purchase from HO' }
 export const STATUS_ORDER = Object.keys(STATUS_LABEL)
 export const statusLabel = (s: string) => STATUS_LABEL[s] ?? s
 export const capitalize = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s)

@@ -1,21 +1,18 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { toCSV } from './csv'
 import { fetchAllPages } from '@/lib/queries/paging'
+import { STATUS_LABELS as REQUEST_STATUS_LABELS } from '@/lib/constants/requests'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
 
 export const MAX_EXPORT_ROWS = 10000
 
-const STATUS_LABELS: Record<string, string> = {
-  open: 'Open',
-  in_progress: 'In Progress',
-  hold_purchase_ho: 'Hold due to Purchase from HO',
-  pending_approval: 'Pending Approval',
+// Every ticket status comes from the one list the screens use (lib/constants/requests.ts), so an export can never show a raw value like
+// "waiting_user" or "assigned" (the copy that used to live here was missing those: D-049). The rest are task / approval / project words.
+export const STATUS_LABELS: Record<string, string> = {
+  ...REQUEST_STATUS_LABELS,
   on_hold: 'On Hold',
-  resolved: 'Resolved',
-  closed: 'Closed',
-  cancelled: 'Cancelled',
   pending: 'Pending',
   approved: 'Approved',
   rejected: 'Rejected',
