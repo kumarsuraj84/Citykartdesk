@@ -6,6 +6,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { assertRefsInOrg } from './orgScopeGuard'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import type { Database } from '@/types/database'
+import { isValidOpenDate } from '@/lib/stores/open-date'
 
 type ActionResult<T = undefined> = { error?: string; data?: T }
 type DepartmentUpdate = Database['public']['Tables']['departments']['Update']
@@ -302,7 +303,7 @@ function masterColumns(f: StoreMasterFields): { error: string } | { columns: Sto
   for (const k of MASTER_TEXT_KEYS) if (k in f) out[k] = f[k]?.trim() || null
   if ('zenatix' in f) out.zenatix = f.zenatix ?? null
   if ('open_date' in f) {
-    if (f.open_date && !/^d{4}-d{2}-d{2}$/.test(f.open_date)) return { error: 'Open date must be a valid date.' }
+    if (f.open_date && !isValidOpenDate(f.open_date)) return { error: 'Open date must be a valid date.' }
     out.open_date = f.open_date || null
   }
   return { columns: out }
