@@ -11,7 +11,7 @@ let admin: Session, manager: Session, staff: Session, adminB: Session
 let orgB: string
 const extraUsers: string[] = []
 const rpc = <T = unknown>(fn: string, body: unknown = {}) => http<T>('POST', `/rest/v1/rpc/${fn}`, { key: SERVICE, token: SERVICE, body })
-const rowsByTag = async () => (await svc<{ id: number; action: string; before_data: unknown; after_data: unknown; row_hash: string | null; prev_hash: string | null }[]>('GET', `/system_log?action=like.${tag}*&order=id.asc`)).json
+const rowsByTag = async () => (await svc<{ id: number; action: string; before_data: unknown; after_data: unknown; row_hash: string | null; prev_hash: string | null; chain_seq: number | null }[]>('GET', `/system_log?action=like.${tag}*&order=id.asc`)).json
 
 beforeAll(async () => {
   ;[admin, manager, staff] = await Promise.all(['admin1', 'manager1', 'staff1'].map((n) => login(`${n}@audit.test`)))
@@ -53,11 +53,11 @@ describe('deleting an organization', () => {
   it('keeps the audit rows of that organization and leaves the chain intact (owner_delete_org skips the log)', async () => {
     const org = (await svc<{ id: string }[]>('POST', '/organizations', { name: `SysLog gone ${tag}`, slug: `${tag}-gone`, status: 'active', seat_limit: 5 }, { Prefer: 'return=representation' })).json[0].id
     await svc('POST', '/system_log', { org_id: org, category: 'audit', source: 'admin', action: `${tag}.before_org_delete` })
-    const first = (await svc<{ id: number }[]>('GET', `/system_log?action=eq.${tag}.before_org_delete&select=id`)).json[0].id
+    const first = (await svc<{ chain_seq: number }[]>('GET', `/system_log?action=eq.${tag}.before_org_delete&select=chain_seq`)).json[0].chain_seq
     await svc('POST', '/system_log', entry('after_org_delete_marker'))
     await http('POST', '/rest/v1/rpc/owner_delete_org', { key: SERVICE, token: SERVICE, body: { p_org_id: org } })
     expect((await svc<unknown[]>('GET', `/system_log?action=eq.${tag}.before_org_delete`)).json).toHaveLength(1)
-    expect((await rpc<unknown[]>('system_log_verify_chain', { p_from_id: first })).json).toEqual([])
+    expect((await rpc<unknown[]>('system_log_verify_chain', { p_from_seq: first })).json).toEqual([])
   })
 })
 
@@ -81,22 +81,22 @@ describe('hash chain', () => {
     expect(rows).toHaveLength(3)
     expect(rows[1].prev_hash).toBe(rows[0].row_hash)
     expect(rows[2].prev_hash).toBe(rows[1].row_hash)
-    const first = rows[0].id
-    expect((await rpc<unknown[]>('system_log_verify_chain', { p_from_id: first })).json).toEqual([])
+    const first = rows[0].chain_seq!
+    expect((await rpc<unknown[]>('system_log_verify_chain', { p_from_seq: first })).json).toEqual([])
 
     // an edit made by someone with database access (the guard trigger switched off) is detected
     psql('alter table system_log disable trigger trg_system_log_guard')
     try {
       psql(`update system_log set after_data = '{"n":"forged"}' where id = ${rows[1].id}`)
-      const broken = (await rpc<{ broken_id: number; reason: string }[]>('system_log_verify_chain', { p_from_id: first })).json
+      const broken = (await rpc<{ broken_id: number; reason: string }[]>('system_log_verify_chain', { p_from_seq: first })).json
       expect(broken[0].broken_id).toBe(rows[1].id)
       psql(`update system_log set after_data = '{"n":"chain2"}' where id = ${rows[1].id}`)
-      expect((await rpc<unknown[]>('system_log_verify_chain', { p_from_id: first })).json).toEqual([])
+      expect((await rpc<unknown[]>('system_log_verify_chain', { p_from_seq: first })).json).toEqual([])
 
       // a removed row is found as well
       const saved = psql(`select row_to_json(s) from system_log s where id = ${rows[1].id}`)
       psql(`delete from system_log where id = ${rows[1].id}`)
-      const gap = (await rpc<{ broken_id: number }[]>('system_log_verify_chain', { p_from_id: first })).json
+      const gap = (await rpc<{ broken_id: number }[]>('system_log_verify_chain', { p_from_seq: first })).json
       expect(gap[0].broken_id).toBe(rows[2].id)
       psql('alter table system_log disable trigger trg_system_log_chain') // the row goes back exactly as it was, not re-hashed
       try {
@@ -104,10 +104,23 @@ describe('hash chain', () => {
       } finally {
         psql('alter table system_log enable trigger trg_system_log_chain')
       }
-      expect((await rpc<unknown[]>('system_log_verify_chain', { p_from_id: first })).json).toEqual([])
+      expect((await rpc<unknown[]>('system_log_verify_chain', { p_from_seq: first })).json).toEqual([])
     } finally {
       psql('alter table system_log enable trigger trg_system_log_guard')
     }
+  })
+})
+
+describe('hash chain under concurrency', () => {
+  it('twenty audit rows written at the same instant get twenty consecutive positions and the chain verifies', async () => {
+    const before = (await svc<{ seq: number }[]>('GET', '/system_log_chain_head?select=seq')).json[0].seq
+    const res = await Promise.all(Array.from({ length: 20 }, (_, i) => svc('POST', '/system_log', entry(`race${i}`, { after_data: { i } }))))
+    expect(res.every((r) => r.status === 201)).toBe(true)
+    const rows = (await rowsByTag()).filter((r) => /\.race\d+$/.test(r.action))
+    expect(rows).toHaveLength(20)
+    expect(rows.map((r) => r.chain_seq!).sort((a, b) => a - b)).toEqual(Array.from({ length: 20 }, (_, i) => before + 1 + i))
+    expect((await rpc<unknown[]>('system_log_verify_chain', { p_from_seq: before + 1 })).json).toEqual([])
+    expect((await rpc<unknown[]>('system_log_verify_chain', { p_from_seq: 0 })).json).toEqual([])
   })
 })
 
@@ -165,6 +178,8 @@ describe('retention', () => {
     expect(left).toContain(`${tag}.recent_audit`); expect(left).toContain(`${tag}.recent_error`)
     const archived = (await svc<{ action: string }[]>('GET', `/system_log_archive?action=like.${tag}*`)).json.map((r) => r.action)
     expect(archived).toEqual(expect.arrayContaining([`${tag}.old_error`, `${tag}.ancient_audit`]))
+    // an audit row that moved to the archive is still part of the chain: the whole chain still verifies
+    expect((await rpc<unknown[]>('system_log_verify_chain', { p_from_seq: 0 })).json).toEqual([])
     // archived rows cannot be changed either
     expect((await svc('DELETE', `/system_log_archive?action=like.${tag}*`)).status).toBeGreaterThanOrEqual(400)
   })

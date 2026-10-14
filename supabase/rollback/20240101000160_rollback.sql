@@ -14,6 +14,7 @@ END $$;
 -- the append-only guard would refuse the DROP of rows, but dropping the tables does not delete rows one by one
 DROP FUNCTION IF EXISTS public.system_log_hash_input(public.system_log);
 DROP TABLE IF EXISTS public.system_log_archive;
+DROP TABLE IF EXISTS public.system_log_chain_head;
 DROP TABLE IF EXISTS public.system_log;
 
 DROP FUNCTION IF EXISTS public.system_log_audit_trigger();

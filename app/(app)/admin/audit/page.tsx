@@ -25,7 +25,7 @@ export default async function AuditLogPage() {
     <div className="space-y-8 max-w-6xl">
       <PageHeader
         title="Audit Log"
-        description="Track all system activity across requests and tasks."
+        description="Track all system activity across requests and tasks. The System Log (Admin) now holds this and much more — configuration, security and error records in one place, with before and after values."
       />
       <AuditLogClient
         initialEntries={auditResult}

@@ -20,7 +20,7 @@ export default async function EventLogPage() {
     <div className="space-y-6">
       <PageHeader
         title="Event Log"
-        description="Page views, clicks and errors from every signed-in user, kept for 90 days. Download it and share it to trace what happened."
+        description="Page views, clicks and errors from every signed-in user, kept for 90 days. Browser errors and crashes are also in the System Log, together with server, database, storage and scheduled-job errors."
       />
       <EventLogClient users={(data ?? []) as { id: string; full_name: string }[]} />
     </div>

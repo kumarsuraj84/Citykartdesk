@@ -41,8 +41,11 @@ CREATE TABLE IF NOT EXISTS public.system_log (
   detail         jsonb,
   legacy_ref     text UNIQUE,
   prev_hash      text,
-  row_hash       text
+  row_hash       text,
+  chain_seq      bigint           -- position in the hash chain (audit / security rows), taken under a lock so the order is exact
 );
+ALTER TABLE public.system_log ADD COLUMN IF NOT EXISTS chain_seq bigint;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_system_log_chain_seq ON public.system_log (chain_seq) WHERE chain_seq IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_system_log_created ON public.system_log (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_system_log_org_created ON public.system_log (org_id, created_at DESC);
@@ -56,6 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_system_log_request ON public.system_log (request_
 -- the archive has the same columns (no identity, no uniqueness): old rows are moved here, never dropped
 CREATE TABLE IF NOT EXISTS public.system_log_archive (LIKE public.system_log INCLUDING DEFAULTS INCLUDING CONSTRAINTS);
 ALTER TABLE public.system_log_archive DROP CONSTRAINT IF EXISTS system_log_archive_legacy_ref_key;
+ALTER TABLE public.system_log_archive ADD COLUMN IF NOT EXISTS chain_seq bigint;
 
 -- ── append-only protection ───────────────────────────────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.system_log_guard()
@@ -90,22 +94,36 @@ CREATE OR REPLACE FUNCTION public.system_log_hash_input(r public.system_log)
 AS $function$
   SELECT concat_ws('|', r.id::text, to_char(r.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US'), coalesce(r.org_id::text, ''), r.category, r.source,
     r.action, coalesce(r.actor_id::text, ''), coalesce(r.entity_type, ''), coalesce(r.entity_id, ''), coalesce(r.before_data::text, ''),
-    coalesce(r.after_data::text, ''), coalesce(r.message, ''), r.outcome)
+    coalesce(r.after_data::text, ''), coalesce(r.message, ''), r.outcome, coalesce(r.chain_seq::text, ''))
 $function$;
+
+-- The head of the chain: one row, locked by every chained insert until its transaction ends, so two writers can never chain to the same
+-- predecessor and the order is exactly the order of chain_seq (the row ids are NOT reliable for this: ids are handed out before the lock).
+CREATE TABLE IF NOT EXISTS public.system_log_chain_head (
+  singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+  seq       bigint NOT NULL DEFAULT 0,
+  hash      text   NOT NULL DEFAULT 'genesis'
+);
+INSERT INTO public.system_log_chain_head (singleton) VALUES (true) ON CONFLICT DO NOTHING;
+REVOKE ALL ON public.system_log_chain_head FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.system_log_chain_head TO service_role;
 
 CREATE OR REPLACE FUNCTION public.system_log_chain()
  RETURNS trigger
  LANGUAGE plpgsql
+ SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
+  v_seq bigint;
   v_prev text;
 BEGIN
   IF NEW.category IN ('audit', 'security') AND NEW.legacy_ref IS NULL THEN
-    PERFORM pg_advisory_xact_lock(7600160) ;                -- one writer at a time keeps the chain in order
-    SELECT row_hash INTO v_prev FROM public.system_log WHERE row_hash IS NOT NULL ORDER BY id DESC LIMIT 1;
-    NEW.prev_hash := coalesce(v_prev, 'genesis');
+    SELECT seq, hash INTO v_seq, v_prev FROM public.system_log_chain_head WHERE singleton FOR UPDATE;
+    NEW.chain_seq := v_seq + 1;
+    NEW.prev_hash := v_prev;
     NEW.row_hash := encode(sha256(convert_to(NEW.prev_hash || '|' || public.system_log_hash_input(NEW), 'UTF8')), 'hex');
+    UPDATE public.system_log_chain_head SET seq = NEW.chain_seq, hash = NEW.row_hash WHERE singleton;
   END IF;
   RETURN NEW;
 END;
@@ -114,8 +132,9 @@ $function$;
 DROP TRIGGER IF EXISTS trg_system_log_chain ON public.system_log;
 CREATE TRIGGER trg_system_log_chain BEFORE INSERT ON public.system_log FOR EACH ROW EXECUTE FUNCTION public.system_log_chain();
 
--- first broken link of the chain, or no rows when it is intact
-CREATE OR REPLACE FUNCTION public.system_log_verify_chain(p_from_id bigint DEFAULT 0, p_limit integer DEFAULT 200000)
+-- first broken link of the chain (in chain order), or no rows when it is intact
+DROP FUNCTION IF EXISTS public.system_log_verify_chain(bigint, integer);
+CREATE OR REPLACE FUNCTION public.system_log_verify_chain(p_from_seq bigint DEFAULT 0, p_limit integer DEFAULT 500000)
  RETURNS TABLE (broken_id bigint, reason text)
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
@@ -124,22 +143,28 @@ AS $function$
 DECLARE
   r public.system_log%ROWTYPE;
   v_prev text;
+  v_prev_seq bigint;
   v_first boolean := true;
   v_expected text;
 BEGIN
-  FOR r IN SELECT * FROM public.system_log WHERE row_hash IS NOT NULL AND id >= p_from_id ORDER BY id LIMIT p_limit LOOP
+  -- records moved to the archive are still part of the chain
+  FOR r IN SELECT * FROM (SELECT * FROM public.system_log UNION ALL SELECT * FROM public.system_log_archive) a WHERE a.row_hash IS NOT NULL AND a.chain_seq >= p_from_seq ORDER BY a.chain_seq LIMIT p_limit LOOP
     IF v_first THEN
       v_first := false;
+    ELSIF r.chain_seq <> v_prev_seq + 1 THEN
+      RETURN QUERY SELECT r.id, 'a record is missing before this one'::text;
+      RETURN;
     ELSIF r.prev_hash IS DISTINCT FROM v_prev THEN
-      RETURN QUERY SELECT r.id, 'the previous row is missing or was changed'::text;
+      RETURN QUERY SELECT r.id, 'the previous record was changed'::text;
       RETURN;
     END IF;
     v_expected := encode(sha256(convert_to(r.prev_hash || '|' || public.system_log_hash_input(r), 'UTF8')), 'hex');
     IF v_expected IS DISTINCT FROM r.row_hash THEN
-      RETURN QUERY SELECT r.id, 'the row content does not match its hash'::text;
+      RETURN QUERY SELECT r.id, 'the record content does not match its hash'::text;
       RETURN;
     END IF;
     v_prev := r.row_hash;
+    v_prev_seq := r.chain_seq;
   END LOOP;
   RETURN;
 END;
