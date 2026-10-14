@@ -1,10 +1,11 @@
 import { redirect } from 'next/navigation'
 import { User, Shield, Users, Building2, Lock, BellRing } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentProfile } from '@/lib/queries/profiles'
+import { getCurrentProfile, getDirectReports } from '@/lib/queries/profiles'
 import { EditableName, AvatarUpload, PasswordResetButton, ChangePasswordForm, PushNotificationToggle, PopupSettings } from './ProfileClient'
 import { hasPushSubscription } from '@/lib/actions/push'
 import { ROLE_LABELS } from '@/lib/constants/roles'
+import type { UserRole } from '@/types'
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -29,10 +30,14 @@ export default async function ProfilePage() {
   if (!profile) redirect('/login')
 
   const supabase = await createClient()
-  const [{ data: { user } }, pushOn] = await Promise.all([
+  const [{ data: { user } }, pushOn, managerRow, team] = await Promise.all([
     supabase.auth.getUser(),
     hasPushSubscription(),
+    // who I report to (the Manager box on my account), and the people who report to me
+    profile.manager_id ? supabase.from('profiles').select('id, full_name, role').eq('id', profile.manager_id).maybeSingle() : Promise.resolve({ data: null }),
+    getDirectReports(profile.id),
   ])
+  const manager = managerRow.data as { id: string; full_name: string; role: UserRole } | null
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
@@ -64,6 +69,7 @@ export default async function ProfilePage() {
         <div className="divide-y divide-border px-5">
           <InfoRow label="Full name" value={<EditableName initialName={profile.full_name} />} />
           <InfoRow label="Email" value={user?.email ?? '—'} />
+          <InfoRow label="Reports to" value={manager ? <span>{manager.full_name} <span className="text-xs font-normal text-muted-foreground">({ROLE_LABELS[manager.role] ?? manager.role})</span></span> : '—'} />
 
           <InfoRow
             label="Member since"
@@ -118,6 +124,25 @@ export default async function ProfilePage() {
           <InfoRow label="Push notifications on this device" value={<PushNotificationToggle initiallyOn={pushOn} />} />
         </div>
       </div>
+
+      {/* My team: the people who report to me */}
+      {team.length > 0 && (
+        <div className="rounded-2xl border border-border bg-card shadow-sm">
+          <div className="flex items-center gap-2 border-b border-border px-5 py-3.5">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-foreground">My Team</h2>
+            <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{team.length}</span>
+          </div>
+          <ul className="divide-y divide-border px-5" aria-label="People who report to you">
+            {team.map((m) => (
+              <li key={m.id} className="flex items-center justify-between gap-3 py-3">
+                <span className="text-sm font-medium text-foreground">{m.full_name}</span>
+                <span className="text-xs text-muted-foreground">{ROLE_LABELS[m.role] ?? m.role}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Teams */}
       {profile.team_members.length > 0 && (

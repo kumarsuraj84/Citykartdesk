@@ -5,7 +5,8 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { ExportButton } from '@/components/requests/ExportButton'
 import { exportRequests } from '@/lib/actions/export'
 import { redirect } from 'next/navigation'
-import { getCurrentProfile, hasSubordinates } from '@/lib/queries/profiles'
+import { getCurrentProfile, hasSubordinates, getDirectReports } from '@/lib/queries/profiles'
+import { ROLE_LABELS } from '@/lib/constants/roles'
 import { getRequests } from '@/lib/queries/requests'
 import { getActiveServicesForReclassify, getServiceCategories, getServiceSubCategoriesForFilter } from '@/lib/queries/services'
 import { RequestsTable } from '@/components/requests/RequestsTable'
@@ -185,6 +186,17 @@ export default async function RequestsPage({ searchParams }: PageProps) {
           )
         })}
       </div>
+
+      {rawView === 'subordinates' && showTeamView && (
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px]" aria-label="Your team">
+          <span className="font-semibold text-muted-foreground">Your team:</span>
+          {(await getDirectReports(profile.id)).map((m) => (
+            <span key={m.id} className="rounded-full border border-border bg-card px-2 py-0.5 font-medium text-foreground">
+              {m.full_name} <span className="font-normal text-muted-foreground">· {ROLE_LABELS[m.role] ?? m.role}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* ── Search + column filters row ── */}
       <div className="flex flex-wrap items-center gap-2">

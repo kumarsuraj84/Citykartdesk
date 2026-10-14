@@ -4,7 +4,7 @@ import { readVerifiedUserId } from '@/lib/auth/verified-user'
 import { createClient } from '@/lib/supabase/server'
 import { OPEN_REQUEST_STATUSES } from '@/lib/constants/requests'
 import { getActionableApprovalsForUser } from '@/lib/queries/approvals'
-import type { ModuleSlug, ProfileWithTeams } from '@/types'
+import type { ModuleSlug, ProfileWithTeams, UserRole } from '@/types'
 
 export const getCurrentProfile = cache(async function (): Promise<ProfileWithTeams | null> {
   const supabase = await createClient()
@@ -239,10 +239,10 @@ export const getDirectReportIds = cache(async function (userId: string): Promise
 })
 
 /** The people who report directly to this user, with their names and roles (the Manager box on their accounts). */
-export const getDirectReports = cache(async function (userId: string): Promise<{ id: string; full_name: string; role: string }[]> {
+export const getDirectReports = cache(async function (userId: string): Promise<{ id: string; full_name: string; role: UserRole }[]> {
   const supabase = await createClient()
   const { data } = await supabase.from('profiles').select('id, full_name, role').eq('manager_id', userId).order('full_name', { ascending: true })
-  return (data ?? []) as { id: string; full_name: string; role: string }[]
+  return (data ?? []) as { id: string; full_name: string; role: UserRole }[]
 })
 
 export type NavCounts = {
