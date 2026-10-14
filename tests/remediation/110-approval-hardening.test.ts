@@ -32,6 +32,9 @@ const actAs = (u: TestUser) => mocked.mockResolvedValue(clientForToken(u.accessT
 const anonymous = () => mocked.mockResolvedValue(clientForToken('not-a-real-session') as never)
 const waitFor = async (cond: () => boolean, ms = 5000) => { const s = Date.now(); while (!cond() && Date.now() - s < ms) await new Promise((r) => setTimeout(r, 50)) }
 const DAY = 86_400_000
+// the new table is not in the hand-maintained generated types
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const loose = (c: unknown) => c as { from: (t: string) => any }
 
 describe('approval hardening', () => {
   let fx: D03Fixtures
@@ -129,7 +132,7 @@ describe('approval hardening', () => {
       expect((await requestApprovalCode(manager)).error).toBeUndefined()
       const code = lastCode()
       expect(code).toMatch(/^\d{6}$/)
-      const { data: rows } = await admin.from('approval_email_codes').select('*').eq('approval_id', approvalId)
+      const { data: rows } = await loose(admin).from('approval_email_codes').select('*').eq('approval_id', approvalId)
       expect(rows).toHaveLength(1)
       expect(JSON.stringify(rows)).not.toContain(code)
       expect(rows![0].code_hash).toMatch(/^[0-9a-f]{64}$/)
@@ -169,12 +172,12 @@ describe('approval hardening', () => {
       anonymous()
       await requestApprovalCode(manager)
       const code = lastCode()
-      await admin.from('approval_email_codes').update({ expires_at: new Date(Date.now() - 1000).toISOString() }).eq('approval_id', approvalId)
+      await loose(admin).from('approval_email_codes').update({ expires_at: new Date(Date.now() - 1000).toISOString() }).eq('approval_id', approvalId)
       expect((await verifyApprovalCode(manager, code)).error).toMatch(/not right|expired/i)
     })
     it('the table cannot be read by a signed-in user', async () => {
       const { approvalId } = await start(fx.requesterA, fx.agentA)
-      const res = await clientForToken(fx.manager.accessToken).from('approval_email_codes').select('*').eq('approval_id', approvalId)
+      const res = await loose(clientForToken(fx.manager.accessToken)).from('approval_email_codes').select('*').eq('approval_id', approvalId)
       expect(res.error?.code === '42501' || (res.data ?? []).length === 0).toBe(true)
     })
   })

@@ -21,6 +21,7 @@ import { createClient } from '@/lib/supabase/server'
 import { sendEmail } from '@/lib/email/send'
 import { uploadAttachment } from '@/lib/actions/attachments'
 import { updateRequestStatus, assignRequest } from '@/lib/actions/requests'
+import { BREAKER_MS } from '@/lib/supabase/resilient-fetch'
 
 const mockedCreateClient = vi.mocked(createClient)
 const actAs = (u: TestUser) => mockedCreateClient.mockResolvedValue(clientForToken(u.accessToken) as never)
@@ -103,6 +104,7 @@ describe('reliability simulations', () => {
       docker('start', STORAGE)
       await storageUp()
     }
+    await new Promise((r) => setTimeout(r, BREAKER_MS + 500))   // the app holds off a service that just failed for a few seconds
     const after = await uploadAttachment(t.id, png('after-outage.png'))
     expect(after.error).toBeUndefined()
     expect(await rowsOf(t.id)).toHaveLength(1)
@@ -135,13 +137,16 @@ describe('reliability simulations', () => {
     try {
       actAs(fx.agentA)
       // With the API layer down the action either returns an error or throws (the app's error screen takes over); it must never report success.
-      // (It takes minutes to give up: the 20 s client timeout is retried on every call. Recorded as a finding in the remediation reports.)
+      // REL-1: it used to take about 165 s to give up (the 20 s time limit was retried on every call); now one time limit, then the rest fail at once.
+      const began = Date.now()
       const outcome = await updateRequestStatus(t.id, 'waiting_user', 'Please confirm.').then((r) => ({ error: r.error }), (e: unknown) => ({ error: `thrown: ${String(e)}` }))
       expect(outcome.error).toBeTruthy()
+      expect(Date.now() - began).toBeLessThan(60_000)
     } finally {
       docker('start', REST)
       await restUp()
     }
+    await new Promise((r) => setTimeout(r, BREAKER_MS + 500))
     expect((await db.from('requests').select('status').eq('id', t.id).single()).data?.status).toBe('in_progress')
     actAs(fx.agentA)
     expect((await updateRequestStatus(t.id, 'waiting_user', 'Please confirm.')).error).toBeUndefined()

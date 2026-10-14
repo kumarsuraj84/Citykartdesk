@@ -1,5 +1,6 @@
 import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { resilientFetch } from '@/lib/supabase/resilient-fetch'
 import type { Database } from '@/types/database'
 import { deleteTestUsers } from './cleanup-user'
 
@@ -30,7 +31,8 @@ export function clientForToken(accessToken: string): SupabaseClient<Database> {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       auth: { autoRefreshToken: false, persistSession: false },
-      global: { headers: { Authorization: `Bearer ${accessToken}` } },
+      // the same fetch wrapper the application's own server client uses (lib/supabase/server.ts), so outage behaviour is the real one
+      global: { fetch: resilientFetch, headers: { Authorization: `Bearer ${accessToken}` } },
     }
   )
 }
