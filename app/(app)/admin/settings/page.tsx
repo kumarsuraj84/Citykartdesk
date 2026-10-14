@@ -6,6 +6,7 @@ import { getEmailSetup, RESEND_API_KEY, resolveSenderAddress } from '@/lib/email
 import { readMailboxForAdmin } from '@/lib/email/mailbox'
 import { getWhatsAppChannelReadiness } from '@/lib/actions/intake/whatsapp-channel'
 import { SettingsClient } from './SettingsClient'
+import { LOG_RETENTION, LOG_RETENTION_KEYS, logRetentionDays } from '@/lib/syslog/retention'
 
 export default async function PlatformSettingsPage() {
   const profile = await getCurrentProfile()
@@ -20,7 +21,7 @@ export default async function PlatformSettingsPage() {
     { data: whatsappChannelRows },
   ] = await Promise.all([
     supabase.from('retention_policies').select('*').order('entity_type'),
-    supabase.from('app_settings').select('key, value').in('key', ['email_from_name', 'email_from_address']),
+    supabase.from('app_settings').select('key, value').in('key', ['email_from_name', 'email_from_address', ...LOG_RETENTION_KEYS]),
     supabase.from('intake_channels').select('id, name, status').eq('type', 'whatsapp').order('created_at'),
   ])
 
@@ -48,6 +49,10 @@ export default async function PlatformSettingsPage() {
   }
 
   const emailFromMap = new Map((emailFromRows ?? []).map((r) => [r.key, r.value]))
+  const logRetention = {
+    system_log: logRetentionDays('system_log', emailFromMap.get(LOG_RETENTION.system_log.key)),
+    event_log: logRetentionDays('event_log', emailFromMap.get(LOG_RETENTION.event_log.key)),
+  }
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -57,6 +62,7 @@ export default async function PlatformSettingsPage() {
       />
       <SettingsClient
         retentionPolicies={retentionPolicies ?? []}
+        logRetention={logRetention}
         integrationStatus={{
           provider:  setup.provider,
           detail:    deliveryDetail,

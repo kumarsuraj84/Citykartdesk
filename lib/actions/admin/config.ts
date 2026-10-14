@@ -8,6 +8,7 @@ import { sendEmail } from '@/lib/email/send'
 import { getEmailFrom, getEmailSetup } from '@/lib/email/config'
 import { invalidateMailboxCache } from '@/lib/email/mailbox'
 import { logAdminAudit } from './audit'
+import { LOG_RETENTION, checkLogRetentionDays, type LogKind } from '@/lib/syslog/retention'
 import { EMAIL_REGEX } from '@/lib/validation/formFields'
 import { mailHostProblem } from '@/lib/validation/mail-host'
 
@@ -471,6 +472,21 @@ export async function updateRequestPriority(
 }
 
 // ── Data Retention Policies ───────────────────────────────────────────────────
+
+/** How long the System Log or the Event Log is kept (Platform Settings > Retention). */
+export async function updateLogRetention(kind: LogKind, days: number): Promise<{ error?: string }> {
+  const profile = await getCurrentProfile()
+  if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!(kind in LOG_RETENTION)) return { error: 'Unknown log.' }
+  const problem = checkLogRetentionDays(kind, days)
+  if (problem) return { error: problem }
+
+  const admin = createAdminClient() as unknown as AnyClient
+  const { error } = await admin.from('app_settings').upsert({ key: LOG_RETENTION[kind].key, value: String(days) }, { onConflict: 'key' })
+  if (error) return { error: error.message }
+  revalidatePath('/admin/settings')
+  return {}
+}
 
 export async function updateRetentionPolicy(
   id: string,

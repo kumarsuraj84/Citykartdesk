@@ -1,9 +1,9 @@
 'use client'
 
 import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
-import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldCheck } from 'lucide-react'
+import { ChevronDown, ChevronRight, Download, RefreshCw, ShieldCheck } from 'lucide-react'
 import {
-  buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+  exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
 } from '@/lib/actions/admin/system-log'
 import type { ErrorGroup } from '@/lib/syslog/bundle'
@@ -90,8 +90,7 @@ export function SystemLogClient({ users }: { users: { id: string; full_name: str
   const [scanned, setScanned] = useState(0)
   const [open, setOpen] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-  const [bundle, setBundle] = useState<string | null>(null)
+
   const [integrity, setIntegrity] = useState<IntegrityResult | null>(null)
   const [loading, startLoad] = useTransition()
   const [busy, startBusy] = useTransition()
@@ -138,22 +137,6 @@ export function SystemLogClient({ users }: { users: { id: string; full_name: str
         URL.revokeObjectURL(url)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Export failed.')
-      }
-    })
-  }
-
-  function copyBundle() {
-    startBusy(async () => {
-      setNotice(null)
-      const res = await buildErrorBundle({ ...filters(), category: category || undefined })
-      if (res.error || !res.text) { setError(res.error ?? 'Nothing to copy.'); return }
-      try {
-        await navigator.clipboard.writeText(res.text)
-        setNotice('Copied. Paste it into the conversation — personal data and secrets have been removed.')
-        setBundle(null)
-      } catch {
-        setBundle(res.text)          // clipboard blocked (plain HTTP): show it to copy by hand
-        setNotice('Your browser blocked the clipboard. Select the text below and copy it.')
       }
     })
   }
@@ -215,9 +198,6 @@ export function SystemLogClient({ users }: { users: { id: string; full_name: str
         <label className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
           <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} /> Auto-refresh
         </label>
-        <button type="button" onClick={copyBundle} disabled={busy} className="btn-gradient flex items-center gap-1.5 disabled:opacity-60">
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ClipboardCopy className="h-3.5 w-3.5" />} Copy for Claude
-        </button>
         <button type="button" onClick={() => download('csv')} disabled={busy} className={btnCls}><Download className="h-3.5 w-3.5" /> CSV</button>
         <button type="button" onClick={() => download('json')} disabled={busy} className={btnCls}><Download className="h-3.5 w-3.5" /> JSON</button>
         <button type="button" onClick={verify} disabled={busy} className={btnCls}><ShieldCheck className="h-3.5 w-3.5" /> Verify integrity</button>
@@ -229,8 +209,6 @@ export function SystemLogClient({ users }: { users: { id: string; full_name: str
       </div>
 
       {error && <p role="alert" className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
-      {notice && <p role="status" className="rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-800">{notice}</p>}
-      {bundle && <textarea readOnly aria-label="Error report to copy" value={bundle} onFocus={(e) => e.currentTarget.select()} className="h-48 w-full rounded-lg border border-[#E2E8F4] bg-white p-2 font-mono text-[11px]" />}
       {integrity && (
         <p role="status" className={`rounded-lg border px-4 py-3 text-sm ${integrity.ok ? 'border-green-100 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-700'}`}>
           {integrity.error

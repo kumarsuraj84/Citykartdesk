@@ -7,6 +7,7 @@ import { verifyCronSecret } from '@/lib/cron-auth'
 import { mapWithConcurrency } from '@/lib/async/concurrency'
 import { logger } from '@/lib/observability/logger'
 import { alertOperator } from '@/lib/observability/alert'
+import { readLogRetention } from '@/lib/syslog/retention'
 import type { UserRole } from '@/types'
 
 // profiles has no `email` column in the generated schema — email is fetched
@@ -32,10 +33,12 @@ export async function GET(req: NextRequest) {
   const todayStart = new Date(now)
   todayStart.setHours(0, 0, 0, 0)
 
-  // Housekeeping: drop event-log rows older than the 90-day retention. Never blocks the alerts.
+  // Housekeeping: drop event-log rows older than the retention set in Platform Settings (90 days unless changed). Never blocks the alerts.
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (admin as any).rpc('purge_app_event_log', { p_days: 90 })
+    const days = (await readLogRetention(admin as any)).event_log
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (admin as any).rpc('purge_app_event_log', { p_days: days })
   } catch { /* table may not exist yet on an un-migrated environment */ }
 
   const results: Record<string, number> = {}

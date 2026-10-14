@@ -3,8 +3,9 @@
 import Link from 'next/link'
 import { useState, useSyncExternalStore, useTransition } from 'react'
 import { Save, Check, AlertTriangle, Circle, Mail, MessageSquare, ChevronDown, ExternalLink, Send } from 'lucide-react'
-import { updateEmailFromSettings, updateRetentionPolicy, sendTestEmail, saveMailboxSettings, clearMailboxSettings } from '@/lib/actions/admin/config'
+import { updateEmailFromSettings, updateRetentionPolicy, updateLogRetention, sendTestEmail, saveMailboxSettings, clearMailboxSettings } from '@/lib/actions/admin/config'
 import { EMAIL_REGEX } from '@/lib/validation/formFields'
+import { LOG_RETENTION, type LogKind } from '@/lib/syslog/retention'
 import type { WhatsAppChannelReadiness } from '@/lib/actions/intake/whatsapp-channel'
 
 type Tab = 'retention' | 'integrations'
@@ -27,6 +28,8 @@ interface WhatsAppChannelSummary {
 
 interface SettingsClientProps {
   retentionPolicies: RetentionPolicy[]
+  /** days the System Log and the Event Log are kept */
+  logRetention: Record<LogKind, number>
   integrationStatus: {
     provider: 'smtp' | 'resend' | null
     /** Non-secret description of the active connection, e.g. the SMTP host and login. */
@@ -177,7 +180,72 @@ function RetentionRow({ policy }: { policy: RetentionPolicy }) {
   )
 }
 
-function RetentionTab({ policies }: { policies: RetentionPolicy[] }) {
+const LOG_ROWS: { kind: LogKind; label: string; help: string }[] = [
+  { kind: 'system_log', label: 'System Log', help: 'Errors and events older than this move to the System Log archive (they are never deleted). Who-changed-what and security records are kept 7 years.' },
+  { kind: 'event_log', label: 'Event Log', help: 'Page views, clicks and browser errors older than this are deleted.' },
+]
+
+/** One of the logs whose keeping time is set here: a number of days, saved on its own. */
+function LogRetentionRow({ kind, label, help, days }: { kind: LogKind; label: string; help: string; days: number }) {
+  const [value, setValue] = useState(days)
+  const [editing, setEditing] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+  const r = LOG_RETENTION[kind]
+
+  function handleSave() {
+    setError(null)
+    startTransition(async () => {
+      const result = await updateLogRetention(kind, value)
+      if (result.error) { setError(result.error); return }
+      setEditing(false); setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    })
+  }
+
+  return (
+    <div className="border-b border-border/50 last:border-0 px-4 py-3">
+      <div className="grid grid-cols-[160px_1fr_1fr_1fr_120px] items-center gap-3">
+        <span className="text-sm font-medium text-foreground">{label}</span>
+        {editing ? (
+          <>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-muted-foreground">Keep (days, {r.min} to {r.max})</span>
+              <input
+                type="number" min={r.min} max={r.max} value={value} aria-label={`${label} days to keep`}
+                onChange={(e) => setValue(parseInt(e.target.value, 10) || r.min)}
+                className="w-24 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            <span />
+            <span />
+            <div className="flex items-center gap-2">
+              <button onClick={handleSave} disabled={isPending} className="btn-gradient disabled:opacity-40"><Save className="h-3 w-3" />{isPending ? 'Saving…' : 'Save'}</button>
+              <button onClick={() => { setEditing(false); setValue(days); setError(null) }} className="btn-soft">Cancel</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <span className="text-sm tabular-nums text-foreground">{value}d</span>
+            <span className="text-sm text-muted-foreground">—</span>
+            <span className="text-sm text-muted-foreground">—</span>
+            <div className="flex items-center gap-2">
+              {saved && <Check className="h-4 w-4 text-emerald-500" />}
+              <button onClick={() => setEditing(true)} className="text-xs text-primary hover:underline">Edit</button>
+            </div>
+          </>
+        )}
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">{help}</p>
+      {error && (
+        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-red-600"><AlertTriangle className="h-3.5 w-3.5" />{error}</div>
+      )}
+    </div>
+  )
+}
+
+function RetentionTab({ policies, logRetention }: { policies: RetentionPolicy[]; logRetention: Record<LogKind, number> }) {
   return (
     <div className="space-y-4 max-w-4xl">
       <p className="text-sm text-muted-foreground">
@@ -193,6 +261,9 @@ function RetentionTab({ policies }: { policies: RetentionPolicy[] }) {
         </div>
         {policies.map((p) => (
           <RetentionRow key={p.id} policy={p} />
+        ))}
+        {LOG_ROWS.map((l) => (
+          <LogRetentionRow key={l.kind} kind={l.kind} label={l.label} help={l.help} days={logRetention[l.kind]} />
         ))}
       </div>
     </div>
@@ -672,7 +743,7 @@ function IntegrationsTab({ status, emailFrom, whatsappChannels, mailbox, canEdit
   )
 }
 
-export function SettingsClient({ retentionPolicies, integrationStatus, emailFrom, whatsappChannels, mailbox, canEditMailbox }: SettingsClientProps) {
+export function SettingsClient({ retentionPolicies, logRetention, integrationStatus, emailFrom, whatsappChannels, mailbox, canEditMailbox }: SettingsClientProps) {
   const [tab, setTab] = useState<Tab>('retention')
 
   const tabs: { key: Tab; label: string }[] = [
@@ -698,7 +769,7 @@ export function SettingsClient({ retentionPolicies, integrationStatus, emailFrom
         ))}
       </div>
 
-      {tab === 'retention'    && <RetentionTab policies={retentionPolicies} />}
+      {tab === 'retention'    && <RetentionTab policies={retentionPolicies} logRetention={logRetention} />}
       {tab === 'integrations' && <IntegrationsTab status={integrationStatus} emailFrom={emailFrom} whatsappChannels={whatsappChannels} mailbox={mailbox} canEditMailbox={canEditMailbox} />}
     </div>
   )
