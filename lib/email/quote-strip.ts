@@ -32,6 +32,16 @@ function stripTrailingQuoteLines(text: string): string {
   return lines.slice(0, cut).join('\n')
 }
 
+/** Written between the lines of the quoted message (an inline reply): after quoted ">" lines come the person's own, unquoted, words. */
+function hasInlineReply(rest: string): boolean {
+  let seenQuoted = false
+  for (const line of rest.split('\n')) {
+    if (/^\s*>/.test(line)) { seenQuoted = true; continue }
+    if (seenQuoted && line.trim() !== '') return true
+  }
+  return false
+}
+
 export function stripQuotedReply(rawText: string): string {
   const text = (rawText ?? '').replace(/\r\n/g, '\n')
   if (!text.trim()) return text
@@ -41,6 +51,10 @@ export function stripQuotedReply(rawText: string): string {
     const m = re.exec(text)
     if (m && m.index < cutAt) cutAt = m.index
   }
+
+  // An OEM or a customer often answers each point under the quoted line: cutting at the first "wrote:" would throw those answers away, so
+  // a message with unquoted words after quoted lines is kept in full (some quoted text staying is better than an answer going missing).
+  if (cutAt < text.length && hasInlineReply(text.slice(cutAt))) return text.trim()
 
   let result = stripTrailingQuoteLines(text.slice(0, cutAt)).trim()
 

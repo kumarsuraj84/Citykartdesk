@@ -101,3 +101,26 @@ export function renderHtmlEmail(templateHtml: string, vars: Record<string, strin
   const filled = flattenCellParagraphs(fillHtmlTemplate(templateHtml, vars))
   return { html: inlineEmailStyles(filled), text: htmlToText(filled) }
 }
+
+const NAMED_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
+
+/**
+ * The readable text of an HTML e-mail, for showing what was sent in the ticket's conversation. Table rows become "Label: value" lines, paragraphs
+ * and line breaks become line breaks, every other tag is dropped, and entities are decoded. The result is only ever displayed as plain text.
+ */
+export function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, '')
+    .replace(/<\/th>\s*<td[^>]*>/gi, ': ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|li|h[1-6]|table|ul|ol|blockquote)>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '- ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (m, e: string) => {
+      if (e[0] === '#') { const code = e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10); return Number.isFinite(code) ? String.fromCodePoint(code) : m }
+      return NAMED_ENTITIES[e.toLowerCase()] ?? m
+    })
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}

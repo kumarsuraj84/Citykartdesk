@@ -36,6 +36,16 @@ describe('stripQuotedReply', () => {
     expect(stripQuotedReply(raw)).toBe(raw)
   })
 
+  it('keeps an inline reply in full: answers written under the quoted lines are not thrown away', () => {
+    const raw = ['Dear Team,', 'On Tue, 14 Oct 2026 at 10:00, Citykart Desk <desk@citykartstores.com> wrote:', '> Please send a technician.', 'Technician will visit tomorrow 11 am.', '> Please confirm the AC model.', 'Model is LG LS-Q18, 1.5 ton.'].join('\n')
+    expect(stripQuotedReply(raw)).toBe(raw)
+  })
+
+  it('still cuts an ordinary reply followed only by the quoted message', () => {
+    const raw = ['Technician will visit tomorrow.', '', 'On Tue, 14 Oct 2026 at 10:00, Citykart Desk <desk@citykartstores.com> wrote:', '> Please send a technician.', '> Thanks'].join('\n')
+    expect(stripQuotedReply(raw)).toBe('Technician will visit tomorrow.')
+  })
+
   it('handles empty/whitespace input safely', () => {
     expect(stripQuotedReply('')).toBe('')
     expect(stripQuotedReply('   ').trim()).toBe('')
