@@ -226,6 +226,8 @@ DECLARE
   k text;
   v_actor uuid;
   v_role text;
+  v_headers jsonb;
+  v_request text;
 BEGIN
   IF TG_OP = 'INSERT' THEN
     v_new := to_jsonb(NEW); v_row := v_new;
@@ -246,11 +248,19 @@ BEGIN
     v_after  := public.system_log_clean((SELECT jsonb_object_agg(key, value) FROM jsonb_each(v_new) WHERE key = ANY (v_changed)));
   END IF;
 
-  BEGIN v_actor := auth.uid(); EXCEPTION WHEN OTHERS THEN v_actor := NULL; END;
   BEGIN v_role := nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role'; EXCEPTION WHEN OTHERS THEN v_role := NULL; END;
   v_role := coalesce(v_role, session_user);
+  IF v_role = 'service_role' THEN
+    -- The server's own client (it bypasses row security, so auth.uid() is empty) names the person it is acting for in the x-actor-id header.
+    -- Trusted ONLY for the service role: a signed-in user's token cannot make a change look like someone else's.
+    BEGIN v_headers := nullif(current_setting('request.headers', true), '')::jsonb; EXCEPTION WHEN OTHERS THEN v_headers := NULL; END;
+    IF (v_headers ->> 'x-actor-id') ~* '^[0-9a-f-]{36}$' THEN v_actor := (v_headers ->> 'x-actor-id')::uuid; END IF;
+    v_request := nullif(left(v_headers ->> 'x-request-id', 80), '');
+  ELSE
+    BEGIN v_actor := auth.uid(); EXCEPTION WHEN OTHERS THEN v_actor := NULL; END;
+  END IF;
 
-  INSERT INTO public.system_log (org_id, category, source, severity, outcome, action, actor_id, actor_role, entity_type, entity_id, entity_label, before_data, after_data, detail)
+  INSERT INTO public.system_log (org_id, category, source, severity, outcome, action, actor_id, actor_role, entity_type, entity_id, entity_label, before_data, after_data, detail, request_id)
   VALUES (
     CASE WHEN (v_row ->> 'org_id') ~* '^[0-9a-f-]{36}$' THEN (v_row ->> 'org_id')::uuid END,
     v_category, 'database', 'info', 'success',
@@ -259,7 +269,8 @@ BEGIN
     coalesce(v_row ->> 'id', nullif(concat_ws(':', v_row ->> 'team_id', v_row ->> 'user_id', v_row ->> 'request_id'), '')),
     left(coalesce(v_row ->> 'name', v_row ->> 'title', v_row ->> 'full_name', v_row ->> 'email', v_row ->> 'request_no', v_row ->> 'slug', v_row ->> 'code', v_row ->> 'key', v_row ->> 'file_name'), 200),
     v_before, v_after,
-    CASE WHEN v_changed IS NULL THEN NULL ELSE jsonb_build_object('changed_columns', to_jsonb(v_changed)) END
+    CASE WHEN v_changed IS NULL THEN NULL ELSE jsonb_build_object('changed_columns', to_jsonb(v_changed)) END,
+    v_request
   );
   RETURN coalesce(NEW, OLD);
 END;

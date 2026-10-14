@@ -4,6 +4,9 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { svc, login, ORG_A, type Session } from './helpers'
 
+// the System Log recorder is a no-op under Vitest unless a test opts in; these tests read what it wrote
+process.env.SYSTEM_LOG_IN_TESTS = '1'
+
 vi.mock('server-only', () => ({}))
 vi.mock('next/headers', () => ({ headers: vi.fn().mockRejectedValue(new Error('outside a request')) }))
 

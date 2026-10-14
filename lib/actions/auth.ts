@@ -7,6 +7,7 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { emailPasswordResetLink } from '@/lib/email/auth-mail'
+import { recordAudit } from '@/lib/syslog/audit'
 
 export async function signInWithPassword(formData: FormData) {
   const supabase = await createClient()
@@ -21,11 +22,15 @@ export async function signInWithPassword(formData: FormData) {
     rateLimit(`login:${email}`, 10, 60_000),
     ip ? rateLimit(`login-ip:${ip}`, 60, 60_000) : Promise.resolve({ limited: false, remaining: 1 }),
   ])
-  if (byAccount.limited || byAddress.limited) return { error: 'Too many login attempts. Please wait a minute.' }
+  if (byAccount.limited || byAddress.limited) {
+    await recordAudit({ category: 'security', source: 'auth', action: 'auth.login_rate_limited', outcome: 'denied', severity: 'warning', message: 'Too many sign-in attempts', after: { email } })
+    return { error: 'Too many login attempts. Please wait a minute.' }
+  }
 
   const { data: signedIn, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
+    await recordAudit({ category: 'security', source: 'auth', action: 'auth.login_failed', outcome: 'failure', severity: 'warning', message: 'Sign-in refused', after: { email } })
     return { error: sanitizeError(error, { route: 'auth.ts#signInWithPassword', fallback: 'Invalid login credentials.' }) }
   }
 
@@ -34,8 +39,10 @@ export async function signInWithPassword(formData: FormData) {
     const { data: me } = await supabase.from('profiles').select('is_active').eq('id', signedIn.user.id).maybeSingle()
     if (me && me.is_active === false) {
       await supabase.auth.signOut()
+      await recordAudit({ category: 'security', source: 'auth', action: 'auth.login_blocked_deactivated', outcome: 'denied', severity: 'warning', actorId: signedIn.user.id, after: { email } })
       return { error: 'This account has been deactivated. Please contact your administrator.' }
     }
+    await recordAudit({ category: 'security', source: 'auth', action: 'auth.login_succeeded', actorId: signedIn.user.id, after: { email } })
   }
 
   // Back to the page the person was trying to open (an approval e-mail, a bookmarked ticket...). Only a path inside this site is honoured
@@ -45,6 +52,8 @@ export async function signInWithPassword(formData: FormData) {
 
 export async function signOut() {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user) await recordAudit({ category: 'security', source: 'auth', action: 'auth.logout', actorId: user.id })
   await supabase.auth.signOut()
   redirect('/login')
 }
@@ -64,6 +73,7 @@ export async function forgotPassword(formData: FormData) {
 
   // Sent through the app's own mailbox (see lib/email/auth-mail.ts).
   const { error } = await emailPasswordResetLink(email)
+  await recordAudit({ category: 'security', source: 'auth', action: 'auth.password_reset_requested', outcome: error ? 'failure' : 'success', after: { email }, message: error ? 'The reset e-mail could not be sent' : null })
   if (error) return { error }
 
   return { success: true }
@@ -92,6 +102,7 @@ export async function resetPassword(formData: FormData) {
   if (profile?.must_reset_password) {
     await supabase.from('profiles').update({ must_reset_password: false }).eq('id', profile.id)
   }
+  await recordAudit({ category: 'security', source: 'auth', action: 'auth.password_changed', actorId: profile?.id ?? null, message: 'Password set through a reset or invitation link' })
 
   redirect('/home')
 }
@@ -121,6 +132,7 @@ export async function changeOwnPassword(formData: FormData): Promise<{ error?: s
 
   const { error } = await supabase.auth.updateUser({ password: newPassword })
   if (error) return { error: sanitizeError(error, { route: 'auth.ts#changeOwnPassword', fallback: 'Could not update your password. Please try again.' }) }
+  await recordAudit({ category: 'security', source: 'auth', action: 'auth.password_changed', actorId: user.id, message: 'Password changed by the user' })
 
   return { success: true }
 }

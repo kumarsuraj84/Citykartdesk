@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { recordAudit } from '@/lib/syslog/audit'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -25,4 +26,6 @@ export async function logAdminAudit(entry: {
   } catch {
     /* audit is best-effort — don't fail the action over a logging error */
   }
+  // the same entry goes to the System Log, where it is chained and carries the actor's role and the request context
+  await recordAudit({ action: entry.action, entityType: entry.entityType, entityId: entry.entityId, after: entry.metadata, orgId: entry.orgId, actorId: entry.actorId, source: 'admin' })
 }

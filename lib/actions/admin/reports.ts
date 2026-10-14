@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { exportRequestsCSV, exportTasksCSV, exportApprovalsCSV, type ExportFilters } from '@/lib/export/reports'
 import { sendEmail } from '@/lib/email/send'
+import { recordAudit } from '@/lib/syslog/audit'
 import { escapeHtml } from '@/lib/email/escape'
 import { loadCcBook } from '@/lib/requests/cc-recipients'
 import { checkReportRecipients } from '@/lib/reporting/report-recipients'
@@ -101,6 +102,7 @@ export async function createScheduledReport(data: {
     .single()
 
   if (error || !row) return { error: error?.message ?? 'Failed to create report.' }
+  await recordAudit({ category: 'security', action: 'scheduled_report.created', entityType: 'scheduled_report', entityId: row.id, entityLabel: data.name.trim(), after: { report_type: data.report_type, frequency: data.frequency, recipients: recipients.recipients, is_active: data.is_active }, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/reports')
   return { data: { id: row.id } }
 }
@@ -137,6 +139,7 @@ export async function updateScheduledReport(
   const admin = createAdminClient()
   const { error } = await admin.from('scheduled_reports').update(update).eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.message }
+  await recordAudit({ category: 'security', action: 'scheduled_report.updated', entityType: 'scheduled_report', entityId: id, after: update, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/reports')
   return {}
 }
@@ -149,6 +152,7 @@ export async function deleteScheduledReport(id: string): Promise<{ error?: strin
   const admin = createAdminClient()
   const { error } = await admin.from('scheduled_reports').delete().eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.message }
+  await recordAudit({ category: 'security', action: 'scheduled_report.deleted', entityType: 'scheduled_report', entityId: id, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/reports')
   return {}
 }
@@ -214,6 +218,7 @@ export async function sendScheduledReport(id: string): Promise<{ error?: string 
     .update({ last_sent_at: new Date().toISOString() })
     .eq('id', id)
 
+  await recordAudit({ category: 'security', action: 'scheduled_report.sent', entityType: 'scheduled_report', entityId: id, entityLabel: report.name, after: { recipients, report_type: report.report_type }, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/reports')
   return {}
 }

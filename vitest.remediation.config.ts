@@ -10,5 +10,5 @@ export default defineConfig({
     setupFiles: ['tests/setup/audit-only.ts', 'tests/setup/env.ts'],
     testTimeout: 60_000,
   },
-  resolve: { alias: { '@': path.resolve(__dirname, '.') } },
+  resolve: { alias: { '@': path.resolve(__dirname, '.'), 'server-only': path.resolve(__dirname, 'tests/setup/server-only-stub.ts') } },
 })

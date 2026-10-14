@@ -101,8 +101,13 @@ async function requestContext(): Promise<Partial<SystemLogInput>> {
   }
 }
 
+// Under Vitest nothing is written unless a test asks for it (SYSTEM_LOG_IN_TESTS=1), so the ordinary suites neither need a database for this
+// nor leave spool files behind.
+const disabled = () => !!process.env.VITEST && process.env.SYSTEM_LOG_IN_TESTS !== '1'
+
 /** Queue one row. Fire-and-forget safe. */
 export async function recordSystemLog(input: SystemLogInput, opts: { floodKey?: string | false } = {}): Promise<void> {
+  if (disabled()) return
   try {
     const ctx = await requestContext()
     const merged: SystemLogInput = { ...ctx, ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined && v !== null)) } as SystemLogInput
@@ -121,6 +126,7 @@ export async function recordSystemLog(input: SystemLogInput, opts: { floodKey?: 
 
 /** Write now (used for audit rows, process crashes and tests). */
 export async function flushSystemLog(): Promise<void> {
+  if (disabled()) return
   try { await getWriter().flush() } catch { /* ignore */ }
 }
 
@@ -140,6 +146,8 @@ interface LoggerPayload {
 export function recordFromLogger(p: LoggerPayload): void {
   const event = p.event ?? 'log'
   const code = p.errorCode ?? (typeof p.context?.code === 'string' ? (p.context.code as string) : null)
+  // a wrong password is not a platform error: the sign-in action records it as a security event
+  if (code === 'invalid_credentials' || p.error?.message === 'Invalid login credentials') return
   const denied = code === '42501'
   void recordSystemLog({
     category: denied ? 'security' : 'error',

@@ -8,6 +8,7 @@ import { rateLimit } from '@/lib/rate-limit'
 import { assertRefsInOrg } from './orgScopeGuard'
 import { emailPasswordResetLink, emailInvitation } from '@/lib/email/auth-mail'
 import { logAdminAudit } from './audit'
+import { recordAudit } from '@/lib/syslog/audit'
 import { BULK_RESET_BATCH_SIZE, BULK_RESET_ROLES } from '@/lib/users/bulk-reset'
 import { normalizeMobileNumber } from '@/lib/users/mobile'
 import { isUsableEmail, describeEmailUpdates, type EmailChangeCounts } from '@/lib/users/email-change'
@@ -89,6 +90,7 @@ export async function updateUserRole(
     .eq('org_id', profile.org_id)
 
   if (error) return { error: error.message }
+  await recordAudit({ category: 'security', action: 'user.role_changed', entityType: 'user', entityId: userId, before: { role: target.role }, after: { role }, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/users')
   return {}
 }
@@ -118,6 +120,7 @@ export async function toggleUserActive(
   // deactivated person cannot log in again or renew their session.
   const { error: banError } = await admin.auth.admin.updateUserById(userId, { ban_duration: isActive ? 'none' : '876000h' })
   if (banError) return { error: `The account was marked ${isActive ? 'active' : 'inactive'}, but its sign-in could not be ${isActive ? 'restored' : 'blocked'}: ${banError.message}` }
+  await recordAudit({ category: 'security', action: isActive ? 'user.reactivated' : 'user.deactivated', entityType: 'user', entityId: userId, before: { is_active: !isActive }, after: { is_active: isActive }, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/users')
   return {}
 }
@@ -318,6 +321,7 @@ export async function setUserTeams(
     if (insErr) return { error: insErr.message }
   }
 
+  await recordAudit({ action: 'user.teams_set', entityType: 'user', entityId: userId, after: { team_ids: teamIds }, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/users')
   return {}
 }
@@ -472,6 +476,7 @@ export async function inviteUser(fields: {
     if (teamErr) return { error: `User invited, but technician group assignment failed: ${teamErr.message}` }
   }
 
+  await recordAudit({ action: 'user.invited', entityType: 'user', entityId: uid, entityLabel: fields.email, after: { email: fields.email, role: profileUpdate.role, team_ids: fields.team_ids ?? [] }, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/users')
 
   // The account is fully set up — now email the "set your password" link through the
@@ -745,6 +750,7 @@ export async function bulkCreateUsers(
     imported++
   }
 
+  await recordAudit({ action: 'user.bulk_imported', entityType: 'user', message: `${imported} users imported, ${errors.length} rows with errors`, after: { imported, rowErrors: errors.length }, actorId: profile.id, orgId })
   revalidatePath('/admin/users')
   return { data: { imported, errors } }
 }
@@ -763,6 +769,7 @@ export async function adminSendPasswordReset(email: string): Promise<{ error?: s
   if (limited) return { error: 'Too many reset emails sent. Please wait a minute.' }
 
   const { error } = await emailPasswordResetLink(email)
+  await recordAudit({ category: 'security', action: 'user.password_reset_sent', outcome: error ? 'failure' : 'success', entityType: 'user', entityLabel: email, actorId: profile.id, orgId: profile.org_id })
   if (error) return { error }
   return {}
 }
@@ -872,6 +879,7 @@ export async function adminSetPassword(userId: string, newPassword: string): Pro
   // own on next login before they can use the portal.
   await admin.from('profiles').update({ must_reset_password: true }).eq('id', userId)
 
+  await recordAudit({ category: 'security', action: 'user.password_set_by_admin', entityType: 'user', entityId: userId, message: 'An administrator set a temporary password; the person must choose their own', actorId: profile.id, orgId: profile.org_id })
   return {}
 }
 
@@ -931,6 +939,7 @@ export async function exportUsersCsv(): Promise<string> {
     mobileNumbersById,
     teamNamesById,
   })
+  await recordAudit({ action: 'user.export_csv', entityType: 'user', message: `${rows.length} users exported`, after: { rows: rows.length }, actorId: profile.id, orgId })
   return toCSV(rows, USER_EXPORT_COLUMNS)
 }
 

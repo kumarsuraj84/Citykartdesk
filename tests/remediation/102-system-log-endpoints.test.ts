@@ -6,6 +6,9 @@ import { NextRequest } from 'next/server'
 import { svc, login, ORG_A, type Session } from './helpers'
 import { signVerifiedUser } from '@/lib/auth/verified-user'
 
+// the System Log recorder is a no-op under Vitest unless a test opts in; these tests read what it wrote
+process.env.SYSTEM_LOG_IN_TESTS = '1'
+
 vi.mock('server-only', () => ({}))
 const hdrs = vi.hoisted(() => ({ current: new Headers() }))
 vi.mock('next/headers', () => ({ headers: async () => hdrs.current }))
