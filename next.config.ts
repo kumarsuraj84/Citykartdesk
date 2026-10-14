@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { buildCspReportOnly } from "./lib/http/csp";
 
 // One stamp per production build, set ONCE by scripts/windows/build-for-deploy.ps1 (reading the clock here would
 // give each of Next's build processes a different value). Every open page compares it with the server's
@@ -70,7 +71,8 @@ const nextConfig: NextConfig = {
   },
   // Basic browser protections on every response (audit D-033). The site's own pages may frame its own attachment previews
   // (SAMEORIGIN); nothing else may frame it. A Content-Security-Policy and HSTS are deliberately NOT set here: a policy needs a
-  // page-by-page test, and HSTS only makes sense once the site is served over HTTPS (audit D-018, a deployment decision).
+  // page-by-page test, and HSTS only makes sense once the site is served over HTTPS (audit D-018, a deployment decision). Meanwhile a
+  // policy that only REPORTS is sent: it blocks nothing, and what the browsers would have blocked is kept in the System Log.
   async headers() {
     return [{
       source: '/:path*',
@@ -79,6 +81,7 @@ const nextConfig: NextConfig = {
         { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
         { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
+        { key: 'Content-Security-Policy-Report-Only', value: buildCspReportOnly(process.env.NEXT_PUBLIC_SUPABASE_URL) },
       ],
     }]
   },
