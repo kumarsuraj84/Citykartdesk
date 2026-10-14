@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Zap, Plus, Pencil, Copy, Trash2, X, RefreshCw } from 'lucide-react'
+import { Zap, Plus, Pencil, Copy, Trash2, X, RefreshCw, Search } from 'lucide-react'
+import { matchesRuleSearch } from '@/lib/rules/search'
 import { cn } from '@/lib/utils'
 import { STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants/requests'
 import {
@@ -888,6 +889,7 @@ export function BusinessRulesClient(props: BusinessRulesClientProps) {
   const [editTarget, setEditTarget] = useState<BusinessRuleRow | null>(null)
   const [duplicateTarget, setDuplicateTarget] = useState<BusinessRuleRow | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
   const [migrating, startMigrate] = useTransition()
   const [, startDelete] = useTransition()
 
@@ -896,6 +898,9 @@ export function BusinessRulesClient(props: BusinessRulesClientProps) {
     setPrevRules(props.rules)
     setRules(props.rules)
   }
+
+  const shown = rules.filter((r) => matchesRuleSearch(r, search))
+  const searching = search.trim().length > 0
 
   function openCreate() { setEditTarget(null); setDuplicateTarget(null); setModalOpen(true) }
   function openEdit(rule: BusinessRuleRow) { setEditTarget(rule); setDuplicateTarget(null); setModalOpen(true) }
@@ -924,9 +929,24 @@ export function BusinessRulesClient(props: BusinessRulesClientProps) {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Zap className="h-4 w-4" />
-          <span>{rules.length} {rules.length === 1 ? 'rule' : 'rules'}</span>
+          <span>{searching ? `${shown.length} of ${rules.length} rules` : `${rules.length} ${rules.length === 1 ? 'rule' : 'rules'}`}</span>
         </div>
         <div className="flex items-center gap-2">
+          {rules.length > 0 && (
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="search" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search rules"
+                placeholder="Search rules by name…"
+                className="w-64 rounded-lg border border-border bg-card py-1.5 pl-8 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              />
+              {searching && (
+                <button type="button" onClick={() => setSearch('')} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          )}
           {props.legacyRulesAvailable && (
             <button onClick={handleMigrate} disabled={migrating} className="btn-soft disabled:opacity-50">
               <RefreshCw className={cn('h-4 w-4', migrating && 'animate-spin')} />
@@ -950,9 +970,14 @@ export function BusinessRulesClient(props: BusinessRulesClientProps) {
             New Rule
           </button>
         </div>
+      ) : shown.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border py-12 text-center">
+          <p className="text-sm font-medium text-foreground">No rule matches “{search.trim()}”</p>
+          <button type="button" onClick={() => setSearch('')} className="btn-soft mt-3">Clear search</button>
+        </div>
       ) : (
         <div className="space-y-3">
-          {rules.map((rule) => (
+          {shown.map((rule) => (
             <RuleCard key={rule.id} rule={rule} onEdit={() => openEdit(rule)} onDuplicate={() => openDuplicate(rule)} onDelete={() => setDeleteTarget(rule.id)} />
           ))}
         </div>
