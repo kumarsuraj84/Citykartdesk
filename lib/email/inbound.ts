@@ -1,7 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadDbSmtpConfig } from './mailbox'
 import { isGmailHost } from './thread-tag'
-import { findTaggedRequestNo, resolveKnownSender } from './inbound-match'
+import { findTaggedRequestNo, isPlausibleSender, oemNameByDomain, resolveKnownSender, resolveOemByDomain } from './inbound-match'
+import { htmlToPlainText } from './oem-template'
 import { stripQuotedReply } from './quote-strip'
 import { senderAddress } from './inbound-sender'
 import { senderAuthenticity } from './inbound-auth'
@@ -54,7 +55,20 @@ async function orgIdentityMaps(admin: AnyClient, orgId: string) {
     for (const email of oem.emails ?? []) oemNameByEmail.set(email.toLowerCase(), oem.name)
   }
 
-  return { profilesByEmail, oemNameByEmail }
+  return { profilesByEmail, oemNameByEmail, oemNameByDomain: oemNameByDomain(oemNameByEmail) }
+}
+
+/**
+ * A reply that was NOT added to the conversation leaves a short internal note on the ticket (staff only), so a technician can see that an answer
+ * arrived and why it is not shown, instead of it vanishing silently. Only for senders at a company we actually deal with.
+ */
+async function noteUnaddedReply(admin: AnyClient, requestId: string, fromAddress: string, reason: string) {
+  try {
+    await admin.from('request_comments').insert({
+      request_id: requestId, author_id: null, external_name: 'Citykart Desk', is_internal: true,
+      body: `An e-mail reply to this ticket from ${fromAddress} was not added to the conversation: ${reason}. If it is genuine, copy the message in by hand.`,
+    })
+  } catch { /* a note must never break the sync */ }
 }
 
 function addressText(value: unknown): string {
@@ -151,10 +165,14 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
             continue
           }
 
+          let maps = identityCache.get(request.org_id)
+          if (!maps) { maps = await orgIdentityMaps(admin, request.org_id); identityCache.set(request.org_id, maps) }
+
           // D-028: a message the receiving server saw FAIL authentication is not attributed to anyone, whoever its From line names
           const auth = senderAuthenticity(parsed.headers?.get('authentication-results'), fromAddress)
           if (auth.verdict === 'failed') {
             result.senderNotRecognized++
+            if (isPlausibleSender(fromAddress, maps.oemNameByEmail, maps.profilesByEmail.keys())) await noteUnaddedReply(admin, request.id, fromAddress, `the mail server could not confirm who sent it (${auth.reason})`)
             await admin.from('processed_inbound_emails').insert({ message_id: messageId, request_id: request.id, outcome: 'sender_not_recognized', from_address: fromAddress })
             try {
               const { recordEvents } = await import('@/lib/events/record')
@@ -166,12 +184,13 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
             continue
           }
 
-          let maps = identityCache.get(request.org_id)
-          if (!maps) { maps = await orgIdentityMaps(admin, request.org_id); identityCache.set(request.org_id, maps) }
-          const sender = resolveKnownSender(fromAddress, maps.profilesByEmail, maps.oemNameByEmail)
+          let sender = resolveKnownSender(fromAddress, maps.profilesByEmail, maps.oemNameByEmail)
+          // an OEM's colleague writing from the company's own domain, confirmed by the mail server (never on an unchecked message)
+          if (sender.kind === 'unknown' && auth.verdict === 'authentic') sender = resolveOemByDomain(fromAddress, maps.oemNameByDomain) ?? sender
 
           if (sender.kind === 'unknown') {
             result.senderNotRecognized++
+            if (isPlausibleSender(fromAddress, maps.oemNameByEmail, maps.profilesByEmail.keys())) await noteUnaddedReply(admin, request.id, fromAddress, 'the sender is not a known user or OEM contact')
             await admin.from('processed_inbound_emails').insert({ message_id: messageId, request_id: request.id, outcome: 'sender_not_recognized', from_address: fromAddress })
             try {
               const { recordEvents } = await import('@/lib/events/record')
@@ -183,7 +202,7 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
             continue
           }
 
-          const rawBody = parsed.text || (parsed.html ? String(parsed.html).replace(/<[^>]+>/g, ' ') : '')
+          const rawBody = parsed.text || (parsed.html ? htmlToPlainText(String(parsed.html)) : '')
           const body = stripQuotedReply(rawBody)
           if (!body.trim()) {
             result.noMatch++

@@ -11,6 +11,7 @@ import { notifyRequesterTicketLogged } from '@/lib/requests/notify-requester'
 import { escapeHtml } from '@/lib/email/escape'
 import { isHtmlTemplate, renderHtmlEmail } from '@/lib/email/oem-template'
 import { sanitizeTemplateHtml } from '@/lib/email/sanitize-template'
+import { oemSentComment } from '@/lib/requests/oem-message'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import type { FormField, RequestPriority } from '@/types'
 import type { Json } from '@/types/database'
@@ -124,7 +125,7 @@ export async function runOemAutoRouting(params: {
   await admin.from('request_comments').insert({
     request_id: request.id,
     author_id: actorId,
-    body: `Ticket sent to ${oem.name} (${(oem.emails as string[]).join(', ')}) for servicing.`,
+    body: oemSentComment({ oemName: oem.name, emails: oem.emails as string[], subject, requestNo: request.request_no, body: bodyText }),
     is_internal: false,
   })
 
