@@ -8,6 +8,7 @@ import { sourceChannelOf } from '@/lib/sources'
 import { isEverBreached, isEverResponseBreached } from '@/lib/sla/breach'
 import { ageBucketLabel } from '@/lib/reporting/aging'
 import { createShortCache } from '@/lib/cache/short-ttl'
+import { istStamp, istTime } from '@/lib/reporting/ist'
 import type { Database } from '@/types/database'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -38,12 +39,7 @@ const nowIso = () => new Date().toISOString()
 // the time actually matters (SLA/response-time analysis). 24-hour, no AM/PM,
 // matching every other time display in the app (lib/export/reports.ts's fmtDate).
 function timeOf(iso: string | null | undefined): string | null {
-  if (!iso) return null
-  try {
-    return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
-  } catch {
-    return null
-  }
+  return istTime(iso)
 }
 
 // ── Task custom fields — dynamic, per-org, merged into the static registry ────
@@ -719,6 +715,23 @@ export async function fetchReportData(
 }
 
 async function loadReportData(
+  entity: EntityKey,
+  orgId: string,
+  scope: ReportViewerScope,
+): Promise<ReportDataResult> {
+  const data = await loadReportDataUtc(entity, orgId, scope)
+  const dateKeys = data.fields.filter((f) => f.type === 'date').map((f) => f.key)
+  if (dateKeys.length === 0) return data
+  for (const row of data.rows) {
+    for (const k of dateKeys) {
+      const v = row[k]
+      if (typeof v === 'string') row[k] = istStamp(v)
+    }
+  }
+  return data
+}
+
+async function loadReportDataUtc(
   entity: EntityKey,
   orgId: string,
   scope: ReportViewerScope,

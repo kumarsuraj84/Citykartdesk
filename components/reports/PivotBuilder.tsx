@@ -54,8 +54,9 @@ function moveInArray<T>(arr: T[], index: number, dir: -1 | 1): T[] {
   return next
 }
 
+// the day as the viewer's calendar shows it (toISOString is UTC, which is the day before between midnight and 05:30 in India)
 function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 const DATE_PRESETS: { key: NonNullable<DatePreset>; label: string; from: () => string; to: () => string }[] = [

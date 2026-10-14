@@ -44,6 +44,7 @@ function fmtDate(v: string | null | undefined): string {
   if (!v) return ''
   try {
     return new Date(v).toLocaleString('en-US', {
+      timeZone: 'Asia/Kolkata',
       year: 'numeric',
       month: 'short',
       day: 'numeric',
