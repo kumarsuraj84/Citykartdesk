@@ -8,7 +8,7 @@ import {
 } from '@/lib/reporting/analytics/report-filter'
 import { STATUS_LABELS } from '@/lib/constants/requests'
 
-type Which = 'group' | 'service' | 'tech' | 'status'
+type Which = 'group' | 'service' | 'tech' | 'status' | 'month'
 
 export interface ReportFiltersProps {
   combos: FilterCombo[]
@@ -17,6 +17,8 @@ export interface ReportFiltersProps {
   defaults: FilterDefaults
   /** what is in force now (a report's starting point where nothing is chosen); an empty list means everything */
   effective: EffectiveFilter
+  /** a monthly report (the Weekly Admin Report): the month it is about and the months to choose from; it has no Status filter */
+  month?: { value: string; multi?: boolean; options: { value: string; label: string }[] }
 }
 
 /**
@@ -24,7 +26,7 @@ export interface ReportFiltersProps {
  * worked out from what is ticked so far, before Apply. Choosing a group selects all of its services (pick some to narrow); an empty choice means everything.
  * The choice lives in the page address, so the Excel export and a refresh keep it.
  */
-export function ReportFilters({ combos, groups, services, defaults, effective }: ReportFiltersProps) {
+export function ReportFilters({ combos, groups, services, defaults, effective, month }: ReportFiltersProps) {
   const router = useRouter()
   const pathname = usePathname()
   const [open, setOpen] = useState<Which | null>(null)
@@ -57,9 +59,10 @@ export function ReportFilters({ combos, groups, services, defaults, effective }:
       // choosing another group selects all of its services again
       return key === 'groups' ? { ...d, groups: next, services: [] } : { ...d, [key]: next }
     })
-  const go = (e: EffectiveFilter) => {
+  const [monthDraft, setMonthDraft] = useState<string[]>(() => (month?.value ? month.value.split(',') : []))
+  const go = (e: EffectiveFilter, months: string = month?.value ?? '') => {
     const params = new URLSearchParams()
-    applyReportFilterToParams(params, choiceFromEffective(e, defaults))
+    applyReportFilterToParams(params, { ...choiceFromEffective(e, defaults), month: months })
     const qs = params.toString()
     setOpen(null)
     router.push(qs ? `${pathname}?${qs}` : pathname)
@@ -113,11 +116,54 @@ export function ReportFilters({ combos, groups, services, defaults, effective }:
         {button('tech', 'Technician', effective.techs.length)}
         {panel('tech', 'Technician', 'techs', options.techs, (v) => v, { text: 'Everybody', apply: () => setDraft((d) => ({ ...d, techs: [] })) })}
       </div>
-      <div className="relative">
+      {month?.multi && (
+        <div className="relative">
+          <button
+            type="button" aria-haspopup="listbox" aria-expanded={open === 'month'}
+            onClick={() => { if (open !== 'month') { setDraft(effective); setMonthDraft(month.value ? month.value.split(',') : []) } setOpen(open === 'month' ? null : 'month') }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm"
+          >
+            {`Month (${month.value ? month.value.split(',').length : 0})`}
+            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${open === 'month' ? 'rotate-180' : ''}`} />
+          </button>
+          {open === 'month' && (
+            <div className="absolute left-0 z-30 mt-1.5 w-60 rounded-xl border border-border bg-card p-2 shadow-lg" role="listbox" aria-label="Month choices">
+              <ul className="max-h-72 overflow-auto">
+                {month.options.map((o) => (
+                  <li key={o.value}>
+                    <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
+                      <input type="checkbox" checked={monthDraft.includes(o.value)} className="rounded"
+                        onChange={() => setMonthDraft((d) => (d.includes(o.value) ? d.filter((x) => x !== o.value) : [...d, o.value]))} />
+                      <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-1 flex justify-between border-t border-border px-2 pt-2">
+                <button type="button" onClick={() => setMonthDraft([])} className="text-[11px] font-medium text-primary hover:underline">Last 3 months</button>
+                <button type="button" onClick={() => go(effective, [...monthDraft].sort().slice(-12).join(','))} className="btn-gradient px-3 py-1 text-xs">Apply</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {month && !month.multi && (
+        <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+          Month
+          <select
+            value={month.value} aria-label="Month"
+            onChange={(e) => { const params = new URLSearchParams(); applyReportFilterToParams(params, { ...choiceFromEffective(effective, defaults), month: e.target.value }); router.push(`${pathname}?${params.toString()}`) }}
+            className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm"
+          >
+            {month.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
+      )}
+      {!month && <div className="relative">
         {button('status', 'Status', statusCustom ? effective.statuses.length : 0)}
         {panel('status', 'Status', 'statuses', options.statuses, (v) => (STATUS_LABELS as Record<string, string>)[v] ?? v, { text: 'Report’s own', apply: () => setDraft((d) => ({ ...d, statuses: defaults.statuses })) })}
-      </div>
-      {changed && <button type="button" onClick={() => go({ statuses: defaults.statuses, techs: [], groups: defaults.groups, services: defaults.services })} className="text-xs font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
+      </div>}
+      {changed && <button type="button" onClick={() => go({ statuses: defaults.statuses, techs: [], groups: defaults.groups, services: defaults.services }, month?.value)} className="text-xs font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
     </div>
   )
 }

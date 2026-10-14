@@ -4,7 +4,9 @@
 
 import { AGE_BUCKETS } from '@/lib/reporting/aging'
 import type { RequestStatus } from '@/types'
-import { isServerRoomAc, type TicketFact } from './facts'
+import { ALL_STATUSES } from './report-filter'
+import { isServerRoomAc, monthLabel, weekOfMonth, type TicketFact } from './facts'
+import { monthHeading, weekText, type WeekMonth } from './weekly'
 import { UNASSIGNED, NO_CATEGORY, techOf, catOf, subOf } from './age-summary'
 import {
   byName, shortDate, type Cell, type HeadGroup, type ReportColumn, type ReportRow, type ReportTable, type ReportTicket, type RowKind,
@@ -16,7 +18,7 @@ export const REPORTS_NAME = 'Predefined Reports'
 /** The folder the reports are kept in. */
 export const REPORTS_FOLDER = 'Admin/NSO/BD Reports'
 
-export type ReportLayout = 'summary' | 'status' | 'cluster-list' | 'store-ac' | 'red-flag' | 'amc-vendor'
+export type ReportLayout = 'summary' | 'status' | 'cluster-list' | 'store-ac' | 'red-flag' | 'amc-vendor' | 'weekly' | 'monthly'
 
 export interface FixedReportDef {
   slug: string
@@ -29,6 +31,8 @@ export interface FixedReportDef {
   services?: string[]
   /** only tickets of services that go to an OEM (AC servicing) */
   acOnly?: boolean
+  /** a weekly / monthly report's rows: one per AMC brand (the default) or one per Store Master priority list (TOP 40, ROS) */
+  rowBy?: 'amc' | 'priority'
   /** only tickets raised by new stores (NSO) */
   nso?: boolean
   /** the statuses counted; the six "still being worked" statuses unless the report says otherwise */
@@ -69,6 +73,12 @@ export const FIXED_REPORTS: FixedReportDef[] = [
     about: 'Open tickets of the BD group, by technician and category.' },
   { slug: 'admin-summary-report', title: 'Admin Summary Report', layout: 'summary', group: 'Admin', statuses: OPEN_STATUSES,
     about: 'Open tickets of the Admin group, by technician and category.' },
+  { slug: 'weekly-admin-report', title: 'Weekly Admin Report', layout: 'weekly', group: 'Admin', services: [ADMIN_AC], acOnly: true, statuses: ALL_STATUSES,
+    about: 'AC tickets of the Admin group by AMC brand and week of the month (Monday to Sunday): opened that week and resolved that week.' },
+  { slug: 'monthly-admin-report', title: 'Monthly Admin Report', layout: 'monthly', group: 'Admin', services: [ADMIN_AC], acOnly: true, statuses: ALL_STATUSES,
+    about: 'AC tickets of the Admin group by AMC brand and month (choose any months): opened in that month and resolved in that month.' },
+  { slug: 'priority-wise-report', title: 'Priority Wise Report', layout: 'monthly', rowBy: 'priority', group: 'Admin', services: [ADMIN_AC], acOnly: true, statuses: ALL_STATUSES,
+    about: 'AC tickets of the Admin group by priority store list (as per Ops: TOP 40, ROS) and month (choose any months): opened in that month and resolved in that month.' },
 ]
 
 export const findFixedReport = (slug: string) => FIXED_REPORTS.find((r) => r.slug === slug)
@@ -89,6 +99,12 @@ export interface BuildInput {
   statusLabel: (s: string) => string
   /** the statuses counted when the viewer chose others than the report's own */
   statuses?: RequestStatus[]
+  /** the month a weekly report is about */
+  month?: WeekMonth
+  /** the months a monthly report shows, oldest first */
+  months?: WeekMonth[]
+  /** the Store Master's stores and ACs per AMC brand (a weekly report's first two columns) */
+  amcStores?: { brand: string; stores: number; acs: number }[]
 }
 
 const localDay = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
@@ -140,6 +156,66 @@ export function buildFixedReport(input: BuildInput): ReportTable {
   let lead = 1
   const rows: ReportRow[] = []
   let dayWord: string | undefined
+  let weekNote = ''
+
+  if (def.layout === 'weekly' || def.layout === 'monthly') {
+    // One row per AMC brand, one Open / Resolved pair per week of the chosen month. Open = tickets created that week; Resolved = tickets resolved that
+    // week (whenever they were created). The store and AC counts come from the Store Master, whatever the filters are.
+    const m = def.layout === 'weekly' ? input.month : input.months?.[0]
+    if (m) {
+      const byPriority = def.rowBy === 'priority'
+      const NO_BRAND = byPriority ? '(No priority list)' : '(No AMC brand)'
+      type Brand = { name: string; stores: number; acs: number; facts: TicketFact[] }
+      const brands = new Map<string, Brand>()
+      const brand = (name: string) => {
+        const k = normName(name)
+        let b = brands.get(k)
+        if (!b) { b = { name, stores: 0, acs: 0, facts: [] }; brands.set(k, b) }
+        return b
+      }
+      for (const s of input.amcStores ?? []) { const b = brand(s.brand); b.stores += s.stores; b.acs += s.acs }
+      for (const f of facts) brand((byPriority ? f.priorityList : f.acAmcBrand).trim() || NO_BRAND).facts.push(f)
+
+      // The columns come in Open / Resolved pairs: one pair per week of the month (Weekly Admin Report), or one per chosen month (Monthly Admin Report).
+      type Period = { head: string; opened: (f: TicketFact) => boolean; done: (f: TicketFact) => boolean }
+      const doneInMonth = (f: TicketFact, label: string) => !!f.doneAt && monthLabel(new Date(f.doneAt)) === label
+      const periods: Period[] = def.layout === 'weekly'
+        ? m.weeks.map((w) => ({
+            head: `Week-${w.week}`,
+            opened: (f) => f.openMonth === m.label && f.openWeek === `Week-${w.week}`,
+            done: (f) => doneInMonth(f, m.label) && weekOfMonth(new Date(f.doneAt as string)) === `Week-${w.week}`,
+          }))
+        : (input.months ?? []).map((mm) => ({ head: monthHeading(mm), opened: (f) => f.openMonth === mm.label, done: (f) => doneInMonth(f, mm.label) }))
+      // % Diff: how much more was resolved than opened ((resolved - opened) / opened); nothing opened and nothing resolved is 0%, nothing opened but some resolved has no percentage
+      const diff = (o: number, c: number): Cell => (o > 0 ? (c - o) / o : c === 0 ? 0 : '')
+
+      lead = 1
+      columns = [
+        col('amc', byPriority ? 'PRIORITY STORE' : 'AMC BRAND', 130), numCol('stores', 'Total Store Count', 70), numCol('acs', 'Total AC Count', 70),
+        ...periods.flatMap((_, i) => [numCol(`o${i}`, 'Open', 58, { align: 'center' }), numCol(`c${i}`, 'Resolved', 66, { align: 'center', tint: 'green' })]),
+        numCol('to', 'Open', 58, { align: 'center', headTone: 'peach' }), numCol('tc', 'Resolved', 66, { align: 'center', tint: 'green', headTone: 'peach' }),
+        numCol('pct', '% Diff', 66, { align: 'center', pct: true, pctWhole: true, diff: true, headTone: 'peach' }),
+      ]
+      headGroups = [
+        ...periods.map((p, i) => ({ label: p.head, from: 3 + 2 * i, span: 2 })),
+        { label: 'Total', from: 3 + 2 * periods.length, span: 3, peach: true },
+      ]
+      const list = [...brands.values()].filter((b) => b.name !== NO_BRAND || b.facts.length > 0).sort((x, y) => (byPriority && /^top/i.test(x.name) !== /^top/i.test(y.name) && x.name !== NO_BRAND && y.name !== NO_BRAND ? (/^top/i.test(x.name) ? -1 : 1) : nameOrder(x.name, y.name, NO_BRAND)))
+      const line = (key: string, kind: RowKind, name: string, stores: number, acs: number, mine: TicketFact[]) => {
+        const per = periods.map((p) => ({ o: mine.filter(p.opened), c: mine.filter(p.done) }))
+        const o = sum(per.map((x) => x.o.length))
+        const c = sum(per.map((x) => x.c.length))
+        rows.push(row(key, kind,
+          [name, stores, acs, ...per.flatMap((x) => [x.o.length, x.c.length]), o, c, diff(o, c)],
+          [undefined, undefined, undefined, ...per.flatMap((x) => [refs(x.o), refs(x.c)]), refs(per.flatMap((x) => x.o)), refs(per.flatMap((x) => x.c)), undefined]))
+      }
+      for (const b of list) line(b.name, 'row', b.name, b.stores, b.acs, b.facts)
+      if (list.length > 0) line('grand', 'grand', 'Grand Total', sum(list.map((b) => b.stores)), sum(list.map((b) => b.acs)), list.flatMap((b) => b.facts))
+      weekNote = def.layout === 'weekly'
+        ? m.weeks.map((w) => `Week-${w.week} = ${weekText(w)}`).join(', ')
+        : `${(input.months ?? []).length} month${(input.months ?? []).length === 1 ? '' : 's'}`
+    }
+  }
 
   if (def.layout === 'summary') {
     const buckets = usedBuckets(facts)
@@ -303,6 +379,10 @@ export function buildFixedReport(input: BuildInput): ReportTable {
   const counted = def.layout === 'summary' ? facts.length : new Set(rows.filter((r) => r.kind === 'row').flatMap((r) => r.refs.flatMap((x) => x ?? []))).size
   return {
     slug: def.slug, title: def.title, columns, headGroups, rows, tickets: tk.list, lead, dayWord,
-    scopeText: `${statusText} · ${counted} ticket${counted === 1 ? '' : 's'}`,
+    scopeText: def.layout === 'weekly' && input.month
+      ? `${input.month.name} · ${counted} ticket${counted === 1 ? '' : 's'} opened or resolved · ${weekNote}`
+      : def.layout === 'monthly' && input.months
+      ? `${input.months.map((x) => x.label).join(', ')} · ${counted} ticket${counted === 1 ? '' : 's'} opened or resolved`
+      : `${statusText} · ${counted} ticket${counted === 1 ? '' : 's'}`,
   }
 }

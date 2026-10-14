@@ -32,10 +32,18 @@ export interface ReportColumn {
   peach?: boolean
   /** shown as a percentage (the cell value is a fraction: 0.125 → 12.5%) */
   pct?: boolean
+  /** a percentage shown in whole numbers (0.125 → 13%) */
+  pctWhole?: boolean
+  /** the body cells are tinted light green, like the Resolved columns of the Excel weekly sheet */
+  tint?: 'green'
+  /** the heading of this column (under a group heading) is peach like the total columns */
+  headTone?: 'peach'
+  /** the cell is shaded by its sign: green when above 0, red when below 0 (a difference in percent) */
+  diff?: boolean
 }
 
 /** A heading above a run of columns (for example "Ticket" over the age-bucket columns). */
-export interface HeadGroup { label: string; from: number; span: number }
+export interface HeadGroup { label: string; from: number; span: number; /** peach instead of blue */ peach?: boolean }
 
 export type RowKind = 'row' | 'subtotal' | 'grand'
 export type Cell = string | number | null
@@ -78,7 +86,7 @@ export function shortDate(iso: string | null | undefined): string {
 /** The on-screen text of a cell: whole numbers as they are, fractions as percentages, blanks as nothing. */
 export function cellText(v: Cell, col: ReportColumn): string {
   if (v === null || v === '') return ''
-  if (typeof v === 'number') return col.pct ? `${Math.round(v * 1000) / 10}%` : String(v)
+  if (typeof v === 'number') return col.pct ? `${col.pctWhole ? Math.round(v * 100) : Math.round(v * 1000) / 10}%` : String(v)
   return v
 }
 

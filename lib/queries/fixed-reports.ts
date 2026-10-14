@@ -6,7 +6,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { fetchAllPages } from '@/lib/queries/paging'
 import { loadAcContext } from '@/lib/queries/store-ac-stats'
 import { canUseReportAnalytics, groupDisplayName, selectableGroups } from '@/lib/reporting/analytics/catalog'
-import { makeFact, isNsoStore, DEFAULT_RED_FLAG_PERCENT, type TicketFact, type RawTicket, type FactContext } from '@/lib/reporting/analytics/facts'
+import { makeFact, isNsoStore, isServerRoomAc, DEFAULT_RED_FLAG_PERCENT, type TicketFact, type RawTicket, type FactContext } from '@/lib/reporting/analytics/facts'
+import { monthOptions, resolveMonth, resolveMonths } from '@/lib/reporting/analytics/weekly'
 import { techOf } from '@/lib/reporting/analytics/age-summary'
 import { buildFixedReport, findFixedReport, normName, type FixedReportDef } from '@/lib/reporting/analytics/fixed-reports'
 import { effectiveFilter, emptyReportFilter, type EffectiveFilter, type FilterCombo, type FilterDefaults, type ReportFilter } from '@/lib/reporting/analytics/report-filter'
@@ -43,7 +44,10 @@ export interface FilterOptionsData {
   effective: EffectiveFilter
 }
 
-export interface FixedReportResult { def: FixedReportDef; table: ReportTable; filters: FilterOptionsData; /** true when the report stopped at the row cap: the numbers cover only the first rows */ truncated?: boolean }
+/** The month a monthly report (the Weekly Admin Report) is about, and the months to choose from. */
+export interface MonthChoice { /** the month chosen, or the months chosen joined by commas ('2026-04,2026-05') */ value: string; name: string; /** the Monthly reports let several months be chosen */ multi?: boolean; options: { value: string; label: string }[] }
+
+export interface FixedReportResult { def: FixedReportDef; table: ReportTable; filters: FilterOptionsData; month?: MonthChoice; /** true when the report stopped at the row cap: the numbers cover only the first rows */ truncated?: boolean }
 
 /** The list of reports: every report is open to anyone who may use the fixed reports at all. */
 export function canOpenFixedReports(profile: Pick<ProfileWithTeams, 'role' | 'org_id'>): boolean {
@@ -79,8 +83,17 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
     combos, groups: visible.map((t) => ({ id: t.id, name: t.name })), services: services.map((s) => ({ id: s.id, name: s.name, groupId: s.team_id })), defaults, effective: eff,
   })
   const statuses = eff.statuses as FixedReportDef['statuses']
-  const result = (table: ReportTable, combos: FilterCombo[]): FixedReportResult => ({ def, table, filters: optionsData(combos) })
-  const empty = () => result(buildFixedReport({ def, facts: [], statusLabel, statuses }), [])
+  // a monthly report is about one month (this month unless another is chosen), and counts tickets whatever their status is now
+  const month = def.layout === 'weekly' ? resolveMonth(clean.month?.split(',')[0]) : undefined
+  // a monthly report (Monthly Admin Report, Priority Wise Report) shows any months chosen (this month and the 2 before it when none)
+  const months = def.layout === 'monthly' ? resolveMonths(clean.month) : undefined
+  const allMonths = monthOptions(new Date())
+  const withChosen = (chosen: { value: string; name: string }[]) => [...allMonths, ...chosen.filter((c) => !allMonths.some((o) => o.value === c.value)).map((c) => ({ value: c.value, label: c.name }))]
+  const monthChoice: MonthChoice | undefined = month
+    ? { value: month.value, name: month.name, options: withChosen([month]) }
+    : months && { value: months.map((x) => x.value).join(','), name: months.map((x) => x.name).join(', '), multi: true, options: withChosen(months) }
+  const result = (table: ReportTable, combos: FilterCombo[]): FixedReportResult => ({ def, table, filters: optionsData(combos), month: monthChoice })
+  const empty = () => result(buildFixedReport({ def, facts: [], statusLabel, statuses, month, months }), [])
   // a report that starts on a group or service the viewer cannot see has nothing to start from
   const startsOnGroup = !!def.group && defGroups.length === 0 && clean.groups.length === 0 && !clean.allGroups
   const startsOnService = !!def.services && defServices.length === 0 && clean.services.length === 0 && !clean.allServices && clean.groups.length === 0 && !clean.allGroups
@@ -94,14 +107,43 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
   const { acFields, openAcByStore, acServiceIds } = await loadAcContext(admin, orgId)
   const ctx: FactContext = { asOf: new Date(), acFields, openAcByStore, redFlagPercent: DEFAULT_RED_FLAG_PERCENT }
   const techOk = (f: TicketFact) => eff.techs.length === 0 || eff.techs.includes(techOf(f.technician))
-  const keep = (f: TicketFact) => (!def.acOnly || f.isAcTicket) && (!def.nso || f.storeType === 'NSO') && techOk(f)
+  // (a weekly report counts the ACs of stores, so the Server Room AC is left out, as in the other AC reports)
+  const keep = (f: TicketFact) => (!def.acOnly || f.isAcTicket) && (!def.nso || f.storeType === 'NSO') && techOk(f) && ((def.layout !== 'weekly' && def.layout !== 'monthly') || !isServerRoomAc(f.acNo))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const scoped = (q: any) => { let x = q.eq('org_id', orgId); if (teamIds) x = x.in('team_id', teamIds); if (serviceIds) x = x.in('service_id', serviceIds); return x }
 
   let truncated = false
-  const raw = await fetchAll<RawTicket>((from, to) =>
-    scoped(admin.from('requests').select(FACT_SELECT)).in('status', statuses).order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to), () => { truncated = true })
+  const raw = await fetchAll<RawTicket>((from, to) => {
+    let q = scoped(admin.from('requests').select(FACT_SELECT))
+    const span = month ? { start: month.start, end: month.end } : months && months.length > 0 ? { start: months[0].start, end: months[months.length - 1].end } : undefined
+    if (span) {
+      // the tickets created in the month(s) and the ones resolved (or, failing that, closed) in them, whatever their status is now
+      const a = span.start.toISOString()
+      const b = span.end.toISOString()
+      q = q.or(`and(created_at.gte.${a},created_at.lte.${b}),and(resolved_at.gte.${a},resolved_at.lte.${b}),and(resolved_at.is.null,closed_at.gte.${a},closed_at.lte.${b})`)
+    } else q = q.in('status', statuses)
+    return q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to)
+  }, () => { truncated = true })
   const facts = raw.map((r) => makeFact(r, ctx)).filter(keep)
+
+  // a weekly report's store and AC counts per AMC brand come from the Store Master (active stores), whatever the filters are
+  // (a Priority Wise Report groups them by the Store Master's priority list instead)
+  let amcStores: { brand: string; stores: number; acs: number }[] | undefined
+  if (month || months) {
+    const stores = await fetchAll<{ ac_amc_brand: string | null; priority_list: string | null; ac_total: number | null }>((from, to) =>
+      admin.from('stores').select('ac_amc_brand, priority_list, ac_total').eq('org_id', orgId).eq('is_active', true).order('id', { ascending: true }).range(from, to))
+    const byBrand = new Map<string, { brand: string; stores: number; acs: number }>()
+    for (const s of stores) {
+      const brand = (def.rowBy === 'priority' ? s.priority_list : s.ac_amc_brand)?.trim()
+      if (!brand) continue
+      const k = normName(brand)
+      const b = byBrand.get(k) ?? { brand, stores: 0, acs: 0 }
+      b.stores++
+      b.acs += s.ac_total ?? 0
+      byBrand.set(k, b)
+    }
+    amcStores = [...byBrand.values()]
+  }
 
   // a summary also shows what was created and resolved today, whatever the status is now
   let dayFacts: TicketFact[] | undefined
@@ -139,5 +181,5 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
       else combos.set(k, { group: r.team_id, service: r.service_id, status: r.status, tech, count: 1 })
     }
   }
-  return { ...result(buildFixedReport({ def, facts, dayFacts, day, statusLabel, statuses }), [...combos.values()]), truncated }
+  return { ...result(buildFixedReport({ def, facts, dayFacts, day, statusLabel, statuses, month, months, amcStores }), [...combos.values()]), truncated }
 }

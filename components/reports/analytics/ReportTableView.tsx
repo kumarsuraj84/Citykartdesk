@@ -7,7 +7,7 @@ import { ReportDetail } from './ReportDetail'
 
 // The look of the Excel pivot tables these reports replace: blue heading band, peach total columns, the first column in pale blue, bold blue "Total" lines,
 // thin grey grid. Drawn like a sheet of paper (fixed colours, not the app theme), the same as the exported Excel file.
-const COLOR = { head: '#4F81BD', peach: '#FBD9C3', tech: '#DCE6F1', total: '#B8CCE4', grid: '#C9D1DE', text: '#1F2937' }
+const COLOR = { head: '#4F81BD', peach: '#FBD9C3', tech: '#DCE6F1', total: '#B8CCE4', grid: '#C9D1DE', text: '#1F2937', green: '#E2EFDA', up: '#C6EFCE', upText: '#006100', down: '#FFC7CE', downText: '#9C0006' }
 /** Small text and thin rows; each column is only as wide as its longest value (never wider than three quarters of its nominal width, which is where long text is cut). */
 const CHAR_PX = 6.1
 /** Bold capital headings are wider per character than the values. */
@@ -22,7 +22,7 @@ interface Open { refs: number[]; title: string; subtitle: string }
  * A fixed report as the Excel pivot shows it. Nothing to choose, nothing to fold: every value that has tickets behind it is clickable and opens them in a
  * pop-up (broken down by sub category, category, technician, store or cluster).
  */
-export function ReportTableView({ table, choice }: { table: ReportTable; choice?: { status?: string; tech?: string; group?: string; service?: string } }) {
+export function ReportTableView({ table, choice }: { table: ReportTable; choice?: { status?: string; tech?: string; group?: string; service?: string; month?: string } }) {
   const [open, setOpen] = useState<Open | null>(null)
   const { columns, rows, headGroups, lead } = table
 
@@ -83,7 +83,12 @@ export function ReportTableView({ table, choice }: { table: ReportTable; choice?
     const c = columns[ci]
     const text = cellText(r.cells[ci], c)
     const total = r.kind !== 'row'
-    const bg: React.CSSProperties = total ? { backgroundColor: COLOR.total } : {}
+    const v = r.cells[ci]
+    // the Excel weekly sheet's shading: Resolved columns light green; a difference green above 0 and red below 0 (never on a total line)
+    const bg: React.CSSProperties = total ? { backgroundColor: COLOR.total }
+      : c.diff && typeof v === 'number' && v > 0 ? { backgroundColor: COLOR.up, color: COLOR.upText }
+      : c.diff && typeof v === 'number' && v < 0 ? { backgroundColor: COLOR.down, color: COLOR.downText }
+      : c.tint === 'green' ? { backgroundColor: COLOR.green } : {}
     const base = `${td} ${align(c)} ${c.align === 'right' || c.align === 'center' ? 'tabular-nums' : ''} ${total ? 'font-bold' : ''}`
     if (!text) return <td key={ci} className={base} style={{ ...grid, ...bg }} />
     return (
@@ -111,7 +116,7 @@ export function ReportTableView({ table, choice }: { table: ReportTable; choice?
               <tr>
                 {columns.map((c, i) => {
                   const g = groupAt(i)
-                  if (g) return <th key={c.key} colSpan={g.span} className="border px-1 py-0.5 text-center text-[11px] font-bold text-white" style={headStyle}>{g.label}</th>
+                  if (g) return <th key={c.key} colSpan={g.span} className={`border px-1 py-0.5 text-center text-[11px] font-bold ${g.peach ? '' : 'text-white'}`} style={g.peach ? peachStyle : headStyle}>{g.label}</th>
                   if (inGroup(i)) return null
                   if (c.peach) return <th key={c.key} rowSpan={2} className="border px-1 py-0.5 text-center text-[11px] font-bold" style={peachStyle}>{c.label}</th>
                   return <th key={c.key} className={`border ${frozen(i)} md:z-30`} style={{ ...headStyle, left: left[i] }} />
@@ -121,7 +126,7 @@ export function ReportTableView({ table, choice }: { table: ReportTable; choice?
             <tr>
               {columns.map((c, i) => {
                 if (hasGroups && c.peach) return null
-                return c.peach
+                return c.peach || c.headTone === 'peach'
                   ? <th key={c.key} className="border px-1 py-0.5 text-center text-[11px] font-bold" style={peachStyle}>{c.label}</th>
                   : <th key={c.key} className={`border px-1.5 py-0.5 text-[11px] font-bold text-white ${align(c)} break-words ${i < lead ? 'md:sticky md:z-30' : ''}`} style={{ ...headStyle, left: left[i] }}>{c.label}</th>
               })}

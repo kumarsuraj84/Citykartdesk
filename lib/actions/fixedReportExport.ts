@@ -8,7 +8,7 @@ import { parseReportFilter } from '@/lib/reporting/analytics/report-filter'
 type Result = { data?: string; filename?: string; error?: string }
 
 /** The Excel file of a fixed report: exactly the table the viewer is allowed to see on screen, with the status and technician choices made on it. */
-export async function exportFixedReportXlsx(slug: string, choice: { status?: string; tech?: string; group?: string; service?: string } = {}): Promise<Result> {
+export async function exportFixedReportXlsx(slug: string, choice: { status?: string; tech?: string; group?: string; service?: string; month?: string } = {}): Promise<Result> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Unauthorized.' }
   const res = await loadFixedReport(profile, slug, parseReportFilter(choice))

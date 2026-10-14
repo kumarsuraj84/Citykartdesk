@@ -35,7 +35,7 @@ export default async function FixedReportPage({ params, searchParams }: { params
     )
   }
   const pick = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : undefined)
-  const choice = { status: pick('status'), tech: pick('tech'), group: pick('group'), service: pick('service') }
+  const choice = { status: pick('status'), tech: pick('tech'), group: pick('group'), service: pick('service'), month: res.month ? res.month.value : undefined }
 
   return (
     <div className="space-y-3">
@@ -52,6 +52,7 @@ export default async function FixedReportPage({ params, searchParams }: { params
       <ReportFilters
         key={JSON.stringify(res.filters.effective)}
         combos={res.filters.combos} groups={res.filters.groups} services={res.filters.services} defaults={res.filters.defaults} effective={res.filters.effective}
+        month={res.month}
       />
       <ReportTableView table={res.table} choice={choice} />
     </div>

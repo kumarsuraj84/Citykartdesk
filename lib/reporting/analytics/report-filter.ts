@@ -21,6 +21,8 @@ export interface ReportFilter {
   allGroups: boolean
   /** "every service" was chosen on a report that starts on one service */
   allServices: boolean
+  /** the month a monthly report (the Weekly Admin Report) is about, "2026-10"; empty = this month */
+  month?: string
 }
 
 /** What a report starts with when nothing is chosen (empty = no limit). */
@@ -29,7 +31,7 @@ export interface FilterDefaults { statuses: string[]; groups: string[]; services
 /** What is really in force: empty groups / services / technicians mean no limit. */
 export interface EffectiveFilter { statuses: string[]; techs: string[]; groups: string[]; services: string[] }
 
-export const emptyReportFilter = (): ReportFilter => ({ statuses: [], techs: [], groups: [], services: [], allGroups: false, allServices: false })
+export const emptyReportFilter = (): ReportFilter => ({ statuses: [], techs: [], groups: [], services: [], allGroups: false, allServices: false, month: '' })
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const isStatus = (s: string): s is RequestStatus => (ALL_STATUSES as string[]).includes(s)
@@ -42,7 +44,10 @@ export function parseReportFilter(sp: Record<string, string | string[] | undefin
   const ids = (raw: string) => [...new Set(raw.split(',').map((s) => s.trim()).filter((s) => UUID.test(s)))].slice(0, 300)
   const group = one(sp.group)
   const service = one(sp.service)
+  // one month, or several joined by commas (the Monthly Admin Report): "2026-04,2026-05"
+  const month = [...new Set(one(sp.month).split(',').map((s) => s.trim()).filter((s) => /^\d{4}-(0[1-9]|1[0-2])$/.test(s)))].sort().slice(0, 12).join(',')
   return {
+    month,
     statuses: ALL_STATUSES.filter((s) => statuses.includes(s)),
     techs,
     groups: group === 'all' ? [] : ids(group),
@@ -72,7 +77,7 @@ export function choiceFromEffective(e: EffectiveFilter, d: FilterDefaults): Repo
   const groupChosen = allGroups || groups.length > 0
   const allServices = e.services.length === 0 && d.services.length > 0 && !groupChosen
   const services = sameSet(e.services, d.services) && !groupChosen ? [] : e.services
-  return { statuses: sameSet(e.statuses, d.statuses) ? [] : e.statuses, techs: e.techs, groups, services, allGroups, allServices }
+  return { statuses: sameSet(e.statuses, d.statuses) ? [] : e.statuses, techs: e.techs, groups, services, allGroups, allServices, month: '' }
 }
 
 /** Writes the choices into URL parameters. */
@@ -82,6 +87,7 @@ export function applyReportFilterToParams(params: URLSearchParams, f: ReportFilt
   set('tech', f.techs.join('|'))
   set('group', f.allGroups ? 'all' : f.groups.join(','))
   set('service', f.allServices ? 'all' : f.services.join(','))
+  set('month', f.month ?? '')
 }
 
 export interface LinkedOptions {

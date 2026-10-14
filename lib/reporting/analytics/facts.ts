@@ -38,6 +38,8 @@ export interface TicketFact {
   /** ISO timestamps */
   createdAt: string
   resolvedAt: string | null
+  /** when it was resolved, or failing that closed (ISO); null while the ticket is still being worked on */
+  doneAt: string | null
   ageDays: number
   ageBucket: string
 
@@ -252,6 +254,7 @@ export function makeFact(r: RawTicket, ctx: FactContext): TicketFact {
     priority: r.priority,
     createdAt: r.created_at,
     resolvedAt: r.resolved_at,
+    doneAt: r.resolved_at ?? r.closed_at ?? null,
     ageDays,
     ageBucket: ageBucketLabel(ageDays),
 

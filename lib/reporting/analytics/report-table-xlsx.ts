@@ -7,6 +7,9 @@ const HEAD_FILL = fill('FF4F81BD')
 const PEACH_FILL = fill('FFFBD9C3')
 const TECH_FILL = fill('FFDCE6F1')
 const TOTAL_FILL = fill('FFB8CCE4')
+const GREEN_FILL = fill('FFE2EFDA')
+const UP_FILL = fill('FFC6EFCE')
+const DOWN_FILL = fill('FFFFC7CE')
 const line = (argb: string): Partial<ExcelJS.Borders> => ({ top: { style: 'thin', color: { argb } }, bottom: { style: 'thin', color: { argb } }, left: { style: 'thin', color: { argb } }, right: { style: 'thin', color: { argb } } })
 const GRID = line('FFBFC7D5')
 const WHITE = line('FFFFFFFF')
@@ -49,7 +52,18 @@ export function buildReportWorkbook(table: ReportTable, generatedAt: Date = new 
       cell.alignment = { vertical: 'middle', wrapText: true, horizontal: c.peach || c.align === 'center' ? 'center' : c.align === 'right' ? 'right' : 'left' }
     })
   }
-  for (const g of table.headGroups) sheet.getCell(XLSX_HEAD_ROW, g.from + 1).alignment = { horizontal: 'center', vertical: 'middle' }
+  for (const g of table.headGroups) {
+    const head = sheet.getCell(XLSX_HEAD_ROW, g.from + 1)
+    head.alignment = { horizontal: 'center', vertical: 'middle' }
+    if (g.peach) { for (let k = 0; k < g.span; k++) sheet.getCell(XLSX_HEAD_ROW, g.from + 1 + k).fill = PEACH_FILL; head.font = { name: FONT, bold: true, size: 11, color: { argb: 'FF1F2937' } } }
+  }
+  // a column whose heading is peach under a group heading
+  cols.forEach((c, i) => {
+    if (c.headTone !== 'peach') return
+    const cell = sheet.getCell(headLast, i + 1)
+    cell.fill = PEACH_FILL
+    cell.font = { name: FONT, bold: true, size: 11, color: { argb: 'FF1F2937' } }
+  })
 
   for (const r of table.rows) {
     const total = r.kind !== 'row'
@@ -59,9 +73,12 @@ export function buildReportWorkbook(table: ReportTable, generatedAt: Date = new 
       cell.border = GRID
       cell.font = { name: FONT, size: 11, bold: total || i === 0 }
       cell.alignment = { horizontal: c.align === 'right' ? 'right' : c.align === 'center' ? 'center' : 'left' }
-      if (c.pct && typeof cell.value === 'number') cell.numFmt = '0.0%'
+      if (c.pct && typeof cell.value === 'number') cell.numFmt = c.pctWhole ? '0%' : '0.0%'
       if (total) cell.fill = TOTAL_FILL
       else if (i === 0) cell.fill = TECH_FILL
+      else if (c.diff && typeof cell.value === 'number' && cell.value > 0) { cell.fill = UP_FILL; cell.font = { name: FONT, size: 11, color: { argb: 'FF006100' } } }
+      else if (c.diff && typeof cell.value === 'number' && cell.value < 0) { cell.fill = DOWN_FILL; cell.font = { name: FONT, size: 11, color: { argb: 'FF9C0006' } } }
+      else if (c.tint === 'green') cell.fill = GREEN_FILL
     })
     if (total && table.lead > 1) sheet.mergeCells(row.number, 1, row.number, table.lead)
   }
