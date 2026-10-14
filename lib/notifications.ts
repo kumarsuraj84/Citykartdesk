@@ -11,6 +11,7 @@ import { logger } from '@/lib/observability/logger'
 import { alertOperator } from '@/lib/observability/alert'
 import type { NotificationType } from '@/types'
 import type { Json } from '@/types/database'
+import { inBatches } from '@/lib/queries/in-batches'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -53,12 +54,12 @@ export async function notify(inputs: NotifyInput | NotifyInput[]): Promise<void>
   const recipientIds = [...new Set(rows.map((r) => r.recipientId))]
 
   const [{ data: optedOut }, { data: recipientProfiles }] = await Promise.all([
-    admin
+    inBatches<{ user_id: string; event_type: string }>(recipientIds, (batch) => admin
       .from('notification_preferences')
       .select('user_id, event_type')
-      .in('user_id', recipientIds)
-      .eq('enabled', false),
-    admin.from('profiles').select('id, org_id, full_name').in('id', recipientIds),
+      .in('user_id', batch)
+      .eq('enabled', false)),
+    inBatches<{ id: string; org_id: string; full_name: string | null }>(recipientIds, (batch) => admin.from('profiles').select('id, org_id, full_name').in('id', batch)),
   ])
 
   const optedOutKeys = new Set(
@@ -91,7 +92,7 @@ export async function notify(inputs: NotifyInput | NotifyInput[]): Promise<void>
   const actorIds = [...new Set(active.map((r) => r.actorId).filter((v): v is string => !!v))]
   const actorNameById = new Map<string, string>()
   if (actorIds.length > 0) {
-    const { data: actorRows } = await admin.from('profiles').select('id, full_name').in('id', actorIds)
+    const { data: actorRows } = await inBatches(actorIds, (batch) => admin.from('profiles').select('id, full_name').in('id', batch))
     for (const a of (actorRows ?? []) as { id: string; full_name: string | null }[]) actorNameById.set(a.id, a.full_name ?? '')
   }
 

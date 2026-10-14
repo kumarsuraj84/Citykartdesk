@@ -8,6 +8,7 @@ import { planStoreAssignment } from '@/lib/oems/store-assignment'
 import { isHtmlTemplate } from '@/lib/email/oem-template'
 import { sanitizeTemplateHtml } from '@/lib/email/sanitize-template'
 import type { Database } from '@/types/database'
+import { inBatchesDo } from '@/lib/queries/in-batches'
 
 type ActionResult<T = undefined> = { error?: string; data?: T }
 type OemUpdate = Database['public']['Tables']['oems']['Update']
@@ -129,11 +130,11 @@ export async function setOemStores(
   const plan = planStoreAssignment((stores ?? []) as { id: string; oem_id: string | null }[], storeIds, oemId)
 
   if (plan.toAssign.length > 0) {
-    const { error } = await admin.from('stores').update({ oem_id: oemId }).in('id', plan.toAssign).eq('org_id', orgId)
+    const { error } = await inBatchesDo(plan.toAssign, (batch) => admin.from('stores').update({ oem_id: oemId }).in('id', batch).eq('org_id', orgId))
     if (error) return { error: 'Could not assign the stores. Nothing further was changed.' }
   }
   if (plan.toUnassign.length > 0) {
-    const { error } = await admin.from('stores').update({ oem_id: null }).in('id', plan.toUnassign).eq('org_id', orgId).eq('oem_id', oemId)
+    const { error } = await inBatchesDo(plan.toUnassign, (batch) => admin.from('stores').update({ oem_id: null }).in('id', batch).eq('org_id', orgId).eq('oem_id', oemId))
     if (error) return { error: 'Stores were assigned, but removing the unticked ones failed. Please try saving again.' }
   }
 

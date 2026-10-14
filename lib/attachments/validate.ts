@@ -47,8 +47,9 @@ const MAGIC_BYTES: Map<string, number[][]> = new Map([
       [0x50, 0x4b, 0x05, 0x06],
     ],
   ],
-  // ftyp box at offset 4 (bytes 4-11 = 00 00 00 18 66 74 79 70)
-  ['video/mp4', [[0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]]],
+  // an MP4 starts with a 4-byte box size and then the letters "ftyp" (bytes 4-7); checked at offset 4 below. (It used to expect
+  // 00 00 00 18 "ftyp" starting AT byte 4, which no real MP4 has, so genuine MP4 files were always refused.)
+  ['video/mp4', [[0x66, 0x74, 0x79, 0x70]]],
 ])
 
 // Office Open XML formats (.docx, .xlsx, .pptx) are ZIP-based; validate as ZIP.
@@ -63,6 +64,16 @@ const ZIP_SIGNATURES = [
   [0x50, 0x4b, 0x05, 0x06],
 ]
 
+export const ALLOWED_MIME_SET: ReadonlySet<string> = new Set(ALLOWED_MIME_TYPES)
+
+/** File-name endings that go with the types above. */
+export const ALLOWED_EXTENSIONS: ReadonlySet<string> = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'webp',
+  'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+  'txt', 'csv', 'zip',
+  'mp4', 'webm', 'mp3', 'wav',
+])
+
 export interface ValidationResult {
   valid: boolean
   error?: string
@@ -76,6 +87,17 @@ function signaturesMatch(bytes: Uint8Array, signatures: number[][], offset = 0):
   return signatures.some((sig) =>
     sig.every((byte, i) => bytes[offset + i] === byte)
   )
+}
+
+/**
+ * Do the first bytes of a file look like the type it claims to be? Types without a known signature (plain text, audio...) pass: for those
+ * the allow-list is the only gate. Shared by every upload path (web, tasks, WhatsApp) so they cannot drift apart again (D-055).
+ */
+export function contentMatchesDeclaredType(bytes: Uint8Array, mimeType: string): boolean {
+  if (ZIP_BASED_MIME_TYPES.has(mimeType)) return signaturesMatch(bytes, ZIP_SIGNATURES)
+  if (mimeType === 'video/mp4') return signaturesMatch(bytes, MAGIC_BYTES.get('video/mp4')!, 4)
+  if (MAGIC_BYTES.has(mimeType)) return signaturesMatch(bytes, MAGIC_BYTES.get(mimeType)!)
+  return true
 }
 
 export async function validateAttachment(file: File): Promise<ValidationResult> {
@@ -93,21 +115,9 @@ export async function validateAttachment(file: File): Promise<ValidationResult> 
   const buf = await file.slice(0, 16).arrayBuffer()
   const bytes = new Uint8Array(buf)
 
-  // 4. Magic byte check — only for types we have signatures for
-  if (ZIP_BASED_MIME_TYPES.has(file.type)) {
-    // 5. Special case: .docx/.xlsx/.pptx are ZIP-based
-    if (!signaturesMatch(bytes, ZIP_SIGNATURES)) {
-      return { valid: false, error: 'File content does not match declared type.', code: 'content_mismatch' }
-    }
-  } else if (file.type === 'video/mp4') {
-    // ftyp box starts at byte offset 4
-    if (!signaturesMatch(bytes, MAGIC_BYTES.get('video/mp4')!, 4)) {
-      return { valid: false, error: 'File content does not match declared type.', code: 'content_mismatch' }
-    }
-  } else if (MAGIC_BYTES.has(file.type)) {
-    if (!signaturesMatch(bytes, MAGIC_BYTES.get(file.type)!)) {
-      return { valid: false, error: 'File content does not match declared type.', code: 'content_mismatch' }
-    }
+  // 4. Magic byte check: the bytes must look like the type the file claims to be
+  if (!contentMatchesDeclaredType(bytes, file.type)) {
+    return { valid: false, error: 'File content does not match declared type.', code: 'content_mismatch' }
   }
 
   return { valid: true }

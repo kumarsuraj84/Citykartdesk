@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import type { ApprovalStatus, RequestPriority, RequestStatus } from '@/types'
 import type { Tables } from '@/types/database'
 import { approvalPeopleLine } from '@/lib/approvals/people'
+import { inBatches } from '@/lib/queries/in-batches'
 
 // ── Enriched approval type ────────────────────────────────────────────────────
 
@@ -193,17 +194,17 @@ export async function getApprovalsForRequest(requestId: string): Promise<Approva
   const approvalIds = approvals.map((a) => a.id)
 
   const [{ data: steps }, { data: decisions }] = await Promise.all([
-    admin
+    inBatches(workflowIds, (batch) => admin
       .from('approval_workflow_steps')
       .select('*, approver:profiles!approval_workflow_steps_approver_user_id_fkey (id, full_name)')
-      .in('workflow_id', workflowIds)
-      .order('step_order', { ascending: true }),
+      .in('workflow_id', batch)
+      .order('step_order', { ascending: true })),
 
-    admin
+    inBatches(approvalIds, (batch) => admin
       .from('approval_decisions')
       .select('*, decider:profiles!approval_decisions_decided_by_fkey (id, full_name)')
-      .in('approval_id', approvalIds)
-      .order('decided_at', { ascending: true }),
+      .in('approval_id', batch)
+      .order('decided_at', { ascending: true })),
   ])
 
   return approvals.map((a) => ({
@@ -265,7 +266,7 @@ export const getActionableApprovalsForUser = cache(async function (userId: strin
   const rows = ((approvals ?? []) as unknown as Row[])
   if (rows.length === 0) return []
 
-  const { data: decisions } = await admin.from('approval_decisions').select('approval_id, step_order').in('approval_id', rows.map((r) => r.id))
+  const { data: decisions } = await inBatches(rows.map((r) => r.id), (batch) => admin.from('approval_decisions').select('approval_id, step_order').in('approval_id', batch))
   const decided = new Map<string, Set<number>>()
   for (const d of (decisions ?? []) as { approval_id: string; step_order: number }[]) {
     const set = decided.get(d.approval_id) ?? new Set<number>()
@@ -287,12 +288,12 @@ export const getActionableApprovalsForUser = cache(async function (userId: strin
 
   // everyone each approval is with, by name, for the "Awaiting: ..." line
   const [{ data: allSteps }, { data: allDecisions }] = await Promise.all([
-    admin.from('approval_workflow_steps').select('*, approver:profiles!approval_workflow_steps_approver_user_id_fkey (id, full_name)').in('workflow_id', [...new Set(actionable.map((r) => r.workflow_id))]),
-    admin.from('approval_decisions').select('*, decider:profiles!approval_decisions_decided_by_fkey (id, full_name)').in('approval_id', actionable.map((r) => r.id)),
+    inBatches(actionable.map((r) => r.workflow_id), (batch) => admin.from('approval_workflow_steps').select('*, approver:profiles!approval_workflow_steps_approver_user_id_fkey (id, full_name)').in('workflow_id', batch)),
+    inBatches(actionable.map((r) => r.id), (batch) => admin.from('approval_decisions').select('*, decider:profiles!approval_decisions_decided_by_fkey (id, full_name)').in('approval_id', batch)),
   ])
 
   const senderIds = [...new Set(actionable.map((r) => r.requested_by).filter((v): v is string => !!v))]
-  const { data: senders } = senderIds.length > 0 ? await admin.from('profiles').select('id, full_name').in('id', senderIds) : { data: [] as { id: string; full_name: string }[] }
+  const { data: senders } = await inBatches<{ id: string; full_name: string }>(senderIds, (batch) => admin.from('profiles').select('id, full_name').in('id', batch))
   const nameById = new Map((senders ?? []).map((p: { id: string; full_name: string }) => [p.id, p.full_name]))
 
   return actionable

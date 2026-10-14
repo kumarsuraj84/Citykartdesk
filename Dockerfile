@@ -2,12 +2,12 @@
 # standalone Next.js server output, not the full source tree or dev deps.
 # See docs/RAILWAY-DEPLOYMENT.md.
 
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -33,7 +33,7 @@ ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV SUPABASE_SERVICE_ROLE_KEY="placeholder"
 RUN node node_modules/next/dist/bin/next build
 
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 # All Date/Intl calls that don't pass an explicit timeZone (most of the app —
@@ -46,7 +46,7 @@ ENV NODE_ENV=production
 # No `tzdata` package needed here despite Alpine/musl lacking a system
 # zoneinfo database: Node's official Docker images ship full ICU with its own
 # embedded IANA tz data, so Date/Intl resolve TZ correctly independent of
-# /usr/share/zoneinfo. Verified directly: `node:20-alpine` with only
+# /usr/share/zoneinfo. Verified directly: `node:22-alpine` with only
 # `TZ=Asia/Kolkata` set (no tzdata installed) correctly renders
 # 2026-01-01T00:00:00Z as 05:30 IST, not a UTC fallback.
 ENV TZ=Asia/Kolkata

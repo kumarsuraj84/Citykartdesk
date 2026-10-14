@@ -1,63 +1,12 @@
 import { findAttachmentsForConversation, updateAttachmentStatus, type ConversationAttachment } from '@/lib/conversations'
 import type { WhatsAppGraphClient } from './graph-client'
+import { ALLOWED_MIME_SET as ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES as MAX_ATTACHMENT_SIZE, contentMatchesDeclaredType } from '@/lib/attachments/validate'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; storage: any }
 
-// Same allowlist lib/actions/attachments.ts enforces for the normal web
-// upload flow, so a WhatsApp-sourced attachment is held to the identical
-// standard — deliberately excludes image/svg+xml even though the
-// request-attachments bucket's own (broader, legacy) config permits it: an
-// attachment opened via a direct signed-URL link renders rather than
-// downloads, so an SVG's embedded <script> would execute (see
-// lib/actions/attachments.ts's own comment for the same reasoning).
-const ALLOWED_MIME_TYPES = new Set([
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'text/plain', 'text/csv',
-  'application/zip', 'application/x-zip-compressed',
-  'video/mp4', 'video/webm',
-  'audio/mpeg', 'audio/wav',
-])
-
-const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024 // matches request_attachments' file_size CHECK
-
-const MAGIC_BYTES: Map<string, number[][]> = new Map([
-  ['image/jpeg', [[0xff, 0xd8, 0xff]]],
-  ['image/png', [[0x89, 0x50, 0x4e, 0x47]]],
-  ['image/gif', [[0x47, 0x49, 0x46, 0x38]]],
-  ['image/webp', [[0x52, 0x49, 0x46, 0x46]]],
-  ['application/pdf', [[0x25, 0x50, 0x44, 0x46]]],
-  ['application/zip', [[0x50, 0x4b, 0x03, 0x04], [0x50, 0x4b, 0x05, 0x06]]],
-  ['application/x-zip-compressed', [[0x50, 0x4b, 0x03, 0x04], [0x50, 0x4b, 0x05, 0x06]]],
-  ['video/mp4', [[0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]]],
-])
-const ZIP_BASED_MIME_TYPES = new Set([
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-])
-const ZIP_SIGNATURES = [[0x50, 0x4b, 0x03, 0x04], [0x50, 0x4b, 0x05, 0x06]]
-
-function signaturesMatch(bytes: Buffer, signatures: number[][], offset = 0): boolean {
-  return signatures.some((sig) => sig.every((byte, i) => bytes[offset + i] === byte))
-}
-
-/** Buffer-based magic-byte check — the declared MIME type from Meta is
- *  attacker-influenced (it's whatever the sender's WhatsApp client claimed),
- *  so it is never trusted on its own (Step 10's explicit requirement). */
-function contentMatchesDeclaredType(content: Buffer, mimeType: string): boolean {
-  if (ZIP_BASED_MIME_TYPES.has(mimeType)) return signaturesMatch(content, ZIP_SIGNATURES)
-  if (mimeType === 'video/mp4') return signaturesMatch(content, MAGIC_BYTES.get('video/mp4')!, 4)
-  if (MAGIC_BYTES.has(mimeType)) return signaturesMatch(content, MAGIC_BYTES.get(mimeType)!)
-  return true // no known signature for this type (e.g. plain text, audio) — allowlist membership is the only gate
-}
+// The allow-list, size limit and magic-byte check are the web upload's own (lib/attachments/validate.ts), so a WhatsApp attachment is held to
+// the identical standard and the two cannot drift apart (D-055). SVG is excluded there on purpose: opened from a direct link it would run its script.
 
 export type RetrieveMediaResult =
   | { ok: true; buffer: Buffer; mimeType: string; size: number }

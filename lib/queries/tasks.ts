@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import type { Tables } from '@/types/database'
+import { inBatches } from '@/lib/queries/in-batches'
 import type { TaskStatus, TaskWithDetails, TaskCommentWithAuthor, TaskActivityWithActor } from '@/types'
 
 export type { TaskWithDetails, TaskCommentWithAuthor, TaskActivityWithActor }
@@ -96,11 +97,11 @@ export async function getTasks(opts: {
   // Fetch subtask counts — count only, no row data
   if (rows.length > 0) {
     const taskIds = rows.map((r) => r.id)
-    const { data: subtaskRows } = await supabase
+    const { data: subtaskRows } = await inBatches<{ parent_task_id: string }>(taskIds, (batch) => supabase
       .from('tasks')
       .select('parent_task_id')
-      .in('parent_task_id', taskIds)
-      .not('parent_task_id', 'is', null)
+      .in('parent_task_id', batch)
+      .not('parent_task_id', 'is', null))
 
     const countMap = new Map<string, number>()
     for (const sr of subtaskRows ?? []) {
@@ -375,10 +376,10 @@ export async function getCustomFields(teamIds: string[]): Promise<import('@/type
 export async function getCustomFieldValues(taskIds: string[]): Promise<Record<string, Record<string, import('@/types').CustomFieldValue['value']>>> {
   if (!taskIds.length) return {}
   const admin = createAdminClient() as unknown as AnyClient
-  const { data } = await admin
+  const { data } = await inBatches(taskIds, (batch) => admin
     .from('task_custom_field_values')
     .select('task_id, field_id, value')
-    .in('task_id', taskIds)
+    .in('task_id', batch))
   const result: Record<string, Record<string, import('@/types').CustomFieldValue['value']>> = {}
   for (const row of (data ?? []) as { task_id: string; field_id: string; value: unknown }[]) {
     if (!result[row.task_id]) result[row.task_id] = {}

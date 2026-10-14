@@ -82,10 +82,8 @@ const nextConfig: NextConfig = {
       ],
     }]
   },
-  typescript: {
-    // Tables added in migrations after types were generated — safe to skip
-    ignoreBuildErrors: true,
-  },
+  // Type errors fail the production build (D-050): `npm run typecheck` is clean, so nothing is skipped any more. (The tables added by
+  // later migrations are in types/database.ts, which is maintained by hand.)
   // Note: the top-level `eslint` config key was removed in Next 16 (ESLint no longer runs
   // during `next build`); lint is run separately via `npm run lint`.
 };

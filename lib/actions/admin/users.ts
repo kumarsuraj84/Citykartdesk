@@ -15,6 +15,7 @@ import { isUsableEmail, describeEmailUpdates, type EmailChangeCounts } from '@/l
 import { toCSV } from '@/lib/export/csv'
 import { USER_EXPORT_COLUMNS, buildUsersExportRows, type ExportProfile } from '@/lib/export/users'
 import type { UserRole } from '@/types'
+import { inBatches, inBatchesDo } from '@/lib/queries/in-batches'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: any; rpc: (fn: string, args: Record<string, unknown>) => any }
@@ -993,14 +994,14 @@ export async function resetPasswordsBatch(
   const admin = createAdminClient() as unknown as AnyClient
 
   // Re-derive the allowed set on the server — never trust the ids the browser sent.
-  const { data: allowedRows } = await admin
+  const { data: allowedRows } = await inBatches(userIds, (batch) => admin
     .from('profiles')
     .select('id, full_name')
     .eq('org_id', profile.org_id)
     .eq('is_active', true)
     .in('role', BULK_RESET_ROLES)
     .neq('id', profile.id)
-    .in('id', [...new Set(userIds)])
+    .in('id', batch))
   const nameById = new Map(((allowedRows ?? []) as { id: string; full_name: string }[]).map((r) => [r.id, r.full_name]))
   const allowed = [...nameById.keys()]
 
@@ -1025,7 +1026,7 @@ export async function resetPasswordsBatch(
 
   if (succeededIds.length > 0) {
     // They never chose this password — force each to set their own before using the portal.
-    await admin.from('profiles').update({ must_reset_password: true }).in('id', succeededIds)
+    await inBatchesDo(succeededIds, (batch) => admin.from('profiles').update({ must_reset_password: true }).in('id', batch))
   }
 
   await logAdminAudit({

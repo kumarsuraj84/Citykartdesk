@@ -13,6 +13,7 @@ import type {
   ProjectMemberWithProfile,
   ProjectUpdateWithAuthor,
 } from '@/types'
+import { inBatches } from '@/lib/queries/in-batches'
 
 export type { ProjectWithDetails, ProjectActivityWithActor, ProjectProgress }
 
@@ -153,8 +154,8 @@ export async function getProjectsProgress(projectIds: string[]): Promise<Record<
 
   const supabase = await createClient()
   const [{ data: taskRows }, { data: requestRows }] = await Promise.all([
-    supabase.from('tasks').select('project_id, status').in('project_id', projectIds),
-    supabase.from('requests').select('project_id, status').in('project_id', projectIds),
+    inBatches<{ project_id: string; status: TaskStatus }>(projectIds, (batch) => supabase.from('tasks').select('project_id, status').in('project_id', batch)),
+    inBatches<{ project_id: string; status: RequestStatus }>(projectIds, (batch) => supabase.from('requests').select('project_id, status').in('project_id', batch)),
   ])
 
   for (const row of taskRows ?? []) {

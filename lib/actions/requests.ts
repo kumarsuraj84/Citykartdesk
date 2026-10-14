@@ -21,6 +21,7 @@ import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { logger } from '@/lib/observability/logger'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus } from '@/types'
 import type { Database, Json } from '@/types/database'
+import { inBatches } from '@/lib/queries/in-batches'
 
 type RequestUpdate = Database['public']['Tables']['requests']['Update']
 
@@ -313,11 +314,26 @@ export type BulkResult = { succeeded: string[]; failed: { id: string; error: str
 // whole selection risked exhausting the DB connection pool. Bounded instead.
 const BULK_ACTION_CONCURRENCY = 10
 
+/** Most requests one bulk action accepts (D-050): the list comes from the browser, so its size and content are checked here. */
+const MAX_BULK_REQUESTS = 500
+const BULK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function cleanBulkIds(ids: unknown): { ids: string[] } | { error: string } {
+  if (!Array.isArray(ids)) return { error: 'No requests selected.' }
+  const unique = [...new Set(ids.filter((v): v is string => typeof v === 'string' && BULK_ID.test(v)))]
+  if (unique.length === 0) return { error: 'No requests selected.' }
+  if (unique.length > MAX_BULK_REQUESTS) return { error: `Select at most ${MAX_BULK_REQUESTS} requests at once.` }
+  return { ids: unique }
+}
+const bulkRefused = (error: string): BulkResult => ({ succeeded: [], failed: [{ id: '', error }] })
+
 export async function bulkAssignRequests(
   requestIds: string[],
   assigneeId: string | null
 ): Promise<BulkResult> {
-  const settled = await mapWithConcurrency(requestIds, BULK_ACTION_CONCURRENCY, async (id) => ({ id, r: await assignRequest(id, assigneeId) }))
+  const picked = cleanBulkIds(requestIds)
+  if ('error' in picked) return bulkRefused(picked.error)
+  const settled = await mapWithConcurrency(picked.ids, BULK_ACTION_CONCURRENCY, async (id) => ({ id, r: await assignRequest(id, assigneeId) }))
   const result: BulkResult = { succeeded: [], failed: [] }
   for (const { id, r } of settled) {
     if (r.error) result.failed.push({ id, error: r.error })
@@ -332,7 +348,9 @@ export async function bulkUpdateStatus(
   requestIds: string[],
   newStatus: RequestStatus
 ): Promise<BulkResult> {
-  const settled = await mapWithConcurrency(requestIds, BULK_ACTION_CONCURRENCY, async (id) => ({ id, r: await updateRequestStatus(id, newStatus) }))
+  const picked = cleanBulkIds(requestIds)
+  if ('error' in picked) return bulkRefused(picked.error)
+  const settled = await mapWithConcurrency(picked.ids, BULK_ACTION_CONCURRENCY, async (id) => ({ id, r: await updateRequestStatus(id, newStatus) }))
   const result: BulkResult = { succeeded: [], failed: [] }
   for (const { id, r } of settled) {
     if (r.error) result.failed.push({ id, error: r.error })
@@ -347,7 +365,9 @@ export async function bulkChangePriority(
   requestIds: string[],
   newPriority: RequestPriority
 ): Promise<BulkResult> {
-  const settled = await mapWithConcurrency(requestIds, BULK_ACTION_CONCURRENCY, async (id) => ({ id, r: await changePriority(id, newPriority) }))
+  const picked = cleanBulkIds(requestIds)
+  if ('error' in picked) return bulkRefused(picked.error)
+  const settled = await mapWithConcurrency(picked.ids, BULK_ACTION_CONCURRENCY, async (id) => ({ id, r: await changePriority(id, newPriority) }))
   const result: BulkResult = { succeeded: [], failed: [] }
   for (const { id, r } of settled) {
     if (r.error) result.failed.push({ id, error: r.error })
@@ -366,10 +386,11 @@ export async function bulkChangePriority(
 export async function bulkExportRequests(requestIds: string[]): Promise<{ csv?: string; error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (requestIds.length === 0) return { error: 'No requests selected.' }
+  const picked = cleanBulkIds(requestIds)
+  if ('error' in picked) return { error: picked.error }
 
   const supabase = await createClient()
-  const { data, error } = await supabase
+  const { data, error } = await inBatches(picked.ids, (batch) => supabase
     .from('requests')
     .select(`
       request_no, title, status, priority, created_at, updated_at, resolution_due_at,
@@ -380,7 +401,7 @@ export async function bulkExportRequests(requestIds: string[]): Promise<{ csv?: 
       requester:profiles!requests_requester_id_fkey (full_name),
       assignee:profiles!requests_assigned_to_fkey (full_name)
     `)
-    .in('id', requestIds)
+    .in('id', batch))
 
   if (error) return { error: sanitizeError(error, { route: 'requests.ts#bulkExportRequests', fallback: 'Failed to export requests.' }) }
 
@@ -431,9 +452,9 @@ export async function bulkExportRequests(requestIds: string[]): Promise<{ csv?: 
 // ── Bulk add collaborator ───────────────────────────────────────────────────────
 
 export async function bulkAddCollaborators(requestIds: string[], userId: string): Promise<BulkResult> {
-  const settled = await Promise.all(
-    requestIds.map(async (id) => ({ id, r: await addCollaborator(id, userId) }))
-  )
+  const picked = cleanBulkIds(requestIds)
+  if ('error' in picked) return bulkRefused(picked.error)
+  const settled = await mapWithConcurrency(picked.ids, BULK_ACTION_CONCURRENCY, async (id) => ({ id, r: await addCollaborator(id, userId) }))
   const result: BulkResult = { succeeded: [], failed: [] }
   for (const { id, r } of settled) {
     if (r.error) result.failed.push({ id, error: r.error })

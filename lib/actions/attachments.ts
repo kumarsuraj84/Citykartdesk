@@ -5,51 +5,11 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logActivity } from '@/lib/activity'
-import { validateAttachment } from '@/lib/attachments/validate'
+import { validateAttachment, ALLOWED_MIME_SET as ALLOWED_MIME_TYPES, ALLOWED_EXTENSIONS, MAX_FILE_SIZE_BYTES as MAX_FILE_SIZE } from '@/lib/attachments/validate'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25 MB
 
-// image/svg+xml is deliberately excluded: attachments are opened via a
-// direct target="_blank" link to a signed URL with no Content-Disposition
-// (see AttachmentChips.tsx / getRequestAttachments()), so the browser
-// renders — not downloads — the file. An SVG's embedded <script> executes
-// on direct navigation like that (unlike when loaded via an <img> tag),
-// making SVG upload a stored-XSS vector against anyone who opens it.
-const ALLOWED_MIME_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'text/plain',
-  'text/csv',
-  'application/zip',
-  'application/x-zip-compressed',
-  'video/mp4',
-  'video/webm',
-  'audio/mpeg',
-  'audio/wav',
-])
-
-const ALLOWED_EXTENSIONS = new Set([
-  'png', 'jpg', 'jpeg', 'gif', 'webp',
-  'pdf',
-  'doc', 'docx',
-  'xls', 'xlsx',
-  'ppt', 'pptx',
-  'txt', 'csv',
-  'zip',
-  'mp4', 'webm',
-  'mp3', 'wav',
-])
 
 type UploadResult =
   | { attachmentId: string; error?: never }

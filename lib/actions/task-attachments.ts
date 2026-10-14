@@ -3,30 +3,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
-import { validateAttachment } from '@/lib/attachments/validate'
+import { validateAttachment, ALLOWED_MIME_SET as ALLOWED_MIME_TYPES, ALLOWED_EXTENSIONS, MAX_FILE_SIZE_BYTES as MAX_FILE_SIZE } from '@/lib/attachments/validate'
 
-const MAX_FILE_SIZE = 25 * 1024 * 1024
 
-// image/svg+xml is deliberately excluded — see the matching comment in
-// lib/actions/attachments.ts (SVG opened via a direct link can execute its
-// embedded script, unlike an SVG loaded through an <img> tag).
-const ALLOWED_MIME_TYPES = new Set([
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'text/plain', 'text/csv',
-  'application/zip', 'application/x-zip-compressed',
-  'video/mp4',
-])
 
-const ALLOWED_EXTENSIONS = new Set([
-  'png', 'jpg', 'jpeg', 'gif', 'webp',
-  'pdf', 'doc', 'docx', 'xls', 'xlsx',
-  'txt', 'csv', 'zip', 'mp4',
-])
 
 function getExtension(fileName: string): string {
   return fileName.split('.').pop()?.toLowerCase() ?? ''
