@@ -9,8 +9,14 @@ import type { Spool } from './writer'
 
 const MAX_BYTES = 5 * 1024 * 1024
 
-export function spoolPath(dir = process.env.SYSTEM_LOG_SPOOL_DIR || path.join(os.tmpdir(), 'ckdesk-system-log')): string {
-  return path.join(dir, 'spool.jsonl')
+// The default folder is put together at run time on purpose: written as a plain path.join(os.tmpdir(), '...') Next.js's file tracer works the
+// path out while building and then tries to copy that folder (which exists only on the build PC) into the release, which fails the build.
+function defaultSpoolDir(): string {
+  return [os.tmpdir(), ['ckdesk', 'system', 'log'].join('-')].join(path.sep)
+}
+
+export function spoolPath(dir = process.env.SYSTEM_LOG_SPOOL_DIR || defaultSpoolDir()): string {
+  return [dir, 'spool.jsonl'].join(path.sep)
 }
 
 export function fileSpool(file = spoolPath()): Spool {
