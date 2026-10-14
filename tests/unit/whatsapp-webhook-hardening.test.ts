@@ -10,7 +10,8 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => { touched(); t
 const limiter = vi.fn(async () => ({ limited: false, remaining: 1 }))
 vi.mock('@/lib/rate-limit', () => ({ rateLimit: (...a: unknown[]) => limiter(...(a as [])), getClientIp: async () => '203.0.113.9' }))
 
-import { POST, MAX_REQUESTS_PER_MINUTE_PER_CALLER } from '@/app/api/intake/webhook/whatsapp/route'
+import { POST } from '@/app/api/intake/webhook/whatsapp/route'
+import { MAX_REQUESTS_PER_MINUTE_PER_CALLER } from '@/lib/whatsapp/webhook-limits'
 import { processWhatsAppWebhookPayload } from '@/lib/whatsapp/webhook-handler'
 
 const payload = (...phoneIds: string[]) => JSON.stringify({

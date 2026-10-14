@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyWebhookChallenge } from '@/lib/whatsapp/config'
 import { processWhatsAppWebhookPayload } from '@/lib/whatsapp/webhook-handler'
 import { getClientIp, rateLimit } from '@/lib/rate-limit'
+import { MAX_REQUESTS_PER_MINUTE_PER_CALLER } from '@/lib/whatsapp/webhook-limits'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; rpc: (fn: string, args: Record<string, unknown>) => any; storage: any }
@@ -49,7 +50,6 @@ const MAX_BODY_BYTES = 1_048_576
 // Signature verification needs the channel's secret, so each request costs a database and Vault read before it can be rejected. One caller address
 // may therefore make only this many requests a minute (Meta's deliveries to one address are far below it). Only applied when the caller's address
 // is trustworthy (TRUSTED_PROXY_HOPS), exactly as for sign-in limits.
-export const MAX_REQUESTS_PER_MINUTE_PER_CALLER = 1200
 
 export async function POST(req: NextRequest) {
   const ip = await getClientIp()
