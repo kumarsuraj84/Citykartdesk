@@ -34,7 +34,7 @@ export function formatRelativeTime(iso: string): string {
   if (hours < 24) return `${hours}h ago`
   const days = Math.floor(hours / 24)
   if (days < 7) return `${days}d ago`
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata' })
 }
 
 /** Absolute "Jan 5, 2026, 3:45 PM" timestamp — pairs with formatRelativeTime()
@@ -42,6 +42,7 @@ export function formatRelativeTime(iso: string): string {
 // 24-hour clock, no AM/PM — the standard for every time shown across the app.
 export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-US', {
+    timeZone: 'Asia/Kolkata',
     month: 'short', day: 'numeric', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: false,
   })

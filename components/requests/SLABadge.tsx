@@ -48,6 +48,9 @@ export function SLABadge({
   const due = dueAt ? new Date(dueAt) : null
   const dueStr = due
     ? due.toLocaleString('en-US', {
+        // India time, whatever time zone the PC is set to: the server and the browser then write the same text (a PC set to another zone made the page differ from its
+        // server copy, which React reports as error #418 and the System Log recorded for several store users)
+        timeZone: 'Asia/Kolkata',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',

@@ -17,6 +17,9 @@ type AnyClient = { from: (t: string) => any; auth: { admin: { listUsers: (opts: 
 // without needing to track IMAP UIDs/state across runs — a run that's late, retried, or
 // overlaps the previous one just re-finds the same messages and skips them.
 const LOOKBACK_DAYS = 3
+// One pass must finish well inside the scheduler's own limit (5 minutes): it stops starting new downloads after this long, and every network wait has a limit.
+const SYNC_BUDGET_MS = 120_000
+const ONE_BATCH = 200
 
 export type InboundSyncResult = {
   skipped?: string
@@ -120,7 +123,13 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
     secure: true,
     auth: { user: config.user, pass: config.pass },
     logger: false,
+    // the library waits up to 5 minutes on a connection that has gone quiet; a pass that stalls that long blocked the scheduled job until it timed out
+    connectionTimeout: 20_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 60_000,
   })
+  // last resort: if anything still hangs, drop the connection so the pass ends
+  const watchdog = setTimeout(() => { try { client.close() } catch { /* already closed */ } }, SYNC_BUDGET_MS + 30_000)
 
   try {
     await client.connect()
@@ -130,7 +139,24 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
       const uids = await client.search({ since }, { uid: true })
       if (!uids || uids.length === 0) return result
 
-      for (const uid of uids) {
+      // Which of these mails are new? Ask for the headers only (small), and download the full message just for the ones not handled before. The pass used to download
+      // and read every mail of the last 3 days on every run (once a minute), which grew with the mailbox until a pass took minutes.
+      const messageIdOf = new Map<number, string>()
+      for await (const m of client.fetch(uids, { envelope: true, uid: true }, { uid: true })) {
+        if (m.envelope?.messageId) messageIdOf.set(m.uid, m.envelope.messageId)
+      }
+      const handled = new Set<string>()
+      const ids = [...new Set(messageIdOf.values())]
+      for (let i = 0; i < ids.length; i += ONE_BATCH) {
+        const { data } = await admin.from('processed_inbound_emails').select('message_id').in('message_id', ids.slice(i, i + ONE_BATCH))
+        for (const r of (data ?? []) as { message_id: string }[]) handled.add(r.message_id)
+      }
+      const isHandled = (id: string) => handled.has(id) || handled.has(`<${id.replace(/^<|>$/g, '')}>`) || handled.has(id.replace(/^<|>$/g, ''))
+      const fresh = uids.filter((uid) => { const id = messageIdOf.get(uid); return !id || !isHandled(id) })
+      const deadline = Date.now() + SYNC_BUDGET_MS
+
+      for (const uid of fresh) {
+        if (Date.now() > deadline) break          // the rest waits for the next pass
         try {
           const msg = await client.fetchOne(uid, { source: true }, { uid: true })
           if (!msg || !msg.source) continue
@@ -229,6 +255,7 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
   } catch (e) {
     result.errors.push(e instanceof Error ? e.message : String(e))
   } finally {
+    clearTimeout(watchdog)
     try { await client.logout() } catch { /* already disconnected */ }
   }
 

@@ -7,6 +7,7 @@ import { toCSV } from '@/lib/export/csv'
 import { recordAudit } from '@/lib/syslog/audit'
 import { buildClaudeBundle, groupErrors, type ErrorGroup, type LogRowLite } from '@/lib/syslog/bundle'
 import { CATEGORIES, SEVERITIES, SOURCES, OUTCOMES, SYSTEM_LOG_PAGE_SIZE } from '@/lib/syslog/shape'
+import { istStamp } from '@/lib/reporting/ist'
 
 // The System Log screen. Reads go through the signed-in administrator's OWN session, so row security (administrators and platform owners of
 // the same organization only) is what limits them, not just the checks here.
@@ -181,9 +182,9 @@ export async function exportSystemLog(filters: SystemLogFilters, format: 'csv' |
   if (error) throw new Error('Failed to load the log.')
   const rows = await withNames((data ?? []) as Omit<SystemLogEntry, 'actor_name'>[])
   await recordAudit({ category: 'security', action: 'data.exported.system_log', entityType: 'system_log', message: `${rows.length} rows exported as ${format}`, after: { rows: rows.length, format, filters }, actorId: profile.id, orgId: profile.org_id })
-  if (format === 'json') return JSON.stringify(rows, null, 1)
+  if (format === 'json') return JSON.stringify(rows.map((r) => ({ ...r, created_at: istStamp(r.created_at) })), null, 1)
   return toCSV(
-    rows.map((r) => ({ ...r, before_data: r.before_data ? JSON.stringify(r.before_data) : '', after_data: r.after_data ? JSON.stringify(r.after_data) : '', detail: r.detail ? JSON.stringify(r.detail) : '', stack: (r.stack ?? '').slice(0, 2000) })) as unknown as Record<string, unknown>[],
+    rows.map((r) => ({ ...r, created_at: istStamp(r.created_at), before_data: r.before_data ? JSON.stringify(r.before_data) : '', after_data: r.after_data ? JSON.stringify(r.after_data) : '', detail: r.detail ? JSON.stringify(r.detail) : '', stack: (r.stack ?? '').slice(0, 2000) })) as unknown as Record<string, unknown>[],
     [
       { key: 'created_at', label: 'Time' }, { key: 'category', label: 'Category' }, { key: 'source', label: 'Source' }, { key: 'severity', label: 'Severity' }, { key: 'outcome', label: 'Outcome' },
       { key: 'action', label: 'Action' }, { key: 'actor_name', label: 'Actor' }, { key: 'actor_role', label: 'Role' }, { key: 'entity_type', label: 'Entity type' }, { key: 'entity_id', label: 'Entity id' },

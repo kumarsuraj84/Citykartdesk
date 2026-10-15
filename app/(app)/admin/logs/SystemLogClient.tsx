@@ -7,6 +7,7 @@ import {
   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
 } from '@/lib/actions/admin/system-log'
 import type { ErrorGroup } from '@/lib/syslog/bundle'
+import { istDay } from '@/lib/reporting/ist'
 
 const CATEGORY_STYLES: Record<string, string> = {
   audit: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -133,7 +134,7 @@ export function SystemLogClient({ users }: { users: { id: string; full_name: str
         const blob = new Blob([text], { type: format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
-        a.href = url; a.download = `system-log-last-${days}-days-${new Date().toISOString().slice(0, 10)}.${format}`; a.click()
+        a.href = url; a.download = `system-log-last-${days}-days-${istDay(new Date())}.${format}`; a.click()
         URL.revokeObjectURL(url)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Export failed.')
