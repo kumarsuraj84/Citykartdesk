@@ -173,3 +173,37 @@ describe('the reminder e-mail', () => {
     expect(mail.text).toContain('waiting 1 day')
   })
 })
+
+describe('the sample e-mail (a test of the reminder)', () => {
+  const two = (n: number) => Array.from({ length: n }, (_, i) => item(i + 1, ago(i + 1)))
+
+  it('sends ONE e-mail, to the address asked for only, listing the approver with most waiting', async () => {
+    const bela: Person = { id: 'bela', full_name: 'Bela Rao', role: 'user', org_id: 'o1', is_active: true }
+    const admin = fakeAdmin({ pending: [{ id: 'a1', workflow_id: 'w1' }], steps: [{ workflow_id: 'w1', approver_user_id: 'ankur' }, { workflow_id: 'w1', approver_user_id: 'bela' }], people: [ankur, bela] })
+    const getPending = vi.fn(async (id: string) => (id === 'ankur' ? two(3) : two(1)))
+    const r = await sendApprovalReminders(admin as never, { now, getPending, send, sampleTo: 'suraj@citykart.test' })
+    expect(send).toHaveBeenCalledTimes(1)
+    const mail = send.mock.calls[0][0]
+    expect(mail.to).toBe('suraj@citykart.test')
+    expect(mail.subject).toContain('[SAMPLE of Ankur Sharma')
+    expect(mail.subject).toContain('3 approvals')
+    expect(r).toMatchObject({ sent: 1, listed: 3, sampleOf: 'Ankur Sharma' })
+  })
+
+  it("does not use up today's run (the real reminders still go out) and e-mails nobody else", async () => {
+    const admin = fakeAdmin(world())
+    const getPending = vi.fn().mockResolvedValue(two(2))
+    await sendApprovalReminders(admin as never, { now, getPending, send, sampleTo: 'suraj@citykart.test' })
+    expect(admin.settings[LAST_RUN_KEY]).toBeUndefined()
+    send.mockClear()
+    const real = await sendApprovalReminders(admin as never, { now, getPending, send })
+    expect(real.sent).toBe(1)
+    expect(send.mock.calls[0][0].to).toBe('ankur@citykart.test')
+  })
+
+  it('sends nothing when nobody has anything waiting', async () => {
+    const r = await sendApprovalReminders(fakeAdmin(world()) as never, { now, getPending: vi.fn().mockResolvedValue([]), send, sampleTo: 'suraj@citykart.test' })
+    expect(send).not.toHaveBeenCalled()
+    expect(r.sent).toBe(0)
+  })
+})
