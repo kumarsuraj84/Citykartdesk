@@ -1,0 +1,227 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit, supabase_db_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [only the user's own browser: chrome.exe(pid 58396) 182.72.84.10:3210 ESTABLISHED - NOT the audit; the audit never uses this browser]
+
+ISOLATION GATE: PASSED  (21/21)
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate[39m
+
+ [32m✓[39m tests/remediation/120-store-open-date.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 551[2mms[22m[39m
+[90mstderr[2m | tests/remediation/91-reliability.test.ts[2m > [22m[2mreliability simulations[2m > [22m[2man upload whose database record fails leaves no orphan file behind
+[22m[39m[uploadAttachment] DB insert failed new row for relation "request_attachments" violates check constraint "tmp_reliability_fail"
+
+[90mstderr[2m | tests/remediation/91-reliability.test.ts[2m > [22m[2mreliability simulations[2m > [22m[2mstorage unavailable: the upload fails cleanly (no record, no crash), and works again once storage is back
+[22m[39m[uploadAttachment] Storage upload failed This operation was aborted
+
+NOTICE:  constraint "tmp_reliability_fail" of relation "request_attachments" does not exist, skipping
+ [32m✓[39m tests/remediation/91-reliability.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 64064[2mms[22m[39m
+   [33m[2m✓[22m[39m reliability simulations[2m > [22man upload whose database record fails leaves no orphan file behind [33m 608[2mms[22m[39m
+   [33m[2m✓[22m[39m reliability simulations[2m > [22mstorage unavailable: the upload fails cleanly (no record, no crash), and works again once storage is back [33m 29536[2mms[22m[39m
+   [33m[2m✓[22m[39m reliability simulations[2m > [22mAPI layer down: actions fail without crashing or changing anything, and everything works after it is back [33m 30142[2mms[22m[39m
+   [33m[2m✓[22m[39m reliability simulations[2m > [22mtwo overlapping runs of the scheduled business-rules job fire a rule once per ticket [33m 2227[2mms[22m[39m
+[90mstderr[2m | tests/remediation/92-db-timeout.test.ts[2m > [22m[2mstatement timeout on the signed-in role[2m > [22m[2mevery statement times out: the action fails cleanly, nothing changes; after the limit is restored it works
+[22m[39m{"ts":"2026-10-15T10:29:52.006Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"requests.ts#updateRequestStatus","errorCode":"57014","error":{"message":"{\"code\":\"57014\",\"details\":null,\"hint\":null,\"message\":\"canceling statement due to statement timeout\"}"}}
+
+ [32m✓[39m tests/remediation/92-db-timeout.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 12102[2mms[22m[39m
+   [33m[2m✓[22m[39m statement timeout on the signed-in role[2m > [22mevery statement times out: the action fails cleanly, nothing changes; after the limit is restored it works [33m 8223[2mms[22m[39m
+ERROR:  system_log is append-only: rows cannot be changed or deleted
+CONTEXT:  PL/pgSQL function system_log_guard() line 7 at RAISE
+ [32m✓[39m tests/remediation/100-system-log-db.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 5058[2mms[22m[39m
+   [33m[2m✓[22m[39m hash chain[2m > [22maudit rows are chained and verify intact; a changed row and a removed row are found [33m 2299[2mms[22m[39m
+   [33m[2m✓[22m[39m database audit triggers[2m > [22ma role change by the server is recorded with before and after, and a change to a column that is not watched is not [33m 1040[2mms[22m[39m
+ [32m✓[39m tests/remediation/110-approval-hardening.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 4632[2mms[22m[39m
+   [33m[2m✓[22m[39m approval hardening[2m > [22mD-030 nobody decides a request they raised or sent[2m > [22mthe person who raised the request cannot approve or reject it, on the portal or from the e-mail; the other approver can [33m 329[2mms[22m[39m
+ [32m✓[39m tests/remediation/105-system-log-screen.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 5096[2mms[22m[39m
+   [33m[2m✓[22m[39m who may use the screen[2m > [22monly administrators and platform owners; everyone else is refused [33m 389[2mms[22m[39m
+   [33m[2m✓[22m[39m the log[2m > [22mfilters by category, source, severity, click and text; pages of 100 with a next-page flag [33m 501[2mms[22m[39m
+   [33m[2m✓[22m[39m grouped errors, export and the Claude bundle[2m > [22mthe bundle is redacted markdown naming the problem; copying it is itself audited [33m 357[2mms[22m[39m
+   [33m[2m✓[22m[39m grouped errors, export and the Claude bundle[2m > [22mCSV and JSON exports hold the rows and are audited with the filters used [33m 440[2mms[22m[39m
+   [33m[2m✓[22m[39m integrity check[2m > [22mreports an intact chain, and finds a record changed behind the application's back [33m 2152[2mms[22m[39m
+[90mstderr[2m | tests/remediation/101-system-log-capture.test.ts[2m > [22m[2mlogger and sanitizer[2m > [22m[2ma logged error is stored with its source, a fingerprint, and a redacted message
+[22m[39m{"ts":"2026-10-15T10:30:14.947Z","level":"error","event":"cap1792060214906.email.send_failed","message":"could not mail suraj@citykart.org with token=abc123def456","route":"lib/email/send.ts","context":{"password":"[redacted]","ok":1}}
+
+[90mstderr[2m | tests/remediation/101-system-log-capture.test.ts[2m > [22m[2mlogger and sanitizer[2m > [22m[2msanitizeError records the REAL error (with its database code) while the user gets only the safe message
+[22m[39m{"ts":"2026-10-15T10:30:15.280Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"requests.ts#assignRequest","errorCode":"23503","error":{"message":"{\"code\":\"23503\",\"message\":\"cap1792060214906 insert or update violates foreign key constraint \\\"x_fkey\\\"\"}"}}
+
+[90mstderr[2m | tests/remediation/101-system-log-capture.test.ts[2m > [22m[2mlogger and sanitizer[2m > [22m[2ma permission denial (42501) is a security event with outcome denied
+[22m[39m{"ts":"2026-10-15T10:30:15.603Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"x.ts#y","errorCode":"42501","error":{"message":"{\"code\":\"42501\",\"message\":\"cap1792060214906 new row violates row-level security policy\"}"}}
+
+ [32m✓[39m tests/remediation/101-system-log-capture.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 3992[2mms[22m[39m
+   [33m[2m✓[22m[39m logger and sanitizer[2m > [22ma logged error is stored with its source, a fingerprint, and a redacted message [33m 334[2mms[22m[39m
+   [33m[2m✓[22m[39m logger and sanitizer[2m > [22msanitizeError records the REAL error (with its database code) while the user gets only the safe message [33m 323[2mms[22m[39m
+   [33m[2m✓[22m[39m logger and sanitizer[2m > [22ma permission denial (42501) is a security event with outcome denied [33m 320[2mms[22m[39m
+   [33m[2m✓[22m[39m failed calls to the database[2m > [22ma real PostgREST failure seen through the app's own client is recorded; an expected "no row" is not [33m 835[2mms[22m[39m
+   [33m[2m✓[22m[39m failed calls to the database[2m > [22ma call that cannot connect is recorded with the connection error [33m 325[2mms[22m[39m
+   [33m[2m✓[22m[39m unhandled errors reported by Next[2m > [22ma server-action error carries the request id, path, method and the signed-in user (from the proxy-signed header) [33m 332[2mms[22m[39m
+   [33m[2m✓[22m[39m unhandled errors reported by Next[2m > [22ma redirect or not-found is not an error [33m 325[2mms[22m[39m
+   [33m[2m✓[22m[39m flood control[2m > [22mtwenty identical failures are stored as ten, and an audit record is never dropped [33m 1146[2mms[22m[39m
+ [32m✓[39m tests/remediation/90-uat-lifecycle.test.ts [2m([22m[2m12 tests[22m[2m)[22m[33m 2663[2mms[22m[39m
+   [33m[2m✓[22m[39m UAT ticket lifecycle across roles[2m > [22massignment: a technician of the team assigns the ticket; the requester is told [33m 346[2mms[22m[39m
+   [33m[2m✓[22m[39m UAT ticket lifecycle across roles[2m > [22mhold due to purchase: only a technician sets it; a requester reply does not resume it; resuming needs its own remark [33m 371[2mms[22m[39m
+[90mstderr[2m | tests/remediation/104-system-log-audit-calls.test.ts[2m > [22m[2mapplication audit records[2m > [22m[2ma refused sign-in is a security event, and the password is never stored
+[22m[39m{"ts":"2026-10-15T10:30:25.300Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","errorCode":"invalid_credentials","error":{"message":"Invalid login credentials","stack":"AuthApiError: Invalid login credentials\n    at handleError (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\@supabase\\auth-js\\src\\lib\\fetch.ts:139:9)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at _handleRequest (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\@supabase\\auth-js\\src\\lib\\fetch.ts:232:5)\n    at _request (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\@supabase\\auth-js\\src\\lib\\fetch.ts:194:16)\n    at SupabaseAuthClient.signInWithPassword (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\@supabase\\auth-js\\src\\GoTrueClient.ts:1153:15)\n    at Module.signInWithPassword (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\lib\\actions\\auth.ts:31:37)\n    at D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\tests\\remediation\\104-system-log-audit-calls.test.ts:85:17\n    at file:///D:/ANKUR%20AI%20PROJECTS/CitykartDesk-ZOHO%20Alternate/node_modules/@vitest/runner/dist/chunk-hooks.js:752:20"}}
+
+ [32m✓[39m tests/remediation/104-system-log-audit-calls.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 3294[2mms[22m[39m
+   [33m[2m✓[22m[39m application audit records[2m > [22ma role change records who changed whose role, from what to what [33m 367[2mms[22m[39m
+   [33m[2m✓[22m[39m application audit records[2m > [22ma refused role change records nothing as a success (the guard stops a plain admin touching a platform owner) [33m 336[2mms[22m[39m
+   [33m[2m✓[22m[39m application audit records[2m > [22mdeactivating and reactivating a user are each recorded [33m 750[2mms[22m[39m
+   [33m[2m✓[22m[39m application audit records[2m > [22man export records who took which data out, with how many rows and which filters [33m 405[2mms[22m[39m
+   [33m[2m✓[22m[39m application audit records[2m > [22mcreating and deleting a scheduled report are recorded with the recipients [33m 719[2mms[22m[39m
+   [33m[2m✓[22m[39m application audit records[2m > [22ma refused sign-in is a security event, and the password is never stored [33m 393[2mms[22m[39m
+NOTICE:  constraint "tmp_invite_fail" of relation "profiles" does not exist, skipping
+NOTICE:  constraint "tmp_invite_fail" of relation "profile_mobile_numbers" does not exist, skipping
+ [32m✓[39m tests/remediation/111-invite-rollback.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 2443[2mms[22m[39m
+   [33m[2m✓[22m[39m invite user rollback (D-048)[2m > [22mwhen the profile step fails, the new account is removed and the same address can be invited again [33m 707[2mms[22m[39m
+   [33m[2m✓[22m[39m invite user rollback (D-048)[2m > [22mwhen attaching the mobile number fails, the new account is removed again [33m 634[2mms[22m[39m
+ [32m✓[39m tests/remediation/70-rls-equivalence.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 2638[2mms[22m[39m
+ [32m✓[39m tests/remediation/119-dashboard-drill-parity.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 2006[2mms[22m[39m
+   [33m[2m✓[22m[39m the normal dashboard numbers open pop-ups with exactly the same tickets[2m > [22mcreated, resolved and closed over a day and over a week (the Daily Activity and inflow / outflow cards) [33m 395[2mms[22m[39m
+   [33m[2m✓[22m[39m the normal dashboard numbers open pop-ups with exactly the same tickets[2m > [22mevery status, priority, group and technician row [33m 748[2mms[22m[39m
+[90mstderr[2m | tests/remediation/115-approval-compensation.test.ts[2m > [22m[2msending for approval takes back what it wrote when the last step fails (D-045)[2m > [22m[2mno approval or workflow is left behind, the ticket is unchanged, and sending works once the fault is gone
+[22m[39m{"ts":"2026-10-15T10:30:35.267Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"approvals.ts#sendAdHocApproval","errorCode":"23514","error":{"message":"{\"code\":\"23514\",\"details\":\"Failing row contains (aabb3b68-e55c-402b-ab6e-0be0d93043c7, CKSD-005228, fixtures-d03 seedRequestLike 1792060234911, null, 48d3bab7-3c69-48ca-b9d0-96bcd41ed571, 1fc1388d-56ff-4c06-bd1c-4e8f57423fe9, f3b97080-67dc-465c-b48a-6d25e1094c39, 12753f65-c146-4b4b-a078-a21d33c848d4, medium, pending_approval, {}, [], null, null, null, null, null, 2026-10-15 10:30:34.913523+00, 2026-10-15 10:30:35.259702+00, [], 2026-10-15 10:30:35.257+00, 00000000-0000-0000-0000-000000000001, null, null, null, null, null, null, null, null, 0, in_progress, 0).\",\"hint\":null,\"message\":\"new row for relation \\\"requests\\\" violates check constraint \\\"tmp_no_pending_approval\\\"\"}"}}
+
+NOTICE:  constraint "tmp_no_pending_approval" of relation "requests" does not exist, skipping
+ [32m✓[39m tests/remediation/115-approval-compensation.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 1311[2mms[22m[39m
+   [33m[2m✓[22m[39m sending for approval takes back what it wrote when the last step fails (D-045)[2m > [22mno approval or workflow is left behind, the ticket is unchanged, and sending works once the fault is gone [33m 691[2mms[22m[39m
+ [32m✓[39m tests/remediation/113-bulk-limits.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 1047[2mms[22m[39m
+ [32m✓[39m tests/remediation/117-org-references.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 874[2mms[22m[39m
+ [32m✓[39m tests/remediation/121-approval-reminders.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 819[2mms[22m[39m
+ [32m✓[39m tests/remediation/80-ticket-number-overflow.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 820[2mms[22m[39m
+ [31m❯[39m tests/remediation/20-db-critical.test.ts [2m([22m[2m16 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 785[2mms[22m[39m
+   [32m✓[39m D-002 owner_delete_org: only the server may delete an organization[2m > [22manonymous caller cannot delete an organization (original attack)[32m 13[2mms[22m[39m
+   [32m✓[39m D-002 owner_delete_org: only the server may delete an organization[2m > [22msigned-in users of every role cannot delete an organization[32m 49[2mms[22m[39m
+   [32m✓[39m D-002 owner_delete_org: only the server may delete an organization[2m > [22mthe server (service role) can still delete an organization[32m 20[2mms[22m[39m
+   [32m✓[39m D-007 internal functions are not public[2m > [22manonymous and signed-in users cannot burn ticket numbers[32m 4[2mms[22m[39m
+   [32m✓[39m D-007 internal functions are not public[2m > [22manonymous and signed-in users cannot seed SLA settings for an organization[32m 9[2mms[22m[39m
+[31m   [31m×[31m D-007 internal functions are not public[2m > [22ma requester can still create a ticket and gets its number from the trigger (the legitimate path)[39m[32m 8[2mms[22m[39m
+[31m     → expected 403 to be 201 // Object.is equality[39m
+   [32m✓[39m D-007 internal functions are not public[2m > [22mthe server can still call the helpers[32m 3[2mms[22m[39m
+   [32m✓[39m D-003 profiles: a user cannot rewrite their own organization, role, active flag or manager[2m > [22ma technician cannot move themselves into another organization (original attack)[32m 4[2mms[22m[39m
+   [32m✓[39m D-003 profiles: a user cannot rewrite their own organization, role, active flag or manager[2m > [22man admin cannot make themselves platform_owner (original attack)[32m 5[2mms[22m[39m
+   [32m✓[39m D-003 profiles: a user cannot rewrite their own organization, role, active flag or manager[2m > [22ma manager cannot rewrite their own employee id / manager (original attack)[32m 5[2mms[22m[39m
+   [32m✓[39m D-003 profiles: a user cannot rewrite their own organization, role, active flag or manager[2m > [22ma deactivated user cannot re-activate themselves (original attack)[32m 144[2mms[22m[39m
+   [32m✓[39m D-003 profiles: a user cannot rewrite their own organization, role, active flag or manager[2m > [22ma user cannot set the forced-reset flag on themselves, nor change other users[32m 7[2mms[22m[39m
+   [32m✓[39m D-003 profiles: a user cannot rewrite their own organization, role, active flag or manager[2m > [22mPOSITIVE: a user can still change their own name and avatar[32m 10[2mms[22m[39m
+[31m   [31m×[31m D-003 profiles: a user cannot rewrite their own organization, role, active flag or manager[2m > [22mPOSITIVE: after setting a new password a user can still clear their own forced-reset flag[39m[32m 138[2mms[22m[39m
+[31m     → expected 403 to be less than 300[39m
+   [32m✓[39m D-003 profiles: a user cannot rewrite their own organization, role, active flag or manager[2m > [22mPOSITIVE: the server (service role) can still change role, active flag, organization fields (the admin screens)[32m 131[2mms[22m[39m
+   [32m✓[39m D-003 profiles: a user cannot rewrite their own organization, role, active flag or manager[2m > [22mPOSITIVE: reading profiles is unchanged (everyone in the organization can still be listed)[32m 2[2mms[22m[39m
+ [32m✓[39m tests/remediation/112-mailbox-settings.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 733[2mms[22m[39m
+ [32m✓[39m tests/remediation/116-oem-routing-failure.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 636[2mms[22m[39m
+ [32m✓[39m tests/remediation/122-resolution-note-rules.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 570[2mms[22m[39m
+ [32m✓[39m tests/remediation/114-status-races.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 636[2mms[22m[39m
+ [32m✓[39m tests/remediation/120-team-dashboard-scope.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 592[2mms[22m[39m
+ [32m✓[39m tests/remediation/102-system-log-endpoints.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 581[2mms[22m[39m
+   [33m[2m✓[22m[39m browser events route[2m > [22mmirrors a browser error into the System Log with the page, the user and the click that preceded it [33m 418[2mms[22m[39m
+ [32m✓[39m tests/remediation/72-rls-cross-tenant.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 486[2mms[22m[39m
+ [31m❯[39m tests/remediation/118-status-transitions-db.test.ts [2m([22m[2m4 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 498[2mms[22m[39m
+   [32m✓[39m ticket status moves checked by the database (D-023)[2m > [22ma requester cannot move their own ticket through the API at all (row security), and a technician can cancel an open one[32m 40[2mms[22m[39m
+   [32m✓[39m ticket status moves checked by the database (D-023)[2m > [22ma technician cannot jump to closed, cannot close a resolved ticket, and cannot revive a cancelled one[32m 40[2mms[22m[39m
+   [32m✓[39m ticket status moves checked by the database (D-023)[2m > [22mevery move the screens offer still works[32m 59[2mms[22m[39m
+[31m   [31m×[31m ticket status moves checked by the database (D-023)[2m > [22ma change that does not touch the status is not affected, and the server may still do what only it may (auto-close)[39m[32m 10[2mms[22m[39m
+[31m     → expected 403 to be less than 300[39m
+ [32m✓[39m tests/remediation/60-approvals-export.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 460[2mms[22m[39m
+ [31m❯[39m tests/remediation/40-db-high.test.ts [2m([22m[2m14 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 372[2mms[22m[39m
+   [32m✓[39m D-004 storage: no one can write into, or read from, another request's attachment folder[2m > [22man unrelated requester cannot upload into another request folder (original attack)[32m 16[2mms[22m[39m
+   [32m✓[39m D-004 storage: no one can write into, or read from, another request's attachment folder[2m > [22man unrelated requester cannot download or list another request's files[32m 25[2mms[22m[39m
+   [32m✓[39m D-004 storage: no one can write into, or read from, another request's attachment folder[2m > [22mPOSITIVE: the server can still upload, download and remove files[32m 30[2mms[22m[39m
+   [32m✓[39m D-006 company-wide settings[2m > [22mare not readable without signing in (original attack)[32m 14[2mms[22m[39m
+   [32m✓[39m D-006 company-wide settings[2m > [22mcannot be changed by a manager or an admin (original attack)[32m 25[2mms[22m[39m
+   [32m✓[39m D-006 company-wide settings[2m > [22mPOSITIVE: signed-in users still read them, and the server can still change them[32m 23[2mms[22m[39m
+   [32m✓[39m D-014 deleting tasks / collaborators stays inside the caller's organization[2m > [22ma manager cannot delete another organization's task; and can still delete a task of their own organization[32m 20[2mms[22m[39m
+   [32m✓[39m D-015 internal notes are visible to the ticket's own team, not to any technician[2m > [22ma technician who raised a ticket to another team cannot read that team's internal notes (original gap)[32m 53[2mms[22m[39m
+   [32m✓[39m D-015 internal notes are visible to the ticket's own team, not to any technician[2m > [22mPOSITIVE: a plain requester never sees internal notes, but sees public replies[32m 15[2mms[22m[39m
+   [32m✓[39m D-008 a ticket cannot be forged through the API[2m > [22ma requester cannot insert a ticket that is already closed with a far-future due date (original attack)[32m 6[2mms[22m[39m
+   [32m✓[39m D-008 a ticket cannot be forged through the API[2m > [22ma technician cannot renumber a ticket or change when it was created (original attack)[32m 12[2mms[22m[39m
+[31m   [31m×[31m D-008 a ticket cannot be forged through the API[2m > [22mPOSITIVE: a requester can still create an ordinary ticket, and a technician can still change their team's tickets[39m[32m 7[2mms[22m[39m
+[31m     → expected 403 to be 201 // Object.is equality[39m
+   [32m✓[39m D-010 (database part) a deactivated user sees nothing, even with a session that is still open[2m > [22mown tickets and other people disappear as soon as the account is inactive[32m 14[2mms[22m[39m
+   [32m✓[39m D-054 an attachment row cannot be re-pointed or re-typed through the API[2m > [22monly the deleted flag can be changed; the file must be in the request's own folder[32m 24[2mms[22m[39m
+[90mstdout[2m | tests/remediation/30-delegate-approval.test.ts
+[22m[39m[EMAIL DISABLED] To: manager3@audit.test  Subject: Approval required: CKSD-005528 — d16-1792060251959 A
+
+ [32m✓[39m tests/remediation/30-delegate-approval.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 283[2mms[22m[39m
+ [32m✓[39m tests/remediation/71-requests-update-identity.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 130[2mms[22m[39m
+ [32m✓[39m tests/remediation/50-delete-attachment.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 154[2mms[22m[39m
+ [32m✓[39m tests/remediation/103-system-log-actor.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 97[2mms[22m[39m
+ [32m✓[39m tests/remediation/00-guard.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 1[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 4 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/remediation/118-status-transitions-db.test.ts[2m > [22mticket status moves checked by the database (D-023)[2m > [22ma change that does not touch the status is not affected, and the server may still do what only it may (auto-close)
+[31m[1mAssertionError[22m: expected 403 to be less than 300[39m
+[36m [2m❯[22m tests/remediation/118-status-transitions-db.test.ts:[2m65:25[22m[39m
+    [90m 63| [39m    [35mconst[39m t [33m=[39m [35mawait[39m [34mticket[39m([32m'resolved'[39m)
+    [90m 64| [39m    const same = await http('PATCH', `/rest/v1/requests?id=eq.${t}`, {…
+    [90m 65| [39m    [34mexpect[39m(same[33m.[39mstatus)[33m.[39m[34mtoBeLessThan[39m([34m300[39m)
+    [90m   | [39m                        [31m^[39m
+    [90m 66| [39m    const server = await db.from('requests').update({ status: 'closed'…
+    [90m 67| [39m    [34mexpect[39m(server[33m.[39merror)[33m.[39m[34mtoBeNull[39m()
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/remediation/20-db-critical.test.ts[2m > [22mD-007 internal functions are not public[2m > [22ma requester can still create a ticket and gets its number from the trigger (the legitimate path)
+[31m[1mAssertionError[22m: expected 403 to be 201 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 201[39m
+[31m+ 403[39m
+
+[36m [2m❯[22m tests/remediation/20-db-critical.test.ts:[2m69:22[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/remediation/20-db-critical.test.ts[2m > [22mD-003 profiles: a user cannot rewrite their own organization, role, active flag or manager[2m > [22mPOSITIVE: after setting a new password a user can still clear their own forced-reset flag
+[31m[1mAssertionError[22m: expected 403 to be less than 300[39m
+[36m [2m❯[22m tests/remediation/20-db-critical.test.ts:[2m127:22[22m[39m
+    [90m125| [39m    await svc('PATCH', `/profiles?id=eq.${u.id}`, { must_reset_passwor…
+    [90m126| [39m    const r = await asUser(u, 'PATCH', `/profiles?id=eq.${u.id}`, { mu…
+    [90m127| [39m    [34mexpect[39m(r[33m.[39mstatus)[33m.[39m[34mtoBeLessThan[39m([34m300[39m)
+    [90m   | [39m                     [31m^[39m
+    [90m128| [39m    [34mexpect[39m(([35mawait[39m [34mprofileRow[39m(u[33m.[39mid))[33m.[39mmust_reset_password)[33m.[39m[34mtoBe[39m([35mfalse[39m)
+    [90m129| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/remediation/40-db-high.test.ts[2m > [22mD-008 a ticket cannot be forged through the API[2m > [22mPOSITIVE: a requester can still create an ordinary ticket, and a technician can still change their team's tickets
+[31m[1mAssertionError[22m: expected 403 to be 201 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 201[39m
+[31m+ 403[39m
+
+[36m [2m❯[22m tests/remediation/40-db-high.test.ts:[2m145:23[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m3 failed[39m[22m[2m | [22m[1m[32m30 passed[39m[22m[90m (33)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m178 passed[39m[22m[90m (182)[39m
+[2m   Start at [22m 15:58:40
+[2m   Duration [22m 133.48s[2m (transform 608ms, setup 313ms, collect 2.56s, tests 120.42s, environment 3ms, prepare 1.31s)[22m
+
+exit 1

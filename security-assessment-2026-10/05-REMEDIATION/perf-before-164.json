@@ -1,0 +1,47 @@
+{
+  "label": "before-164",
+  "at": "2026-10-15T10:57:04.132Z",
+  "tickets_in_audit_db": 3002,
+  "manager: list 1000 tickets (row security over the whole organisation)": {
+    "p50": 4.6,
+    "p95": 6,
+    "p99": 7.1,
+    "runs": 40
+  },
+  "manager: count all tickets": {
+    "p50": 3.6,
+    "p95": 4.2,
+    "p99": 4.3,
+    "runs": 40
+  },
+  "technician: list own group tickets": {
+    "p50": 4.9,
+    "p95": 5.8,
+    "p99": 6.4,
+    "runs": 40
+  },
+  "requester: list own tickets": {
+    "p50": 4.9,
+    "p95": 5.5,
+    "p99": 6.3,
+    "runs": 40
+  },
+  "technician: edit a ticket (update trigger path)": {
+    "p50": 4.3,
+    "p95": 5.6,
+    "p99": 5.6,
+    "runs": 40
+  },
+  "requester: read attachments rows of a ticket": {
+    "p50": 2.6,
+    "p95": 3.6,
+    "p99": 4,
+    "runs": 40
+  },
+  "search: manager title search": {
+    "p50": 2.5,
+    "p95": 3.1,
+    "p99": 3.5,
+    "runs": 40
+  }
+}
