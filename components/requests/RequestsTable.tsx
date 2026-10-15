@@ -17,7 +17,6 @@ import {
 import {
   bulkAssignRequests,
   bulkUpdateStatus,
-  bulkChangePriority,
   bulkAddCollaborators,
   bulkExportRequests,
   searchOrgMembers,
@@ -27,20 +26,13 @@ import { StatusBadge, PriorityBadge, ReopenedBadge, SourceBadge } from '@/compon
 import { SLABadge } from '@/components/requests/SLABadge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatRelativeTime } from '@/lib/utils'
-import type { RequestWithRelations, RequestStatus, RequestPriority } from '@/types'
+import type { RequestWithRelations, RequestStatus } from '@/types'
 
 const BULK_STATUSES: { value: RequestStatus; label: string }[] = [
   { value: 'in_progress',  label: 'In Progress' },
   { value: 'waiting_user', label: 'Waiting on User' },
   { value: 'resolved',     label: 'Resolved' },
   { value: 'cancelled',    label: 'Cancelled' },
-]
-
-const BULK_PRIORITIES: { value: RequestPriority; label: string }[] = [
-  { value: 'low',    label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high',   label: 'High' },
-  { value: 'urgent', label: 'Urgent' },
 ]
 
 // createRequest() stores title as "ServiceName: Subject" (or just "ServiceName"
@@ -180,7 +172,6 @@ export function RequestsTable({
   const [bulkError, setBulkError] = useState<string | null>(null)
   const [assignOpen, setAssignOpen] = useState(false)
   const [statusOpen, setStatusOpen] = useState(false)
-  const [priorityOpen, setPriorityOpen] = useState(false)
 
   // Selection doesn't survive a fresh set of rows (new page/filter/sort) — stale
   // ids pointing at rows no longer on screen would silently no-op on bulk actions.
@@ -214,7 +205,7 @@ export function RequestsTable({
   function clearSelection() {
     setSelected(new Set())
     setBulkError(null)
-    setAssignOpen(false); setStatusOpen(false); setPriorityOpen(false)
+    setAssignOpen(false); setStatusOpen(false)
   }
 
   function handleBulkAssign(assigneeId: string | null) {
@@ -232,16 +223,6 @@ export function RequestsTable({
     setStatusOpen(false); setBulkError(null)
     startTransition(async () => {
       const result = await bulkUpdateStatus(ids, status)
-      if (result.failed.length > 0) setBulkError(`${result.failed.length} request(s) could not be updated.`)
-      else clearSelection()
-    })
-  }
-
-  function handleBulkPriority(priority: RequestPriority) {
-    const ids = Array.from(selected)
-    setPriorityOpen(false); setBulkError(null)
-    startTransition(async () => {
-      const result = await bulkChangePriority(ids, priority)
       if (result.failed.length > 0) setBulkError(`${result.failed.length} request(s) could not be updated.`)
       else clearSelection()
     })
@@ -362,7 +343,7 @@ export function RequestsTable({
 
             {showAssignAction && (
               <div className="relative">
-                <button type="button" onClick={() => { setAssignOpen((v) => !v); setStatusOpen(false); setPriorityOpen(false) }} disabled={isPending} className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors">
+                <button type="button" onClick={() => { setAssignOpen((v) => !v); setStatusOpen(false) }} disabled={isPending} className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors">
                   Assign To
                   <ChevronDown className="h-3.5 w-3.5" />
                 </button>
@@ -381,7 +362,7 @@ export function RequestsTable({
             )}
 
             <div className="relative">
-              <button type="button" onClick={() => { setStatusOpen((v) => !v); setAssignOpen(false); setPriorityOpen(false) }} disabled={isPending} className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors">
+              <button type="button" onClick={() => { setStatusOpen((v) => !v); setAssignOpen(false) }} disabled={isPending} className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors">
                 Change Status
                 <ChevronDown className="h-3.5 w-3.5" />
               </button>
@@ -390,22 +371,6 @@ export function RequestsTable({
                   <div className="p-1">
                     {BULK_STATUSES.map((s) => (
                       <button key={s.value} type="button" onClick={() => handleBulkStatus(s.value)} className="w-full rounded-lg px-3 py-2 text-left text-xs text-foreground hover:bg-muted transition-colors">{s.label}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="relative">
-              <button type="button" onClick={() => { setPriorityOpen((v) => !v); setAssignOpen(false); setStatusOpen(false) }} disabled={isPending} className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors">
-                Change Priority
-                <ChevronDown className="h-3.5 w-3.5" />
-              </button>
-              {priorityOpen && (
-                <div className="absolute bottom-full left-0 mb-2 min-w-[140px] rounded-xl border border-border bg-card shadow-lg">
-                  <div className="p-1">
-                    {BULK_PRIORITIES.map((p) => (
-                      <button key={p.value} type="button" onClick={() => handleBulkPriority(p.value)} className="w-full rounded-lg px-3 py-2 text-left text-xs text-foreground hover:bg-muted transition-colors">{p.label}</button>
                     ))}
                   </div>
                 </div>

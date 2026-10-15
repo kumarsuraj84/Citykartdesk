@@ -15,7 +15,7 @@ vi.mock('next/headers', () => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn(), refresh: vi.fn() }))
 
 import { createClient } from '@/lib/supabase/server'
-import { updateRequestStatus, assignRequest, addComment, addCollaborator, changePriority } from '@/lib/actions/requests'
+import { updateRequestStatus, assignRequest, addComment, addCollaborator } from '@/lib/actions/requests'
 import { createTask, updateTaskStatus, addTaskComment, deleteTask } from '@/lib/actions/tasks'
 
 const mockedCreateClient = vi.mocked(createClient)
@@ -151,7 +151,6 @@ describe('UAT ticket lifecycle across roles', () => {
     expect((await updateRequestStatus(t.id, 'cancelled', 'no')).error).toBeTruthy()
     actAs(fx.agentB)
     expect((await updateRequestStatus(t.id, 'in_progress')).error).toBeTruthy()
-    expect((await changePriority(t.id, 'urgent')).error).toBeTruthy()
     actAs(fx.requesterA)
     expect((await updateRequestStatus(t.id, 'resolved', 'self resolve')).error).toBeTruthy() // not a requester transition
     expect((await addComment(t.id, '   ', false)).error).toBeTruthy() // empty comment

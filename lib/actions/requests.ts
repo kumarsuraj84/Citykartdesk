@@ -13,7 +13,7 @@ import { notifyLowRating } from '@/lib/csat/alerts'
 import { getEnabledModules } from '@/lib/queries/profiles'
 import { validateFieldValue } from '@/lib/validation/formFields'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
-import { resolveServiceFormSections, requesterCanSet } from '@/lib/forms/sections'
+import { requesterCanSet } from '@/lib/forms/sections'
 import { toCSV } from '@/lib/export/csv'
 import { mapWithConcurrency } from '@/lib/async/concurrency'
 import { createRequestCore } from '@/lib/requests/create-request-core'
@@ -354,23 +354,6 @@ export async function bulkUpdateStatus(
   const picked = cleanBulkIds(requestIds)
   if ('error' in picked) return bulkRefused(picked.error)
   const settled = await mapWithConcurrency(picked.ids, BULK_ACTION_CONCURRENCY, async (id) => ({ id, r: await updateRequestStatus(id, newStatus) }))
-  const result: BulkResult = { succeeded: [], failed: [] }
-  for (const { id, r } of settled) {
-    if (r.error) result.failed.push({ id, error: r.error })
-    else result.succeeded.push(id)
-  }
-  return result
-}
-
-// ── Bulk priority change ──────────────────────────────────────────────────────
-
-export async function bulkChangePriority(
-  requestIds: string[],
-  newPriority: RequestPriority
-): Promise<BulkResult> {
-  const picked = cleanBulkIds(requestIds)
-  if ('error' in picked) return bulkRefused(picked.error)
-  const settled = await mapWithConcurrency(picked.ids, BULK_ACTION_CONCURRENCY, async (id) => ({ id, r: await changePriority(id, newPriority) }))
   const result: BulkResult = { succeeded: [], failed: [] }
   for (const { id, r } of settled) {
     if (r.error) result.failed.push({ id, error: r.error })
@@ -890,127 +873,9 @@ export async function deleteEmptyComment(commentId: string): Promise<ActionResul
   return {}
 }
 
-// ── Change priority ───────────────────────────────────────────────────────────
-
-export async function changePriority(
-  requestId: string,
-  newPriority: RequestPriority
-): Promise<ActionResult> {
-  const supabase = await createClient()
-  const profile = await getCurrentProfile()
-  if (!profile) return { error: 'Not authenticated.' }
-
-  const isAgentOrManager =
-    profile.role === 'agent' ||
-    profile.role === 'manager' ||
-    profile.role === 'admin' ||
-    profile.role === 'platform_owner'
-
-  if (!isAgentOrManager) return { error: 'Not authorized to change priority.' }
-
-  const { data: request } = await supabase
-    .from('requests')
-    .select('id, priority, team_id, status, created_at, waiting_since, assigned_to, service_id, form_data, paused_ms_total, service:services(sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections))')
-    .eq('id', requestId)
-    .single()
-
-  if (!request) return { error: 'Request not found.' }
-
-  const isOnTeam =
-    profile.role === 'manager' ||
-    profile.role === 'admin' ||
-    profile.role === 'platform_owner' ||
-    (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
-
-  if (!isOnTeam) return { error: 'Not authorized to change priority for this technician group.' }
-
-  const oldPriority = request.priority as RequestPriority
-  if (oldPriority === newPriority) return {}
-
-  // Recalculate SLA deadlines from created_at with the new priority tier — same
-  // field-override > SLA Policy resolution as request creation, so the
-  // request's already-selected field values still drive the deadline under
-  // the new priority. This is a manual override — it doesn't touch the
-  // request's sub-category, so a later reclassify can still re-derive
-  // priority from whatever tier that sub-category carries.
-  const svc = request.service as unknown as {
-    sla_policy?: { config?: SLAConfig } | null
-    form_sections?: FormSection[]
-    form_fields?: FormField[]
-    template?: { form_sections?: FormSection[] } | null
-  }
-  const allFields = resolveServiceFormSections(svc).flatMap((s) => s.fields)
-  const createdAt = new Date(request.created_at)
-
-  let { responseDueAt: newResponseDue, resolutionDueAt: newResolutionDue } = await resolveSlaDeadlines(supabase, {
-    serviceId: request.service_id,
-    priority: newPriority,
-    servicePolicyConfig: svc.sla_policy?.config ?? null,
-    allFields,
-    formData: (request.form_data ?? {}) as Record<string, unknown>,
-    from: createdAt,
-  })
-
-  // Preserve every pause this request has ever accumulated (completed ones
-  // via the ledger, plus one currently in progress) on top of the fresh
-  // baseline — not just a pause active at this exact moment.
-  newResponseDue = withPauseCredit(newResponseDue, request.paused_ms_total, request.waiting_since)
-  newResolutionDue = withPauseCredit(newResolutionDue, request.paused_ms_total, request.waiting_since)
-
-  // A finished ticket (resolved, closed, cancelled) keeps the deadlines it finished with: changing its priority afterwards must not
-  // move them, or reports would show it as breached/not breached for a clock that had already stopped (D-044).
-  const finished = request.status === 'resolved' || request.status === 'closed' || request.status === 'cancelled'
-  const { error: updateError } = await supabase
-    .from('requests')
-    .update(finished ? { priority: newPriority } : {
-      priority: newPriority,
-      response_due_at: newResponseDue,
-      resolution_due_at: newResolutionDue,
-    })
-    .eq('id', requestId)
-
-  if (updateError) return { error: sanitizeError(updateError, { route: 'requests.ts#changePriority', fallback: 'Failed to change priority.' }) }
-
-  const activityResult = await logActivity({
-    requestId,
-    actorId: profile.id,
-    action: 'priority_changed',
-    metadata: { priority_from: oldPriority, priority_to: newPriority },
-  })
-  if (activityResult.error) {
-    return { error: activityResult.error }
-  }
-
-  // Notify assignee about priority change (if not self-change)
-  if (request.assigned_to && request.assigned_to !== profile.id) {
-    notify({
-      recipientId: request.assigned_to,
-      actorId: profile.id,
-      type: 'priority_changed',
-      title: 'Request priority changed',
-      body: `${profile.full_name} changed priority from ${oldPriority} to ${newPriority}.`,
-      requestId,
-      link: `/requests/${requestId}`,
-    }).catch(() => {})
-  }
-
-  // Business Rules: "updated" trigger — a priority change counts as an edit.
-  // The rule engine's own set_priority/set_status actions write directly via the
-  // admin client rather than calling back into changePriority()/
-  // updateRequestStatus(), so this can't recurse into itself.
-  try {
-    const { runRulesForTrigger } = await import('@/lib/rules/run')
-    await runRulesForTrigger('updated', requestId)
-  } catch (e) {
-    console.error('[changePriority] Business rules (updated) failed', e)
-  }
-
-  revalidatePath(`/requests/${requestId}`)
-  revalidatePath('/requests')
-  revalidatePath('/tasks')
-
-  return {}
-}
+// ── The priority of a ticket cannot be changed by hand ──────────────────────────
+// It comes from the sub-category (and the SLA that goes with it), or from a Business Rule. Changing the sub-category re-derives it in updateRequestCategory().
+// There is deliberately no changePriority() / bulkChangePriority(): no role, manager and admin included, can override it (tests/unit/no-priority-change.test.ts).
 
 // ── The service of a ticket cannot be changed ───────────────────────────────────
 // Every service has its own form with its own mandatory fields, so a ticket moved to another service would be missing what that service needs. Nobody changes

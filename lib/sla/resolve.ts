@@ -68,7 +68,7 @@ export async function resolveFieldSlaTier(
 
 /**
  * Single source of truth for computing a request's response/resolution deadlines —
- * used by createRequest, the REOPEN path in updateRequestStatus, changePriority,
+ * used by createRequest, the REOPEN path in updateRequestStatus,
  * reclassifyRequest, and updateRequestCategory so every place a request gets (or
  * regets) an SLA deadline resolves the same two layers (field override > the
  * service's mapped SLA Policy) and applies the same business-hours-aware calendar

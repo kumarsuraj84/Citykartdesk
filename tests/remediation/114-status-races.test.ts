@@ -15,7 +15,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn(), 
 
 import { createClient } from '@/lib/supabase/server'
 import { runRulesForTrigger } from '@/lib/rules/run'
-import { changePriority, addComment } from '@/lib/actions/requests'
+import { addComment } from '@/lib/actions/requests'
 
 vi.setConfig({ testTimeout: 120_000 })
 
@@ -89,20 +89,6 @@ describe('business rules and status (D-044)', () => {
 })
 
 describe('manual changes (D-044)', () => {
-  it('changing the priority of a finished ticket keeps its deadlines; an open one gets new ones', async () => {
-    const due = '2026-01-01T00:00:00.000Z'
-    const done = await ticket({ status: 'closed', resolution_due_at: due, response_due_at: due, assigned_to: fx.agentA.id })
-    const live = await ticket({ status: 'in_progress', resolution_due_at: due, response_due_at: due, assigned_to: fx.agentA.id })
-    vi.mocked(createClient).mockResolvedValue(clientForToken(fx.agentA.accessToken) as never)
-    expect((await changePriority(done, 'urgent')).error).toBeUndefined()
-    expect((await changePriority(live, 'urgent')).error).toBeUndefined()
-    const a = await row(done), b = await row(live)
-    expect(a.priority).toBe('urgent')
-    expect(new Date(a.resolution_due_at!).toISOString()).toBe(due)
-    expect(b.priority).toBe('urgent')
-    expect(new Date(b.resolution_due_at!).toISOString()).not.toBe(due)
-  })
-
   it('the requester\'s reply resumes a Waiting-on-User ticket but not one on Hold', async () => {
     const since = new Date(Date.now() - HOUR).toISOString()
     const waiting = await ticket({ status: 'waiting_user', waiting_since: since, assigned_to: fx.agentA.id })

@@ -8,7 +8,6 @@ import { CopyButton } from '@/components/ui/CopyButton'
 import {
   updateRequestStatus,
   assignRequest,
-  changePriority,
   addCollaborator,
   removeCollaborator,
   searchOrgMembers,
@@ -231,70 +230,13 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
   )
 }
 
-// Inline priority selector
-function PriorityRow({ requestId, priority, isAgent }: {
-  requestId: string; priority: RequestPriority; isAgent: boolean
-}) {
-  const [open, setOpen] = useState(false)
-  const [cur, setCur] = useState(priority)
-  const [isPending, startTransition] = useTransition()
-  const ref = useRef<HTMLDivElement>(null)
-  const opts: RequestPriority[] = ['urgent', 'high', 'medium', 'low']
-  // Guards against a slow, now-superseded transition's error rollback
-  // clobbering a value set by a later, faster one (e.g. two rapid clicks).
-  const seqRef = useRef(0)
-
-  // Re-sync if the server-provided priority changes underneath us — e.g. a
-  // Business Rule's set_priority action fires and the page refreshes, which
-  // re-renders this component with a fresh `priority` prop but would
-  // otherwise leave `cur` frozen at its very first value. Same pattern as
-  // StatusRow/CategoryRow above.
-  const [prevPriority, setPrevPriority] = useState(priority)
-  if (priority !== prevPriority) {
-    setPrevPriority(priority)
-    setCur(priority)
-  }
-
-  useEffect(() => {
-    if (!open) return
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [open])
-
-  function pick(p: RequestPriority) {
-    const prev = cur
-    const seq = ++seqRef.current
-    setCur(p); setOpen(false)
-    startTransition(async () => {
-      const result = await changePriority(requestId, p)
-      if (result?.error) { toast.error(result.error); if (seqRef.current === seq) setCur(prev) }
-    })
-  }
-
+// Priority is shown, never edited: it comes from the sub-category (and its SLA) or a Business Rule, so it follows the server value on every refresh.
+function PriorityRow({ priority }: { priority: RequestPriority }) {
   return (
     <PropRow label="Priority">
-      <div ref={ref} className="relative">
-        <button
-          onClick={() => isAgent && !isPending && setOpen(v => !v)}
-          disabled={isPending}
-          className={`flex items-center gap-1 ${isAgent && !isPending ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
-        >
-          <PriorityBadge priority={cur} size="sm" />
-          {isAgent && !isPending && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
-          {isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-        </button>
-        {open && (
-          <div className="absolute right-0 top-full z-50 mt-1 min-w-[120px] rounded-xl border border-border bg-card shadow-xl py-1">
-            {opts.map(p => (
-              <button key={p} onClick={() => pick(p)}
-                className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted transition-colors ${p === cur ? 'bg-muted/60' : ''}`}>
-                <PriorityBadge priority={p} size="sm" />
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      <span title="Priority is set automatically from the sub-category and its SLA. It cannot be changed by hand.">
+        <PriorityBadge priority={priority} size="sm" />
+      </span>
     </PropRow>
   )
 }
@@ -788,7 +730,7 @@ export function RequestSidebarPanel({
         <StatusRow requestId={requestId} status={status} isAgent={isAgent} isRequester={isRequester} />
 
         {/* Editable: Priority */}
-        <PriorityRow requestId={requestId} priority={priority} isAgent={isAgent} />
+        <PriorityRow priority={priority} />
 
         {/* Editable: Assignee */}
         {isAgent && (

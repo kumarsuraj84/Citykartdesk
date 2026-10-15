@@ -50,7 +50,7 @@ export type ActionRequest = {
   org_id: string | null
   // Needed by set_priority/set_status to recompute SLA deadlines and replicate
   // the pause/resume + reopen bookkeeping that the interactive
-  // changePriority()/updateRequestStatus() actions already do — a raw status/
+  // updateRequestStatus() action already does — a raw status/
   // priority write with none of that leaves stale or wrong due dates behind.
   status: string
   priority: string
@@ -168,7 +168,7 @@ async function runAssign(
 }
 
 async function runSetPriority(admin: AnyClient, request: ActionRequest, priority: string, ctx: RuleActionContext): Promise<void> {
-  // Recompute deadlines the same way the interactive changePriority() action
+  // Recompute deadlines the same way a sub-category change does (updateRequestCategory())
   // does — from created_at, field override > the service's mapped SLA Policy,
   // business-hours aware — instead of leaving the old priority's due dates in
   // place under a new priority.
@@ -189,7 +189,7 @@ async function runSetPriority(admin: AnyClient, request: ActionRequest, priority
   })
 
   // Preserve every pause this request has ever accumulated (the ledger,
-  // plus one currently in progress) — same fix as changePriority()'s.
+  // plus one currently in progress) — same as updateRequestCategory().
   const creditMs =
     request.paused_ms_total + (request.waiting_since ? Date.now() - new Date(request.waiting_since).getTime() : 0)
   if (creditMs > 0) {

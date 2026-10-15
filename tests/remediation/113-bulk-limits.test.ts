@@ -11,7 +11,7 @@ vi.mock('next/headers', () => ({ headers: vi.fn().mockResolvedValue(new Headers(
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn(), refresh: vi.fn() }))
 
 import { createClient } from '@/lib/supabase/server'
-import { bulkExportRequests, bulkUpdateStatus, bulkChangePriority, bulkAssignRequests, bulkAddCollaborators } from '@/lib/actions/requests'
+import { bulkExportRequests, bulkUpdateStatus, bulkAssignRequests, bulkAddCollaborators } from '@/lib/actions/requests'
 
 vi.setConfig({ testTimeout: 180_000 })
 
@@ -41,17 +41,11 @@ describe('bulk actions: limits and batching', () => {
     const many = Array.from({ length: 501 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`)
     for (const bad of [many, [], ['x', '1; drop table requests', '../etc'], 'nope' as unknown as string[]]) {
       expect((await bulkExportRequests(bad)).error, JSON.stringify(bad).slice(0, 40)).toBeTruthy()
-      for (const result of [await bulkUpdateStatus(bad, 'cancelled'), await bulkChangePriority(bad, 'high'), await bulkAssignRequests(bad, null), await bulkAddCollaborators(bad, fx.agentA.id)]) {
+      for (const result of [await bulkUpdateStatus(bad, 'cancelled'), await bulkAssignRequests(bad, null), await bulkAddCollaborators(bad, fx.agentA.id)]) {
         expect(result.succeeded).toEqual([])
         expect(result.failed[0]?.error).toMatch(/at most 500|No requests selected/)
       }
     }
   })
 
-  it('a bulk change over a few real tickets still works', async () => {
-    const some = ids.slice(0, 3)
-    const r = await bulkChangePriority([...some, 'not-an-id'], 'high')
-    expect(r.failed).toEqual([])
-    expect(r.succeeded.sort()).toEqual([...some].sort())
-  })
 })
