@@ -13,6 +13,8 @@ import { getCurrentProfile, getTeamMembers } from '@/lib/queries/profiles'
 import { getRequestById, getRequestActivity, getRequestComments, getRequestCollaborators, getRelatedRequests, getCsatSurveyForRequest } from '@/lib/queries/requests'
 import { getRequestAttachments } from '@/lib/queries/attachments'
 import { getApprovalsForRequest } from '@/lib/queries/approvals'
+import { buildTicketSummary } from '@/lib/requests/ticket-summary'
+import { TicketSummaryCard } from '@/components/requests/TicketSummaryCard'
 import { ApprovalPanel } from '@/components/requests/ApprovalPanel'
 import { RelatedRequestsPanel } from '@/components/requests/RelatedRequestsPanel'
 import { CsatSurvey } from '@/components/requests/CsatSurvey'
@@ -495,10 +497,27 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
     ...approvalEvents.map((item) => ({ kind: 'approval' as const, created_at: item.created_at, item })),
   ].sort((a, b) => b.created_at.localeCompare(a.created_at))
 
+  // "Catch me up": what happened and what is pending, for the technician or manager (built from this ticket's own history; nothing leaves the app)
+  const ticketSummary = isAgent ? buildTicketSummary({
+    now: new Date(nowMs), ticketNo: request.request_no, title: request.title, status: request.status, priority: request.priority, createdAt: request.created_at,
+    requester: request.requester.full_name, technician: request.assignee?.full_name ?? null, group: request.team?.name ?? null,
+    respondedAt: request.responded_at, responseDueAt: request.response_due_at, resolutionDueAt: request.resolution_due_at, resolvedAt: request.resolved_at, waitingSince: request.waiting_since,
+    comments: comments.map((c) => ({ at: c.created_at, author: c.author?.full_name ?? (c as { external_name?: string | null }).external_name ?? 'Someone outside', internal: c.is_internal, byRequester: c.author?.id === request.requester_id, body: c.body })),
+    activity: activity.map((a) => ({ at: a.created_at, action: a.action, actor: a.actor?.full_name ?? '', from: (a.metadata as { from?: string } | null)?.from, to: (a.metadata as { to?: string } | null)?.to })),
+    approvals: approvals.map((ap) => {
+      const decided = new Set(ap.decisions.map((d) => d.step_order))
+      const steps = ap.steps.filter((s) => (ap.current_step === 0 ? !decided.has(s.step_order) : s.step_order === (ap.current_step ?? 1)))
+      const last = [...ap.decisions].sort((x, y) => (x.decided_at ?? '').localeCompare(y.decided_at ?? '')).pop()
+      return { status: ap.status, sentAt: ap.created_at, awaiting: ap.status === 'pending' ? steps.map((s) => s.approver?.full_name ?? 'an approver') : [], decidedBy: ap.status !== 'pending' ? last?.decider?.full_name : undefined, decision: ap.status !== 'pending' ? ap.status : undefined }
+    }),
+    attachmentCount: attachments.length,
+  }) : null
+
   const conversationsTab = (
     <div className="flex flex-col" style={{ minHeight: '480px', maxHeight: '70vh' }}>
       {/* Scrollable message thread */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+        {ticketSummary && <TicketSummaryCard summary={ticketSummary} />}
         {request.status === 'waiting_user' && isRequester && !isAgent && (
           <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
             <p className="text-sm font-semibold text-orange-900">Action needed</p>
