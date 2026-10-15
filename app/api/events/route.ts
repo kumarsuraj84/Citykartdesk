@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   if (!Array.isArray(body.events) || body.events.length === 0) return NextResponse.json({ ok: true })
   // A browser may only report what a browser can observe. 'server_error' and 'system' are written by the server itself, so a signed-in user
   // can no longer put rows of those kinds into the log.
-  body.events = body.events.filter((e) => e && CLIENT_KINDS.has(e.kind))
+  body.events = body.events.filter((e) => e && CLIENT_KINDS.has(e.kind)).slice(0, 50)
   if (body.events.length === 0) return NextResponse.json({ ok: true })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

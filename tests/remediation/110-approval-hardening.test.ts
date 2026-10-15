@@ -60,7 +60,7 @@ describe('approval hardening', () => {
     return { req, approvalId: approval!.id as string, manager: tokenFor(fx.manager), adminTok: tokenFor(fx.admin) }
   }
   const approvalStatus = async (id: string) => (await admin.from('approvals').select('status').eq('id', id).single()).data!.status
-  const lastCode = () => /\b(\d{6})\b/.exec([...sent].reverse().find((m) => /Your Citykart Desk code/.test(m.subject))?.subject ?? '')?.[1] ?? ''
+  const lastCode = () => /\bis (\d{6})\./.exec([...sent].reverse().find((m) => /Your Citykart Desk verification code/.test(m.subject))?.text ?? '')?.[1] ?? ''
   const wrong = (code: string) => (code === '000000' ? '111111' : '000000')
 
   describe('D-030 nobody decides a request they raised or sent', () => {

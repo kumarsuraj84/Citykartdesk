@@ -40,6 +40,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Only the form this site shows may post here: a page on another site could otherwise submit its own token and sign the visitor in
+  // as the attacker (VAPT VA-API-08). Browsers always send Origin on a cross-site POST.
+  const sentFrom = request.headers.get('origin')
+  if (sentFrom && sentFrom !== new URL(request.url).origin && sentFrom !== process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '')) {
+    return new NextResponse('Not allowed', { status: 403 })
+  }
+  if (request.headers.get('sec-fetch-site') === 'cross-site') return new NextResponse('Not allowed', { status: 403 })
   const form = await request.formData()
   const tokenHash = String(form.get('token_hash') ?? '')
   const type = String(form.get('type') ?? '')

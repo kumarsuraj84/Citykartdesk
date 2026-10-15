@@ -37,6 +37,13 @@ export async function consumeApprovalCode(admin: AnyClient, approvalId: string, 
     const { data: claimed } = await admin.from('approval_email_codes').update({ used_at: new Date().toISOString() }).eq('id', row.id).is('used_at', null).select('id').maybeSingle()
     return claimed ? 'ok' : 'none'
   }
-  await admin.from('approval_email_codes').update({ attempts: row.attempts + 1 }).eq('id', row.id).eq('attempts', row.attempts)
-  return row.attempts + 1 >= CODE_MAX_ATTEMPTS ? 'locked' : 'wrong'
+  // Count the wrong guess for certain (VAPT VA-DB-11 / VA-TKT-13): a burst of parallel guesses used to read the same counter and be counted as one try.
+  // A guess that keeps losing the race to the counter is treated as a lock-out instead of a free try.
+  for (let i = 0; i < 6; i++) {
+    const { data: cur } = await admin.from('approval_email_codes').select('attempts').eq('id', row.id).maybeSingle()
+    if (!cur || cur.attempts >= CODE_MAX_ATTEMPTS) return 'locked'
+    const { data: bumped } = await admin.from('approval_email_codes').update({ attempts: cur.attempts + 1 }).eq('id', row.id).eq('attempts', cur.attempts).select('attempts').maybeSingle()
+    if (bumped) return bumped.attempts >= CODE_MAX_ATTEMPTS ? 'locked' : 'wrong'
+  }
+  return 'locked'
 }

@@ -148,6 +148,16 @@ export async function updateUserProfile(
 
   const admin = createAdminClient() as unknown as AnyClient
 
+  // Who may change whom (VAPT VA-ADM-05): only a platform owner edits an administrator or platform owner; a manager does not set reporting lines
+  // (the line manager gets to read that person's tickets).
+  {
+    const { data: who } = await admin.from('profiles').select('id, role, org_id').eq('id', userId).maybeSingle()
+    if (!who || who.org_id !== profile.org_id) return { error: 'User not found.' }
+    const guard = targetGuardError({ id: profile.id, role: profile.role }, { id: who.id, role: who.role }, 'profile')
+    if (guard) return { error: guard }
+    if ('manager_id' in fields && profile.role === 'manager') return { error: 'Only an administrator can set who a person reports to.' }
+  }
+
   // createAdminClient() bypasses RLS — without this, nothing stops these ids
   // from pointing at another org's rows. See orgScopeGuard.ts.
   const refError = await assertRefsInOrg(admin, profile.org_id, [
@@ -245,8 +255,10 @@ export async function addMobileNumber(
   const admin = createAdminClient() as unknown as AnyClient
 
   // Target must belong to caller's org — createAdminClient() bypasses RLS.
-  const { data: target } = await admin.from('profiles').select('org_id').eq('id', userId).maybeSingle()
+  const { data: target } = await admin.from('profiles').select('id, org_id, role').eq('id', userId).maybeSingle()
   if (!target || target.org_id !== profile.org_id) return { error: 'User not found.' }
+  const phoneGuard = targetGuardError({ id: profile.id, role: profile.role }, { id: target.id, role: target.role }, 'phone')
+  if (phoneGuard) return { error: phoneGuard }
 
   const dupError = await checkMobileNotTaken(admin, profile.org_id, normalized.normalized, userId)
   if (dupError) return { error: dupError }
@@ -262,6 +274,7 @@ export async function addMobileNumber(
     if (error.code === '23505') return { error: 'This mobile number is already registered to another user in this organization.' }
     return { error: error.message }
   }
+  await recordAudit({ category: 'security', action: 'user.mobile_added', entityType: 'user', entityId: userId, after: { mobile_number: normalized.normalized }, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/users')
   return {}
 }
@@ -279,6 +292,11 @@ export async function removeMobileNumber(
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const admin = createAdminClient() as unknown as AnyClient
+  const { data: who } = await admin.from('profiles').select('id, role, org_id').eq('id', userId).maybeSingle()
+  if (!who || who.org_id !== profile.org_id) return { error: 'User not found.' }
+  const phoneGuard = targetGuardError({ id: profile.id, role: profile.role }, { id: who.id, role: who.role }, 'phone')
+  if (phoneGuard) return { error: phoneGuard }
+  await recordAudit({ category: 'security', action: 'user.mobile_removed', entityType: 'user', entityId: userId, before: { mobile_number: mobileNumber }, actorId: profile.id, orgId: profile.org_id })
   const { error } = await admin
     .from('profile_mobile_numbers')
     .delete()
@@ -303,6 +321,8 @@ export async function setUserTeams(
   // Target user and every team assigned must belong to the caller's own org.
   const { data: targetUser } = await admin.from('profiles').select('org_id, role').eq('id', userId).maybeSingle()
   if (!targetUser || targetUser.org_id !== profile.org_id) return { error: 'User not found.' }
+  const teamsGuard = targetGuardError({ id: profile.id, role: profile.role }, { id: userId, role: targetUser.role }, 'teams')
+  if (teamsGuard) return { error: teamsGuard }
   // Technician groups are for technicians/admins to work tickets as a group —
   // a requester has no use for one, so this is enforced here too, not just
   // hidden client-side (e.g. a stale selection from before a role downgrade).

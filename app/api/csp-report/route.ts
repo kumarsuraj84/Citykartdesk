@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { recordSystemLog } from '@/lib/syslog/record'
-import { rateLimit } from '@/lib/rate-limit'
+import { rateLimit, getClientIp } from '@/lib/rate-limit'
 
 // Where the browser sends Content-Security-Policy violation reports (lib/http/csp.ts). Anyone can post here, so it is small and cheap: the
 // body is capped, each address is rate-limited, identical reports collapse into one row, and nothing is stored except what the browser says
@@ -13,7 +13,12 @@ const short = (v: unknown, n = 300) => (typeof v === 'string' ? v.slice(0, n) : 
 const bare = (v: unknown) => { const s = short(v, 500); try { const u = new URL(s); return `${u.origin}${u.pathname}` } catch { return s.split('?')[0] } }
 
 export async function POST(req: NextRequest) {
-  const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown'
+  // A caller can write any X-Forwarded-For it likes, so only the trusted-proxy address counts (VAPT VA-API-07 / VA-ADM-08), and the whole endpoint has
+  // one cap on top, so a flood cannot fill the System Log whatever it invents.
+  const declared = Number(req.headers.get('content-length') ?? '0')
+  if (declared > MAX_BODY) return new NextResponse(null, { status: 204 })
+  if ((await rateLimit('csp-report:all', 120, 60_000)).limited) return new NextResponse(null, { status: 204 })
+  const ip = (await getClientIp()) ?? 'unknown'
   if ((await rateLimit(`csp-report:${ip}`, 30, 60_000)).limited) return new NextResponse(null, { status: 204 })
 
   let report: Record<string, unknown> | null = null

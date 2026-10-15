@@ -48,7 +48,9 @@ export const getCurrentProfile = cache(async function (): Promise<ProfileWithTea
       .eq('id', userId)
       .single()
 
-    if (!error) return data as ProfileWithTeams | null
+    // A deactivated person's session stays valid until its token expires; the application stops treating them as signed in at once
+    // (the database already gives them no organisation or role, see current_org_id()). VAPT VA-API-09.
+    if (!error) return (data && (data as { is_active?: boolean }).is_active === false ? null : data) as ProfileWithTeams | null
     if (error.code === 'PGRST116') return null
     await new Promise((r) => setTimeout(r, 250 * (attempt + 1)))
   }

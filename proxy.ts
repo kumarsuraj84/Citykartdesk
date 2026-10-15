@@ -35,7 +35,7 @@ export async function proxy(request: NextRequest) {
   const isPublicAsset =
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon') ||
-    /\.(svg|png|jpg|jpeg|gif|webp|ico)$/.test(pathname)
+    /^\/[A-Za-z0-9._-]+\.(svg|png|jpg|jpeg|gif|webp|ico)$/.test(pathname)   // root-level files of /public only (VAPT VA-API-04)
   if (isPublicAsset) return passThrough(request)
 
   // A public page only ever posts a small form: refuse a large body before any action reads it (D-039).
@@ -107,7 +107,7 @@ export async function proxy(request: NextRequest) {
           )
           supabaseResponse = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, (process.env.NEXT_PUBLIC_APP_URL ?? '').startsWith('https') ? { ...options, secure: true } : options)
           )
         },
       },

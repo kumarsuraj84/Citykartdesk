@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { safeNextPath } from '@/lib/auth/safe-next'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
@@ -100,7 +101,8 @@ export async function resetPassword(formData: FormData) {
   // clearing it here is a no-op for anyone who wasn't flagged.
   const profile = await getCurrentProfile()
   if (profile?.must_reset_password) {
-    await supabase.from('profiles').update({ must_reset_password: false }).eq('id', profile.id)
+    // only the server clears it, and only here, after the password really changed (a signed-in user has no right to switch it off: VAPT VA-API-02)
+    await createAdminClient().from('profiles').update({ must_reset_password: false }).eq('id', profile.id)
   }
   await recordAudit({ category: 'security', source: 'auth', action: 'auth.password_changed', actorId: profile?.id ?? null, message: 'Password set through a reset or invitation link' })
 
@@ -124,6 +126,8 @@ export async function changeOwnPassword(formData: FormData): Promise<{ error?: s
   const { data: { user } } = await supabase.auth.getUser()
   if (!user?.email) return { error: 'Not authenticated.' }
 
+  // checking the current password is itself a password guess: it is limited like a sign-in (VAPT VA-TKT-18)
+  if ((await rateLimit(`change-password:${user.id}`, 5, 10 * 60_000)).limited) return { error: 'Too many attempts. Please wait a few minutes and try again.' }
   const { error: verifyError } = await supabase.auth.signInWithPassword({
     email: user.email,
     password: currentPassword,
@@ -133,6 +137,8 @@ export async function changeOwnPassword(formData: FormData): Promise<{ error?: s
   const { error } = await supabase.auth.updateUser({ password: newPassword })
   if (error) return { error: sanitizeError(error, { route: 'auth.ts#changeOwnPassword', fallback: 'Could not update your password. Please try again.' }) }
   await recordAudit({ category: 'security', source: 'auth', action: 'auth.password_changed', actorId: user.id, message: 'Password changed by the user' })
+  // a changed password ends every OTHER session of this person (a stolen session must not survive it): VAPT VA-API-09 / VA-TKT-18
+  try { await supabase.auth.signOut({ scope: 'others' }) } catch { /* the password is changed either way */ }
 
   return { success: true }
 }

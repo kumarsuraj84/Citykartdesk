@@ -42,7 +42,9 @@ export function senderAuthenticity(authResults: unknown, fromAddress: string): S
   if (!header) return { verdict: 'unchecked', reason: 'no result from the receiving mail server' }
 
   const dmarc = methodResults(header, 'dmarc')
-  if (dmarc.some((d) => d.result === 'pass')) return { verdict: 'authentic', reason: 'DMARC pass' }
+  // a DMARC result names the domain it was about (header.from); a pass for some other domain says nothing about this sender (VAPT VA-INT-07)
+  const dmarcPassForSender = dmarc.some((d) => d.result === 'pass' && (!d.props['header.from'] || aligned(lower(d.props['header.from']), fromDomain)))
+  if (dmarcPassForSender) return { verdict: 'authentic', reason: 'DMARC pass' }
   if (dmarc.some((d) => d.result === 'fail')) return { verdict: 'failed', reason: 'DMARC fail' }
 
   // the domain publishes no DMARC rule: accept a DKIM or SPF pass only when it is for the very domain the message says it is from

@@ -61,7 +61,7 @@ describe('ticket status moves checked by the database (D-023)', () => {
 
   it('a change that does not touch the status is not affected, and the server may still do what only it may (auto-close)', async () => {
     const t = await ticket('resolved')
-    const same = await http('PATCH', `/rest/v1/requests?id=eq.${t}`, { token: fx.agentA.accessToken, body: { priority: 'high' }, headers: { Prefer: 'return=representation' } })
+    const same = await http('PATCH', `/rest/v1/requests?id=eq.${t}`, { token: fx.agentA.accessToken, body: { description: 'edited, status untouched' }, headers: { Prefer: 'return=representation' } })
     expect(same.status).toBeLessThan(300)
     const server = await db.from('requests').update({ status: 'closed', closed_at: new Date().toISOString() }).eq('id', t)
     expect(server.error).toBeNull()

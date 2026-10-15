@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server'
 const record = vi.hoisted(() => vi.fn(async () => {}))
 const limit = vi.hoisted(() => vi.fn(async () => ({ limited: false, remaining: 10 })))
 vi.mock('@/lib/syslog/record', () => ({ recordSystemLog: record }))
-vi.mock('@/lib/rate-limit', () => ({ rateLimit: limit }))
+vi.mock('@/lib/rate-limit', () => ({ rateLimit: limit, getClientIp: async () => null }))
 
 import { POST } from '@/app/api/csp-report/route'
 import { buildCspReportOnly } from '@/lib/http/csp'

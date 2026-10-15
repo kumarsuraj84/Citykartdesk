@@ -142,11 +142,9 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
     formData: parsedFormData,
     projectId,
     source: 'web',
-    // "Book on behalf of" needs the admin client for the insert —
-    // requests_insert's RLS (requester_id = auth.uid()) would otherwise
-    // reject any requester_id other than the acting agent's own id (same
-    // pattern as duplicateRequest).
-    useAdminForWrites: requesterId !== user.id,
+    // A ticket is always inserted by the server (VAPT VA-DB-02): the database gives a signed-in user no direct INSERT on requests, so the
+    // service, form, priority and routing chosen here cannot be skipped by calling the data API. Who the requester is was checked above.
+    useAdminForWrites: true,
     // Location-scoped visibility only applies to a plain Requester — see
     // createRequestCore()'s own doc comment. Agent-tier actors (including
     // one raising this "on behalf of" a Requester elsewhere) are exempt,
@@ -725,7 +723,10 @@ export async function addComment(
       // Public comment: requester + assignee + collaborators
       : [audience.requesterId, audience.assigneeId, ...audience.collaboratorIds]
 
-    const recipients = [...new Set(notifyIds.filter((id): id is string => id !== null && id !== profile.id))]
+    let recipients = [...new Set(notifyIds.filter((id): id is string => id !== null && id !== profile.id))]
+    // An internal note is staff-only: its text must not reach an ordinary user who is only a collaborator on the ticket (VAPT VA-INT-03).
+    const staffIds = await staffAmong(supabase, recipients)
+    if (internal) recipients = recipients.filter((id) => staffIds.has(id))
     const notifBody = trimmed ? (trimmed.length > 120 ? trimmed.slice(0, 120) + '…' : trimmed) : '📎 Sent an attachment'
 
     if (recipients.length > 0) {
@@ -764,7 +765,10 @@ export async function addComment(
         const matched = candidates.find(
           (p) => p.full_name.toLowerCase().split(' ')[0] === firstName
         )
-        if (matched) {
+        // Only someone who may read the comment is told what it says: for an internal note that is staff, otherwise staff or a person on the ticket.
+        const mentionedStaff = matched ? (await staffAmong(supabase, [matched.id])).has(matched.id) : false
+        const mentionedOnTicket = matched ? [audience.requesterId, audience.assigneeId, ...audience.collaboratorIds].includes(matched.id) : false
+        if (matched && (internal ? mentionedStaff : (mentionedStaff || mentionedOnTicket))) {
           notify({
             recipientId: matched.id,
             actorId: profile.id,
@@ -871,6 +875,14 @@ export async function deleteEmptyComment(commentId: string): Promise<ActionResul
   await supabase.from('request_comments').delete().eq('id', commentId)
   revalidatePath(`/requests/${comment.request_id}`)
   return {}
+}
+
+const STAFF_ROLES = ['agent', 'manager', 'admin', 'platform_owner']
+/** Which of these people are staff (technician, manager, admin, platform owner)? Used to keep internal-note text away from ordinary users. */
+async function staffAmong(supabase: Awaited<ReturnType<typeof createClient>>, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set()
+  const { data } = await supabase.from('profiles').select('id, role').in('id', ids)
+  return new Set((data ?? []).filter((p) => STAFF_ROLES.includes(p.role as string)).map((p) => p.id as string))
 }
 
 // ── The priority of a ticket cannot be changed by hand ──────────────────────────
@@ -1203,7 +1215,8 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
   if (!req) return { error: 'Request not found.' }
 
   const onTeam = profile.role === 'agent' && profile.team_members.some((m) => m.team_id === req.team_id)
-  if (!['manager', 'admin', 'platform_owner'].includes(profile.role) && !onTeam && profile.id !== req.requester_id)
+  // Only staff of the ticket send it for approval: a requester could otherwise freeze their own ticket and pause its SLA (VAPT VA-TKT-05).
+  if (!['manager', 'admin', 'platform_owner'].includes(profile.role) && !onTeam)
     return { error: 'Unauthorized.' }
 
   if (['resolved', 'closed', 'cancelled', 'pending_approval'].includes(req.status))
@@ -1236,14 +1249,9 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
   if (workflowId) {
     usedWorkflowId = workflowId
   } else {
-    // No workflow on service — look for any default workflow
-    const { data: defaultWorkflow } = await supabase
-      .from('approval_workflows')
-      .select('id')
-      .limit(1)
-      .maybeSingle()
-    if (!defaultWorkflow) return { error: 'No approval workflow is configured. Ask an admin to set one up.' }
-    usedWorkflowId = defaultWorkflow.id
+    // The service has no approval route. Do NOT pick "any" workflow (it used to be a random one, often another ticket's ad-hoc route, whose
+    // approvers would then gain access to this ticket): use "Send for approval" with named approvers, or ask an admin to set a route (VAPT VA-TKT-05).
+    return { error: 'This service has no approval workflow. Send the ticket for approval with named approvers, or ask an admin to set up a workflow for the service.' }
   }
 
   // Product Decision D — a workflow with zero configured steps must never
@@ -1278,7 +1286,7 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
 
   const { data: createdApproval, error: wfErr } = await admin
     .from('approvals')
-    .insert({ request_id: requestId, workflow_id: workflowId || usedWorkflowId, status: 'pending' })
+    .insert({ request_id: requestId, workflow_id: workflowId || usedWorkflowId, status: 'pending', requested_by: profile.id })
     .select('id')
     .single()
   // 23505 = the approvals_one_pending_per_request unique index rejected a

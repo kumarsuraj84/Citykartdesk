@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyCronSecret } from '@/lib/cron-auth'
 import { sendApprovalReminders } from '@/lib/approvals/reminders'
 import { recordAudit } from '@/lib/syslog/audit'
+import { loadDbSmtpConfig } from '@/lib/email/mailbox'
 
 // Scheduled job (cron-tick job "approval-reminders", every day at 10:00): one e-mail to each approver listing everything still waiting for their decision.
 export async function GET(req: NextRequest) {
@@ -14,6 +15,11 @@ export async function GET(req: NextRequest) {
     // ?sampleTo=name@company.com sends ONE sample e-mail to that address only (a test; nobody else is e-mailed and today's run is not used up)
     const sampleTo = req.nextUrl.searchParams.get('sampleTo')?.trim()
     if (sampleTo !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sampleTo)) return NextResponse.json({ error: 'sampleTo must be an e-mail address.' }, { status: 400 })
+    // The sample carries real approval links, so it may only go to an address at the company's own mail domain (VAPT VA-API-10), never to any outside address.
+    if (sampleTo) {
+      const companyDomain = (await loadDbSmtpConfig())?.user?.split('@')[1]?.toLowerCase()
+      if (!companyDomain || !sampleTo.toLowerCase().endsWith('@' + companyDomain)) return NextResponse.json({ error: 'sampleTo must be an address at the company mail domain.' }, { status: 400 })
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await sendApprovalReminders(createAdminClient() as any, sampleTo ? { sampleTo } : {})
     if (!sampleTo && (result.sent > 0 || result.failed > 0)) {

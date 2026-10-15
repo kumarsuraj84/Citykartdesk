@@ -46,6 +46,9 @@ function validate(input: RuleInput): string | null {
   if (!hasOutput) return 'Set at least one outcome (type, department, category, subcategory or priority).'
   if (input.match_regex) {
     try { new RegExp(input.match_regex) } catch { return 'The regex pattern is invalid.' }
+    if (input.match_regex.length > 200) return 'The regex pattern is too long (200 characters at most).'
+    // a repeated group that itself repeats, such as (a+)+ or (.*)*, can make a crafted e-mail run for minutes
+    if (/\([^)]*[+*}][^)]*\)\s*[+*{]/.test(input.match_regex)) return 'The regex pattern is too complex (a repeated group inside a repeat). Use keywords or a simpler pattern.'
   }
   if (input.weight < 1 || input.weight > 10) return 'Weight must be between 1 and 10.'
   return null

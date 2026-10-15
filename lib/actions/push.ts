@@ -1,5 +1,6 @@
 'use server'
 
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { isAcceptablePushEndpoint } from '@/lib/push/endpoint'
@@ -32,7 +33,7 @@ export async function subscribeToPush(sub: PushSubscriptionInput): Promise<{ err
     { onConflict: 'endpoint' }
   )
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'push.ts', fallback: 'Something went wrong. Please try again.' }) }
   return {}
 }
 
@@ -47,7 +48,7 @@ export async function unsubscribeFromPush(endpoint: string): Promise<{ error?: s
     .eq('endpoint', endpoint)
     .eq('user_id', profile.id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'push.ts', fallback: 'Something went wrong. Please try again.' }) }
   return {}
 }
 

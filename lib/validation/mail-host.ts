@@ -20,7 +20,9 @@ export function mailHostProblem(host: string): string | null {
     if (o[0] === 169 && o[1] === 254) return 'That address is reserved for the network itself (169.254.x.x) and cannot be a mail server.'
     if (o[0] >= 224) return 'That address cannot be a mail server.'
   }
+  // a name made only of digits and dots must be a plain dotted address: 127.1 and 0177.0.0.1 are read as 127.0.0.1 by the resolver (VAPT, earlier D-026)
+  if (/^[0-9.]+$/.test(h) && !/^(0|[1-9]\d{0,2})(\.(0|[1-9]\d{0,2})){3}$/.test(h)) return 'Enter the mail server by name or as a dotted address, e.g. smtp.gmail.com.'
   // numeric shortcuts that some resolvers read as an address (e.g. 2130706433 or 0x7f000001 for 127.0.0.1)
-  if (/^\d+$/.test(h) || /^0x[0-9a-f]+$/i.test(h)) return 'Enter the mail server by name or as a dotted address, e.g. smtp.gmail.com.'
+  if (/^\d+$/.test(h) || /(^|\.)0x[0-9a-f]+(\.|$)/i.test(h)) return 'Enter the mail server by name or as a dotted address, e.g. smtp.gmail.com.'
   return null
 }

@@ -137,7 +137,10 @@ export default function RichEmailEditor({ label, value, onChange, hint }: {
     }
   }, [value, editor])
 
-  const previewHtml = renderHtmlEmail(toEditorHtml(value) || '<p></p>', OEM_SAMPLE_VALUES).html
+  // The preview is built from what the editor itself holds (its own schema drops scripts, event handlers and unknown tags), never from the raw stored text:
+  // a template written straight into the database could otherwise run in the administrator's browser (VAPT VA-INT-05 / VA-ADM-07).
+  const cleanHtml = editor && !editor.isEmpty ? editor.getHTML() : ''
+  const previewHtml = renderHtmlEmail(cleanHtml || '<p></p>', OEM_SAMPLE_VALUES).html
 
   return (
     <div>

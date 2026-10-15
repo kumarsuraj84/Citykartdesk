@@ -134,7 +134,7 @@ export async function sendAdHocApproval(
 
   const { data: req } = await supabase
     .from('requests')
-    .select('id, title, status, team_id, requester_id, org_id, waiting_since')
+    .select('id, request_no, title, status, team_id, requester_id, org_id, waiting_since')
     .eq('id', requestId)
     .single()
   if (!req) return { error: 'Request not found.' }
@@ -170,7 +170,7 @@ export async function sendAdHocApproval(
   // with "Approval workflow has no steps" for every approver, permanently.
   const { data: workflow, error: wfErr } = await admin
     .from('approval_workflows')
-    .insert({ name: `Ad-hoc: ${req.title}`, org_id: req.org_id })
+    .insert({ name: `Ad-hoc approval ${req.request_no ?? ''}`.trim(), org_id: req.org_id })
     .select('id')
     .single()
   if (wfErr || !workflow) return { error: sanitizeError(wfErr, { route: 'approvals.ts#sendAdHocApproval', fallback: 'Failed to create approval workflow.' }) }

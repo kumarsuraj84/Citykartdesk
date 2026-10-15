@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { logActivity } from '@/lib/activity'
 import { notify } from '@/lib/notifications'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
-import { resolveServiceFormSections } from '@/lib/forms/sections'
+import { resolveServiceFormSections, requesterCanSet } from '@/lib/forms/sections'
 import { validateRequesterFormCompletion } from '@/lib/requests/validate-requester-form-completion'
 import { resolveSubCategoryForService } from '@/lib/requests/resolve-sub-category'
 import { sendEmail } from '@/lib/email/send'
@@ -366,6 +366,14 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
       .maybeSingle()
     requesterStoreAddress = store?.address ?? null
     requesterStoreOemId = store?.oem_id ?? null
+  }
+
+  // A plain requester answers only the questions a requester may answer. Anything else they send (a technician-only box, an id that is not on the form)
+  // is dropped: otherwise a pre-filled technician field would pass the technician's "must fill before moving on" gate, and a hidden field could pick
+  // a field-level SLA tier (VAPT VA-TKT-08).
+  if (actingUserRoleForLocationCheck === 'user') {
+    const settable = new Set(allFields.filter((f) => requesterCanSet(f)).map((f) => f.id))
+    for (const key of Object.keys(parsedFormData)) if (!settable.has(key)) delete parsedFormData[key]
   }
 
   // Always system-populated, never trust whatever (if anything) the caller

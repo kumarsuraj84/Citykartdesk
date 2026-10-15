@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
+import { mailHostProblem } from '@/lib/validation/mail-host'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -205,6 +206,8 @@ export async function connectChannel(
   if (!creds.host?.trim() || !creds.user?.trim() || !creds.port) {
     return { error: 'Host, port and username are required.' }
   }
+  const hostProblem = mailHostProblem(creds.host.trim())
+  if (hostProblem) return { error: hostProblem }
 
   // Verify the channel belongs to the caller's org (RLS-scoped read).
   const rls = (await createClient()) as unknown as AnyClient
@@ -233,6 +236,12 @@ export async function connectChannel(
       const prev = JSON.parse((existing as string) ?? '{}') as { password?: string; type?: string }
       if (prev.type === 'oauth') return { error: 'This channel uses OAuth — reconnect with the provider button instead.' }
       if (!prev.password) return { error: 'No stored password to keep — please enter the password.' }
+      // The saved password is only ever sent to the server it was saved for. Pointing the channel at another server (or user) means typing the password
+      // again, so a saved password cannot be redirected to a machine somebody else controls (VAPT VA-ADM-01).
+      const prevWithHost = prev as { host?: string; port?: number; user?: string; password?: string }
+      if ((prevWithHost.host ?? '').trim().toLowerCase() !== creds.host.trim().toLowerCase() || Number(prevWithHost.port) !== Number(creds.port) || (prevWithHost.user ?? '').trim().toLowerCase() !== creds.user.trim().toLowerCase()) {
+        return { error: 'You changed the mail server, port or user: please enter the password again.' }
+      }
       password = prev.password
     } catch {
       return { error: 'Could not read existing credentials — please enter the password.' }

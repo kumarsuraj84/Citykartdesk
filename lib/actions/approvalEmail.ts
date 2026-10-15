@@ -72,7 +72,7 @@ export async function requestApprovalCode(token: string): Promise<Result & { sen
     <p style="font-size:13px;color:#6B7280;">It works once, for the next ${CODE_MINUTES} minutes. If you did not open the approval link, ignore this e-mail and do not share the code.</p>
   `)
   const res = await sendEmail({
-    to: email, subject: `Your Citykart Desk code: ${code}`, html,
+    to: email, subject: 'Your Citykart Desk verification code', html,
     text: `Your verification code to approve or reject ${state.requestNo} is ${code}. It works once, for the next ${CODE_MINUTES} minutes. If you did not open the approval link, ignore this e-mail and do not share the code.`,
   })
   if (res.error) return { error: 'The code could not be sent. Please try again.' }

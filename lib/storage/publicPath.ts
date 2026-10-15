@@ -7,8 +7,9 @@
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 const EXT = '(png|jpe?g|gif|webp)'
 const SHAPES: Record<string, RegExp> = {
-  icons: new RegExp(`^${UUID}\.${EXT}$`, 'i'),
-  avatars: new RegExp(`^${UUID}/avatar\.${EXT}$`, 'i'),
+  // String.raw keeps the backslash: in a plain template literal "\." is just "." (any character), which loosened the dot (VAPT VA-API-14)
+  icons: new RegExp(String.raw`^${UUID}\.${EXT}$`, 'i'),
+  avatars: new RegExp(String.raw`^${UUID}/avatar\.${EXT}$`, 'i'),
 }
 
 export const CONTENT_TYPE_BY_EXT: Record<string, string> = {

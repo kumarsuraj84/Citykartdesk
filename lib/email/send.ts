@@ -75,6 +75,8 @@ async function sendViaSmtp(p: EmailPayload, setup: EmailSetup): Promise<{ error?
     html: p.html,
     text: p.text,
     replyTo,
+    // automatic mail: other systems must not auto-answer it (VAPT VA-INT-09)
+    headers: { 'Auto-Submitted': 'auto-generated', 'X-Auto-Response-Suppress': 'All' },
     attachments: p.attachments?.map((a) => ({ filename: a.filename, content: a.content, encoding: 'base64' })),
   })
   return {}
@@ -96,6 +98,7 @@ async function sendViaResend(p: EmailPayload, setup: EmailSetup): Promise<{ erro
       html: p.html,
       text: p.text,
       ...(replyTo ? { reply_to: replyTo } : {}),
+      headers: { 'Auto-Submitted': 'auto-generated', 'X-Auto-Response-Suppress': 'All' },
       ...(p.attachments ? { attachments: p.attachments } : {}),
     }),
   })

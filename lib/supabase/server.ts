@@ -18,7 +18,7 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, (process.env.NEXT_PUBLIC_APP_URL ?? '').startsWith('https') ? { ...options, secure: true } : options)
             )
           } catch {
             // Called from a Server Component — middleware handles session refresh

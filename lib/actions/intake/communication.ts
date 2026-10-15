@@ -64,7 +64,7 @@ export async function addNote(
   body: string,
 ): Promise<{ id?: string; error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile) return { error: 'Unauthorized.' }
+  if (!profile || !canReview(profile.role)) return { error: 'Unauthorized.' }   // VAPT VA-ADM-11: a requester cannot write notes on staff mail threads
   const moduleError = await requireModuleEnabled('intake')
   if (moduleError) return { error: moduleError }
   if (!body.trim()) return { error: 'Note body cannot be empty.' }

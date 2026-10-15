@@ -119,14 +119,17 @@ export async function uploadAttachment(
   // Files are attached inline to the reply they were sent with — confirm the given
   // comment actually belongs to this request so a caller can't graft a file onto
   // an unrelated request's comment.
+  // A file sent with an internal note is internal too (VAPT VA-INT-01): the row says so, and row security then keeps it from the requester.
+  let attachmentIsInternal = false
   if (commentId) {
     const { data: comment } = await supabase
       .from('request_comments')
-      .select('id')
+      .select('id, is_internal')
       .eq('id', commentId)
       .eq('request_id', requestId)
       .maybeSingle()
     if (!comment) return { error: 'Comment not found on this request.' }
+    attachmentIsInternal = comment.is_internal === true
   }
 
   // ── Storage upload ────────────────────────────────────────────────────────
@@ -158,7 +161,7 @@ export async function uploadAttachment(
       file_size: file.size,
       mime_type: mimeType,
       storage_path: storagePath,
-      is_internal: false,
+      is_internal: attachmentIsInternal,
     })
     .select('id')
     .single()
@@ -175,7 +178,8 @@ export async function uploadAttachment(
     requestId,
     actorId: profile.id,
     action: 'attachment_added',
-    metadata: { file_name: file.name, file_size: file.size },
+    // the history is readable by the requester, so the name and size of a staff-only file are not written to it
+    metadata: attachmentIsInternal ? { internal: true } : { file_name: file.name, file_size: file.size },
   })
 
   revalidatePath(`/requests/${requestId}`)

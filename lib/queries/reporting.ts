@@ -745,7 +745,9 @@ async function loadReportDataUtc(
   }
 
   if (entity === 'requests') {
-    const formFields = await getOrgRequestFormFields(admin, orgId)
+    let formFields = await getOrgRequestFormFields(admin, orgId)
+    // a person who sees tickets as a requester (their own, or those of the people who report to them) does not get the technician-only boxes in a report either (VAPT VA-ADM-04)
+    if (scope.kind === 'own' || scope.kind === 'reports') formFields = formFields.filter((f) => f.requesterCanView !== false)
     const { rows, truncated } = await fetchRequestRows(admin, orgId, scope, formFields)
     return { fields: [RECORD_COUNT_FIELD, ...getEntityFields(entity, toReportFields(formFields))], rows, truncated }
   }

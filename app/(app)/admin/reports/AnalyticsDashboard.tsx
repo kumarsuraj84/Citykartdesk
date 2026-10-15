@@ -777,6 +777,7 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds,
   // hydration mismatch) and whenever the available widgets themselves change
   // (e.g. technician-workload card appearing/disappearing with the data).
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the saved order lives in the browser (localStorage) and can only be read after mount
     setOrder(loadSavedOrder(userId, defaultOrder))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, defaultOrder.join(',')])

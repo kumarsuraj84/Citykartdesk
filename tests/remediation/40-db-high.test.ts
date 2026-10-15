@@ -139,14 +139,17 @@ describe('D-008 a ticket cannot be forged through the API', () => {
     expect(after).toEqual({ request_no: mine.request_no, created_at: mine.created_at })
     expect(before.request_no).toBeTruthy()
   })
-  it('POSITIVE: a requester can still create an ordinary ticket, and a technician can still change their team\'s tickets', async () => {
+  it('POSITIVE: the server creates the ordinary ticket (no direct INSERT for a user since migration 164), and a technician can still edit their team\'s tickets but not the priority', async () => {
     const s = (await svc<{ id: string; team_id: string }[]>('GET', '/services?select=id,team_id&limit=1')).json[0]
-    const ok = await asUser<{ id: string }[]>(staff1, 'POST', '/requests', { title: `normal ${tag}`, requester_id: staff1.id, org_id: ORG_A, service_id: s.id, team_id: s.team_id }, { Prefer: 'return=representation' })
+    expect((await asUser(staff1, 'POST', '/requests', { title: `direct ${tag}`, requester_id: staff1.id, org_id: ORG_A, service_id: s.id, team_id: s.team_id }, { Prefer: 'return=representation' })).status).toBeGreaterThanOrEqual(400)
+    const ok = await svc<{ id: string }[]>('POST', '/requests', { title: `normal ${tag}`, requester_id: staff1.id, org_id: ORG_A, service_id: s.id, team_id: s.team_id }, { Prefer: 'return=representation' })
     expect(ok.status).toBe(201)
     cleanup.push(() => svc('DELETE', `/requests?id=eq.${ok.json[0].id}`))
     const t = await teamOf(agent1.id)
     const mine = (await svc<{ id: string; title: string }[]>('GET', `/requests?team_id=eq.${t}&select=id,title&limit=1`)).json[0]
-    const upd = await asUser(agent1, 'PATCH', `/requests?id=eq.${mine.id}`, { priority: 'high' })
+    const now = (await svc<{ priority: string }[]>('GET', `/requests?id=eq.${mine.id}&select=priority`)).json[0].priority
+    expect((await asUser(agent1, 'PATCH', `/requests?id=eq.${mine.id}`, { priority: now === 'urgent' ? 'low' : 'urgent' })).status).toBeGreaterThanOrEqual(400)   // nobody sets the priority by hand
+    const upd = await asUser(agent1, 'PATCH', `/requests?id=eq.${mine.id}`, { description: 'edited by the technician' })
     expect(upd.status).toBeLessThan(300)
   })
 })

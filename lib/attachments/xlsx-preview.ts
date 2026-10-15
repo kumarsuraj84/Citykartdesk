@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs'
+import { inflateRawSync } from 'node:zlib'
 
 // Reads an .xlsx attachment into plain rows for the preview popup. Runs on the server, on a file a
 // logged-in user uploaded, so it is deliberately bounded: file size, decompressed size (a tiny
@@ -46,6 +47,42 @@ export function inspectZip(buf: Buffer): { entries: number; uncompressed: number
   return { entries, uncompressed }
 }
 
+/**
+ * The sizes written in a zip's directory are numbers its author chooses, so they prove nothing (VAPT VA-API-06 / VA-INT-04): a file can declare
+ * 1 KB and unpack to gigabytes. This really unpacks every entry, with a hard output limit shared by the whole file, and refuses the file as soon as
+ * the real total passes it. Memory use is bounded by `maxTotal` whatever the file claims.
+ */
+export function verifyZipRealSize(buf: Buffer, maxTotal: number): void {
+  let eocd = -1
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 22 - 65535); i--) {
+    if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break }
+  }
+  if (eocd < 0) throw new PreviewError('unreadable')
+  const entries = buf.readUInt16LE(eocd + 10)
+  let offset = buf.readUInt32LE(eocd + 16)
+  let remaining = maxTotal
+  for (let n = 0; n < entries; n++) {
+    if (offset + 46 > buf.length || buf.readUInt32LE(offset) !== 0x02014b50) throw new PreviewError('unreadable')
+    const method = buf.readUInt16LE(offset + 10)
+    const compressedSize = buf.readUInt32LE(offset + 20)
+    const localHeader = buf.readUInt32LE(offset + 42)
+    offset += 46 + buf.readUInt16LE(offset + 28) + buf.readUInt16LE(offset + 30) + buf.readUInt16LE(offset + 32)
+    if (localHeader + 30 > buf.length || buf.readUInt32LE(localHeader) !== 0x04034b50) throw new PreviewError('unreadable')
+    const start = localHeader + 30 + buf.readUInt16LE(localHeader + 26) + buf.readUInt16LE(localHeader + 28)
+    if (start + compressedSize > buf.length) throw new PreviewError('unreadable')
+    const data = buf.subarray(start, start + compressedSize)
+    if (method === 0) { remaining -= data.length }
+    else if (method === 8) {
+      try { remaining -= inflateRawSync(data, { maxOutputLength: Math.max(1, remaining) }).length }
+      catch (e) {
+        if ((e as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE') throw new PreviewError('too_large')
+        throw new PreviewError('unreadable')
+      }
+    } else throw new PreviewError('unreadable')
+    if (remaining < 0) throw new PreviewError('too_large')
+  }
+}
+
 function pad(n: number): string {
   return String(n).padStart(2, '0')
 }
@@ -76,6 +113,8 @@ export async function previewXlsx(
   if (entries > MAX_ZIP_ENTRIES || uncompressed > (opts.maxUncompressed ?? MAX_UNCOMPRESSED_BYTES)) {
     throw new PreviewError('too_large')
   }
+  // the declared sizes can lie: check what the file really unpacks to before the spreadsheet reader sees it
+  verifyZipRealSize(buffer, opts.maxUncompressed ?? MAX_UNCOMPRESSED_BYTES)
 
   const workbook = new ExcelJS.Workbook()
   try {

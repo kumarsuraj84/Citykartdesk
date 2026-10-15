@@ -1,5 +1,6 @@
 'use server'
 
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -45,7 +46,7 @@ export async function updateProfile(data: {
     .eq('id', user.id)
 
   if (error) {
-    return { error: error.message }
+    return { error: sanitizeError(error, { route: 'profile.ts', fallback: 'Something went wrong. Please try again.' }) }
   }
 
   revalidatePath('/profile')
@@ -89,7 +90,7 @@ export async function uploadAvatar(formData: FormData): Promise<{ avatarUrl?: st
     .update({ avatar_url: avatarUrl })
     .eq('id', user.id)
 
-  if (updateError) return { error: updateError.message }
+  if (updateError) return { error: sanitizeError(updateError, { route: 'profile.ts', fallback: 'Something went wrong. Please try again.' }) }
 
   revalidatePath('/profile')
   return { avatarUrl }

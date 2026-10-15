@@ -7,6 +7,8 @@ import { buildCspReportOnly } from "./lib/http/csp";
 const BUILD_ID = process.env.CK_BUILD_ID || 'dev'
 
 const nextConfig: NextConfig = {
+  // Do not announce the framework in every response header (VAPT, information leak)
+  poweredByHeader: false,
   env: { NEXT_PUBLIC_BUILD_ID: BUILD_ID },
   generateBuildId: async () => BUILD_ID,
   // Emits a self-contained .next/standalone server (only the node_modules it
@@ -55,6 +57,9 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '30mb',
     },
+    // With proxy.ts in front, Next buffers a request body up to 10 MB by default and silently cuts it there; keep it equal to the Server Action limit
+    // so a 10-25 MB attachment arrives whole (VAPT observation, see 02-VAPT/04-MANUAL-PENETRATION-TESTING.md).
+    proxyClientMaxBodySize: '30mb',
     // Cache dynamic RSC payloads in the client router cache so back/forward and quick
     // re-navigation are instant (SPA-feel) instead of re-fetching from the server every
     // time (dynamic default is 0s). Mutations still bust the cache via revalidatePath in
@@ -81,6 +86,8 @@ const nextConfig: NextConfig = {
         { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
         { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
+        // only when the site really is served over https (a browser ignores it on http, and it must never be sent before https works)
+        ...((process.env.NEXT_PUBLIC_APP_URL ?? '').startsWith('https') ? [{ key: 'Strict-Transport-Security', value: 'max-age=31536000' }] : []),
         { key: 'Content-Security-Policy-Report-Only', value: buildCspReportOnly(process.env.NEXT_PUBLIC_SUPABASE_URL) },
       ],
     }]

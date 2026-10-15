@@ -61,7 +61,7 @@ describe('approve / reject from the e-mail link', () => {
   }
   const statusOf = async (id: string) => (await admin.from('requests').select('status').eq('id', id).single()).data!.status
   const approvalStatus = async (id: string) => (await admin.from('approvals').select('status').eq('id', id).single()).data!.status
-  const lastCode = () => /\b(\d{6})\b/.exec([...sent].reverse().find((m) => /Your Citykart Desk code/.test(m.subject))?.subject ?? '')?.[1] ?? ''
+  const lastCode = () => /\bis (\d{6})\./.exec([...sent].reverse().find((m) => /Your Citykart Desk verification code/.test(m.subject))?.text ?? '')?.[1] ?? ''
 
   it('each approver\'s e-mail has Approve and Reject buttons that carry THEIR own link', async () => {
     const { manager, adminTok } = await start()
@@ -85,7 +85,7 @@ describe('approve / reject from the e-mail link', () => {
     const r = await requestApprovalCode(manager.approve)
     expect(r.error).toBeUndefined()
     expect(r.sentTo).toMatch(/\*+@/) // masked address on the page
-    const codeMails = sent.filter((m) => /Your Citykart Desk code/.test(m.subject))
+    const codeMails = sent.filter((m) => /Your Citykart Desk verification code/.test(m.subject))
     expect(codeMails).toHaveLength(1)
     expect(codeMails[0].to.toLowerCase()).toBe(fx.manager.email.toLowerCase()) // never anyone else's mailbox
   })

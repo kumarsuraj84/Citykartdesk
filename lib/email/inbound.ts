@@ -1,3 +1,4 @@
+import { senderMayReply } from '@/lib/email/inbound-participant'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadDbSmtpConfig } from './mailbox'
 import { isGmailHost } from './thread-tag'
@@ -168,8 +169,17 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
 
           result.checked++
           const subject = parsed.subject ?? ''
+          // An out-of-office or other automatic answer is not a person's reply (VAPT VA-INT-09): it is recorded as handled and skipped.
+          const autoSubmitted = String(parsed.headers?.get('auto-submitted') ?? '').toLowerCase()
+          const precedence = String(parsed.headers?.get('precedence') ?? '').toLowerCase()
+          if ((autoSubmitted && autoSubmitted !== 'no') || parsed.headers?.get('x-autoreply') || parsed.headers?.get('x-autorespond') || /bulk|junk|list|auto_reply/.test(precedence)) {
+            result.noMatch++
+            await admin.from('processed_inbound_emails').insert({ message_id: messageId, outcome: 'no_match', from_address: senderAddress(parsed.from) ?? '' })
+            continue
+          }
           // the sender is read from the parsed header's structured field; a message without exactly one plain sender address is not trusted (D-057)
-          const fromAddress = senderAddress(parsed.from) ?? ''
+          const fromHeaderCount = (parsed.headerLines ?? []).filter((h: { key: string }) => h.key === 'from').length
+          const fromAddress = fromHeaderCount > 1 ? '' : (senderAddress(parsed.from) ?? '')   // VAPT VA-INT-07: two From lines = not trusted
           if (!fromAddress) {
             result.noMatch++
             await admin.from('processed_inbound_emails').insert({ message_id: messageId, outcome: 'no_match', from_address: '' })
@@ -184,7 +194,7 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
             continue
           }
 
-          const { data: request } = await admin.from('requests').select('id, org_id').eq('request_no', requestNo).maybeSingle()
+          const { data: request } = await admin.from('requests').select('id, org_id, requester_id, assigned_to, team_id').eq('request_no', requestNo).maybeSingle()
           if (!request?.org_id) {
             result.noMatch++
             await admin.from('processed_inbound_emails').insert({ message_id: messageId, outcome: 'no_match', from_address: fromAddress })
@@ -222,6 +232,22 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
               const { recordEvents } = await import('@/lib/events/record')
               await recordEvents(
                 [{ kind: 'system', target: fromAddress, message: `Reply to ${requestNo} from an unrecognized address was not added to the conversation.` }],
+                { orgId: request.org_id, userId: null },
+              )
+            } catch { /* logging must never break the sync */ }
+            continue
+          }
+
+          // VAPT VA-INT-02: the sender must take part in this ticket (requester, assignee, collaborator, its technician group, a manager, or the OEM it was
+          // sent to). A subject line with a guessed ticket number is not enough to write on somebody else's ticket.
+          if (!(await senderMayReply(admin, request, sender.kind === 'profile' ? { kind: 'profile', profileId: sender.profileId } : { kind: 'oem', name: sender.name }))) {
+            result.senderNotRecognized++
+            await noteUnaddedReply(admin, request.id, fromAddress, 'the sender takes no part in this ticket')
+            await admin.from('processed_inbound_emails').insert({ message_id: messageId, request_id: request.id, outcome: 'sender_not_recognized', from_address: fromAddress })
+            try {
+              const { recordEvents } = await import('@/lib/events/record')
+              await recordEvents(
+                [{ kind: 'system', target: fromAddress, message: `Reply to ${requestNo} was not added: the sender takes no part in this ticket.` }],
                 { orgId: request.org_id, userId: null },
               )
             } catch { /* logging must never break the sync */ }

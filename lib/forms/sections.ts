@@ -112,6 +112,8 @@ export type ServiceFormFieldRef = {
   /** Set when the field was added from the Field Library — every instance of the
    *  same library field across templates/services shares this id. */
   libraryFieldId?: string
+  /** false for a technician-only box: a requester must never see its value (not on the ticket, not in a report) */
+  requesterCanView?: boolean
 }
 
 /**
@@ -147,6 +149,7 @@ export async function getServiceFormFieldsForOrg(admin: AnyClient, orgId: string
         serviceId: service.id,
         serviceName: service.name,
         libraryFieldId: field.library_field_id,
+        requesterCanView: requesterCanView(field),
       }))
     )
   )

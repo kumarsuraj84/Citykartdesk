@@ -63,9 +63,10 @@ describe('D-007 internal functions are not public', () => {
     expect((await http('POST', '/rest/v1/rpc/seed_default_sla_config', { body: { p_org_id: org } })).status).toBeGreaterThanOrEqual(400)
     expect((await http('POST', '/rest/v1/rpc/seed_default_sla_config', { token: manager.token, body: { p_org_id: org } })).status).toBeGreaterThanOrEqual(400)
   })
-  it('a requester can still create a ticket and gets its number from the trigger (the legitimate path)', async () => {
+  it('a ticket gets its number from the trigger when the SERVER creates it (a signed-in user has no direct INSERT since the VAPT migration 164)', async () => {
     const s = (await svc<{ id: string; team_id: string }[]>('GET', '/services?select=id,team_id&limit=1')).json[0]
-    const r = await asUser<{ id: string; request_no: string }[]>(staff, 'POST', '/requests', { title: 'remediation positive', requester_id: staff.id, org_id: ORG_A, service_id: s.id, team_id: s.team_id }, { Prefer: 'return=representation' })
+    expect((await asUser(staff, 'POST', '/requests', { title: 'direct insert', requester_id: staff.id, org_id: ORG_A, service_id: s.id, team_id: s.team_id }, { Prefer: 'return=representation' })).status).toBeGreaterThanOrEqual(400)
+    const r = await svc<{ id: string; request_no: string }[]>('POST', '/requests', { title: 'remediation positive', requester_id: staff.id, org_id: ORG_A, service_id: s.id, team_id: s.team_id }, { Prefer: 'return=representation' })
     expect(r.status).toBe(201)
     expect(r.json[0].request_no).toMatch(/^CKSD-\d{6,}$/)
     await svc('DELETE', `/requests?id=eq.${r.json[0].id}`)
@@ -120,11 +121,13 @@ describe('D-003 profiles: a user cannot rewrite their own organization, role, ac
     expect((await profileRow(staff.id)).full_name).toBe('Audit Staff 1 (renamed)')
     await svc('PATCH', `/profiles?id=eq.${staff.id}`, { full_name: before.full_name })
   })
-  it('POSITIVE: after setting a new password a user can still clear their own forced-reset flag', async () => {
+  it('after setting a new password the SERVER clears the forced-reset flag; the user cannot clear it themselves (VAPT VA-API-02)', async () => {
     const u = await createUser(`clearflag-${tag}@audit.test`, 'Clear Flag'); extraUsers.push(u.id)
     await svc('PATCH', `/profiles?id=eq.${u.id}`, { must_reset_password: true })
     const r = await asUser(u, 'PATCH', `/profiles?id=eq.${u.id}`, { must_reset_password: false })
-    expect(r.status).toBeLessThan(300)
+    expect(r.status).toBeGreaterThanOrEqual(400)
+    expect((await profileRow(u.id)).must_reset_password).toBe(true)
+    expect((await svc('PATCH', `/profiles?id=eq.${u.id}`, { must_reset_password: false })).status).toBeLessThan(300)
     expect((await profileRow(u.id)).must_reset_password).toBe(false)
   })
   it('POSITIVE: the server (service role) can still change role, active flag, organization fields (the admin screens)', async () => {

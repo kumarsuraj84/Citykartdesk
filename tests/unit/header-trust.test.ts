@@ -18,7 +18,7 @@ function forwarded(res: Response): string[] {
 }
 
 describe('proxy: client-supplied verified-user headers are removed on every fast path', () => {
-  const paths = ['/requests/anything.png', '/admin/categories/x.svg', '/approve/sometoken', '/csat/sometoken', '/api/health', '/api/version', '/api/alerts/run', '/_next/data/x', '/favicon.ico']
+  const paths = ['/citykart-desk-icon.png', '/mark.svg', '/approve/sometoken', '/csat/sometoken', '/api/health', '/api/version', '/api/alerts/run', '/_next/data/x', '/favicon.ico']
   for (const p of paths) {
     it(`${p}: the forged id and signature are not forwarded`, async () => {
       const res = await proxy(req(p, { [VERIFIED_USER_HEADER]: VICTIM, [VERIFIED_USER_SIG_HEADER]: 'forged', 'x-keep-me': '1' }))
@@ -29,6 +29,14 @@ describe('proxy: client-supplied verified-user headers are removed on every fast
       expect(names).toContain('x-keep-me') // unrelated headers still pass
     })
   }
+
+  it('a page-looking path that merely ends in .png or .svg is NOT a static file any more: it needs a session like every other page (VAPT VA-API-04)', async () => {
+    for (const p of ['/requests/anything.png', '/admin/categories/x.svg']) {
+      const res = await proxy(req(p, { [VERIFIED_USER_HEADER]: VICTIM, [VERIFIED_USER_SIG_HEADER]: 'forged' }))
+      expect([307, 308], p).toContain(res.status)
+      expect(new URL(res.headers.get('location')!).pathname).toBe('/login')
+    }
+  })
 
   it('a signed-out visitor to a protected page is still sent to /login, and nothing forged reaches it', async () => {
     const res = await proxy(req('/admin/users', { [VERIFIED_USER_HEADER]: VICTIM, [VERIFIED_USER_SIG_HEADER]: 'forged' }))

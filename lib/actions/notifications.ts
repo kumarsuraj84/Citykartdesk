@@ -1,5 +1,6 @@
 'use server'
 
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
@@ -22,7 +23,7 @@ export async function markNotificationRead(
     .eq('user_id', profile.id)
     .is('read_at', null)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'notifications.ts', fallback: 'Something went wrong. Please try again.' }) }
 
   revalidatePath('/notifications')
   return {}
@@ -42,7 +43,7 @@ export async function markAllNotificationsRead(): Promise<ActionResult> {
     .is('read_at', null)
     .is('archived_at', null)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'notifications.ts', fallback: 'Something went wrong. Please try again.' }) }
 
   revalidatePath('/notifications')
   revalidatePath('/home')
@@ -69,7 +70,7 @@ export async function markRequestNotificationsRead(requestId: string): Promise<A
     .is('archived_at', null)
     .select('id')
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'notifications.ts', fallback: 'Something went wrong. Please try again.' }) }
   if (data.length === 0) return { updated: 0 }
 
   revalidatePath('/notifications')
@@ -93,7 +94,7 @@ export async function archiveNotification(
     .eq('id', notificationId)
     .eq('user_id', profile.id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'notifications.ts', fallback: 'Something went wrong. Please try again.' }) }
 
   revalidatePath('/notifications')
   return {}
@@ -113,6 +114,6 @@ export async function setNotificationPreference(
     .from('notification_preferences')
     .upsert({ user_id: profile.id, event_type: eventType, enabled })
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'notifications.ts', fallback: 'Something went wrong. Please try again.' }) }
   return {}
 }

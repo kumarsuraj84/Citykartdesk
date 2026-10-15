@@ -11,7 +11,7 @@ export default defineConfig({
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
     // The remediation tests change data in the disposable audit database; they run only through vitest.remediation.config.ts
     // (which refuses anything but the audit stack), never in the default run against the developer database.
-    exclude: ['**/node_modules/**', 'tests/remediation/**'],
+    exclude: ['**/node_modules/**', 'tests/remediation/**', 'tests/vapt/**'],
     setupFiles: ['tests/setup/env.ts'],
   },
   resolve: {

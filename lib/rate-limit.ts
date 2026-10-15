@@ -27,6 +27,7 @@ export async function rateLimit(
   windowMs = 60_000
 ): Promise<{ limited: boolean; remaining: number }> {
   cleanup()
+  key = key.length > 200 ? key.slice(0, 200) : key   // VAPT VA-API-03
   const now = Date.now()
   const entry = store.get(key)
 

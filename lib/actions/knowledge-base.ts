@@ -1,5 +1,6 @@
 'use server'
 
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
@@ -51,7 +52,7 @@ export async function createKbArticle(
     .select('id, title, slug, status, view_count, helpful_yes, helpful_no, created_at, updated_at, author:profiles(id, full_name)')
     .single()
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'knowledge-base.ts', fallback: 'Something went wrong. Please try again.' }) }
   revalidatePath('/admin/knowledge-base')
   return { article: data }
 }
@@ -97,7 +98,7 @@ export async function updateKbArticle(
     })
     .eq('id', id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'knowledge-base.ts', fallback: 'Something went wrong. Please try again.' }) }
   revalidatePath('/admin/knowledge-base')
   return {}
 }
@@ -116,7 +117,7 @@ export async function archiveKbArticle(id: string): Promise<ActionResult> {
     .update({ status: 'archived' })
     .eq('id', id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'knowledge-base.ts', fallback: 'Something went wrong. Please try again.' }) }
   revalidatePath('/admin/knowledge-base')
   return {}
 }
