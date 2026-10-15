@@ -13,7 +13,6 @@ import {
   removeCollaborator,
   searchOrgMembers,
   searchAgentTierMembers,
-  reclassifyRequest,
   updateRequestCategory,
 } from '@/lib/actions/requests'
 import { StatusBadge, PriorityBadge } from './RequestBadges'
@@ -35,12 +34,10 @@ interface RequestSidebarPanelProps {
   assigneeId: string | null
   assigneeName: string | null
   teamName: string
-  serviceId: string
   serviceName: string
   categoryName: string | null
   subCategoryId: string | null
   subCategoryName: string | null
-  reclassifyOptions: { id: string; name: string }[]
   allowedSubCategories: AllowedSubCategory[]
   requesterId: string
   requesterName: string
@@ -447,66 +444,12 @@ function AssigneeRow({ requestId, assigneeId, assigneeName, viewerId, teamMember
   )
 }
 
-// Inline service corrector — the rare "this was raised against the wrong
-// broad service entirely" case. Flat org-wide list (services no longer nest
-// under a category, so there's nothing to cascade through); picking a
-// different service clears the request's category/sub-category server-side
-// since the old tags may not apply to the new service — the requester/agent
-// re-picks via CategoryRow below.
-function ServiceRow({ requestId, serviceId, serviceName, isAgent, options }: {
-  requestId: string; serviceId: string; serviceName: string; isAgent: boolean
-  options: { id: string; name: string }[]
-}) {
-  const [open, setOpen] = useState(false)
-  const [cur, setCur] = useState({ id: serviceId, name: serviceName })
-  const [isPending, startTransition] = useTransition()
-  const [error, setError] = useState<string | null>(null)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [open])
-
-  function pick(o: { id: string; name: string }) {
-    if (o.id === cur.id) { setOpen(false); return }
-    const prev = cur
-    setCur(o); setOpen(false); setError(null)
-    startTransition(async () => {
-      const result = await reclassifyRequest(requestId, o.id)
-      if (result?.error) { setError(result.error); setCur(prev) }
-    })
-  }
-
+// The service the ticket was raised against. It cannot be changed by anyone (every service has its own mandatory form): a ticket raised against the wrong
+// service is cancelled and raised again. Category and Sub Category (below) can be changed, and that is what sends the ticket to the right person.
+function ServiceRow({ serviceName }: { serviceName: string }) {
   return (
-    <PropRow label="Service" copyValue={cur.name}>
-      <div ref={ref} className="relative">
-        <button
-          onClick={() => isAgent && setOpen((v) => !v)}
-          className={`flex items-center gap-1 ${isAgent ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
-          title={error ?? undefined}
-        >
-          <span className={`text-xs ${error ? 'text-destructive' : 'text-foreground'}`}>{cur.name}</span>
-          {isAgent && !isPending && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
-          {isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-        </button>
-        {open && (
-          <div className="absolute right-0 top-full z-50 mt-1 w-60 max-h-72 space-y-0.5 overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow-xl">
-            <p className="px-1.5 pb-1 text-[10px] text-muted-foreground">Moving to a different service clears Category/Sub Category — you&apos;ll need to re-pick them.</p>
-            {options.map((o) => (
-              <button
-                key={o.id}
-                onClick={() => pick(o)}
-                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted transition-colors ${o.id === cur.id ? 'bg-muted/60 font-medium' : ''}`}
-              >
-                {o.name}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+    <PropRow label="Service" copyValue={serviceName}>
+      <span className="text-xs text-foreground" title="The service cannot be changed. If it is wrong, cancel this ticket and raise a new one in the right service.">{serviceName}</span>
     </PropRow>
   )
 }
@@ -798,8 +741,8 @@ function CollaboratorsRow({ requestId, assigneeId, viewerId, initialCollaborator
 
 export function RequestSidebarPanel({
   requestId, requestNo, status, priority,
-  assigneeId, assigneeName, teamName, serviceId, serviceName,
-  categoryName, subCategoryId, subCategoryName, reclassifyOptions, allowedSubCategories,
+  assigneeId, assigneeName, teamName, serviceName,
+  categoryName, subCategoryId, subCategoryName, allowedSubCategories,
   requesterId, requesterName,
   resolutionDueAt, responseDueAt, createdAt,
   viewerId, isAgent, isManager, isRequester, isTerminal,
@@ -893,7 +836,7 @@ export function RequestSidebarPanel({
             reclassify within the current service via Category below, never
             move the ticket to a different service entirely. */}
         {isManager ? (
-          <ServiceRow requestId={requestId} serviceId={serviceId} serviceName={serviceName} isAgent={isManager} options={reclassifyOptions} />
+          <ServiceRow serviceName={serviceName} />
         ) : (
           <PropRow label="Service" copyValue={serviceName}>
             <span className="text-xs text-foreground">{serviceName}</span>

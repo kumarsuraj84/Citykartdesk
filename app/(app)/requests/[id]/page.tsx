@@ -22,7 +22,7 @@ import { SLABadge } from '@/components/requests/SLABadge'
 import { StatusBadge, PriorityBadge, ReopenedBadge, SourceBadge } from '@/components/requests/RequestBadges'
 import { RequestSidebarPanel } from '@/components/requests/RequestSidebarPanel'
 import { SubmittedDataPanel } from '@/components/requests/SubmittedDataPanel'
-import { getActiveServicesForReclassify, getAllowedSubCategoriesForService } from '@/lib/queries/services'
+import { getAllowedSubCategoriesForService } from '@/lib/queries/services'
 import { RequestTasksTab } from '@/components/requests/RequestTasksTab'
 import { getTasksForRequest } from '@/lib/queries/tasks'
 import { getAllProjectsMini } from '@/lib/queries/projects'
@@ -416,10 +416,9 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
   const isTerminal  = TERMINAL_STATUSES.includes(request.status)
 
   // Phase 2: only the queries that depend on request data (or are agent-only).
-  const [teamMembers, csatSurvey, reclassifyOptions, allowedSubCategories] = await Promise.all([
+  const [teamMembers, csatSurvey, allowedSubCategories] = await Promise.all([
     canManage ? getTeamMembers(request.team_id) : Promise.resolve([]),
     isRequester ? getCsatSurveyForRequest(id) : Promise.resolve(null),
-    canManage ? getActiveServicesForReclassify() : Promise.resolve([]),
     canManage ? getAllowedSubCategoriesForService(request.service_id) : Promise.resolve([]),
   ])
 
@@ -897,12 +896,10 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
         assigneeId={request.assigned_to}
         assigneeName={request.assignee?.full_name ?? null}
         teamName={request.team.name}
-        serviceId={request.service_id}
         serviceName={request.service.name}
         categoryName={request.category?.name ?? null}
         subCategoryId={request.sub_category?.id ?? null}
         subCategoryName={request.sub_category?.name ?? null}
-        reclassifyOptions={reclassifyOptions}
         allowedSubCategories={allowedSubCategories}
         requesterId={request.requester_id}
         requesterName={request.requester.full_name}
