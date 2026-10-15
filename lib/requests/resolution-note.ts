@@ -2,7 +2,7 @@
 // anything that learns from solved tickets, so it must say what was wrong and what was done, and it must never carry a password.
 
 /** The shortest note accepted (characters, spaces ignored at both ends). */
-export const MIN_RESOLUTION_NOTE_CHARS = 20
+export const MIN_RESOLUTION_NOTE_CHARS = 10
 
 export const RESOLUTION_NOTE_HINT = 'Write what the cause was and what you did to fix it, for example: "Cable was damaged. Replaced the cable and tested the payment." Never type a password here.'
 export const RESOLUTION_NOTE_PLACEHOLDER = 'Cause: …  What I did: …'
@@ -11,6 +11,7 @@ export const RESOLUTION_NOTE_PLACEHOLDER = 'Cause: …  What I did: …'
 const EMPTY_WORDS = new Set([
   'done', 'ok', 'okay', 'resolved', 'resolve', 'solved', 'solve', 'fixed', 'fix', 'completed', 'complete', 'closed', 'close', 'sorted', 'noted', 'checked', 'working',
   'issue resolved', 'issue solved', 'issue fixed', 'problem solved', 'problem resolved', 'ticket resolved', 'done sir', 'resolved sir', 'done mam', 'resolved mam',
+  'work done', 'work completed', 'all ok', 'all ok now', 'now ok', 'now working', 'working fine', 'it is working', 'task done', 'task completed', 'request completed', 'no issue', 'no problem',
   'we are resolving the ticket', 'we are resolving the ticket.', 'we are closing the ticket',
 ])
 

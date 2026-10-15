@@ -9,7 +9,7 @@ describe('the note written when a ticket is resolved', () => {
   })
 
   it('a note that says nothing about the fix is asked for more (the kind of notes that are on tickets today)', () => {
-    for (const note of ['Resolved', 'Done.', 'done sir', 'Ok', 'We are resolving the ticket.', 'issue solved', 'Bill is cancelled', 'Pending']) {
+    for (const note of ['Resolved', 'Done.', 'done sir', 'Ok', 'We are resolving the ticket.', 'issue solved', 'work completed', 'All OK now', 'Pending', 'Cancelled']) {
       expect(checkResolutionNote(note), note).toBe(NOTE_TOO_SHORT_MESSAGE)
     }
   })
@@ -21,6 +21,8 @@ describe('the note written when a ticket is resolved', () => {
       'Approved 700/- for MCB purchase at the store, please do the work and share the photos.',
       'Bill cancelled in the system after the store confirmed the wrong entry.',
       'You have been granted access to LinkedIn and Instagram; please check.',
+      'Bill is cancelled',
+      'Cable replaced',
     ]) expect(checkResolutionNote(note), note).toBeNull()
   })
 
