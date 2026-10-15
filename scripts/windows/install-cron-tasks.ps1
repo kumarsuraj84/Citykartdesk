@@ -5,6 +5,7 @@
 #   CitykartDesk-Cron-EmailReplySync every 1 min   (poll IMAP for replies to outbound emails)
 #   CitykartDesk-Cron-Csat           every 30 min  (auto-close resolved tickets past their reopen window + the one CSAT reminder)
 #   CitykartDesk-Cron-SystemLogArchive every 6 hours (moves old System Log records to the archive; never deletes)
+#   CitykartDesk-Cron-ApprovalReminders every day at 10:00 (one e-mail per approver listing everything still waiting for their decision)
 #   CitykartDesk-LogShipper          every 2 min   (copies problems from the PostgREST / auth / storage logs into the System Log)
 $runner = Join-Path $PSScriptRoot 'run-cron-tick.ps1'
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
@@ -28,3 +29,9 @@ $shipAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoPr
 $shipTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Minutes 2)
 Register-ScheduledTask -TaskName 'CitykartDesk-LogShipper' -Action $shipAction -Trigger $shipTrigger -Principal $principal -Settings $settings -Force | Out-Null
 Write-Output 'Installed CitykartDesk-LogShipper (every 2 min)'
+
+# the daily approval reminder (one e-mail per approver listing everything still waiting), every day at 10:00
+$remindAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$runner`" -Job approval-reminders"
+$remindTrigger = New-ScheduledTaskTrigger -Daily -At '10:00'
+Register-ScheduledTask -TaskName 'CitykartDesk-Cron-ApprovalReminders' -Action $remindAction -Trigger $remindTrigger -Principal $principal -Settings $settings -Force | Out-Null
+Write-Output 'Installed CitykartDesk-Cron-ApprovalReminders (every day at 10:00)'

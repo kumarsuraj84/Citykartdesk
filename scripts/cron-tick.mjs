@@ -31,6 +31,7 @@ const JOB_PATHS = {
   'email-reply-sync': '/api/email/inbound-sync',
   csat: '/api/csat/run',
   'system-log-archive': '/api/system-log/archive',
+  'approval-reminders': '/api/approvals/reminders',
 }
 
 const secret = process.env.CRON_SECRET
