@@ -39,7 +39,7 @@ const clearDay = () => svc('DELETE', `/app_settings?key=eq.${LAST_RUN_KEY}`)
 async function run(deliver: { to: string; subject: string; html: string }[]) {
   return sendApprovalReminders(createAdminClient() as never, { now: now(), send: async (m) => { deliver.push(m); return {} } })
 }
-const mailFor = (sent: { to: string; html: string }[], s: Session) => sent.find((m) => m.to === s.email)
+const mailFor = (sent: { to: string; subject: string; html: string }[], s: Session) => sent.find((m) => m.to === s.email)
 
 beforeAll(async () => {
   const stamp = Date.now()
