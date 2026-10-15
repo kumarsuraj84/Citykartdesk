@@ -22,6 +22,7 @@ import { SubmittedFieldRow } from './SubmittedFieldRow'
 import { requesterCanSet } from '@/lib/forms/sections'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
 import { formatRelativeTime, formatDateTime } from '@/lib/utils'
+import { checkResolutionNote, RESOLUTION_NOTE_HINT, RESOLUTION_NOTE_PLACEHOLDER } from '@/lib/requests/resolution-note'
 import type { RequestStatus, RequestPriority, RequestCollaborator, FormField, FormSection, AllowedSubCategory } from '@/types'
 
 interface TeamMember { id: string; full_name: string }
@@ -95,7 +96,7 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
   // A handful of transitions need a message first — it's posted to the
   // conversation server-side, so it's collected here instead of firing the
   // transition blind and finding out from a rejected server response.
-  const [pendingComment, setPendingComment] = useState<{ next: RequestStatus; heading: string; placeholder: string; cta: string } | null>(null)
+  const [pendingComment, setPendingComment] = useState<{ next: RequestStatus; heading: string; placeholder: string; cta: string; hint?: string } | null>(null)
   const [pendingCommentText, setPendingCommentText] = useState('')
   const [pendingCommentError, setPendingCommentError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
@@ -149,7 +150,7 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
       return
     }
     if (isAgent && next === 'resolved') {
-      setPendingComment({ next, heading: 'Resolution details', placeholder: 'What did you do to resolve this?', cta: 'Mark Resolved' })
+      setPendingComment({ next, heading: 'Resolution details', placeholder: RESOLUTION_NOTE_PLACEHOLDER, cta: 'Mark Resolved', hint: RESOLUTION_NOTE_HINT })
       return
     }
     // Technician-only hold — the requester never sees this option at all
@@ -178,6 +179,8 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
   function confirmPendingComment() {
     if (!pendingComment) return
     if (!pendingCommentText.trim()) { setPendingCommentError('This message is required.'); return }
+    // a resolution note must say what was wrong and what was done, and carry no password
+    if (pendingComment.next === 'resolved') { const problem = checkResolutionNote(pendingCommentText); if (problem) { setPendingCommentError(problem); return } }
     apply(pendingComment.next, pendingCommentText)
   }
 
@@ -214,6 +217,7 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
               rows={3}
               className="w-full resize-none rounded-lg border border-input bg-background px-2 py-1.5 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
+            {pendingComment.hint && !pendingCommentError && <p className="text-[10px] leading-snug text-muted-foreground">{pendingComment.hint}</p>}
             {pendingCommentError && <p className="text-[11px] text-destructive">{pendingCommentError}</p>}
             <div className="flex gap-2">
               <button onClick={confirmPendingComment} disabled={isPending} className="btn-gradient flex-1 !py-1 !text-xs">

@@ -19,6 +19,7 @@ import { buildFirstResponseMessage } from '@/lib/requests/first-response'
 import { issueCsat } from '@/lib/csat/issue'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus, ProfileWithTeams } from '@/types'
 import type { Database } from '@/types/database'
+import { checkResolutionNote } from '@/lib/requests/resolution-note'
 
 type RequestUpdate = Database['public']['Tables']['requests']['Update']
 type ActionResult = { error?: string }
@@ -175,8 +176,10 @@ export async function applyStatusChange(
   if (agentInitiated && newStatus === 'waiting_user' && !comment?.trim()) {
     return { error: 'Please add a message explaining what you need from the requester.' }
   }
-  if (agentInitiated && newStatus === 'resolved' && !comment?.trim()) {
-    return { error: 'Please add a resolution message before marking this resolved.' }
+  // the resolution note must say what was wrong and what was done, and must not carry a password (lib/requests/resolution-note.ts)
+  if (agentInitiated && newStatus === 'resolved') {
+    const problem = checkResolutionNote(comment)
+    if (problem) return { error: problem }
   }
 
   // "Hold due to Purchase from HO" — technician-only both ways (see

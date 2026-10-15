@@ -21,6 +21,7 @@ import { updateRequestStatus } from '@/lib/actions/requests'
 import { AGENT_TRANSITIONS } from '@/lib/constants/request-transitions'
 import { StatusBadge, PriorityBadge, ReopenedBadge, SourceBadge } from '@/components/requests/RequestBadges'
 import { SLABadge } from '@/components/requests/SLABadge'
+import { checkResolutionNote, RESOLUTION_NOTE_HINT, RESOLUTION_NOTE_PLACEHOLDER } from '@/lib/requests/resolution-note'
 import type { RequestWithRelations, RequestStatus } from '@/types'
 
 // ── Column config — mirrors the status filter tabs already used on the list view ──
@@ -172,7 +173,7 @@ export function RequestBoardView({
   // message that gets posted to the conversation (enforced server-side in
   // updateRequestStatus) — a drag-and-drop has nowhere to type one, so these
   // three targets pause here for it instead of firing the transition blind.
-  const [pendingDrop, setPendingDrop] = useState<{ requestId: string; fromCol: RequestStatus; toCol: RequestStatus; heading: string; placeholder: string; cta: string } | null>(null)
+  const [pendingDrop, setPendingDrop] = useState<{ requestId: string; fromCol: RequestStatus; toCol: RequestStatus; heading: string; placeholder: string; cta: string; hint?: string } | null>(null)
   const [pendingDropText, setPendingDropText] = useState('')
   const [pendingDropError, setPendingDropError] = useState<string | null>(null)
   const [pendingDropSaving, setPendingDropSaving] = useState(false)
@@ -249,11 +250,12 @@ export function RequestBoardView({
           : toCol === 'resolved' ? 'Resolution details'
           : 'Why are you reopening this?',
         placeholder: toCol === 'waiting_user' ? 'e.g. Please confirm your extension number…'
-          : toCol === 'resolved' ? 'What did you do to resolve this?'
+          : toCol === 'resolved' ? RESOLUTION_NOTE_PLACEHOLDER
           : "Explain what's still wrong…",
         cta: toCol === 'waiting_user' ? 'Set to Waiting on User'
           : toCol === 'resolved' ? 'Mark Resolved'
           : 'Reopen',
+        hint: toCol === 'resolved' ? RESOLUTION_NOTE_HINT : undefined,
       })
       return
     }
@@ -278,6 +280,8 @@ export function RequestBoardView({
   function confirmPendingDrop() {
     if (!pendingDrop) return
     if (!pendingDropText.trim()) { setPendingDropError('This message is required.'); return }
+    // a resolution note must say what was wrong and what was done, and carry no password
+    if (pendingDrop.toCol === 'resolved') { const problem = checkResolutionNote(pendingDropText); if (problem) { setPendingDropError(problem); return } }
     const { requestId, fromCol, toCol } = pendingDrop
     setPendingDropSaving(true)
     const seq = nextDragSeq(requestId)
@@ -336,6 +340,7 @@ export function RequestBoardView({
               rows={4}
               className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
+            {pendingDrop.hint && !pendingDropError && <p className="text-[11px] leading-snug text-muted-foreground">{pendingDrop.hint}</p>}
             {pendingDropError && <p className="text-xs text-destructive">{pendingDropError}</p>}
             <div className="flex justify-end gap-2">
               <button onClick={cancelPendingDrop} disabled={pendingDropSaving} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50">
