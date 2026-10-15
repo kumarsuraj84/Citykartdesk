@@ -1,5 +1,6 @@
 'use server'
 
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
@@ -114,7 +115,7 @@ export async function updateBusinessRule(id: string, data: BusinessRuleInput): P
     .eq('id', id)
     .eq('org_id', profile.org_id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'business-rules.ts', fallback: 'Could not save the rule. Please try again.' }) }
 
   await logAdminAudit({
     orgId: profile.org_id!,
@@ -135,7 +136,7 @@ export async function deleteBusinessRule(id: string): Promise<{ error?: string }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('business_rules').delete().eq('id', id).eq('org_id', profile.org_id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'business-rules.ts', fallback: 'Could not save the rule. Please try again.' }) }
 
   await logAdminAudit({
     orgId: profile.org_id!,
@@ -159,7 +160,7 @@ export async function toggleBusinessRuleActive(id: string, isActive: boolean): P
     .update({ is_active: isActive, updated_by: profile.id })
     .eq('id', id)
     .eq('org_id', profile.org_id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'business-rules.ts', fallback: 'Could not save the rule. Please try again.' }) }
   revalidatePath('/admin/business-rules')
   return {}
 }
