@@ -12,9 +12,11 @@ interface ImportModalProps {
   onImport: (rows: Record<string, string>[]) => Promise<{ error?: string; data?: { imported: number; errors: string[] } }>
   onClose: () => void
   onDone: () => void
+  /** optional extra content shown above the file chooser (for example a choice that changes how the import is made) */
+  note?: React.ReactNode
 }
 
-export function ImportModal({ title, sampleFilename, sampleColumns, sampleRows, onImport, onClose, onDone }: ImportModalProps) {
+export function ImportModal({ title, sampleFilename, sampleColumns, sampleRows, onImport, onClose, onDone, note }: ImportModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [pending, startTransition] = useTransition()
   const [parsedRows, setParsedRows] = useState<Record<string, string>[] | null>(null)
@@ -109,6 +111,7 @@ export function ImportModal({ title, sampleFilename, sampleColumns, sampleRows, 
         </div>
 
         <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-2">
+          {note}
           <p className="text-xs text-muted-foreground">
             Don&apos;t have a file yet? Download a sample CSV with the expected columns, fill it in, then upload it below.
           </p>

@@ -1,5 +1,6 @@
 'use server'
 
+import { generateOneTimePassword } from '@/lib/auth/one-time-password'
 import { revalidatePath } from 'next/cache'
 import { targetGuardError } from '@/lib/admin/target-guard'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -539,7 +540,8 @@ export type UserImportRow = {
 }
 
 const VALID_IMPORT_ROLES: UserRole[] = ['user', 'agent', 'manager', 'admin', 'platform_owner']
-const DEFAULT_BULK_PASSWORD = 'Welcome@123'
+// There is no shared default password any more (VAPT-003): an account without a password in the file gets its own random one-time password (shown to the administrator
+// once) or, in invitation mode, a set-your-password e-mail. Either way the account is flagged "must change password".
 
 /** Same safe, explicit boolean parsing every other import column would want
  *  — only a small known set of strings is accepted; anything else is an
@@ -555,9 +557,16 @@ function parseImportWhatsAppEnabled(raw: string | undefined): { ok: true; value:
   return { ok: false }
 }
 
+export type BulkOnboarding = 'random_password' | 'invite'
+export type BulkCredential = { email: string; full_name: string; password: string }
+
 export async function bulkCreateUsers(
-  rows: UserImportRow[]
-): Promise<{ error?: string; data?: { imported: number; errors: string[] } }> {
+  rows: UserImportRow[],
+  options: { onboarding?: BulkOnboarding } = {}
+): Promise<{ error?: string; data?: { imported: number; errors: string[]; credentials?: BulkCredential[]; invited?: number } }> {
+  const onboarding: BulkOnboarding = options.onboarding === 'invite' ? 'invite' : 'random_password'
+  const credentials: BulkCredential[] = []
+  let invited = 0
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
@@ -716,8 +725,10 @@ export async function bulkCreateUsers(
       continue
     }
 
-    const password = row.password?.trim() || DEFAULT_BULK_PASSWORD
-    if (password.length < 8) { errors.push(`${rowLabel}: password must be at least 8 characters, skipped.`); continue }
+    const givenPassword = row.password?.trim() || ''
+    if (givenPassword && givenPassword.length < 8) { errors.push(`${rowLabel}: password must be at least 8 characters, skipped.`); continue }
+    // a password typed in the file is used as is (and must be changed at first sign-in); otherwise the account gets its own random password
+    const password = givenPassword || generateOneTimePassword()
 
     const { data: authData, error: authErr } = await admin.auth.admin.createUser({
       email,
@@ -776,11 +787,21 @@ export async function bulkCreateUsers(
     emailToProfileId.set(email, uid)
     if (mobileNumber) existingMobileNumbers.add(mobileNumber)
     imported++
+    if (!givenPassword) {
+      if (onboarding === 'invite') {
+        // nobody knows the random password: the person sets their own through the e-mailed link
+        const mail = await emailPasswordResetLink(email)
+        if (mail.error) errors.push(`${rowLabel}: account created for "${email}" but the set-password e-mail could not be sent (${mail.error}). Use "Send password reset" on the user.`)
+        else invited++
+      } else {
+        credentials.push({ email, full_name: fullName, password })
+      }
+    }
   }
 
   await recordAudit({ action: 'user.bulk_imported', entityType: 'user', message: `${imported} users imported, ${errors.length} rows with errors`, after: { imported, rowErrors: errors.length }, actorId: profile.id, orgId })
   revalidatePath('/admin/users')
-  return { data: { imported, errors } }
+  return { data: { imported, errors, ...(credentials.length ? { credentials } : {}), ...(invited ? { invited } : {}) } }
 }
 
 // ── adminSendPasswordReset ──────────────────────────────────────────────────

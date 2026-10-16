@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { AppShell } from '@/components/layout/AppShell'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
-import { getCurrentProfile, getEnabledModules, getTrialInfo, getNavCounts, getDirectReportIds } from '@/lib/queries/profiles'
+import { getCurrentProfileForPasswordReset, getEnabledModules, getTrialInfo, getNavCounts, getDirectReportIds } from '@/lib/queries/profiles'
 import { getNotifications } from '@/lib/queries/notifications'
 import { getActionableApprovalsForUser } from '@/lib/queries/approvals'
 import { TrialBanner } from '@/components/layout/TrialBanner'
@@ -17,7 +17,7 @@ export default async function AppLayout({
   // Run all three in parallel — getEnabledModules and getTrialInfo don't need
   // the profile result, so there's no reason to serialize them behind it.
   const [profile, enabledModules, trialInfo] = await Promise.all([
-    getCurrentProfile(),
+    getCurrentProfileForPasswordReset(),
     getEnabledModules(),
     getTrialInfo(),
   ])

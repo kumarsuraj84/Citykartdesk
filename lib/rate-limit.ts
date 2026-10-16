@@ -41,6 +41,24 @@ export async function rateLimit(
   return { limited: false, remaining: limit - entry.count }
 }
 
+/** Is this key already over its limit? Does not count the call (used to look before a sign-in attempt; only FAILED attempts are then counted with recordEvent). */
+export function isOverLimit(key: string, limit: number): boolean {
+  key = key.length > 200 ? key.slice(0, 200) : key
+  const entry = store.get(key)
+  return !!entry && entry.resetAt >= Date.now() && entry.count >= limit
+}
+
+/** Count one event on a key (a failed sign-in) and return how many there have been in the window. */
+export function recordEvent(key: string, windowMs: number): number {
+  cleanup()
+  key = key.length > 200 ? key.slice(0, 200) : key
+  const now = Date.now()
+  const entry = store.get(key)
+  if (!entry || entry.resetAt < now) { store.set(key, { count: 1, resetAt: now + windowMs }); return 1 }
+  entry.count++
+  return entry.count
+}
+
 /**
  * The caller's address, or null when it cannot be known reliably (audit D-017).
  * A client can send any X-Forwarded-For / X-Real-IP it likes, so those are only believed when the number of reverse proxies in front of the

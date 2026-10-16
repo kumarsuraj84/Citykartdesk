@@ -2,11 +2,32 @@ import { cache } from 'react'
 import { headers } from 'next/headers'
 import { readVerifiedUserId } from '@/lib/auth/verified-user'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { OPEN_REQUEST_STATUSES } from '@/lib/constants/requests'
 import { getActionableApprovalsForUser } from '@/lib/queries/approvals'
 import type { ModuleSlug, ProfileWithTeams, UserRole } from '@/types'
 
-export const getCurrentProfile = cache(async function (): Promise<ProfileWithTeams | null> {
+const PROFILE_SELECT = `
+        *,
+        team_members (
+          team_id,
+          is_lead,
+          joined_at,
+          team:teams (*)
+        )
+      `
+
+/**
+ * Someone who has not yet chosen their own password (VAPT-003: a new account, or one an administrator reset) sees nothing through row security
+ * (migration 168), so this reads their profile with the server's key. Used only by the password-change flow.
+ */
+async function readPendingResetProfile(userId: string): Promise<ProfileWithTeams | null> {
+  const { data } = await createAdminClient().from('profiles').select(PROFILE_SELECT).eq('id', userId).maybeSingle()
+  const row = data as (ProfileWithTeams & { is_active?: boolean }) | null
+  return row && row.is_active !== false && row.must_reset_password ? row : null
+}
+
+async function loadCurrentProfile(includePasswordReset: boolean): Promise<ProfileWithTeams | null> {
   const supabase = await createClient()
 
   // proxy.ts already verified the session for this exact request and forwards the
@@ -36,22 +57,21 @@ export const getCurrentProfile = cache(async function (): Promise<ProfileWithTea
   for (let attempt = 0; attempt < 4; attempt++) {
     const { data, error } = await supabase
       .from('profiles')
-      .select(`
-        *,
-        team_members (
-          team_id,
-          is_lead,
-          joined_at,
-          team:teams (*)
-        )
-      `)
+      .select(PROFILE_SELECT)
       .eq('id', userId)
       .single()
 
     // A deactivated person's session stays valid until its token expires; the application stops treating them as signed in at once
     // (the database already gives them no organisation or role, see current_org_id()). VAPT VA-API-09.
-    if (!error) return (data && (data as { is_active?: boolean }).is_active === false ? null : data) as ProfileWithTeams | null
-    if (error.code === 'PGRST116') return null
+    if (!error) {
+      const row = data as (ProfileWithTeams & { is_active?: boolean }) | null
+      if (row && row.is_active === false) return null
+      // Until a new person (or one whose password an administrator set) has chosen their own password they are not signed in for anything except changing it:
+      // every server action and route sees "no profile" (VAPT-003 / VAPT-005: the forced change was only a redirect in one page layout).
+      if (row?.must_reset_password && !includePasswordReset) return null
+      return row
+    }
+    if (error.code === 'PGRST116') return includePasswordReset ? readPendingResetProfile(userId) : null
     await new Promise((r) => setTimeout(r, 250 * (attempt + 1)))
   }
   // Signed in, but the profile still could not be read: this is a temporary failure,
@@ -60,7 +80,11 @@ export const getCurrentProfile = cache(async function (): Promise<ProfileWithTea
   const { recordEvents } = await import('@/lib/events/record')
   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profile after retries' }], { orgId: null, userId })
   throw new Error('Could not load the signed-in profile')
-})
+}
+
+export const getCurrentProfile = cache(() => loadCurrentProfile(false))
+/** Like getCurrentProfile, but also returns a person who still has to choose their own password: only the layout redirect and the password-change action use it. */
+export const getCurrentProfileForPasswordReset = cache(() => loadCurrentProfile(true))
 
 export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
   const supabase = await createClient()

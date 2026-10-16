@@ -4,8 +4,8 @@ import { redirect } from 'next/navigation'
 import { safeNextPath } from '@/lib/auth/safe-next'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { rateLimit, getClientIp } from '@/lib/rate-limit'
-import { getCurrentProfile } from '@/lib/queries/profiles'
+import { rateLimit, getClientIp, isOverLimit, recordEvent } from '@/lib/rate-limit'
+import { getCurrentProfile, getCurrentProfileForPasswordReset } from '@/lib/queries/profiles'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { emailPasswordResetLink } from '@/lib/email/auth-mail'
 import { recordAudit } from '@/lib/syslog/audit'
@@ -19,11 +19,13 @@ export async function signInWithPassword(formData: FormData) {
   // The limit follows the ACCOUNT being tried, not a client-supplied address, so changing request headers does not buy more guesses (D-017).
   // A per-address limit is added only when the address can be trusted (see getClientIp).
   const ip = await getClientIp()
-  const [byAccount, byAddress] = await Promise.all([
-    rateLimit(`login:${email}`, 10, 60_000),
-    ip ? rateLimit(`login-ip:${ip}`, 60, 60_000) : Promise.resolve({ limited: false, remaining: 1 }),
-  ])
-  if (byAccount.limited || byAddress.limited) {
+  // What is limited is FAILED tries (VAPT-032): a person who signs in correctly never uses up their allowance, and with a trusted address a stranger's wrong guesses
+  // count against the stranger's address and that account together, so they cannot lock the real person out from somewhere else. Without a trusted address
+  // (TRUSTED_PROXY_HOPS not set) the account alone is counted. Separately, one address trying many different accounts (password spraying) is slowed down.
+  const failKey = ip ? `login-fail:${email}|${ip}` : `login-fail:${email}`
+  const attempts = await rateLimit(`login:${email}`, 60, 60_000)           // raw speed of tries on one account (protects the sign-in service)
+  const spraying = !!ip && isOverLimit(`login-fail-ip:${ip}`, 40)
+  if (attempts.limited || spraying || isOverLimit(failKey, 10)) {
     await recordAudit({ category: 'security', source: 'auth', action: 'auth.login_rate_limited', outcome: 'denied', severity: 'warning', message: 'Too many sign-in attempts', after: { email } })
     return { error: 'Too many login attempts. Please wait a minute.' }
   }
@@ -31,6 +33,12 @@ export async function signInWithPassword(formData: FormData) {
   const { data: signedIn, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
+    recordEvent(failKey, 10 * 60_000)
+    if (ip) recordEvent(`login-fail-ip:${ip}`, 10 * 60_000)
+    // many different accounts failing in a short time, from anywhere: report it once per window so someone looks (password spraying, any address)
+    if (recordEvent('login-fail-global', 10 * 60_000) === 200) {
+      await recordAudit({ category: 'security', source: 'auth', action: 'auth.spray_suspected', outcome: 'denied', severity: 'warning', message: 'About 200 failed sign-ins in 10 minutes across the whole site' })
+    }
     await recordAudit({ category: 'security', source: 'auth', action: 'auth.login_failed', outcome: 'failure', severity: 'warning', message: 'Sign-in refused', after: { email } })
     return { error: sanitizeError(error, { route: 'auth.ts#signInWithPassword', fallback: 'Invalid login credentials.' }) }
   }
@@ -70,10 +78,16 @@ export async function forgotPassword(formData: FormData) {
     rateLimit(`forgot:${email}`, 3, 3_600_000),
     ip ? rateLimit(`forgot-ip:${ip}`, 5, 300_000) : Promise.resolve({ limited: false, remaining: 1 }),
   ])
-  if (byEmail.limited || byAddress.limited) return { error: 'Too many requests. Please wait before trying again.' }
+  const overall = await rateLimit('forgot-all', 300, 3_600_000)             // one cap for the whole site: the form cannot be turned into a mail flood
+  if (byEmail.limited || byAddress.limited || overall.limited) return { error: 'Too many requests. Please wait before trying again.' }
 
-  // Sent through the app's own mailbox (see lib/email/auth-mail.ts).
+  // Sent through the app's own mailbox (see lib/email/auth-mail.ts). An address that has no account takes less time than one that does (no mail to build or send),
+  // so the answer is never given sooner than a fixed minimum: the stopwatch cannot tell them apart (VAPT-041).
+  const started = Date.now()
   const { error } = await emailPasswordResetLink(email)
+  const floorMs = Number(process.env.FORGOT_PASSWORD_MIN_MS ?? (process.env.NODE_ENV === 'production' ? 1500 : 0))
+  const wait = floorMs - (Date.now() - started)
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait))
   await recordAudit({ category: 'security', source: 'auth', action: 'auth.password_reset_requested', outcome: error ? 'failure' : 'success', after: { email }, message: error ? 'The reset e-mail could not be sent' : null })
   if (error) return { error }
 
@@ -99,7 +113,7 @@ export async function resetPassword(formData: FormData) {
   // Covers both an invite/recovery link AND the forced-reset redirect from
   // app/(app)/layout.tsx (bulkCreateUsers/adminSetPassword flip this flag) —
   // clearing it here is a no-op for anyone who wasn't flagged.
-  const profile = await getCurrentProfile()
+  const profile = await getCurrentProfileForPasswordReset()
   if (profile?.must_reset_password) {
     // only the server clears it, and only here, after the password really changed (a signed-in user has no right to switch it off: VAPT VA-API-02)
     await createAdminClient().from('profiles').update({ must_reset_password: false }).eq('id', profile.id)
