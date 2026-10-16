@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { secureCompare } from '@/lib/secure-compare'
+import { getSecret } from '@/lib/secrets'
 
 // POST /api/intake/webhook/gmail?token=<INTAKE_WEBHOOK_TOKEN>
 //
@@ -27,7 +28,7 @@ import { secureCompare } from '@/lib/secure-compare'
 
 export async function POST(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token')
-  const secret = process.env.INTAKE_WEBHOOK_TOKEN ?? process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
+  const secret = getSecret('intake_webhook')
   if (!secret || !token || !secureCompare(token, secret)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
   // Forward to the worker for Gmail API sync. Fire and forget — Pub/Sub has
   // already delivered the notification; the worker handles retries internally.
   const workerUrl = process.env.INTAKE_WORKER_URL
-  const workerSecret = process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
+  const workerSecret = getSecret('intake_worker')
   if (workerUrl && workerSecret) {
     fetch(`${workerUrl}/intake/gmail-sync`, {
       method: 'POST',

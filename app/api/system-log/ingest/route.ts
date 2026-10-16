@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { secureCompare } from '@/lib/secure-compare'
 import { flushSystemLog, recordSystemLog } from '@/lib/syslog/record'
 import { isSeverity, isSource, type Source, type Severity } from '@/lib/syslog/shape'
+import { getSecret } from '@/lib/secrets'
 
 // Lets things OUTSIDE the app add error rows to the System Log: the cron runner (a job failed, or the app could not be reached) and the log
 // shipper (PostgREST / auth / storage / PostgreSQL log lines). Authenticated with a shared secret (x-system-log-secret, or the cron secret),
@@ -13,7 +14,7 @@ const MAX_ENTRIES = 200
 const SOURCES_ALLOWED = new Set<Source>(['cron', 'database', 'storage', 'auth', 'integration', 'process', 'shipper', 'app_server'])
 
 function authorized(req: NextRequest): boolean | null {
-  const secrets = [process.env.SYSTEM_LOG_INGEST_SECRET, process.env.CRON_SECRET].filter((s): s is string => typeof s === 'string' && s.length >= 16)
+  const secrets = [getSecret('system_log_ingest')].filter((s): s is string => typeof s === 'string' && s.length >= 16)
   if (secrets.length === 0) return null
   const given = req.headers.get('x-system-log-secret') ?? req.headers.get('x-cron-secret') ?? (req.headers.get('authorization')?.startsWith('Bearer ') ? req.headers.get('authorization')!.slice(7) : '')
   return secrets.some((s) => secureCompare(given, s))

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { secureCompare } from '@/lib/secure-compare'
+import { getSecret } from '@/lib/secrets'
 
 // POST /api/intake/webhook/outlook?token=<INTAKE_WEBHOOK_TOKEN>
 // GET  /api/intake/webhook/outlook?validationToken=...   (Microsoft subscription validation)
@@ -33,13 +34,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const token = req.nextUrl.searchParams.get('token')
-  const webhookToken = process.env.INTAKE_WEBHOOK_TOKEN ?? process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
-  if (!webhookToken || !token || !secureCompare(token, webhookToken)) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
+  // The shared value is no longer carried in the URL (it would sit in proxy and access logs and in Microsoft's subscription record): Graph sends it back inside
+  // every notification as clientState, and each one is checked below (VAPT-030). An older subscription that still has ?token= in its address keeps working.
+  const webhookToken = getSecret('intake_webhook')
+  if (!webhookToken) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  // Microsoft Graph also sends a validationToken in some POST scenarios.
+  // Microsoft Graph also sends a validationToken in some POST scenarios (the subscription handshake carries no clientState).
   const validationToken = req.nextUrl.searchParams.get('validationToken')
   if (validationToken) {
     return new NextResponse(validationToken, {
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   if (!notifications?.length) return NextResponse.json({ ok: true })
 
   const workerUrl = process.env.INTAKE_WORKER_URL
-  const workerSecret = process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
+  const workerSecret = getSecret('intake_worker')
   if (!workerUrl || !workerSecret) return NextResponse.json({ ok: true })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

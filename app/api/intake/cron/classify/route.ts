@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyCronSecret } from '@/lib/cron-auth'
 import type { Json } from '@/types/database'
+import { getSecret } from '@/lib/secrets'
 
 function isJsonObject(v: Json | null | undefined): v is { [key: string]: Json | undefined } {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
   }
 
   const rawWorkerUrl = process.env.INTAKE_WORKER_URL
-  const workerSecret = process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
+  const workerSecret = getSecret('intake_worker')
   if (!rawWorkerUrl || !workerSecret) {
     return NextResponse.json({ skipped: true, reason: 'Worker not configured.' })
   }

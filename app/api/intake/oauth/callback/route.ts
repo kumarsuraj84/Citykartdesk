@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { exchangeCode, providerConfig, verifyState } from '@/lib/intake/oauth'
 import { setupGmailWatch } from '@/lib/intake/gmail-api'
 import { createGraphSubscription } from '@/lib/intake/graph-api'
+import { getSecret } from '@/lib/secrets'
 
 // GET /api/intake/oauth/callback?code=...&state=...
 // Exchanges the auth code for a refresh token, stores OAuth credentials in
@@ -78,7 +79,7 @@ export async function GET(req: NextRequest) {
   // app/api/intake/webhook/outlook/route.ts for why this is deliberately
   // not INTAKE_WORKER_SECRET (that one grants full worker-admin access and
   // shouldn't sit in a URL query string).
-  const workerSecret = process.env.INTAKE_WEBHOOK_TOKEN ?? process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET ?? ''
+  const workerSecret = getSecret('intake_webhook') ?? ''
   let pushConfig: Record<string, unknown> = {}
 
   if (provider === 'google') {
@@ -95,7 +96,7 @@ export async function GET(req: NextRequest) {
     }
   } else if (provider === 'microsoft') {
     if (workerSecret && result.accessToken) {
-      const notificationUrl = `${baseUrl}/api/intake/webhook/outlook?token=${encodeURIComponent(workerSecret)}`
+      const notificationUrl = `${baseUrl}/api/intake/webhook/outlook`      // no secret in the address (VAPT-030): clientState carries it
       const sub = await createGraphSubscription({
         accessToken:     result.accessToken,
         notificationUrl,
