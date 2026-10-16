@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
 import { mailHostProblem } from '@/lib/validation/mail-host'
+import { getSecret } from '@/lib/secrets'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -413,7 +414,7 @@ export async function pollNow(): Promise<{
   if (!canManageChannels(profile.role)) return { ok: false, error: 'You do not have permission to manage channels.' }
 
   const rawUrl = process.env.INTAKE_WORKER_URL
-  const workerSecret = process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
+  const workerSecret = getSecret('intake_worker')
   if (!rawUrl || !workerSecret) {
     return { ok: false, error: 'Worker is not configured (INTAKE_WORKER_URL / INTAKE_WORKER_SECRET).' }
   }
@@ -444,7 +445,7 @@ export async function testChannel(channelId: string): Promise<{ ok: boolean; err
   if (!canManageChannels(profile.role)) return { ok: false, error: 'You do not have permission to manage channels.' }
 
   const rawUrl = process.env.INTAKE_WORKER_URL
-  const workerSecret = process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
+  const workerSecret = getSecret('intake_worker')
   if (!rawUrl || !workerSecret) {
     return { ok: false, error: 'Worker is not configured (INTAKE_WORKER_URL / INTAKE_WORKER_SECRET).' }
   }

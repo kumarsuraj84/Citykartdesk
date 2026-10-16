@@ -5,6 +5,7 @@
 // random, kept hashed in the database and works once: lib/approvals/email-code.ts). The links are signed values, so they need no storage.
 
 import { createHmac, randomInt, timingSafeEqual } from 'crypto'
+import { getSecret } from '@/lib/secrets'
 const absoluteAppUrl = (path: string) => `${(process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')}${path}`
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -14,9 +15,9 @@ export const LINK_DAYS = 7
 /** Links e-mailed before expiry existed carry no date; they work until this long after the approval was raised. */
 export const LEGACY_LINK_DAYS = 14
 
-// A dedicated secret is preferred; the older shared ones are still accepted so existing configuration keeps working.
+// Only the secret meant for approval links signs them (lib/secrets.ts, VAPT-030): not the rating-link secret, not the cron secret.
 function secret(): string | null {
-  return process.env.APPROVAL_LINK_SECRET || process.env.CSAT_LINK_SECRET || process.env.CRON_SECRET || null
+  return getSecret('approval_link')
 }
 /** Links can only be made (and so the buttons shown) when a signing secret is configured. */
 export const approvalLinksAvailable = () => secret() !== null

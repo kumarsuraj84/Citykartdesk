@@ -3,12 +3,13 @@
 // which is how store users who share a mailbox can rate or reopen without logging in.
 
 import { createHmac, timingSafeEqual } from 'crypto'
+import { getSecret } from '@/lib/secrets'
 
 /** How long after resolving a ticket its e-mail link keeps working (rating only after the reopen window ends). */
 export const CSAT_LINK_DAYS = 30
 
 function secret(): string | null {
-  return process.env.CSAT_LINK_SECRET || process.env.CRON_SECRET || null
+  return getSecret('csat_link')   // its own secret only (VAPT-030)
 }
 
 /** Links can only be made (and so the e-mail sent) when a signing secret is configured. */

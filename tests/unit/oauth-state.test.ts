@@ -27,9 +27,9 @@ describe('OAuth state signing', () => {
     expect(verifyState(signState(payload))).toEqual(payload)
   })
 
-  it('a BLANK OAUTH_STATE_SECRET no longer means an empty key: it falls through to the next real secret', () => {
+  it('a BLANK OAUTH_STATE_SECRET means "not configured": it does not fall through to the cron secret (VAPT-030)', () => {
     setAll({ OAUTH_STATE_SECRET: '', CRON_SECRET: 'cron-secret-long-enough-0000' })
-    expect(verifyState(signState(payload))).toEqual(payload)
+    expect(() => signState(payload)).toThrow()
   })
 
   it('with every secret blank or missing nothing can be signed and nothing is accepted', () => {

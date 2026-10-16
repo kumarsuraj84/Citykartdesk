@@ -4,6 +4,7 @@ import { fetchWithTimeout } from '@/lib/http/fetch-timeout'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createClient } from '@/lib/supabase/server'
 import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
+import { getSecret } from '@/lib/secrets'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -50,7 +51,7 @@ export async function testStage2(): Promise<TestStage2Result> {
   if (moduleError) return { ok: false, error: moduleError }
 
   const rawUrl = process.env.INTAKE_WORKER_URL
-  const secret = process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
+  const secret = getSecret('intake_worker')
   if (!rawUrl || !secret) return { ok: false, error: 'Worker not configured.' }
   const workerUrl = (/^https?:\/\//.test(rawUrl) ? rawUrl : `https://${rawUrl}`).replace(/\/$/, '')
 
@@ -166,7 +167,7 @@ export async function reclassifyBacklog(
   if (moduleError) return { ok: false, error: moduleError }
 
   const rawUrl = process.env.INTAKE_WORKER_URL
-  const workerSecret = process.env.INTAKE_WORKER_SECRET ?? process.env.CRON_SECRET
+  const workerSecret = getSecret('intake_worker')
   if (!rawUrl || !workerSecret) {
     return { ok: false, error: 'Worker not configured (INTAKE_WORKER_URL / INTAKE_WORKER_SECRET).' }
   }

@@ -19,7 +19,7 @@ import { POST as events } from '@/app/api/events/route'
 import { flushSystemLog } from '@/lib/syslog/record'
 
 const tag = `ep${Date.now()}`
-const secret = () => process.env.CRON_SECRET!
+const secret = () => process.env.SYSTEM_LOG_INGEST_SECRET!   // its own secret since VAPT-030 (not the cron secret)
 type Row = { id: number; category: string; source: string; severity: string; action: string; message: string | null; actor_id: string | null; org_id: string | null; from_click: boolean | null; click_target: string | null; path: string | null; row_hash: string | null; user_agent: string | null; session_id: string | null }
 const rows = async (like: string) => (await svc<Row[]>('GET', `/system_log?action=like.${like}*&order=id.asc`)).json
 const post = (url: string, body: unknown, headers: Record<string, string> = {}) => new NextRequest(`http://localhost${url}`, { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body), headers })
@@ -32,7 +32,7 @@ describe('ingest', () => {
     expect((await ingest(post('/api/system-log/ingest', { entries: [] }))).status).toBe(401)
     expect((await ingest(post('/api/system-log/ingest', { entries: [] }, { 'x-system-log-secret': 'wrong-secret-value-123456' }))).status).toBe(401)
     expect((await ingest(post('/api/system-log/ingest', { entries: [] }, { 'x-system-log-secret': secret() }))).status).toBe(200)
-    expect((await ingest(post('/api/system-log/ingest', { entries: [] }, { 'x-cron-secret': secret() }))).status).toBe(200)
+    expect((await ingest(post('/api/system-log/ingest', { entries: [] }, { 'x-cron-secret': secret() }))).status).toBe(200)   // the same value in the other header name still works
   })
   it('stores error rows from the cron runner and the shipper', async () => {
     const res = await ingest(post('/api/system-log/ingest', { entries: [
@@ -68,7 +68,7 @@ describe('archive job', () => {
     const old = new Date(Date.now() - 200 * 86_400_000).toISOString()
     await svc('POST', '/system_log', { org_id: ORG_A, category: 'error', source: 'app_server', severity: 'error', outcome: 'failure', action: `${tag}.old_error`, created_at: old })
     expect((await archive(new NextRequest('http://localhost/api/system-log/archive'))).status).toBe(401)
-    const res = await archive(new NextRequest('http://localhost/api/system-log/archive', { headers: { 'x-cron-secret': secret() } }))
+    const res = await archive(new NextRequest('http://localhost/api/system-log/archive', { headers: { 'x-cron-secret': process.env.CRON_SECRET! } }))
     const out = await res.json()
     expect(out).toMatchObject({ ok: true, errorDays: 180, auditYears: 7 })
     expect(out.moved).toBeGreaterThanOrEqual(1)

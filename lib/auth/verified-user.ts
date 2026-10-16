@@ -10,8 +10,9 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 export const VERIFIED_USER_HEADER = 'x-verified-user-id'
 export const VERIFIED_USER_SIG_HEADER = 'x-verified-user-sig'
 
+// The signing key is the server's own service key (never the cron secret, VAPT-030): without it nothing is signed and callers re-check the session.
 function key(): string | null {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.CRON_SECRET || null
+  return process.env.SUPABASE_SERVICE_ROLE_KEY || null
 }
 
 const mac = (k: string, userId: string) => createHmac('sha256', k).update(`verified-user:${userId}`).digest('hex')

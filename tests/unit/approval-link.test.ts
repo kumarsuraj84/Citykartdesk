@@ -12,8 +12,9 @@ const Q = '323e4567-e89b-12d3-a456-426614174222'
 const DAY = 86_400_000
 
 beforeEach(() => {
-  delete process.env.APPROVAL_LINK_SECRET; delete process.env.CRON_SECRET
-  process.env.CSAT_LINK_SECRET = 'unit-secret'; process.env.NEXT_PUBLIC_APP_URL = 'http://app.test'
+  // since VAPT-030 approval links are signed with their own secret only (not the rating-link or cron secret)
+  delete process.env.CSAT_LINK_SECRET; delete process.env.CRON_SECRET; delete process.env.ALLOW_SHARED_SECRET_FALLBACK
+  process.env.APPROVAL_LINK_SECRET = 'unit-secret'; process.env.NEXT_PUBLIC_APP_URL = 'http://app.test'
 })
 
 describe('the personal approval link', () => {
@@ -43,16 +44,17 @@ describe('the personal approval link', () => {
     expect(verifyApprovalToken(`${Q}.${P}.${exp}.${sig}`, now)).toBeNull() // swap in a different approval
     expect(verifyApprovalToken(`${A}.${P}.${(parseInt(exp, 36) + 10 * DAY).toString(36)}.${sig}`, now)).toBeNull() // push the expiry out
     expect(verifyApprovalToken('nonsense', now)).toBeNull()
-    process.env.CSAT_LINK_SECRET = 'other'
+    process.env.APPROVAL_LINK_SECRET = 'other'
     expect(verifyApprovalToken(t, now)).toBeNull()
   })
 
-  it('uses a dedicated approval secret when there is one, in preference to the shared ones', () => {
-    process.env.APPROVAL_LINK_SECRET = 'dedicated-secret'
+  it('is signed with the approval secret only: the rating-link and cron secrets do not sign or verify it', () => {
     const t = signApprovalToken(A, P, now)!
     expect(verifyApprovalToken(t, now)).not.toBeNull()
     delete process.env.APPROVAL_LINK_SECRET
-    expect(verifyApprovalToken(t, now)).toBeNull() // it was signed with the dedicated secret, not the shared one
+    process.env.CSAT_LINK_SECRET = 'unit-secret'; process.env.CRON_SECRET = 'unit-secret'
+    expect(signApprovalToken(A, P, now)).toBeNull()
+    expect(verifyApprovalToken(t, now)).toBeNull()
   })
 
   it('still accepts a link e-mailed before links expired, until the approval is LEGACY_LINK_DAYS old', () => {
@@ -68,7 +70,7 @@ describe('the personal approval link', () => {
   })
 
   it('makes no link when no secret is configured', () => {
-    delete process.env.CSAT_LINK_SECRET
+    delete process.env.APPROVAL_LINK_SECRET
     expect(signApprovalToken(A, P)).toBeNull()
     expect(approvalLinkUrls(A, P)).toBeNull()
   })

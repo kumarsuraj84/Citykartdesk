@@ -1,5 +1,6 @@
 import { fetchWithTimeout } from '@/lib/http/fetch-timeout'
 import crypto from 'crypto'
+import { getSecret } from '@/lib/secrets'
 
 // OAuth2 for mailbox access. Microsoft permanently disabled basic-auth IMAP and
 // Google blocks account-password IMAP, so Gmail/M365 must authenticate via
@@ -52,7 +53,7 @@ export function providerConfig(provider: OAuthProvider): ProviderConfig {
 // A blank value now counts as "not set", and with no usable secret (at least 16 characters) states are neither signed nor accepted.
 const MIN_STATE_SECRET_LENGTH = 16
 function stateSecret(): string | null {
-  const secret = process.env.OAUTH_STATE_SECRET || process.env.INTAKE_WORKER_SECRET || process.env.CRON_SECRET || ''
+  const secret = getSecret('oauth_state') ?? ''     // its own secret only (VAPT-030)
   return secret.length >= MIN_STATE_SECRET_LENGTH ? secret : null
 }
 

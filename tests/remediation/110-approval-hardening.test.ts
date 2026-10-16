@@ -42,7 +42,7 @@ describe('approval hardening', () => {
 
   beforeAll(async () => {
     process.env.NEXT_PUBLIC_APP_URL = 'http://app.test'
-    process.env.CSAT_LINK_SECRET = 'approval-hardening-secret'
+    process.env.APPROVAL_LINK_SECRET = 'approval-hardening-secret'
     fx = await setupD03Fixtures()
   }, 120_000)
   afterAll(async () => { await fx?.cleanup() }, 120_000)

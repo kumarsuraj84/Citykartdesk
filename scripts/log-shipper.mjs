@@ -159,7 +159,7 @@ async function pass(opts, target, secret) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2))
   const target = (process.env.SYSTEM_LOG_TARGET_URL ?? process.env.CRON_TARGET_URL ?? '').replace(/\/$/, '')
-  const secret = process.env.SYSTEM_LOG_INGEST_SECRET ?? process.env.CRON_SECRET ?? ''
+  const secret = process.env.SYSTEM_LOG_INGEST_SECRET ?? (process.env.ALLOW_SHARED_SECRET_FALLBACK === '1' ? process.env.CRON_SECRET : '') ?? ''
   if (!opts.dryRun && (!target || secret.length < 16)) throw new Error('Set SYSTEM_LOG_TARGET_URL and SYSTEM_LOG_INGEST_SECRET (16+ characters), or use --dry-run')
   if (opts.once || opts.dryRun) {
     const r = await pass(opts, target, secret)
