@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { getApprovalWorkflowWithSteps, type ApprovalWorkflowStep } from '@/lib/queries/admin'
+import { requireCapability } from '@/lib/permissions/policies'
 
 type ActionResult<T = undefined> = T extends undefined
   ? { error?: string }
@@ -14,9 +15,8 @@ type ActionResult<T = undefined> = T extends undefined
 async function requireAdminOrManager() {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (profile.role !== 'admin' && profile.role !== 'manager' && profile.role !== 'platform_owner') {
-    return { error: 'Admin or manager role required.' }
-  }
+  const denied = await requireCapability(profile, 'workflows.write')
+  if (denied) return { error: denied }
   return { profile }
 }
 

@@ -6,6 +6,8 @@ import { getEmailSetup, RESEND_API_KEY, resolveSenderAddress } from '@/lib/email
 import { readMailboxForAdmin } from '@/lib/email/mailbox'
 import { getWhatsAppChannelReadiness } from '@/lib/actions/intake/whatsapp-channel'
 import { SettingsClient } from './SettingsClient'
+import { PolicySwitchesCard } from '@/components/admin/PolicySwitchesCard'
+import { loadPolicies } from '@/lib/permissions/policies'
 import { LOG_RETENTION, LOG_RETENTION_KEYS, logRetentionDays } from '@/lib/syslog/retention'
 
 export default async function PlatformSettingsPage() {
@@ -48,6 +50,8 @@ export default async function PlatformSettingsPage() {
     deliveryDetail = `API key ••••${resendKey.slice(-4)}`
   }
 
+  const policies = profile.role === 'platform_owner' ? await loadPolicies() : null
+
   const emailFromMap = new Map((emailFromRows ?? []).map((r) => [r.key, r.value]))
   const logRetention = {
     system_log: logRetentionDays('system_log', emailFromMap.get(LOG_RETENTION.system_log.key)),
@@ -77,6 +81,7 @@ export default async function PlatformSettingsPage() {
         }}
         whatsappChannels={whatsappChannels}
       />
+      {policies && <PolicySwitchesCard values={policies} />}
     </div>
   )
 }

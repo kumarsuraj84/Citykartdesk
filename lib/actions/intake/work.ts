@@ -7,6 +7,7 @@ import { canReview, logIntakeAudit } from './_shared'
 import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
 import { createRequestCore } from '@/lib/requests/create-request-core'
 import { collectFields, buildFormData } from '@/lib/intake/autofill'
+import { roleMay } from '@/lib/permissions/policies'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -258,7 +259,8 @@ export async function approveAndCreate(
       // priority behavior exactly; without this, routing through the shared
       // core would silently discard the reviewer's priority decision in
       // favor of the service's bare default.
-      priorityOverride: mapPriorityToRequest(decision.final_priority),
+      // only when the permission switch allows a reviewer to choose it (VAPT-010); otherwise the sub-category and its SLA decide, like every other ticket
+      priorityOverride: (await roleMay(profile.role, 'intake.priority_override')) ? mapPriorityToRequest(decision.final_priority) : undefined,
     })
 
     if (coreResult.error || !coreResult.requestId || !coreResult.requestNo) {

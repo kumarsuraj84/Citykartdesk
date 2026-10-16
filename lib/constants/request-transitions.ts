@@ -62,3 +62,22 @@ export const REQUESTER_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
   closed:           [],
   cancelled:        [],
 }
+
+/**
+ * Status moves a Business Rule (or any other automatic server step) may make. It is the same list the database keeps in request_status_transition_allowed(),
+ * plus the automatic closing of a resolved ticket. A rule can no longer jump a ticket to any status (VAPT-008): for example, it cannot revive a cancelled
+ * ticket or close one that was never resolved. tests/vapt/23-business-rule-limits.test.ts compares this list with the database function.
+ */
+export const SERVER_ALLOWED_TRANSITIONS: ReadonlyArray<readonly [RequestStatus, RequestStatus]> = [
+  ['open', 'assigned'], ['open', 'in_progress'], ['open', 'cancelled'],
+  ['assigned', 'open'], ['assigned', 'in_progress'], ['assigned', 'cancelled'],
+  ['in_progress', 'waiting_user'], ['in_progress', 'hold_purchase_ho'], ['in_progress', 'resolved'], ['in_progress', 'cancelled'],
+  ['waiting_user', 'in_progress'], ['waiting_user', 'resolved'], ['waiting_user', 'open'], ['waiting_user', 'cancelled'],
+  ['hold_purchase_ho', 'in_progress'],
+  ['resolved', 'open'],
+  ['resolved', 'closed'],
+]
+
+export function isServerTransitionAllowed(from: string, to: string): boolean {
+  return from === to || SERVER_ALLOWED_TRANSITIONS.some(([a, b]) => a === from && b === to)
+}

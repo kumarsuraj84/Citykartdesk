@@ -8,13 +8,15 @@ import { logAdminAudit } from '@/lib/actions/admin/audit'
 import type { RuleCondition, RuleConditionsLogic } from '@/lib/rules/evaluate'
 import type { RuleAction } from '@/lib/rules/actions'
 import { assertRuleActionsInOrg } from '@/lib/actions/admin/orgScopeGuard'
+import { requireCapability } from '@/lib/permissions/policies'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
 
+// Who may write Business Rules is one of the permission-matrix switches (lib/permissions/matrix.ts): today managers, administrators and platform owners.
 async function requireAdminOrManager() {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return null
+  if (!profile || (await requireCapability(profile, 'business_rules.write'))) return null
   return profile
 }
 

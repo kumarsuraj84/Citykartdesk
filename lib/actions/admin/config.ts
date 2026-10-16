@@ -11,6 +11,9 @@ import { logAdminAudit } from './audit'
 import { LOG_RETENTION, checkLogRetentionDays, type LogKind } from '@/lib/syslog/retention'
 import { EMAIL_REGEX } from '@/lib/validation/formFields'
 import { mailHostProblem } from '@/lib/validation/mail-host'
+import { requireCapability } from '@/lib/permissions/policies'
+import { APP_SETTING_RULES } from '@/lib/permissions/matrix'
+import { rateLimit } from '@/lib/rate-limit'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -22,7 +25,13 @@ export async function updateAppSetting(
   value: string
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'settings.global.write'); if (denied) return { error: denied } }
+
+  // Only the settings the screens really use can be written here, and each value is checked (VAPT-007: any key with any value used to be accepted).
+  // The "who may change what" switches have their own action (lib/actions/admin/policies.ts).
+  const valid = APP_SETTING_RULES[key]
+  if (!valid || !valid(String(value))) return { error: 'That setting or value is not accepted.' }
 
   // app_settings is a plain key/value table (key TEXT PRIMARY KEY, value TEXT) with
   // no updated_at column — don't include one in the upsert payload.
@@ -51,7 +60,8 @@ export async function updateAppSetting(
  */
 export async function updateEmailFromSettings(name: string, address: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'settings.global.write'); if (denied) return { error: denied } }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin
@@ -73,11 +83,18 @@ export async function updateEmailFromSettings(name: string, address: string): Pr
  *  (SMTP login, sender address, spam placement) without waiting for a real ticket. */
 export async function sendTestEmail(to: string): Promise<{ error?: string; from?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'mailbox.write'); if (denied) return { error: denied } }
 
   const recipient = to?.trim()
   if (!recipient || !EMAIL_REGEX.test(recipient)) return { error: 'Enter a valid email address.' }
+  // A test mail goes only to an address at the company's own mail domain and only a few times a minute: it cannot be used to send
+  // mail from the company mailbox to strangers (VAPT, spam relay).
+  if ((await rateLimit(`test-email:${profile.id}`, 5, 60_000)).limited) return { error: 'Too many test e-mails. Please wait a minute.' }
   const setup = await getEmailSetup()
+  const mailboxDomain = (setup.smtp?.user ?? '').split('@')[1]?.toLowerCase()
+  const recipientDomain = recipient.split('@')[1]?.toLowerCase()
+  if (mailboxDomain && recipientDomain !== mailboxDomain) return { error: 'A test e-mail can only be sent to an address at your own mail domain.' }
   if (!setup.provider) {
     return { error: 'Email sending is not set up yet — save the mailbox in the section above first.' }
   }
@@ -181,7 +198,8 @@ export async function createTaskTemplate(data: {
   teamId?: string
 }): Promise<{ data?: { id: string }; error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'task_config.write'); if (denied) return { error: denied } }
 
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
@@ -208,7 +226,8 @@ export async function updateTaskTemplate(
   data: { name?: string; description?: string }
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'task_config.write'); if (denied) return { error: denied } }
 
   const admin = createAdminClient() as unknown as AnyClient
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -223,7 +242,8 @@ export async function updateTaskTemplate(
 
 export async function deleteTaskTemplate(id: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'task_config.write'); if (denied) return { error: denied } }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('task_templates').delete().eq('id', id).eq('org_id', profile.org_id)
@@ -242,7 +262,8 @@ export async function upsertTemplateItem(data: {
   position?: number
 }): Promise<{ data?: { id: string }; error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'task_config.write'); if (denied) return { error: denied } }
 
   const admin = createAdminClient() as unknown as AnyClient
 
@@ -283,7 +304,8 @@ export async function upsertTemplateItem(data: {
 
 export async function deleteTemplateItem(id: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'task_config.write'); if (denied) return { error: denied } }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { data: existingItem } = await admin
@@ -307,7 +329,8 @@ export async function updateBusinessHours(
   data: { start_time: string; end_time: string; is_active: boolean }
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'settings.global.write'); if (denied) return { error: denied } }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin
@@ -328,7 +351,8 @@ export async function createHoliday(data: {
   is_recurring: boolean
 }): Promise<{ data?: { id: string; name: string; date: string; is_recurring: boolean }; error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'settings.global.write'); if (denied) return { error: denied } }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { data: holiday, error } = await admin
@@ -348,7 +372,8 @@ export async function createHoliday(data: {
 
 export async function deleteHoliday(id: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'settings.global.write'); if (denied) return { error: denied } }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('holidays').delete().eq('id', id)
@@ -386,7 +411,8 @@ export type AlertRuleRow = {
 
 export async function createAlertRule(data: AlertRuleData): Promise<{ data?: AlertRuleRow; error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'alert_rules.write'); if (denied) return { error: denied } }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const admin = createAdminClient() as unknown as AnyClient
@@ -417,7 +443,8 @@ export async function updateAlertRule(
   data: Partial<AlertRuleData>
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'alert_rules.write'); if (denied) return { error: denied } }
 
   const admin = createAdminClient() as unknown as AnyClient
   // D-013: only the rule's own settings can be changed (never its organization or id)
@@ -431,7 +458,8 @@ export async function updateAlertRule(
 
 export async function deleteAlertRule(id: string): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'alert_rules.write'); if (denied) return { error: denied } }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('alert_rules').delete().eq('id', id).eq('org_id', profile.org_id)
@@ -442,7 +470,8 @@ export async function deleteAlertRule(id: string): Promise<{ error?: string }> {
 
 export async function toggleAlertRule(id: string, is_active: boolean): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'alert_rules.write'); if (denied) return { error: denied } }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('alert_rules').update({ is_active }).eq('id', id).eq('org_id', profile.org_id)
@@ -460,7 +489,8 @@ export async function updateRequestPriority(
   data: Partial<{ name: string; color: string; sla_multiplier: number; is_active: boolean; display_order: number }>
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile) return { error: 'Unauthorized.' }
+  { const denied = await requireCapability(profile, 'settings.global.write'); if (denied) return { error: denied } }
 
   const admin = createAdminClient() as unknown as AnyClient
   const update = pickFields(data, ['name', 'color', 'sla_multiplier', 'is_active', 'display_order'] as const)

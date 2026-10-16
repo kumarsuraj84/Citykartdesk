@@ -11,6 +11,7 @@ import { getResolvedReopenWindowHours } from '@/lib/settings/reopenWindow'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
 import { resolveServiceFormSections } from '@/lib/forms/sections'
 import type { SLAConfig, FormSection, FormField } from '@/types'
+import { isServerTransitionAllowed } from '@/lib/constants/request-transitions'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: { admin: { getUserById: (id: string) => any } } }
@@ -149,7 +150,7 @@ async function runAssign(
   await admin.from('requests').update({ assigned_to: chosenId }).eq('id', request.id)
   await logActivity({
     requestId: request.id,
-    actorId: chosenId,
+    actorId: null,
     action: 'assigned',
     metadata: { assigned_to: chosenId, via: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName },
   })
@@ -175,7 +176,7 @@ async function runSetPriority(admin: AnyClient, request: ActionRequest, priority
   // A finished ticket keeps the deadlines it finished with (D-044): only its priority is recorded.
   if (request.status === 'resolved' || request.status === 'closed' || request.status === 'cancelled') {
     await admin.from('requests').update({ priority }).eq('id', request.id)
-    await logActivity({ requestId: request.id, actorId: request.requester_id, action: 'priority_changed', metadata: { priority_to: priority, via: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName } })
+    await logActivity({ requestId: request.id, actorId: null, action: 'priority_changed', metadata: { priority_to: priority, via: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName } })
     return
   }
   const allFields = resolveServiceFormSections(request.service).flatMap((s) => s.fields)
@@ -203,7 +204,7 @@ async function runSetPriority(admin: AnyClient, request: ActionRequest, priority
     .eq('id', request.id)
   await logActivity({
     requestId: request.id,
-    actorId: request.requester_id,
+    actorId: null,
     action: 'priority_changed',
     metadata: { priority_to: priority, via: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName },
   })
@@ -212,6 +213,11 @@ async function runSetPriority(admin: AnyClient, request: ActionRequest, priority
 /** Returns true when the ticket was actually moved (false: invalid status, or someone else changed it first). */
 async function runSetStatus(admin: AnyClient, request: ActionRequest, status: string, ctx: RuleActionContext): Promise<boolean> {
   if (!(status in STATUS_LABELS)) return false // guard against a stale/invalid status baked into an old rule
+  // A rule may only make the moves a person could make, plus auto-close (VAPT-008): no jumping to any status, no reviving a cancelled ticket
+  if (!isServerTransitionAllowed(request.status, status)) {
+    logger.warn({ event: 'rules.status_move_refused', message: 'A Business Rule tried a status move that is not allowed', route: 'rules/actions.ts#runSetStatus', requestId: request.id, context: { from: request.status, to: status, ruleId: ctx.ruleId } })
+    return false
+  }
 
   const now = new Date()
   const nowIso = now.toISOString()
@@ -327,7 +333,7 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
 
   await logActivity({
     requestId: request.id,
-    actorId: request.requester_id,
+    actorId: null,   // the system, with the rule named in the details (it used to name the requester: VAPT-060)
     action: 'status_changed',
     metadata: { to: status, via: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName },
   })
@@ -344,7 +350,7 @@ async function runSetTeam(admin: AnyClient, request: ActionRequest, teamId: stri
   if (error) return
   await logActivity({
     requestId: request.id,
-    actorId: request.requester_id,
+    actorId: null,
     action: 'reclassified',
     metadata: { team_id: teamId, via: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName },
   })
