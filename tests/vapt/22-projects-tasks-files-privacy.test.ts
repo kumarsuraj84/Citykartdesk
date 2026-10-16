@@ -23,7 +23,7 @@ describe('projects', () => {
   it('a technician of another group cannot add himself to a project of group A, and so cannot read it; the project\'s own technician can add a member', async () => {
     const asB = clientForToken(fx.agentB.accessToken)
     const { error } = await asB.from('project_members').insert({ project_id: projectA, user_id: fx.agentB.id, org_id: fx.orgId, role: 'member', added_by: fx.agentB.id })
-    expect(error).not.toBeNull()
+    expect(error?.code).toBe('42501')
     expect(((await asB.from('projects').select('id').eq('id', projectA)).data ?? []).length).toBe(0)
     const asA = clientForToken(fx.agentA.accessToken)
     const ok = await asA.from('project_members').insert({ project_id: projectA, user_id: fx.manager.id, org_id: fx.orgId, role: 'member', added_by: fx.agentA.id })
@@ -31,17 +31,17 @@ describe('projects', () => {
   })
   it('milestones and updates of a project need access to that project', async () => {
     const asB = clientForToken(fx.agentB.accessToken)
-    expect((await asB.from('milestones').insert({ project_id: projectA, org_id: fx.orgId, name: 'x', created_by: fx.agentB.id })).error).not.toBeNull()
-    expect((await asB.from('project_updates').insert({ project_id: projectA, org_id: fx.orgId, author_id: fx.agentB.id, body: 'x' })).error).not.toBeNull()
+    expect((await asB.from('milestones').insert({ project_id: projectA, org_id: fx.orgId, name: 'x', created_by: fx.agentB.id })).error?.code).toBe('42501')
+    expect((await asB.from('project_updates').insert({ project_id: projectA, org_id: fx.orgId, author_id: fx.agentB.id, update_date: '2026-10-15', update_text: 'x' })).error?.code).toBe('42501')
   })
 })
 
 describe('tasks', () => {
   it('an ordinary employee cannot create a task at all, and a technician cannot create one inside another group\'s project', async () => {
     const asReq = clientForToken(fx.requesterA.accessToken)
-    expect((await asReq.from('tasks').insert({ title: 'x', org_id: fx.orgId, created_by: fx.requesterA.id, assignee_id: fx.agentA.id })).error).not.toBeNull()
+    expect((await asReq.from('tasks').insert({ title: 'x', org_id: fx.orgId, created_by: fx.requesterA.id, assignee_id: fx.agentA.id })).error?.code).toBe('42501')
     const asB = clientForToken(fx.agentB.accessToken)
-    expect((await asB.from('tasks').insert({ title: 'x', org_id: fx.orgId, created_by: fx.agentB.id, project_id: projectA })).error).not.toBeNull()
+    expect((await asB.from('tasks').insert({ title: 'x', org_id: fx.orgId, created_by: fx.agentB.id, project_id: projectA })).error?.code).toBe('42501')
   })
   it('a technician can still create an ordinary task for a colleague', async () => {
     const asA = clientForToken(fx.agentA.accessToken)
@@ -56,7 +56,7 @@ describe('task files', () => {
     for (const who of [fx.requesterA, fx.agentA, fx.manager, fx.admin]) {
       const c = clientForToken(who.accessToken)
       const rec = await c.from('task_attachments').insert({ task_id: fx.taskA.id, uploaded_by: who.id, file_name: 'x.png', file_size: 1, mime_type: 'image/png', storage_path: `${fx.taskB.id}/someone-elses-file.png` })
-      expect(rec.error, who.email).not.toBeNull()
+      expect(rec.error?.code, who.email).toBe('42501')
       const up = await c.storage.from('task-attachments').upload(`vapt-${Date.now()}/x.png`, Buffer.from('x'), { contentType: 'image/png' })
       expect(up.error, who.email).not.toBeNull()
     }
