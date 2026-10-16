@@ -8,6 +8,7 @@ import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
 import { WhatsAppGraphClient } from '@/lib/whatsapp/graph-client'
 import { resolveGraphApiVersion } from '@/lib/whatsapp/config'
 import { WhatsAppSecretSchema } from '@/lib/whatsapp/types'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -82,7 +83,7 @@ export async function createWhatsAppChannel(input: {
     if ((error as { code?: string }).code === '23505') {
       return { error: 'Another WhatsApp channel already uses this phone number id.' }
     }
-    return { error: error.message }
+    return { error: sanitizeError(error, { route: 'lib/actions/intake/whatsapp-channel.ts' }) }
   }
 
   await logIntakeAudit({ orgId: profile.org_id!, actorId: profile.id, entityId: data.id, action: 'whatsapp_channel_created', metadata: { name, phoneNumberId } })
@@ -159,7 +160,7 @@ export async function setWhatsAppChannelActive(channelId: string, active: boolea
     if ((error as { code?: string }).code === '23505') {
       return { error: 'Another active WhatsApp channel already uses this phone number id.' }
     }
-    return { error: error.message }
+    return { error: sanitizeError(error, { route: 'lib/actions/intake/whatsapp-channel.ts' }) }
   }
 
   await logIntakeAudit({ orgId: profile.org_id!, actorId: profile.id, entityId: channelId, action: active ? 'whatsapp_channel_activated' : 'whatsapp_channel_paused' })

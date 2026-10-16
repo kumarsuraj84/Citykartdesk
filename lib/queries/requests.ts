@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getCurrentProfile } from '@/lib/queries/profiles'
+import { publicActivityMetadata } from '@/lib/activity-public'
 import type { ReportViewerScope } from '@/lib/reporting/access'
 import { ACTIVE_TECH_STATUSES, type TechnicianWorkloadRow } from '@/lib/queries/technicianWorkloadShared'
 import type {
@@ -70,6 +72,20 @@ export async function getRequestPreviewSummary(id: string): Promise<RequestPrevi
 
 export async function getRequestActivity(requestId: string): Promise<RequestActivityWithActor[]> {
   const supabase = await createClient()
+  // A requester does not read the log through the data API any more (migration 169). Staff read it as before; for a requester the server first checks
+  // that they may see the ticket (row security), then reads the rows itself and hands over only the fields the History tab shows.
+  const profile = await getCurrentProfile()
+  if (profile && profile.role === 'user') {
+    const { data: visible } = await supabase.from('requests').select('id').eq('id', requestId).maybeSingle()
+    if (!visible) return []
+    const { data: rows } = await createAdminClient()
+      .from('request_activity')
+      .select('*, actor:profiles (id, full_name)')
+      .eq('request_id', requestId)
+      .order('created_at', { ascending: false })
+      .limit(100)
+    return ((rows ?? []) as RequestActivityWithActor[]).map((r) => ({ ...r, metadata: publicActivityMetadata(r.metadata) }))
+  }
   const { data } = await supabase
     .from('request_activity')
     .select(`*, actor:profiles (id, full_name)`)

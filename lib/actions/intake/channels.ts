@@ -8,6 +8,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
 import { mailHostProblem } from '@/lib/validation/mail-host'
 import { getSecret } from '@/lib/secrets'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -75,7 +76,7 @@ export async function createChannel(input: {
     .select('id')
     .single()
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/channels.ts' }) }
 
   await logIntakeAudit({
     orgId: profile.org_id!, actorId: profile.id,
@@ -116,7 +117,7 @@ export async function updateChannel(
     .eq('id', id)
     .eq('org_id', profile.org_id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/channels.ts' }) }
 
   await logIntakeAudit({
     orgId: profile.org_id!, actorId: profile.id,
@@ -144,7 +145,7 @@ export async function setChannelStatus(
     .eq('id', id)
     .eq('org_id', profile.org_id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/channels.ts' }) }
 
   await logIntakeAudit({
     orgId: profile.org_id!, actorId: profile.id,
@@ -170,7 +171,7 @@ export async function deleteChannel(id: string): Promise<{ error?: string }> {
     .eq('id', id)
     .eq('org_id', profile.org_id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/channels.ts' }) }
 
   await logIntakeAudit({
     orgId: profile.org_id!, actorId: profile.id,
@@ -386,7 +387,7 @@ export async function resyncChannel(channelId: string): Promise<{ error?: string
     .update({ config: nextConfig })
     .eq('id', channelId)
     .eq('org_id', profile.org_id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/channels.ts' }) }
 
   await logIntakeAudit({
     orgId: profile.org_id!, actorId: profile.id,

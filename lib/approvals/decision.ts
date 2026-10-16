@@ -102,6 +102,11 @@ async function approveCore(ctx: ApprovalCtx, approvalId: string, comment?: strin
   const { approval, steps, currentStep, profile, isParallel } = ctx
   const admin = createAdminClient()
 
+  // The approval must still be pending when the decision is written (VAPT-058 / VA-TKT-15): a decision that arrives after another approver, a
+  // rejection or a cancellation has settled it is not recorded.
+  const { data: stillPending } = await admin.from('approvals').select('status').eq('id', approvalId).maybeSingle()
+  if (!stillPending || stillPending.status !== 'pending') return { error: 'This approval has already been decided.' }
+
   // Record the decision
   const { error: decisionError } = await admin.from('approval_decisions').insert({
     approval_id: approvalId,
@@ -194,6 +199,8 @@ async function approveCore(ctx: ApprovalCtx, approvalId: string, comment?: strin
       .from('requests')
       .update(updatePayload)
       .eq('id', approval.request_id)
+      // only a ticket that is still waiting for this approval is moved on; one that a rule or a person has closed or cancelled meanwhile stays as it is
+      .eq('status', 'pending_approval')
     if (requestUpdateError) return { error: sanitizeError(requestUpdateError, { route: 'approvals.ts#approveApproval', fallback: 'Failed to update request.' }) }
 
     await logActivity({

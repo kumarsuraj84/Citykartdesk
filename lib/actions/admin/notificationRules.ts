@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { ALL_NOTIFICATION_EVENT_TYPES } from '@/lib/constants/notification-rules'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 export type NotificationRuleValues = {
   event_type: string
@@ -63,7 +64,7 @@ export async function saveNotificationRules(rules: NotificationRuleValues[]): Pr
     .from('notification_rules')
     .upsert(rows, { onConflict: 'org_id,event_type' })
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/notificationRules.ts' }) }
   revalidatePath('/admin/request-config')
   return {}
 }

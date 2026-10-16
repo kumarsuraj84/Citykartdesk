@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logAdminAudit } from './audit'
 import type { RequestPriority } from '@/types'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 type ActionResult = { error?: string }
 
@@ -106,7 +107,7 @@ export async function updateCategory(
     .from('service_categories')
     .update(payload)
     .eq('id', id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/categories.ts' }) }
 
   await logAdminAudit({
     orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
@@ -132,7 +133,7 @@ export async function toggleCategoryActive(
     .update({ is_active: isActive })
     .eq('id', id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/categories.ts' }) }
 
   await logAdminAudit({
     orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
@@ -185,7 +186,7 @@ export async function deleteCategory(id: string): Promise<ActionResult> {
   }
 
   const { error } = await supabase.from('service_categories').delete().eq('id', id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/categories.ts' }) }
 
   await logAdminAudit({
     orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
@@ -246,7 +247,7 @@ export async function upsertSubCategory(
       .from('service_sub_categories')
       .update(payload)
       .eq('id', input.id)
-    if (error) return { error: error.message }
+    if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/categories.ts' }) }
 
     await logAdminAudit({
       orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
@@ -277,7 +278,7 @@ export async function upsertSubCategory(
       .insert({ ...payload, slug })
       .select('id')
       .single()
-    if (error) return { error: error.message }
+    if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/categories.ts' }) }
 
     await logAdminAudit({
       orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
@@ -510,7 +511,7 @@ export async function toggleSubCategoryActive(
     .update({ is_active: isActive })
     .eq('id', id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/categories.ts' }) }
 
   await logAdminAudit({
     orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
@@ -556,7 +557,7 @@ export async function deleteSubCategory(id: string, categoryId: string): Promise
   }
 
   const { error } = await supabase.from('service_sub_categories').delete().eq('id', id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/categories.ts' }) }
 
   await logAdminAudit({
     orgId: guard.profile!.org_id!, actorId: guard.profile!.id,

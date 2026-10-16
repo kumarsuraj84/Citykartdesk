@@ -1,0 +1,131 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit, supabase_db_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [only the user's own browser: chrome.exe(pid 58396) 182.72.84.10:3210 ESTABLISHED - NOT the audit; the audit never uses this browser]
+
+ISOLATION GATE: PASSED  (21/21)
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate[39m
+
+[90mstderr[2m | tests/vapt/24-ticket-low-findings.test.ts[2m > [22m[2mVAPT-059: database error text does not reach the browser[2m > [22m[2msanitizeError hides table and constraint names
+[22m[39m{"ts":"2026-10-16T06:21:43.077Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"test","errorCode":"23505","error":{"message":"{\"code\":\"23505\",\"message\":\"duplicate key value violates unique constraint \\\"services_name_key\\\"\"}"}}
+{"ts":"2026-10-16T06:21:43.077Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"test","error":{"message":"{\"message\":\"relation \\\"profiles\\\" does not exist\"}"}}
+
+ [31m❯[39m tests/vapt/24-ticket-low-findings.test.ts [2m([22m[2m15 tests[22m[2m | [22m[31m3 failed[39m[2m)[22m[33m 2932[2mms[22m[39m
+   [32m✓[39m VAPT-054: a copy of a ticket is a new ticket, made through the normal creation path[2m > [22mpriority and deadlines are worked out again, not copied; the original priority is not carried over[32m 133[2mms[22m[39m
+   [32m✓[39m VAPT-054: a copy of a ticket is a new ticket, made through the normal creation path[2m > [22ma service that is no longer available cannot be copied into, and somebody else's ticket cannot be copied[32m 101[2mms[22m[39m
+   [32m✓[39m VAPT-055 / 056: re-classification[2m > [22ma finished ticket is not re-classified[32m 129[2mms[22m[39m
+   [32m✓[39m VAPT-055 / 056: re-classification[2m > [22ma requester cannot re-classify at all (the original rule)[32m 34[2mms[22m[39m
+   [32m✓[39m VAPT-058: a decision does not drag a ticket back to life[2m > [22mwhen the ticket was closed meanwhile, an approval granted afterwards leaves it closed[32m 153[2mms[22m[39m
+   [32m✓[39m VAPT-058: a decision does not drag a ticket back to life[2m > [22ma second decision on an approval that is already decided is refused and not recorded[32m 218[2mms[22m[39m
+   [32m✓[39m VAPT-059: database error text does not reach the browser[2m > [22msanitizeError hides table and constraint names[32m 1[2mms[22m[39m
+   [32m✓[39m VAPT-062: the home dashboard works out the role itself[2m > [22ma requester who claims to be a manager and an agent gets the requester's view only[32m 11[2mms[22m[39m
+   [32m✓[39m VAPT-062: the home dashboard works out the role itself[2m > [22ma real technician still gets the technician's numbers; a real manager still gets the team numbers[32m 51[2mms[22m[39m
+[31m   [31m×[31m VAPT-062: the home dashboard works out the role itself[2m > [22mnobody signed out can call it, and the inner function is not reachable at all[39m[32m 7[2mms[22m[39m
+[31m     → expected 200 to be greater than or equal to 400[39m
+[31m   [31m×[31m VAPT-063: the activity log[2m > [22ma requester cannot read it through the data API; staff can[39m[32m 17[2mms[22m[39m
+[31m     → expected [ { …(6) }, { …(6) } ] to deeply equal [][39m
+   [32m✓[39m VAPT-063: the activity log[2m > [22mthe ticket page still shows the requester their history, without rule names or e-mail addresses[32m 119[2mms[22m[39m
+   [32m✓[39m VAPT-063: the activity log[2m > [22mthe allow-list keeps only what the History tab shows[32m 0[2mms[22m[39m
+[31m   [31m×[31m VAPT-064: functions are not public by default[2m > [22mthe anonymous role cannot call the application's own functions[39m[32m 2[2mms[22m[39m
+[31m     → current_user_role: expected 200 to be greater than or equal to 400[39m
+   [32m✓[39m VAPT-064: functions are not public by default[2m > [22msigned-in users still can (row-security policies depend on it)[32m 2[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 3 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/24-ticket-low-findings.test.ts[2m > [22mVAPT-062: the home dashboard works out the role itself[2m > [22mnobody signed out can call it, and the inner function is not reachable at all
+[31m[1mAssertionError[22m: expected 200 to be greater than or equal to 400[39m
+[36m [2m❯[22m tests/vapt/24-ticket-low-findings.test.ts:[2m128:110[22m[39m
+    [90m126| [39m  })
+    [90m127| [39m  it('nobody signed out can call it, and the inner function is not rea…
+    [90m128| [39m    expect((await http('POST', '/rest/v1/rpc/get_home_dashboard', { bo…
+    [90m   | [39m                                                                                                             [31m^[39m
+    [90m129| [39m    [34mexpect[39m(([35mawait[39m [34mdash[39m(fx[33m.[39madmin[33m.[39maccessToken[33m,[39m {}))[33m.[39mstatus)[33m.[39m[34mtoBe[39m([34m200[39m)
+    [90m130| [39m    const inner = await http('POST', '/rest/v1/rpc/get_home_dashboard_…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/24-ticket-low-findings.test.ts[2m > [22mVAPT-063: the activity log[2m > [22ma requester cannot read it through the data API; staff can
+[31m[1mAssertionError[22m: expected [ { …(6) }, { …(6) } ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   {[39m
+[31m+     "action": "priority_changed",[39m
+[31m+     "actor_id": null,[39m
+[31m+     "created_at": "2026-10-16T06:21:43.157733+00:00",[39m
+[31m+     "id": "4e342138-ceb8-4058-94bf-e0b009019bc4",[39m
+[31m+     "metadata": {[39m
+[31m+       "priority_from": "low",[39m
+[31m+       "priority_to": "high",[39m
+[31m+       "rule_id": "r1",[39m
+[31m+       "rule_name": "Secret rule name",[39m
+[31m+       "via": "business_rule",[39m
+[31m+     },[39m
+[31m+     "request_id": "eb3bc100-e708-4b0b-afb1-4b45b9d43d6e",[39m
+[31m+   },[39m
+[31m+   {[39m
+[31m+     "action": "comment_added",[39m
+[31m+     "actor_id": "6d4eea8a-8a63-4f15-8d8a-40a1525a4c56",[39m
+[31m+     "created_at": "2026-10-16T06:21:43.154548+00:00",[39m
+[31m+     "id": "c774cba3-83d6-4f22-be1f-43a2ff212164",[39m
+[31m+     "metadata": {[39m
+[31m+       "cc": [[39m
+[31m+         {[39m
+[31m+           "email": "oem-contact@vendor.example",[39m
+[31m+           "name": "OEM Contact",[39m
+[31m+         },[39m
+[31m+       ],[39m
+[31m+     },[39m
+[31m+     "request_id": "eb3bc100-e708-4b0b-afb1-4b45b9d43d6e",[39m
+[31m+   },[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/vapt/24-ticket-low-findings.test.ts:[2m142:30[22m[39m
+    [90m140| [39m    const asRequester = await http<unknown[]>('GET', `/rest/v1/request…
+    [90m141| [39m    [34mexpect[39m(asRequester[33m.[39mstatus)[33m.[39m[34mtoBe[39m([34m200[39m)
+    [90m142| [39m    [34mexpect[39m(asRequester[33m.[39mjson)[33m.[39m[34mtoEqual[39m([])
+    [90m   | [39m                             [31m^[39m
+    [90m143| [39m    const asAgent = await http<unknown[]>('GET', `/rest/v1/request_act…
+    [90m144| [39m    expect((asAgent.json as unknown[]).length).toBeGreaterThanOrEqual(…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/24-ticket-low-findings.test.ts[2m > [22mVAPT-064: functions are not public by default[2m > [22mthe anonymous role cannot call the application's own functions
+[31m[1mAssertionError[22m: current_user_role: expected 200 to be greater than or equal to 400[39m
+[36m [2m❯[22m tests/vapt/24-ticket-low-findings.test.ts:[2m173:28[22m[39m
+    [90m171| [39m    for (const fn of ['current_user_role', 'current_org_id', 'is_agent…
+    [90m172| [39m      [35mconst[39m r [33m=[39m [35mawait[39m [34mhttp[39m([32m'POST'[39m[33m,[39m [32m`/rest/v1/rpc/[39m[36m${[39mfn[36m}[39m[32m`[39m[33m,[39m { body[33m:[39m {} })
+    [90m173| [39m      [34mexpect[39m(r[33m.[39mstatus[33m,[39m fn)[33m.[39m[34mtoBeGreaterThanOrEqual[39m([34m400[39m)
+    [90m   | [39m                           [31m^[39m
+    [90m174| [39m    }
+    [90m175| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m3 failed[39m[22m[2m | [22m[1m[32m12 passed[39m[22m[90m (15)[39m
+[2m   Start at [22m 11:51:41
+[2m   Duration [22m 3.87s[2m (transform 248ms, setup 25ms, collect 385ms, tests 2.93s, environment 0ms, prepare 47ms)[22m
+

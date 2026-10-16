@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -42,7 +43,7 @@ export async function claimReview(reviewId: string): Promise<{ error?: string }>
     .eq('org_id', profile.org_id)
     .in('state', ['pending', 'in_review'])
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/reviews.ts' }) }
   await logIntakeAudit({ orgId: profile.org_id!, actorId: profile.id, entityId: reviewId, action: 'review_claimed' })
   revalidatePath(`/intake/review/${reviewId}`)
   revalidatePath('/intake/queue')
@@ -62,7 +63,7 @@ export async function assignReviewer(reviewId: string, userId: string): Promise<
     .eq('id', reviewId)
     .eq('org_id', profile.org_id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/reviews.ts' }) }
   await logIntakeAudit({ orgId: profile.org_id!, actorId: profile.id, entityId: reviewId, action: 'review_assigned', metadata: { userId } })
   revalidatePath(`/intake/review/${reviewId}`)
   return {}
@@ -121,7 +122,7 @@ export async function approveReview(reviewId: string, decision: ReviewDecision):
     .eq('id', reviewId)
     .eq('org_id', profile.org_id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/reviews.ts' }) }
   await logIntakeAudit({
     orgId: profile.org_id!, actorId: profile.id, entityId: reviewId,
     action: wasOverridden ? 'review_modified' : 'review_approved',
@@ -153,7 +154,7 @@ export async function rejectReview(reviewId: string, notes?: string): Promise<{ 
     .select('message_id')
     .single()
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/reviews.ts' }) }
 
   // Reflect on the source message.
   await supabase.from('intake_messages').update({ status: 'rejected' }).eq('id', review.message_id).eq('org_id', profile.org_id)

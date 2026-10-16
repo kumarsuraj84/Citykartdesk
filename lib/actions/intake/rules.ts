@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -98,7 +99,7 @@ export async function createIntakeRule(input: RuleInput): Promise<{ error?: stri
     .insert({ ...toRow(input), org_id: profile.org_id, created_by: profile.id, updated_by: profile.id })
     .select('id')
     .single()
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/rules.ts' }) }
 
   await logAudit(admin, profile.org_id, profile.id, 'rule_created', data.id, input.name.trim())
   revalidatePath('/intake/rules')
@@ -122,7 +123,7 @@ export async function updateIntakeRule(id: string, input: RuleInput): Promise<{ 
     .update({ ...toRow(input), updated_by: profile.id, updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('org_id', profile.org_id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/rules.ts' }) }
 
   await logAudit(admin, profile.org_id, profile.id, 'rule_updated', id, input.name.trim())
   revalidatePath('/intake/rules')
@@ -144,7 +145,7 @@ export async function setIntakeRuleEnabled(id: string, enabled: boolean): Promis
     .update({ enabled, updated_by: profile.id, updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('org_id', profile.org_id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/rules.ts' }) }
   revalidatePath('/intake/rules')
   return {}
 }
@@ -159,7 +160,7 @@ export async function deleteIntakeRule(id: string): Promise<{ error?: string }> 
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('intake_rules').delete().eq('id', id).eq('org_id', profile.org_id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/rules.ts' }) }
 
   await logAudit(admin, profile.org_id, profile.id, 'rule_deleted', id, '')
   revalidatePath('/intake/rules')

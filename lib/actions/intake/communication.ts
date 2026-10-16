@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/server'
 import { canReview, logIntakeAudit } from './_shared'
 import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
 import { getSecret } from '@/lib/secrets'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -32,7 +33,7 @@ export async function markMessageRead(
     .eq('id', messageId)
     .select('id')
     .maybeSingle()
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/communication.ts' }) }
   if (!data) return { error: 'Message not found.' }
   return {}
 }
@@ -53,7 +54,7 @@ export async function archiveMessage(
     .eq('id', messageId)
     .select('id')
     .maybeSingle()
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/communication.ts' }) }
   if (!data) return { error: 'Message not found.' }
   return {}
 }

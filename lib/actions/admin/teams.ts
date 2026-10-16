@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 type ActionResult<T = undefined> = { error?: string; data?: T }
 
@@ -68,7 +69,7 @@ export async function createTeam(name: string): Promise<ActionResult<{ id: strin
 
   if (error) {
     if (error.code === '23505') return { error: 'A technician group with a similar name already exists — try a different name.' }
-    return { error: error.message }
+    return { error: sanitizeError(error, { route: 'lib/actions/admin/teams.ts' }) }
   }
 
   revalidatePath('/admin/teams')
@@ -90,7 +91,7 @@ export async function updateTeam(id: string, name: string): Promise<ActionResult
     .eq('id', id)
     .eq('org_id', guard.profile!.org_id!)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/teams.ts' }) }
 
   revalidatePath('/admin/teams')
   return {}
@@ -129,7 +130,7 @@ export async function deleteTeam(id: string): Promise<ActionResult> {
   }
 
   const { error } = await admin.from('teams').delete().eq('id', id).eq('org_id', guard.profile!.org_id!)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/teams.ts' }) }
 
   revalidatePath('/admin/teams')
   return {}
@@ -159,7 +160,7 @@ export async function addTeamMember(teamId: string, userId: string): Promise<Act
     .from('team_members')
     .insert({ team_id: teamId, user_id: userId, org_id: team.org_id })
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/teams.ts' }) }
 
   revalidatePath('/admin/teams')
   return {}
@@ -180,7 +181,7 @@ export async function removeTeamMember(teamId: string, userId: string): Promise<
     .eq('user_id', userId)
     .eq('org_id', guard.profile!.org_id!)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/teams.ts' }) }
 
   revalidatePath('/admin/teams')
   return {}

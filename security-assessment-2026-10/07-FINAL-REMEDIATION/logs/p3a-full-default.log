@@ -1,0 +1,1059 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit, supabase_db_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [none]
+
+ISOLATION GATE: PASSED  (21/21)
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate[39m
+
+ [32m✓[39m tests/integration/csat-flow.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 9123[2mms[22m[39m
+   [33m[2m✓[22m[39m CSAT: resolved e-mail, rating and reopen from the link[2m > [22msends ONE e-mail on resolve: the resolution note, five star links and a reopen link (no separate resolved e-mail) [33m 784[2mms[22m[39m
+   [33m[2m✓[22m[39m CSAT: resolved e-mail, rating and reopen from the link[2m > [22mclosing sends no e-mail to the requester (the bell only) [33m 1357[2mms[22m[39m
+   [33m[2m✓[22m[39m CSAT: resolved e-mail, rating and reopen from the link[2m > [22ma rating from the link is saved once; 1–2 stars need a comment and alert the technician [33m 734[2mms[22m[39m
+   [33m[2m✓[22m[39m CSAT: resolved e-mail, rating and reopen from the link[2m > [22ma 5-star rating raises no alert [33m 709[2mms[22m[39m
+   [33m[2m✓[22m[39m CSAT: resolved e-mail, rating and reopen from the link[2m > [22mreopening from the link needs a reason, then follows the normal reopen rules; resolving again asks again [33m 1515[2mms[22m[39m
+   [33m[2m✓[22m[39m CSAT: resolved e-mail, rating and reopen from the link[2m > [22mcannot reopen once the window has ended, and bad or expired links are refused [33m 719[2mms[22m[39m
+   [33m[2m✓[22m[39m CSAT: resolved e-mail, rating and reopen from the link[2m > [22msends one reminder after the configured days to a requester who has not rated, and only one [33m 725[2mms[22m[39m
+   [33m[2m✓[22m[39m CSAT: resolved e-mail, rating and reopen from the link[2m > [22mdoes not remind a requester who already rated [33m 708[2mms[22m[39m
+ [32m✓[39m tests/integration/stage7b-meta-failures-webhook-security.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 7064[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 7B — UAT-31: outbound Meta send failures (429, 5xx, persistent) — bounded retry, no duplicate ticket/state[2m > [22ma 429 then a transient 5xx both recover within sendAll()'s bounded retry — the requester still gets the prompt, no duplicate state advancement [33m 1541[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 7B — UAT-31: outbound Meta send failures (429, 5xx, persistent) — bounded retry, no duplicate ticket/state[2m > [22ma persistent 5xx failure (retries exhausted) never blocks Stage 4 state, is audited exactly once, and produces no duplicate ticket [33m 5153[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 7B — UAT-32: webhook security — invalid signature and invalid verify token both safely rejected (BLOCKER check: neither is ever accepted)[2m > [22man invalid X-Hub-Signature-256 against the REAL verifyMetaSignature code path is rejected with no processing and no state change [33m 302[2mms[22m[39m
+[90mstderr[2m | tests/integration/assign-rule-and-status-email.test.ts[2m > [22m[2massign-rule re-firing + status email content[2m > [22m[2mthe "in progress" email to the requester shows the real status, not blank — the second reported bug
+[22m[39m[business-rules] assign action for rule 0fdbdd58-ff6a-4e3d-886e-a8846580642f chose user 3e94874f-4ae4-401a-a9cd-9ba6d1cadbbf, who is not on request 3eb41c94-ac5a-445d-9f90-3f67ab49e044's team — skipped.
+
+ [32m✓[39m tests/integration/assign-rule-and-status-email.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 6860[2mms[22m[39m
+   [33m[2m✓[22m[39m assign-rule re-firing + status email content[2m > [22mStart Working (assigned -> in_progress) re-runs the same rule but sends NO second "assigned" email — the reported bug [33m 888[2mms[22m[39m
+ [32m✓[39m tests/integration/requester-notifications.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 6803[2mms[22m[39m
+   [33m[2m✓[22m[39m requester + technician notification emails[2m > [22mdoes not tell a requester they were assigned their own ticket [33m 619[2mms[22m[39m
+   [33m[2m✓[22m[39m requester + technician notification emails[2m > [22mthe requester copy respects Notification Rules (Email unticked for "Ticket assigned") [33m 838[2mms[22m[39m
+   [33m[2m✓[22m[39m team "new request" broadcast is in-app only, never email[2m > [22ma team member (not the assignee) gets the bell but no email for "new request" [33m 719[2mms[22m[39m
+   [33m[2m✓[22m[39m team "new request" broadcast is in-app only, never email[2m > [22mthe requester's OWN "ticket logged" email is unaffected (different audience) [33m 722[2mms[22m[39m
+ [32m✓[39m tests/integration/approval-email-notifications.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 5827[2mms[22m[39m
+   [33m[2m✓[22m[39m approval flow emails: requester + the technician who sent it[2m > [22mon APPROVE: requester gets the decision + comment, and so does the technician who sent it [33m 616[2mms[22m[39m
+   [33m[2m✓[22m[39m approval flow emails: requester + the technician who sent it[2m > [22mon REJECT: requester and the technician both get the decision + the approver's comment [33m 600[2mms[22m[39m
+   [33m[2m✓[22m[39m approval flow emails: requester + the technician who sent it[2m > [22mwhen the requester sent it themselves, they are not double-emailed as both requester and "technician" [33m 616[2mms[22m[39m
+ [32m✓[39m tests/integration/stage2-mobile-identity.test.ts [2m([22m[2m24 tests[22m[2m)[22m[33m 4741[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 2 — mobile identity & WhatsApp user resolution[2m > [22ma number removed from one profile can then be added to a different profile and resolves there [33m 325[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 2 — mobile identity & WhatsApp user resolution[2m > [22maddMobileNumber rejects a number already on a different profile, but gives a distinct message for re-adding a number already on the SAME profile [33m 318[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage7b-audit-logging.test.ts[2m > [22m[2mStage 7B — UAT-33: audit logging completeness across all required whatsapp_* event types[2m > [22m[2mwhatsapp_attachment_link_failed — SIMULATED/INJECTED: real linkConversationAttachmentsToRequest() forced to fail via a deliberately invalid requesterId, audit row reproduced with matching real output (organic reproduction through the full webhook path would require corrupting the requester mid-flight, which processWhatsAppWebhookPayload provides no external way to do)
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792132920286-uat7b-audit-lnk@example.test  Subject: Request created: CKSD-013088 — Conv Fixture Service uat7b-8c5d02-audit-1792132920421-lnk: Printer Issue uat7b-8c5d02-audit-1792132920421-lnk: Printer…
+
+[90mstdout[2m | tests/integration/stage7b-audit-logging.test.ts[2m > [22m[2mStage 7B — UAT-33: audit logging completeness across all required whatsapp_* event types[2m > [22m[2mUAT-33 evidence summary — every required event type has a confirmed real row
+[22m[39m[UAT-33 evidence] {
+  "whatsapp_message_processed": {
+    "table": "intake_audit_log",
+    "mode": "organic-this-run",
+    "rowId": "c58855ca-7471-4ada-8263-227b8bdc5237"
+  },
+  "whatsapp_sender_rejected": {
+    "table": "intake_audit_log",
+    "mode": "organic-this-run",
+    "rowId": "b37c1757-4736-43a2-b429-c1787a5b5687"
+  },
+  "whatsapp_unsupported_message": {
+    "table": "intake_audit_log",
+    "mode": "organic-this-run",
+    "rowId": "deb2c0e9-6fd1-40a3-8c09-77fd16c162d0"
+  },
+  "whatsapp_rate_limited": {
+    "table": "intake_audit_log",
+    "mode": "targeted-real-call",
+    "rowId": "415ff071-9a4e-49bd-bf12-6c172f951b20"
+  },
+  "whatsapp_channel_not_found": {
+    "table": "owner_audit_log",
+    "mode": "organic-this-run",
+    "rowId": "691968dc-b16e-4d8b-9b48-02f84447e103"
+  },
+  "whatsapp_channel_conflict": {
+    "table": "owner_audit_log",
+    "mode": "simulated-injected",
+    "rowId": "2c4583a0-8093-4c2d-94e9-f4cb774c06df"
+  },
+  "whatsapp_invalid_signature": {
+    "table": "intake_audit_log",
+    "mode": "organic-this-run",
+    "rowId": "1490411f-8b2c-427f-94a1-ce7e7c0a3dfb"
+  },
+  "whatsapp_status_event": {
+    "table": "intake_audit_log",
+    "mode": "organic-this-run",
+    "rowId": "07fd60f2-f09f-44f9-a64e-11bf7e56b2cb"
+  },
+  "whatsapp_send_failed": {
+    "table": "intake_audit_log",
+    "mode": "organic-this-run",
+    "rowId": "faba736f-ae97-44b2-b096-da1a2218a537"
+  },
+  "whatsapp_attachment_link_failed": {
+    "table": "intake_audit_log",
+    "mode": "simulated-injected",
+    "rowId": "4e0e11da-310d-47c8-a8a1-653ec4ac7789"
+  },
+  "whatsapp_test_connection_succeeded": {
+    "table": "intake_audit_log",
+    "mode": "organic-this-run",
+    "rowId": "07ce4762-e956-46cd-9852-5479a49591e3"
+  },
+  "whatsapp_test_connection_failed": {
+    "table": "intake_audit_log",
+    "mode": "organic-this-run",
+    "rowId": "82873bd2-d7d4-48a5-8eac-406230c775cd"
+  }
+}
+
+ [32m✓[39m tests/integration/stage7b-audit-logging.test.ts [2m([22m[2m12 tests[22m[2m)[22m[33m 4480[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 7B — UAT-33: audit logging completeness across all required whatsapp_* event types[2m > [22mwhatsapp_send_failed — a real, persistent outbound 5xx exhausting sendAll()'s bounded retry [33m 2691[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 7B — UAT-33: audit logging completeness across all required whatsapp_* event types[2m > [22mwhatsapp_attachment_link_failed — SIMULATED/INJECTED: real linkConversationAttachmentsToRequest() forced to fail via a deliberately invalid requesterId, audit row reproduced with matching real output (organic reproduction through the full webhook path would require corrupting the requester mid-flight, which processWhatsAppWebhookPayload provides no external way to do) [33m 459[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 7B — UAT-33: audit logging completeness across all required whatsapp_* event types[2m > [22mwhatsapp_test_connection_succeeded / whatsapp_test_connection_failed — the real testWhatsAppConnection() server action, real RLS session, Graph HTTP boundary stubbed [33m 317[2mms[22m[39m
+ [32m✓[39m tests/integration/approval-first-response-decides.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 4555[2mms[22m[39m
+ [32m✓[39m tests/integration/approval-email-link.test.ts [2m([22m[2m11 tests[22m[2m)[22m[33m 4146[2mms[22m[39m
+   [33m[2m✓[22m[39m approve / reject from the e-mail link[2m > [22mthe portal needs a comment as well, for approve and for reject [33m 308[2mms[22m[39m
+ [32m✓[39m tests/integration/stage5-outbound-failure.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 4614[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5.1 — outbound send-failure recovery[2m > [22ma transient (retryable) 503 recovers within the same request — Stage 4 state advances AND the prompt is actually delivered [33m 1514[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5.1 — outbound send-failure recovery[2m > [22ma persistent send failure is never silently dropped — Stage 4 state still advanced, but the outcome and audit log both surface the delivery failure [33m 2707[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5.1 — outbound send-failure recovery[2m > [22mexisting recovery: a structured (select/date/number) prompt the requester never saw is naturally re-asked, never silently misread, if their next reply does not match a valid option [33m 392[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage5-media.test.ts[2m > [22m[2mStage 5.1 — required media staged before Review/Create[2m > [22m[2ma valid image is staged immediately (review-ready right away) and Create MOVES it without a second Meta download
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792132939677-stage5-media-req-a@example.test  Subject: Request created: CKSD-013112 — Conv Fixture Service stage5-media-1792132939799-a: Printer Issue stage5-media-1792132939799-a: Printer Down
+
+[90mstdout[2m | tests/integration/stage5-media.test.ts[2m > [22m[2mStage 5.1 — required media staged before Review/Create[2m > [22m[2mprocess-restart after staging — a fresh DB reload still recognizes the staged attachment (AC-5.1.8)
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792132939677-stage5-media-req-e@example.test  Subject: Request created: CKSD-013113 — Conv Fixture Service stage5-media-1792132939799-e: Printer Issue stage5-media-1792132939799-e: Printer Down
+
+[90mstdout[2m | tests/integration/stage5-media.test.ts[2m > [22m[2mStage 5.1 — required media staged before Review/Create[2m > [22m[2ma Create-time rejection (temporarily-ineligible requester) retains the staged attachment for a successful retry, with no re-download (AC-5.1.10)
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792132939677-stage5-media-req-f@example.test  Subject: Request created: CKSD-013114 — Conv Fixture Service stage5-media-1792132939799-f: Printer Issue stage5-media-1792132939799-f: Printer Down
+
+[90mstdout[2m | tests/integration/stage5-media.test.ts[2m > [22m[2mStage 5.1 — required media staged before Review/Create[2m > [22m[2ma post-Create link (promotion) failure never creates a duplicate ticket and leaves the staged object recoverable (AC-5.1.11)
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792132939677-stage5-media-req-g@example.test  Subject: Request created: CKSD-013115 — Conv Fixture Service stage5-media-1792132939799-g: Printer Issue stage5-media-1792132939799-g: Printer Down
+
+ [32m✓[39m tests/integration/stage5-media.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 3566[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5.1 — required media staged before Review/Create[2m > [22ma valid image is staged immediately (review-ready right away) and Create MOVES it without a second Meta download [33m 597[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5.1 — required media staged before Review/Create[2m > [22minvalid content fails staging immediately — never satisfies, never reaches Review; a valid retry then succeeds [33m 490[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5.1 — required media staged before Review/Create[2m > [22ma Meta media download failure also fails staging cleanly — never satisfies the field [33m 408[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5.1 — required media staged before Review/Create[2m > [22mrejects a text answer while awaiting a required file — no fake attachment is ever created [33m 440[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5.1 — required media staged before Review/Create[2m > [22mprocess-restart after staging — a fresh DB reload still recognizes the staged attachment (AC-5.1.8) [33m 553[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5.1 — required media staged before Review/Create[2m > [22ma Create-time rejection (temporarily-ineligible requester) retains the staged attachment for a successful retry, with no re-download (AC-5.1.10) [33m 524[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5.1 — required media staged before Review/Create[2m > [22ma post-Create link (promotion) failure never creates a duplicate ticket and leaves the staged object recoverable (AC-5.1.11) [33m 552[2mms[22m[39m
+ [32m✓[39m tests/integration/approval-bell-list.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 3467[2mms[22m[39m
+   [33m[2m✓[22m[39m Approvals bell: what is waiting for me[2m > [22mthe general bell no longer spends its ten slots on approval requests [33m 867[2mms[22m[39m
+[90mstdout[2m | tests/integration/dashboard-numbers-audit.test.ts[2m > [22m[2mdashboard numbers vs the raw data (local database)[2m > [22m[2mreconciles every shared figure
+[22m[39m
+ok   [30d] Smart window starts: truth="2026-09-16T18:30" shown="2026-09-16T18:30"
+ok   [30d] Smart created: truth=204 shown=204
+ok   [30d] Smart resolved (resolved in period): truth=101 shown=101
+ok   [30d] Smart open backlog: truth=1529 shown=1529
+ok   [30d] Smart currently breached: truth=0 shown=0
+ok   [30d] Smart SLA %: truth=null shown=null
+ok   [30d] Smart avg resolution h: truth=103 shown=103
+ok   [30d] Smart avg first response h: truth=null shown=null
+ok   [30d] Smart created by status: truth={"assigned":8,"waiting_user":8,"closed":46,"cancelled":12,"resolved":41,"hold_purchase_ho":7,"pending_approval":14,"open":33,"in_progress":35} shown={"assigned":8,"waiting_user":8,"closed":46,"cancelled":12,"resolved":41,"hold_purchase_ho":7,"pending_approval":14,"open":33,"in_progress":35}
+ok   [30d] Smart created by priority: truth={"medium":88,"urgent":35,"high":42,"low":39} shown={"medium":88,"urgent":35,"high":42,"low":39}
+ok   [30d] Smart backlog age buckets: truth={"11–20 days":31,"46–60 days":57,"76–90 days":53,"61–75 days":47,"6–10 days":18,"21–30 days":50,"31–45 days":52,"90+ days":1214,"0–5 days":7} shown={"0–5 days":7,"6–10 days":18,"11–20 days":31,"21–30 days":50,"31–45 days":52,"46–60 days":57,"61–75 days":47,"76–90 days":53,"90+ days":1214}
+ok   [30d] Smart created by group: truth={"ADMIN GROUP":76,"BD GROUP":22,"HR SUPPORT":42,"FINANCE SUPPORT":27,"IT SUPPORT":37} shown={"ADMIN GROUP":76,"BD GROUP":22,"HR SUPPORT":42,"FINANCE SUPPORT":27,"IT SUPPORT":37}
+ok   [30d] Smart open by group: truth={"ADMIN GROUP":473,"BD GROUP":246,"HR SUPPORT":230,"FINANCE SUPPORT":235,"IT SUPPORT":345} shown={"ADMIN GROUP":473,"BD GROUP":246,"HR SUPPORT":230,"FINANCE SUPPORT":235,"IT SUPPORT":345}
+ok   [30d] Smart approvals approved: truth=0 shown=0
+ok   [30d] Smart approvals rejected: truth=0 shown=0
+ok   [30d] Smart approvals waiting: truth=0 shown=0
+ok   [30d] Normal Created: truth=204 shown=204
+ok   [30d] Normal Resolved (resolved in period): truth=101 shown=101
+ok   [30d] Normal Open Now: truth=1529 shown=1529
+ok   [30d] Normal Currently Breached: truth=0 shown=0
+ok   [30d] Normal SLA %: truth=null shown=null
+ok   [30d] Normal avg resolution h: truth=103 shown=103
+ok   [30d] Normal avg first response h: truth=null shown=null
+ok   [30d] Normal status counts: truth={"assigned":8,"waiting_user":8,"closed":46,"cancelled":12,"resolved":41,"hold_purchase_ho":7,"pending_approval":14,"open":33,"in_progress":35} shown={"open":33,"assigned":8,"in_progress":35,"waiting_user":8,"hold_purchase_ho":7,"pending_approval":14,"resolved":41,"closed":46,"cancelled":12}
+ok   [30d] Normal backlog aging: truth={"11–20 days":31,"46–60 days":57,"76–90 days":53,"61–75 days":47,"6–10 days":18,"21–30 days":50,"31–45 days":52,"90+ days":1214,"0–5 days":7} shown={"0–5 days":7,"6–10 days":18,"11–20 days":31,"21–30 days":50,"31–45 days":52,"46–60 days":57,"61–75 days":47,"76–90 days":53,"90+ days":1214}
+ok   [30d] Normal group volume: truth={"ADMIN GROUP":76,"BD GROUP":22,"HR SUPPORT":42,"FINANCE SUPPORT":27,"IT SUPPORT":37} shown={"ADMIN GROUP":76,"HR SUPPORT":42,"IT SUPPORT":37,"FINANCE SUPPORT":27,"BD GROUP":22}
+ok   [30d] Normal group resolved: truth={"ADMIN GROUP":33,"BD GROUP":12,"FINANCE SUPPORT":16,"HR SUPPORT":23,"IT SUPPORT":17} shown={"ADMIN GROUP":33,"HR SUPPORT":23,"IT SUPPORT":17,"FINANCE SUPPORT":16,"BD GROUP":12}
+ok   [30d] Normal group open now: truth={"ADMIN GROUP":473,"BD GROUP":246,"HR SUPPORT":230,"FINANCE SUPPORT":235,"IT SUPPORT":345} shown={"ADMIN GROUP":473,"HR SUPPORT":230,"IT SUPPORT":345,"FINANCE SUPPORT":235,"BD GROUP":246}
+ok   [30d] Normal priority resolved / SLA: truth={"high":{"resolved":19,"slaBase":0,"slaMet":0},"low":{"resolved":22,"slaBase":0,"slaMet":0},"medium":{"resolved":42,"slaBase":0,"slaMet":0},"urgent":{"resolved":18,"slaBase":0,"slaMet":0}} shown={"urgent":{"resolved":18,"slaBase":0,"slaMet":0},"high":{"resolved":19,"slaBase":0,"slaMet":0},"medium":{"resolved":42,"slaBase":0,"slaMet":0},"low":{"resolved":22,"slaBase":0,"slaMet":0}}
+ok   [30d] Normal agent leaderboard: truth={"b5aba815-6cae-4979-b565-427ccc353ead":{"resolved":10,"open":96},"5fcd26bc-9c1e-4dc0-a210-018c83073957":{"resolved":9,"open":33},"edf7ce48-5a29-4287-9d1d-64495fdb1b18":{"resolved":9,"open":34},"b535b278-71b9-4d08-a36c-ede823234e71":{"resolved":9,"open":63},"ef37bc53-a949-4ba7-8539-64834deede13":{"resolved":8,"open":69},"1e2a3718-f0b6-40cd-aeb8-dd1912a84337":{"resolved":7,"open":36},"20717a63-625b-461b-82db-1fd8981dcef1":{"resolved":7,"open":52},"c159c792-d9c4-4130-9716-6326a15a5336":{"resolved":6,"open":33},"03bd4ad3-8f01-4e5a-aa38-4a8bd2e70e96":{"resolved":6,"open":75},"095a5e76-ad0b-488c-958a-ebcb058bf55f":{"resolved":6,"open":35}} shown={"b5aba815-6cae-4979-b565-427ccc353ead":{"resolved":10,"open":96},"5fcd26bc-9c1e-4dc0-a210-018c83073957":{"resolved":9,"open":33},"edf7ce48-5a29-4287-9d1d-64495fdb1b18":{"resolved":9,"open":34},"b535b278-71b9-4d08-a36c-ede823234e71":{"resolved":9,"open":63},"ef37bc53-a949-4ba7-8539-64834deede13":{"resolved":8,"open":69},"1e2a3718-f0b6-40cd-aeb8-dd1912a84337":{"resolved":7,"open":36},"20717a63-625b-461b-82db-1fd8981dcef1":{"resolved":7,"open":52},"c159c792-d9c4-4130-9716-6326a15a5336":{"resolved":6,"open":33},"03bd4ad3-8f01-4e5a-aa38-4a8bd2e70e96":{"resolved":6,"open":75},"095a5e76-ad0b-488c-958a-ebcb058bf55f":{"resolved":6,"open":35}}
+ok   [30d] Normal approvals: truth={"approved":0,"rejected":0,"pending":0} shown={"approved":0,"rejected":0,"pending":0}
+ok   [60d] Smart window starts: truth="2026-08-17T18:30" shown="2026-08-17T18:30"
+ok   [60d] Smart created: truth=430 shown=430
+ok   [60d] Smart resolved (resolved in period): truth=207 shown=207
+ok   [60d] Smart open backlog: truth=1529 shown=1529
+ok   [60d] Smart currently breached: truth=0 shown=0
+ok   [60d] Smart SLA %: truth=null shown=null
+ok   [60d] Smart avg resolution h: truth=107.4 shown=107.4
+ok   [60d] Smart avg first response h: truth=null shown=null
+ok   [60d] Smart created by status: truth={"assigned":14,"waiting_user":19,"closed":114,"cancelled":29,"resolved":74,"hold_purchase_ho":17,"pending_approval":22,"open":60,"in_progress":81} shown={"assigned":14,"waiting_user":19,"closed":114,"cancelled":29,"resolved":74,"hold_purchase_ho":17,"pending_approval":22,"open":60,"in_progress":81}
+ok   [60d] Smart created by priority: truth={"medium":165,"urgent":81,"high":88,"low":96} shown={"medium":165,"urgent":81,"high":88,"low":96}
+ok   [60d] Smart backlog age buckets: truth={"11–20 days":31,"46–60 days":57,"76–90 days":53,"61–75 days":47,"6–10 days":18,"21–30 days":50,"31–45 days":52,"90+ days":1214,"0–5 days":7} shown={"0–5 days":7,"6–10 days":18,"11–20 days":31,"21–30 days":50,"31–45 days":52,"46–60 days":57,"61–75 days":47,"76–90 days":53,"90+ days":1214}
+ok   [60d] Smart created by group: truth={"ADMIN GROUP":151,"BD GROUP":61,"HR SUPPORT":80,"FINANCE SUPPORT":58,"IT SUPPORT":80} shown={"ADMIN GROUP":151,"BD GROUP":61,"HR SUPPORT":80,"FINANCE SUPPORT":58,"IT SUPPORT":80}
+ok   [60d] Smart open by group: truth={"ADMIN GROUP":473,"BD GROUP":246,"HR SUPPORT":230,"FINANCE SUPPORT":235,"IT SUPPORT":345} shown={"ADMIN GROUP":473,"BD GROUP":246,"HR SUPPORT":230,"FINANCE SUPPORT":235,"IT SUPPORT":345}
+ok   [60d] Smart approvals approved: truth=0 shown=0
+ok   [60d] Smart approvals rejected: truth=0 shown=0
+ok   [60d] Smart approvals waiting: truth=0 shown=0
+ok   [60d] Normal Created: truth=430 shown=430
+ok   [60d] Normal Resolved (resolved in period): truth=207 shown=207
+ok   [60d] Normal Open Now: truth=1529 shown=1529
+ok   [60d] Normal Currently Breached: truth=0 shown=0
+ok   [60d] Normal SLA %: truth=null shown=null
+ok   [60d] Normal avg resolution h: truth=107.4 shown=107.4
+ok   [60d] Normal avg first response h: truth=null shown=null
+ok   [60d] Normal status counts: truth={"assigned":14,"waiting_user":19,"closed":114,"cancelled":29,"resolved":74,"hold_purchase_ho":17,"pending_approval":22,"open":60,"in_progress":81} shown={"open":60,"assigned":14,"in_progress":81,"waiting_user":19,"hold_purchase_ho":17,"pending_approval":22,"resolved":74,"closed":114,"cancelled":29}
+ok   [60d] Normal backlog aging: truth={"11–20 days":31,"46–60 days":57,"76–90 days":53,"61–75 days":47,"6–10 days":18,"21–30 days":50,"31–45 days":52,"90+ days":1214,"0–5 days":7} shown={"0–5 days":7,"6–10 days":18,"11–20 days":31,"21–30 days":50,"31–45 days":52,"46–60 days":57,"61–75 days":47,"76–90 days":53,"90+ days":1214}
+ok   [60d] Normal group volume: truth={"ADMIN GROUP":151,"BD GROUP":61,"HR SUPPORT":80,"FINANCE SUPPORT":58,"IT SUPPORT":80} shown={"ADMIN GROUP":151,"IT SUPPORT":80,"HR SUPPORT":80,"BD GROUP":61,"FINANCE SUPPORT":58}
+ok   [60d] Normal group resolved: truth={"ADMIN GROUP":68,"BD GROUP":25,"FINANCE SUPPORT":26,"HR SUPPORT":43,"IT SUPPORT":45} shown={"ADMIN GROUP":68,"IT SUPPORT":45,"HR SUPPORT":43,"BD GROUP":25,"FINANCE SUPPORT":26}
+ok   [60d] Normal group open now: truth={"ADMIN GROUP":473,"BD GROUP":246,"HR SUPPORT":230,"FINANCE SUPPORT":235,"IT SUPPORT":345} shown={"ADMIN GROUP":473,"IT SUPPORT":345,"HR SUPPORT":230,"BD GROUP":246,"FINANCE SUPPORT":235}
+ok   [60d] Normal priority resolved / SLA: truth={"high":{"resolved":46,"slaBase":0,"slaMet":0},"low":{"resolved":44,"slaBase":0,"slaMet":0},"medium":{"resolved":85,"slaBase":0,"slaMet":0},"urgent":{"resolved":32,"slaBase":0,"slaMet":0}} shown={"urgent":{"resolved":32,"slaBase":0,"slaMet":0},"high":{"resolved":46,"slaBase":0,"slaMet":0},"medium":{"resolved":85,"slaBase":0,"slaMet":0},"low":{"resolved":44,"slaBase":0,"slaMet":0}}
+ok   [60d] Normal agent leaderboard: truth={"b535b278-71b9-4d08-a36c-ede823234e71":{"resolved":20,"open":63},"b5aba815-6cae-4979-b565-427ccc353ead":{"resolved":19,"open":96},"ef37bc53-a949-4ba7-8539-64834deede13":{"resolved":16,"open":69},"edf7ce48-5a29-4287-9d1d-64495fdb1b18":{"resolved":15,"open":34},"20717a63-625b-461b-82db-1fd8981dcef1":{"resolved":14,"open":52},"5fcd26bc-9c1e-4dc0-a210-018c83073957":{"resolved":14,"open":33},"03bd4ad3-8f01-4e5a-aa38-4a8bd2e70e96":{"resolved":13,"open":75},"c02f6656-15ca-4ead-b87b-363e4939206a":{"resolved":13,"open":57},"1e2a3718-f0b6-40cd-aeb8-dd1912a84337":{"resolved":12,"open":36},"c159c792-d9c4-4130-9716-6326a15a5336":{"resolved":10,"open":33}} shown={"b535b278-71b9-4d08-a36c-ede823234e71":{"resolved":20,"open":63},"b5aba815-6cae-4979-b565-427ccc353ead":{"resolved":19,"open":96},"ef37bc53-a949-4ba7-8539-64834deede13":{"resolved":16,"open":69},"edf7ce48-5a29-4287-9d1d-64495fdb1b18":{"resolved":15,"open":34},"20717a63-625b-461b-82db-1fd8981dcef1":{"resolved":14,"open":52},"5fcd26bc-9c1e-4dc0-a210-018c83073957":{"resolved":14,"open":33},"03bd4ad3-8f01-4e5a-aa38-4a8bd2e70e96":{"resolved":13,"open":75},"c02f6656-15ca-4ead-b87b-363e4939206a":{"resolved":13,"open":57},"1e2a3718-f0b6-40cd-aeb8-dd1912a84337":{"resolved":12,"open":36},"c159c792-d9c4-4130-9716-6326a15a5336":{"resolved":10,"open":33}}
+ok   [60d] Normal approvals: truth={"approved":0,"rejected":0,"pending":0} shown={"approved":0,"rejected":0,"pending":0}
+ok   [90d] Smart window starts: truth="2026-07-18T18:30" shown="2026-07-18T18:30"
+ok   [90d] Smart created: truth=645 shown=645
+ok   [90d] Smart resolved (resolved in period): truth=305 shown=305
+ok   [90d] Smart open backlog: truth=1529 shown=1529
+ok   [90d] Smart currently breached: truth=0 shown=0
+ok   [90d] Smart SLA %: truth=null shown=null
+ok   [90d] Smart avg resolution h: truth=106.2 shown=106.2
+ok   [90d] Smart avg first response h: truth=null shown=null
+ok   [90d] Smart created by status: truth={"assigned":19,"waiting_user":28,"closed":182,"cancelled":40,"resolved":109,"pending_approval":33,"hold_purchase_ho":27,"open":91,"in_progress":116} shown={"assigned":19,"waiting_user":28,"closed":182,"cancelled":40,"resolved":109,"pending_approval":33,"hold_purchase_ho":27,"open":91,"in_progress":116}
+ok   [90d] Smart created by priority: truth={"medium":245,"urgent":131,"high":139,"low":130} shown={"medium":245,"urgent":131,"high":139,"low":130}
+ok   [90d] Smart backlog age buckets: truth={"11–20 days":31,"46–60 days":57,"76–90 days":53,"61–75 days":47,"6–10 days":18,"21–30 days":50,"31–45 days":52,"90+ days":1214,"0–5 days":7} shown={"0–5 days":7,"6–10 days":18,"11–20 days":31,"21–30 days":50,"31–45 days":52,"46–60 days":57,"61–75 days":47,"76–90 days":53,"90+ days":1214}
+ok   [90d] Smart created by group: truth={"ADMIN GROUP":220,"BD GROUP":91,"HR SUPPORT":111,"FINANCE SUPPORT":89,"IT SUPPORT":134} shown={"ADMIN GROUP":220,"BD GROUP":91,"HR SUPPORT":111,"FINANCE SUPPORT":89,"IT SUPPORT":134}
+ok   [90d] Smart open by group: truth={"ADMIN GROUP":473,"BD GROUP":246,"HR SUPPORT":230,"FINANCE SUPPORT":235,"IT SUPPORT":345} shown={"ADMIN GROUP":473,"BD GROUP":246,"HR SUPPORT":230,"FINANCE SUPPORT":235,"IT SUPPORT":345}
+ok   [90d] Smart approvals approved: truth=0 shown=0
+ok   [90d] Smart approvals rejected: truth=0 shown=0
+ok   [90d] Smart approvals waiting: truth=0 shown=0
+ok   [90d] Normal Created: truth=645 shown=645
+ok   [90d] Normal Resolved (resolved in period): truth=305 shown=305
+ok   [90d] Normal Open Now: truth=1529 shown=1529
+ok   [90d] Normal Currently Breached: truth=0 shown=0
+ok   [90d] Normal SLA %: truth=null shown=null
+ok   [90d] Normal avg resolution h: truth=106.2 shown=106.2
+ok   [90d] Normal avg first response h: truth=null shown=null
+ok   [90d] Normal status counts: truth={"assigned":19,"waiting_user":28,"closed":182,"cancelled":40,"resolved":109,"pending_approval":33,"hold_purchase_ho":27,"open":91,"in_progress":116} shown={"open":91,"assigned":19,"in_progress":116,"waiting_user":28,"hold_purchase_ho":27,"pending_approval":33,"resolved":109,"closed":182,"cancelled":40}
+ok   [90d] Normal backlog aging: truth={"11–20 days":31,"46–60 days":57,"76–90 days":53,"61–75 days":47,"6–10 days":18,"21–30 days":50,"31–45 days":52,"90+ days":1214,"0–5 days":7} shown={"0–5 days":7,"6–10 days":18,"11–20 days":31,"21–30 days":50,"31–45 days":52,"46–60 days":57,"61–75 days":47,"76–90 days":53,"90+ days":1214}
+ok   [90d] Normal group volume: truth={"ADMIN GROUP":220,"BD GROUP":91,"HR SUPPORT":111,"FINANCE SUPPORT":89,"IT SUPPORT":134} shown={"ADMIN GROUP":220,"IT SUPPORT":134,"HR SUPPORT":111,"BD GROUP":91,"FINANCE SUPPORT":89}
+ok   [90d] Normal group resolved: truth={"ADMIN GROUP":100,"BD GROUP":39,"FINANCE SUPPORT":46,"HR SUPPORT":54,"IT SUPPORT":66} shown={"ADMIN GROUP":100,"IT SUPPORT":66,"HR SUPPORT":54,"BD GROUP":39,"FINANCE SUPPORT":46}
+ok   [90d] Normal group open now: truth={"ADMIN GROUP":473,"BD GROUP":246,"HR SUPPORT":230,"FINANCE SUPPORT":235,"IT SUPPORT":345} shown={"ADMIN GROUP":473,"IT SUPPORT":345,"HR SUPPORT":230,"BD GROUP":246,"FINANCE SUPPORT":235}
+ok   [90d] Normal priority resolved / SLA: truth={"high":{"resolved":64,"slaBase":0,"slaMet":0},"low":{"resolved":60,"slaBase":0,"slaMet":0},"medium":{"resolved":126,"slaBase":0,"slaMet":0},"urgent":{"resolved":55,"slaBase":0,"slaMet":0}} shown={"urgent":{"resolved":55,"slaBase":0,"slaMet":0},"high":{"resolved":64,"slaBase":0,"slaMet":0},"medium":{"resolved":126,"slaBase":0,"slaMet":0},"low":{"resolved":60,"slaBase":0,"slaMet":0}}
+ok   [90d] Normal agent leaderboard: truth={"b535b278-71b9-4d08-a36c-ede823234e71":{"resolved":34,"open":63},"ef37bc53-a949-4ba7-8539-64834deede13":{"resolved":25,"open":69},"b5aba815-6cae-4979-b565-427ccc353ead":{"resolved":24,"open":96},"20717a63-625b-461b-82db-1fd8981dcef1":{"resolved":22,"open":52},"1e2a3718-f0b6-40cd-aeb8-dd1912a84337":{"resolved":18,"open":36},"03bd4ad3-8f01-4e5a-aa38-4a8bd2e70e96":{"resolved":17,"open":75},"c02f6656-15ca-4ead-b87b-363e4939206a":{"resolved":17,"open":57},"edf7ce48-5a29-4287-9d1d-64495fdb1b18":{"resolved":17,"open":34},"095a5e76-ad0b-488c-958a-ebcb058bf55f":{"resolved":16,"open":35},"5fcd26bc-9c1e-4dc0-a210-018c83073957":{"resolved":16,"open":33}} shown={"b535b278-71b9-4d08-a36c-ede823234e71":{"resolved":34,"open":63},"ef37bc53-a949-4ba7-8539-64834deede13":{"resolved":25,"open":69},"b5aba815-6cae-4979-b565-427ccc353ead":{"resolved":24,"open":96},"20717a63-625b-461b-82db-1fd8981dcef1":{"resolved":22,"open":52},"1e2a3718-f0b6-40cd-aeb8-dd1912a84337":{"resolved":18,"open":36},"03bd4ad3-8f01-4e5a-aa38-4a8bd2e70e96":{"resolved":17,"open":75},"c02f6656-15ca-4ead-b87b-363e4939206a":{"resolved":17,"open":57},"edf7ce48-5a29-4287-9d1d-64495fdb1b18":{"resolved":17,"open":34},"095a5e76-ad0b-488c-958a-ebcb058bf55f":{"resolved":16,"open":35},"5fcd26bc-9c1e-4dc0-a210-018c83073957":{"resolved":16,"open":33}}
+ok   [90d] Normal approvals: truth={"approved":0,"rejected":0,"pending":0} shown={"approved":0,"rejected":0,"pending":0}
+ok   [120d] Smart window starts: truth="2026-06-18T18:30" shown="2026-06-18T18:30"
+ok   [120d] Smart created: truth=868 shown=868
+ok   [120d] Smart resolved (resolved in period): truth=415 shown=415
+ok   [120d] Smart open backlog: truth=1529 shown=1529
+ok   [120d] Smart currently breached: truth=0 shown=0
+ok   [120d] Smart SLA %: truth=null shown=null
+ok   [120d] Smart avg resolution h: truth=105.3 shown=105.3
+ok   [120d] Smart avg first response h: truth=null shown=null
+ok   [120d] Smart created by status: truth={"assigned":29,"waiting_user":42,"closed":241,"cancelled":58,"resolved":146,"hold_purchase_ho":34,"pending_approval":46,"open":120,"in_progress":152} shown={"assigned":29,"waiting_user":42,"closed":241,"cancelled":58,"resolved":146,"hold_purchase_ho":34,"pending_approval":46,"open":120,"in_progress":152}
+ok   [120d] Smart created by priority: truth={"medium":340,"urgent":179,"high":184,"low":165} shown={"medium":340,"urgent":179,"high":184,"low":165}
+ok   [120d] Smart backlog age buckets: truth={"11–20 days":31,"46–60 days":57,"76–90 days":53,"61–75 days":47,"6–10 days":18,"21–30 days":50,"31–45 days":52,"90+ days":1214,"0–5 days":7} shown={"0–5 days":7,"6–10 days":18,"11–20 days":31,"21–30 days":50,"31–45 days":52,"46–60 days":57,"61–75 days":47,"76–90 days":53,"90+ days":1214}
+ok   [120d] Smart created by group: truth={"ADMIN GROUP":287,"BD GROUP":135,"HR SUPPORT":138,"FINANCE SUPPORT":125,"IT SUPPORT":183} shown={"ADMIN GROUP":287,"BD GROUP":135,"HR SUPPORT":138,"FINANCE SUPPORT":125,"IT SUPPORT":183}
+ok   [120d] Smart open by group: truth={"ADMIN GROUP":473,"BD GROUP":246,"HR SUPPORT":230,"FINANCE SUPPORT":235,"IT SUPPORT":345} shown={"ADMIN GROUP":473,"BD GROUP":246,"HR SUPPORT":230,"FINANCE SUPPORT":235,"IT SUPPORT":345}
+ok   [120d] Smart approvals approved: truth=0 shown=0
+ok   [120d] Smart approvals rejected: truth=0 shown=0
+ok   [120d] Smart approvals waiting: truth=0 shown=0
+ok   [120d] Normal Created: truth=868 shown=868
+ok   [120d] Normal Resolved (resolved in period): truth=415 shown=415
+ok   [120d] Normal Open Now: truth=1529 shown=1529
+ok   [120d] Normal Currently Breached: truth=0 shown=0
+ok   [120d] Normal SLA %: truth=null shown=null
+ok   [120d] Normal avg resolution h: truth=105.3 shown=105.3
+ok   [120d] Normal avg first response h: truth=null shown=null
+ok   [120d] Normal status counts: truth={"assigned":29,"waiting_user":42,"closed":241,"cancelled":58,"resolved":146,"hold_purchase_ho":34,"pending_approval":46,"open":120,"in_progress":152} shown={"open":120,"assigned":29,"in_progress":152,"waiting_user":42,"hold_purchase_ho":34,"pending_approval":46,"resolved":146,"closed":241,"cancelled":58}
+ok   [120d] Normal backlog aging: truth={"11–20 days":31,"46–60 days":57,"76–90 days":53,"61–75 days":47,"6–10 days":18,"21–30 days":50,"31–45 days":52,"90+ days":1214,"0–5 days":7} shown={"0–5 days":7,"6–10 days":18,"11–20 days":31,"21–30 days":50,"31–45 days":52,"46–60 days":57,"61–75 days":47,"76–90 days":53,"90+ days":1214}
+ok   [120d] Normal group volume: truth={"ADMIN GROUP":287,"BD GROUP":135,"HR SUPPORT":138,"FINANCE SUPPORT":125,"IT SUPPORT":183} shown={"ADMIN GROUP":287,"IT SUPPORT":183,"HR SUPPORT":138,"BD GROUP":135,"FINANCE SUPPORT":125}
+ok   [120d] Normal group resolved: truth={"ADMIN GROUP":133,"BD GROUP":55,"FINANCE SUPPORT":62,"HR SUPPORT":68,"IT SUPPORT":97} shown={"ADMIN GROUP":133,"IT SUPPORT":97,"HR SUPPORT":68,"BD GROUP":55,"FINANCE SUPPORT":62}
+ok   [120d] Normal group open now: truth={"ADMIN GROUP":473,"BD GROUP":246,"HR SUPPORT":230,"FINANCE SUPPORT":235,"IT SUPPORT":345} shown={"ADMIN GROUP":473,"IT SUPPORT":345,"HR SUPPORT":230,"BD GROUP":246,"FINANCE SUPPORT":235}
+ok   [120d] Normal priority resolved / SLA: truth={"high":{"resolved":83,"slaBase":0,"slaMet":0},"low":{"resolved":79,"slaBase":0,"slaMet":0},"medium":{"resolved":170,"slaBase":0,"slaMet":0},"urgent":{"resolved":83,"slaBase":0,"slaMet":0}} shown={"urgent":{"resolved":83,"slaBase":0,"slaMet":0},"high":{"resolved":83,"slaBase":0,"slaMet":0},"medium":{"resolved":170,"slaBase":0,"slaMet":0},"low":{"resolved":79,"slaBase":0,"slaMet":0}}
+ok   [120d] Normal agent leaderboard: truth={"b535b278-71b9-4d08-a36c-ede823234e71":{"resolved":43,"open":63},"ef37bc53-a949-4ba7-8539-64834deede13":{"resolved":38,"open":69},"b5aba815-6cae-4979-b565-427ccc353ead":{"resolved":32,"open":96},"20717a63-625b-461b-82db-1fd8981dcef1":{"resolved":30,"open":52},"c02f6656-15ca-4ead-b87b-363e4939206a":{"resolved":27,"open":57},"1e2a3718-f0b6-40cd-aeb8-dd1912a84337":{"resolved":23,"open":36},"095a5e76-ad0b-488c-958a-ebcb058bf55f":{"resolved":23,"open":35},"b97ebf94-3189-452f-8253-455b9883f9e0":{"resolved":21,"open":40},"03bd4ad3-8f01-4e5a-aa38-4a8bd2e70e96":{"resolved":20,"open":75},"5fcd26bc-9c1e-4dc0-a210-018c83073957":{"resolved":19,"open":33}} shown={"b535b278-71b9-4d08-a36c-ede823234e71":{"resolved":43,"open":63},"ef37bc53-a949-4ba7-8539-64834deede13":{"resolved":38,"open":69},"b5aba815-6cae-4979-b565-427ccc353ead":{"resolved":32,"open":96},"20717a63-625b-461b-82db-1fd8981dcef1":{"resolved":30,"open":52},"c02f6656-15ca-4ead-b87b-363e4939206a":{"resolved":27,"open":57},"1e2a3718-f0b6-40cd-aeb8-dd1912a84337":{"resolved":23,"open":36},"095a5e76-ad0b-488c-958a-ebcb058bf55f":{"resolved":23,"open":35},"b97ebf94-3189-452f-8253-455b9883f9e0":{"resolved":21,"open":40},"03bd4ad3-8f01-4e5a-aa38-4a8bd2e70e96":{"resolved":20,"open":75},"5fcd26bc-9c1e-4dc0-a210-018c83073957":{"resolved":19,"open":33}}
+ok   [120d] Normal approvals: truth={"approved":0,"rejected":0,"pending":0} shown={"approved":0,"rejected":0,"pending":0}
+ok   [fy] Smart window starts: truth="2026-03-31T18:30" shown="2026-03-31T18:30"
+ok   [fy] Smart created: truth=1523 shown=1523
+ok   [fy] Smart resolved (resolved in period): truth=703 shown=703
+ok   [fy] Smart open backlog: truth=1529 shown=1529
+ok   [fy] Smart currently breached: truth=0 shown=0
+ok   [fy] Smart SLA %: truth=null shown=null
+ok   [fy] Smart avg resolution h: truth=109.6 shown=109.6
+ok   [fy] Smart avg first response h: truth=null shown=null
+ok   [fy] Smart created by status: truth={"assigned":58,"waiting_user":67,"closed":424,"cancelled":96,"resolved":261,"pending_approval":83,"hold_purchase_ho":67,"open":205,"in_progress":262} shown={"assigned":58,"waiting_user":67,"closed":424,"cancelled":96,"resolved":261,"pending_approval":83,"hold_purchase_ho":67,"open":205,"in_progress":262}
+ok   [fy] Smart created by priority: truth={"medium":614,"urgent":314,"high":313,"low":282} shown={"medium":614,"urgent":314,"high":313,"low":282}
+ok   [fy] Smart backlog age buckets: truth={"11–20 days":31,"46–60 days":57,"76–90 days":53,"61–75 days":47,"6–10 days":18,"21–30 days":50,"31–45 days":52,"90+ days":1214,"0–5 days":7} shown={"0–5 days":7,"6–10 days":18,"11–20 days":31,"21–30 days":50,"31–45 days":52,"46–60 days":57,"61–75 days":47,"76–90 days":53,"90+ days":1214}
+ok   [fy] Smart created by group: truth={"ADMIN GROUP":490,"BD GROUP":237,"HR SUPPORT":226,"FINANCE SUPPORT":238,"IT SUPPORT":332} shown={"ADMIN GROUP":490,"BD GROUP":237,"HR SUPPORT":226,"FINANCE SUPPORT":238,"IT SUPPORT":332}
+ok   [fy] Smart open by group: truth={"ADMIN GROUP":473,"BD GROUP":246,"HR SUPPORT":230,"FINANCE SUPPORT":235,"IT SUPPORT":345} shown={"ADMIN GROUP":473,"BD GROUP":246,"HR SUPPORT":230,"FINANCE SUPPORT":235,"IT SUPPORT":345}
+ok   [fy] Smart approvals approved: truth=0 shown=0
+ok   [fy] Smart approvals rejected: truth=0 shown=0
+ok   [fy] Smart approvals waiting: truth=0 shown=0
+ok   [fy] Normal Created: truth=1523 shown=1523
+ok   [fy] Normal Resolved (resolved in period): truth=703 shown=703
+ok   [fy] Normal Open Now: truth=1529 shown=1529
+ok   [fy] Normal Currently Breached: truth=0 shown=0
+ok   [fy] Normal SLA %: truth=null shown=null
+ok   [fy] Normal avg resolution h: truth=109.6 shown=109.6
+ok   [fy] Normal avg first response h: truth=null shown=null
+ok   [fy] Normal status counts: truth={"assigned":58,"waiting_user":67,"closed":424,"cancelled":96,"resolved":261,"pending_approval":83,"hold_purchase_ho":67,"open":205,"in_progress":262} shown={"open":205,"assigned":58,"in_progress":262,"waiting_user":67,"hold_purchase_ho":67,"pending_approval":83,"resolved":261,"closed":424,"cancelled":96}
+ok   [fy] Normal backlog aging: truth={"11–20 days":31,"46–60 days":57,"76–90 days":53,"61–75 days":47,"6–10 days":18,"21–30 days":50,"31–45 days":52,"90+ days":1214,"0–5 days":7} shown={"0–5 days":7,"6–10 days":18,"11–20 days":31,"21–30 days":50,"31–45 days":52,"46–60 days":57,"61–75 days":47,"76–90 days":53,"90+ days":1214}
+ok   [fy] Normal group volume: truth={"ADMIN GROUP":490,"BD GROUP":237,"HR SUPPORT":226,"FINANCE SUPPORT":238,"IT SUPPORT":332} shown={"ADMIN GROUP":490,"IT SUPPORT":332,"FINANCE SUPPORT":238,"BD GROUP":237,"HR SUPPORT":226}
+ok   [fy] Normal group resolved: truth={"ADMIN GROUP":222,"BD GROUP":95,"FINANCE SUPPORT":113,"HR SUPPORT":111,"IT SUPPORT":162} shown={"ADMIN GROUP":222,"IT SUPPORT":162,"FINANCE SUPPORT":113,"BD GROUP":95,"HR SUPPORT":111}
+ok   [fy] Normal group open now: truth={"ADMIN GROUP":473,"BD GROUP":246,"HR SUPPORT":230,"FINANCE SUPPORT":235,"IT SUPPORT":345} shown={"ADMIN GROUP":473,"IT SUPPORT":345,"FINANCE SUPPORT":235,"BD GROUP":246,"HR SUPPORT":230}
+ok   [fy] Normal priority resolved / SLA: truth={"high":{"resolved":141,"slaBase":0,"slaMet":0},"low":{"resolved":134,"slaBase":0,"slaMet":0},"medium":{"resolved":291,"slaBase":0,"slaMet":0},"urgent":{"resolved":137,"slaBase":0,"slaMet":0}} shown={"urgent":{"resolved":137,"slaBase":0,"slaMet":0},"high":{"resolved":141,"slaBase":0,"slaMet":0},"medium":{"resolved":291,"slaBase":0,"slaMet":0},"low":{"resolved":134,"slaBase":0,"slaMet":0}}
+ok   [fy] Normal agent leaderboard: truth={"b535b278-71b9-4d08-a36c-ede823234e71":{"resolved":67,"open":63},"ef37bc53-a949-4ba7-8539-64834deede13":{"resolved":60,"open":69},"b5aba815-6cae-4979-b565-427ccc353ead":{"resolved":58,"open":96},"20717a63-625b-461b-82db-1fd8981dcef1":{"resolved":43,"open":52},"c02f6656-15ca-4ead-b87b-363e4939206a":{"resolved":41,"open":57},"eac91a97-cac3-4467-9391-98d333fecff7":{"resolved":39,"open":38},"b97ebf94-3189-452f-8253-455b9883f9e0":{"resolved":39,"open":40},"095a5e76-ad0b-488c-958a-ebcb058bf55f":{"resolved":37,"open":35},"03bd4ad3-8f01-4e5a-aa38-4a8bd2e70e96":{"resolved":37,"open":75},"edf7ce48-5a29-4287-9d1d-64495fdb1b18":{"resolved":32,"open":34}} shown={"b535b278-71b9-4d08-a36c-ede823234e71":{"resolved":67,"open":63},"ef37bc53-a949-4ba7-8539-64834deede13":{"resolved":60,"open":69},"b5aba815-6cae-4979-b565-427ccc353ead":{"resolved":58,"open":96},"20717a63-625b-461b-82db-1fd8981dcef1":{"resolved":43,"open":52},"c02f6656-15ca-4ead-b87b-363e4939206a":{"resolved":41,"open":57},"eac91a97-cac3-4467-9391-98d333fecff7":{"resolved":39,"open":38},"b97ebf94-3189-452f-8253-455b9883f9e0":{"resolved":39,"open":40},"095a5e76-ad0b-488c-958a-ebcb058bf55f":{"resolved":37,"open":35},"03bd4ad3-8f01-4e5a-aa38-4a8bd2e70e96":{"resolved":37,"open":75},"edf7ce48-5a29-4287-9d1d-64495fdb1b18":{"resolved":32,"open":34}}
+ok   [fy] Normal approvals: truth={"approved":0,"rejected":0,"pending":0} shown={"approved":0,"rejected":0,"pending":0}
+
+0 differences
+
+
+ [32m✓[39m tests/integration/dashboard-numbers-audit.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 3968[2mms[22m[39m
+   [33m[2m✓[22m[39m dashboard numbers vs the raw data (local database)[2m > [22mreconciles every shared figure [33m 3967[2mms[22m[39m
+ [32m✓[39m tests/unit/log-shipper-run.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 3247[2mms[22m[39m
+   [33m[2m✓[22m[39m log shipper[2m > [22mstarts at the end of an existing log, then ships only what is added, once [33m 601[2mms[22m[39m
+   [33m[2m✓[22m[39m log shipper[2m > [22mkeeps its place while the app is down and delivers when it is back [33m 656[2mms[22m[39m
+   [33m[2m✓[22m[39m log shipper[2m > [22mwaits for a half-written line [33m 580[2mms[22m[39m
+   [33m[2m✓[22m[39m log shipper[2m > [22mreads from the beginning again after the file is rotated (becomes smaller) [33m 453[2mms[22m[39m
+ [32m✓[39m tests/integration/fixed-reports.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 3417[2mms[22m[39m
+   [33m[2m✓[22m[39m fixed reports (local database)[2m > [22mloads all twelve, and the Admin and BD summaries count exactly the open tickets of their groups [33m 3077[2mms[22m[39m
+   [33m[2m✓[22m[39m fixed reports (local database)[2m > [22ma technician starts on their own groups, and an admin on every group [33m 339[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage6-audit-log-coverage.test.ts[2m > [22m[2mStage 6, Part 22 — all 9 WhatsApp audit-log event types produce real DB rows[2m > [22m[2m8. whatsapp_attachment_link_failed — the staged object goes missing before Create promotes it
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792132959087-stage6-audit-attach@example.test  Subject: Request created: CKSD-013125 — Conv Fixture Service stage6-audit-1792132959201: Printer Issue stage6-audit-1792132959201: Printer Down
+
+ [32m✓[39m tests/integration/stage6-audit-log-coverage.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 3439[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 6, Part 22 — all 9 WhatsApp audit-log event types produce real DB rows[2m > [22m8. whatsapp_attachment_link_failed — the staged object goes missing before Create promotes it [33m 448[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 6, Part 22 — all 9 WhatsApp audit-log event types produce real DB rows[2m > [22m9. whatsapp_send_failed — an outbound delivery that never recovers [33m 2640[2mms[22m[39m
+ [32m✓[39m tests/integration/nudge-ticket.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 2729[2mms[22m[39m
+   [33m[2m✓[22m[39m Nudge from the Smart Dashboard[2m > [22mreminds the technician handling the ticket, by bell and by e-mail, with the manager's message [33m 745[2mms[22m[39m
+ [32m✓[39m tests/integration/notification-rules-email.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 2814[2mms[22m[39m
+   [33m[2m✓[22m[39m notification rules gate the email channel[2m > [22memail unticked: no email, but the in-app notification still arrives [33m 833[2mms[22m[39m
+ [32m✓[39m tests/integration/admin-store-login-rename.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 2372[2mms[22m[39m
+ [32m✓[39m tests/integration/bulk-password-reset.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 2499[2mms[22m[39m
+ [32m✓[39m tests/integration/approvals-page-scope.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 2401[2mms[22m[39m
+ [32m✓[39m tests/integration/admin-change-user-email.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 2338[2mms[22m[39m
+ [32m✓[39m tests/integration/resolved-reopen-flow.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 2485[2mms[22m[39m
+ [32m✓[39m tests/integration/request-search.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 2479[2mms[22m[39m
+ [32m✓[39m tests/integration/d03-authorization.test.ts [2m([22m[2m14 tests[22m[2m)[22m[33m 2351[2mms[22m[39m
+[90mstdout[2m | tests/integration/item6-assignment-rbac.test.ts[2m > [22m[2mItem 6: assignRequest() RBAC[2m > [22m[2magent cannot assign to a different team
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792132988728-item6-agent-a2@example.test  Subject: Request assigned to you: CKSD-013167 — fixtures-d03 seedRequestLike 1792132989153
+
+[90mstdout[2m | tests/integration/item6-assignment-rbac.test.ts[2m > [22m[2mItem 6: assignRequest() RBAC[2m > [22m[2magent cannot unassign a ticket
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792132988728-requester-a@example.test  Subject: Your request has been assigned: CKSD-013167 — fixtures-d03 seedRequestLike 1792132989153
+
+[90mstdout[2m | tests/integration/item6-assignment-rbac.test.ts[2m > [22m[2mItem 6: assignRequest() RBAC[2m > [22m[2madmin can cross-team assign
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792132988728-agent-b@example.test  Subject: Request assigned to you: CKSD-013171 — fixtures-d03 seedRequestLike 1792132989320
+
+[90mstdout[2m | tests/integration/item6-assignment-rbac.test.ts[2m > [22m[2mItem 6: assignRequest() RBAC[2m > [22m[2madmin can cross-team assign
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792132988728-requester-a@example.test  Subject: Your request has been assigned: CKSD-013171 — fixtures-d03 seedRequestLike 1792132989320
+
+[90mstdout[2m | tests/integration/item6-assignment-rbac.test.ts[2m > [22m[2mItem 6: assignRequest() RBAC
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792132988728-agent-a@example.test  Subject: Request assigned to you: CKSD-013172 — fixtures-d03 seedRequestLike 1792132989378
+
+[90mstdout[2m | tests/integration/item6-assignment-rbac.test.ts[2m > [22m[2mItem 6: assignRequest() RBAC
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792132988728-requester-b@example.test  Subject: Your request has been assigned: CKSD-013172 — fixtures-d03 seedRequestLike 1792132989378
+
+ [32m✓[39m tests/integration/item6-assignment-rbac.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 2273[2mms[22m[39m
+ [32m✓[39m tests/integration/ticket-copy.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 2259[2mms[22m[39m
+ [32m✓[39m tests/integration/start-working-auto-response.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 2157[2mms[22m[39m
+[90mstdout[2m | tests/integration/d07-alert-rule-channels.test.ts[2m > [22m[2mD-07: alert rule channels are respected[2m > [22m[2man email-only rule (in_app unchecked) does not create a visible bell notification, and does not resend on a second tick
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792132996730-agent-a@example.test  Subject: Task overdue: D-07 overdue task
+
+[90mstdout[2m | tests/integration/d07-alert-rule-channels.test.ts[2m > [22m[2mD-07: alert rule channels are respected[2m > [22m[2man in_app + email rule creates a normal, unread, unarchived bell notification
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792132996730-agent-b@example.test  Subject: Task overdue: D-07 overdue task (in-app)
+
+ [32m✓[39m tests/integration/d07-alert-rule-channels.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 2065[2mms[22m[39m
+ [32m✓[39m tests/integration/oem-assign-stores.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 2015[2mms[22m[39m
+ [32m✓[39m tests/integration/email-reply-comment.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 2044[2mms[22m[39m
+ [32m✓[39m tests/integration/rules-library-field.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 2010[2mms[22m[39m
+ [32m✓[39m tests/integration/mark-request-notifications-read.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 1978[2mms[22m[39m
+ [32m✓[39m tests/integration/d12-oem-revalidation.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 1992[2mms[22m[39m
+ [32m✓[39m tests/integration/d16-task-creation-authorization.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 2009[2mms[22m[39m
+[90mstdout[2m | tests/integration/d06-duplicate-reopen-notification.test.ts[2m > [22m[2mD-06: no duplicate reopen notification when requester === assignee
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133013391-agent-a@example.test  Subject: Request updated: CKSD-013205 — fixtures-d03 seedRequestLike 1792133013712
+
+ [32m✓[39m tests/integration/d06-duplicate-reopen-notification.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 1971[2mms[22m[39m
+[90mstdout[2m | tests/integration/desk-uat-001-reopen.test.ts[2m > [22m[2mDESK-UAT-001: requester reopen of a resolved ticket[2m > [22m[2m1. valid requester reopen succeeds and updates every expected field
+[22m[39m[EMAIL DISABLED] To: uat-desk-001-1792133015793-requester@example.test  Subject: Request updated: CKSD-013206 — DESK-UAT-001 regression uat-desk-001-1792133015793
+
+[90mstdout[2m | tests/integration/desk-uat-001-reopen.test.ts[2m > [22m[2mDESK-UAT-001: requester reopen of a resolved ticket[2m > [22m[2m1. valid requester reopen succeeds and updates every expected field
+[22m[39m[EMAIL DISABLED] To: uat-desk-001-1792133015793-agent@example.test  Subject: Request updated: CKSD-013206 — DESK-UAT-001 regression uat-desk-001-1792133015793
+
+[90mstdout[2m | tests/integration/desk-uat-001-reopen.test.ts[2m > [22m[2mDESK-UAT-001: requester reopen of a resolved ticket[2m > [22m[2m6. agent reopen of their own resolved ticket is unaffected (regression)
+[22m[39m[EMAIL DISABLED] To: uat-desk-001-1792133015793-requester@example.test  Subject: Request updated: CKSD-013210 — DESK-UAT-001 regression uat-desk-001-1792133015793
+
+[90mstdout[2m | tests/integration/desk-uat-001-reopen.test.ts[2m > [22m[2mDESK-UAT-001: requester reopen of a resolved ticket[2m > [22m[2m7. a manually-cancelled ticket still cannot be reopened by the requester
+[22m[39m[EMAIL DISABLED] To: uat-desk-001-1792133015793-requester@example.test  Subject: Request updated: CKSD-013211 — DESK-UAT-001 regression uat-desk-001-1792133015793
+
+ [32m✓[39m tests/integration/desk-uat-001-reopen.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 1923[2mms[22m[39m
+ [32m✓[39m tests/integration/auth-email-links.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 1989[2mms[22m[39m
+ [32m✓[39m tests/integration/notifications-new-route.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 1995[2mms[22m[39m
+ [32m✓[39m tests/integration/ticket-pdf-route.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 1977[2mms[22m[39m
+ [32m✓[39m tests/integration/email-mailbox-settings.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 1913[2mms[22m[39m
+ [32m✓[39m tests/integration/d17-oem-notification-rules-visibility.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 1956[2mms[22m[39m
+ [32m✓[39m tests/integration/d09-platform-owner-task-delete.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 1895[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage7b-duplicates-concurrency.test.ts[2m > [22m[2mStage 7B — UAT-24: replaying the identical Meta message.id produces exactly one state advance / one ticket[2m > [22m[2mthe identical Meta message.id, replayed 3 times (a real Meta webhook retry scenario), advances state exactly once and creates exactly one ticket
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133032331-uat7b-dup-req@example.test  Subject: Request created: CKSD-013226 — Conv Fixture Service uat7b-8c5d02-dupconc-1792133032454-a: Printer Issue uat7b-8c5d02-dupconc-1792133032454-a: Printer…
+
+[90mstdout[2m | tests/integration/stage7b-duplicates-concurrency.test.ts[2m > [22m[2mStage 7B — UAT-25: two near-simultaneous distinct WhatsApp messages — no lost update, no double state advancement[2m > [22m[2mtwo distinct real CREATE confirmations racing at Review produce exactly one ticket
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133032331-uat7b-conc-create-req@example.test  Subject: Request created: CKSD-013227 — Conv Fixture Service uat7b-8c5d02-dupconc-1792133032454-b: Printer Issue uat7b-8c5d02-dupconc-1792133032454-b: Printer…
+
+ [32m✓[39m tests/integration/stage7b-duplicates-concurrency.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 1477[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 7B — UAT-24: replaying the identical Meta message.id produces exactly one state advance / one ticket[2m > [22mthe identical Meta message.id, replayed 3 times (a real Meta webhook retry scenario), advances state exactly once and creates exactly one ticket [33m 331[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 7B — UAT-25: two near-simultaneous distinct WhatsApp messages — no lost update, no double state advancement[2m > [22mtwo distinct real messages answering the same pending field, sent back-to-back, resolve deterministically with no corrupted/mixed answer [33m 352[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 7B — UAT-25: two near-simultaneous distinct WhatsApp messages — no lost update, no double state advancement[2m > [22mtwo distinct real CREATE confirmations racing at Review produce exactly one ticket [33m 434[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage5-mandatory-fields.test.ts[2m > [22m[2mStage 5 — mandatory field collection over WhatsApp[2m > [22m[2masks every mandatory field (Printer Location, Business Impact, Asset Number) before Review — none skippable
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133034302-stage5-fields-req-a@example.test  Subject: Request created: CKSD-013228 — Conv Fixture Service stage5-fields-1792133034424-a: Printer Issue stage5-fields-1792133034424-a: Printer Down
+
+[90mstdout[2m | tests/integration/stage5-mandatory-fields.test.ts[2m > [22m[2mStage 5 — mandatory field collection over WhatsApp[2m > [22m[2mmultiselect: answered via comma-separated free text, never silently reduced to a single value
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133034302-stage5-fields-req-c@example.test  Subject: Request created: CKSD-013229 — Conv Fixture Service stage5-fields-1792133034424-c: Printer Issue stage5-fields-1792133034424-c: Printer Down
+
+ [32m✓[39m tests/integration/stage5-mandatory-fields.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 1438[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5 — mandatory field collection over WhatsApp[2m > [22masks every mandatory field (Printer Location, Business Impact, Asset Number) before Review — none skippable [33m 591[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5 — mandatory field collection over WhatsApp[2m > [22mwith no mandatory fields beyond description, goes straight from Description to Review [33m 374[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5 — mandatory field collection over WhatsApp[2m > [22mmultiselect: answered via comma-separated free text, never silently reduced to a single value [33m 473[2mms[22m[39m
+ [32m✓[39m tests/integration/stage7b-resume-cancel-restart-expiry.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 1488[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 7B — UAT-20: Resume mid-conversation (with a staged attachment), Subject never regenerated[2m > [22mresumes at the exact next question after a staged file, same conversation row, title untouched [33m 414[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 7B — UAT-21/22: Cancel (with staged attachment + real Storage cleanup) then Restart[2m > [22mUAT-21: CANCEL marks the conversation terminal and removes the staged Storage object (not just the DB row) [33m 376[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 7B — UAT-21/22: Cancel (with staged attachment + real Storage cleanup) then Restart[2m > [22mUAT-22: after Cancel, a fresh "Hi"/NEW starts exactly one clean active conversation — no leftover draft [33m 302[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 7B — UAT-23: lazy 24h Expiry with staged-attachment cleanup, old conversation cannot silently continue[2m > [22man expired conversation with a staged file is reconciled safely: Storage cleaned up, old draft inert, a fresh "Hi" starts cleanly [33m 395[2mms[22m[39m
+[90mstdout[2m | tests/integration/whatsapp-stage1-create-request-core.test.ts[2m > [22m[2mStage 1 — shared ticket-creation core (web / core-direct / Email Intake parity)[2m > [22m[2mweb path (createRequest): missing mandatory select field is rejected before any insert
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133038098-stage1-agent@example.test  Subject: Request assigned to you: CKSD-013230 — Laptop will not boot
+
+[90mstdout[2m | tests/integration/whatsapp-stage1-create-request-core.test.ts[2m > [22m[2mStage 1 — shared ticket-creation core (web / core-direct / Email Intake parity)[2m > [22m[2mweb path (createRequest): missing mandatory select field is rejected before any insert
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133038098-stage1-requester@example.test  Subject: Your request has been assigned: CKSD-013230 — Laptop will not boot
+
+[90mstdout[2m | tests/integration/whatsapp-stage1-create-request-core.test.ts[2m > [22m[2mStage 1 — shared ticket-creation core (web / core-direct / Email Intake parity)[2m > [22m[2mweb path (createRequest): missing mandatory select field is rejected before any insert
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133038098-stage1-requester@example.test  Subject: Request created: CKSD-013230 — Laptop will not boot
+
+[90mstdout[2m | tests/integration/whatsapp-stage1-create-request-core.test.ts[2m > [22m[2mStage 1 — shared ticket-creation core (web / core-direct / Email Intake parity)[2m > [22m[2mcore-direct call (no browser session, admin client — the shape a WhatsApp webhook would use): identical governed behavior to the web path
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133038098-stage1-agent@example.test  Subject: Request assigned to you: CKSD-013231 — Tech field is not my problem
+
+[90mstdout[2m | tests/integration/whatsapp-stage1-create-request-core.test.ts[2m > [22m[2mStage 1 — shared ticket-creation core (web / core-direct / Email Intake parity)[2m > [22m[2mcore-direct call (no browser session, admin client — the shape a WhatsApp webhook would use): identical governed behavior to the web path
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133038098-stage1-requester@example.test  Subject: Your request has been assigned: CKSD-013231 — Tech field is not my problem
+
+[90mstdout[2m | tests/integration/whatsapp-stage1-create-request-core.test.ts[2m > [22m[2mStage 1 — shared ticket-creation core (web / core-direct / Email Intake parity)[2m > [22m[2mcore-direct call (no browser session, admin client — the shape a WhatsApp webhook would use): identical governed behavior to the web path
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133038098-stage1-requester@example.test  Subject: Request created: CKSD-013231 — Tech field is not my problem
+
+[90mstdout[2m | tests/integration/whatsapp-stage1-create-request-core.test.ts[2m > [22m[2mStage 1 — shared ticket-creation core (web / core-direct / Email Intake parity)[2m > [22m[2mEmail Intake (approveAndCreate, type=request): now receives SLA deadlines and Business Rule assignment — previously both were silently skipped
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133038098-stage1-agent@example.test  Subject: Request assigned to you: CKSD-013232 — Printer offline
+
+[90mstdout[2m | tests/integration/whatsapp-stage1-create-request-core.test.ts[2m > [22m[2mStage 1 — shared ticket-creation core (web / core-direct / Email Intake parity)[2m > [22m[2mEmail Intake (approveAndCreate, type=request): now receives SLA deadlines and Business Rule assignment — previously both were silently skipped
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133038098-stage1-other-requester@example.test  Subject: Your request has been assigned: CKSD-013232 — Printer offline
+
+[90mstdout[2m | tests/integration/whatsapp-stage1-create-request-core.test.ts[2m > [22m[2mStage 1 — shared ticket-creation core (web / core-direct / Email Intake parity)[2m > [22m[2mEmail Intake (approveAndCreate, type=request): now receives SLA deadlines and Business Rule assignment — previously both were silently skipped
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133038098-stage1-other-requester@example.test  Subject: Request created: CKSD-013232 — Printer offline
+
+[90mstdout[2m | tests/integration/whatsapp-stage1-create-request-core.test.ts[2m > [22m[2mStage 1 — shared ticket-creation core (web / core-direct / Email Intake parity)[2m > [22m[2mEmail Intake (approveAndCreate, type=approval): creates the approvals row and enters pending_approval when a workflow exists
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133038098-stage1-agent@example.test  Subject: Request assigned to you: CKSD-013233 — Intake-sourced ticket
+
+[90mstdout[2m | tests/integration/whatsapp-stage1-create-request-core.test.ts[2m > [22m[2mStage 1 — shared ticket-creation core (web / core-direct / Email Intake parity)[2m > [22m[2mEmail Intake (approveAndCreate, type=approval): creates the approvals row and enters pending_approval when a workflow exists
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133038098-stage1-agent@example.test  Subject: Request created: CKSD-013233 — Intake-sourced ticket
+
+[90mstdout[2m | tests/integration/whatsapp-stage1-create-request-core.test.ts[2m > [22m[2mStage 1 — shared ticket-creation core (web / core-direct / Email Intake parity)[2m > [22m[2mEmail Intake (approveAndCreate, type=approval): creates the approvals row and enters pending_approval when a workflow exists
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133038098-stage1-agent@example.test  Subject: Request assigned to you: CKSD-013234 — Needs sign-off
+
+[90mstdout[2m | tests/integration/whatsapp-stage1-create-request-core.test.ts[2m > [22m[2mStage 1 — shared ticket-creation core (web / core-direct / Email Intake parity)[2m > [22m[2mEmail Intake (approveAndCreate, type=approval): creates the approvals row and enters pending_approval when a workflow exists
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133038098-stage1-agent@example.test  Subject: Request created: CKSD-013234 — Needs sign-off
+
+[90mstdout[2m | tests/integration/whatsapp-stage1-create-request-core.test.ts[2m > [22m[2mStage 1 — shared ticket-creation core (web / core-direct / Email Intake parity)[2m > [22m[2mEmail Intake (approveAndCreate, type=approval): never leaves a ticket stuck in pending_approval with zero approvals rows
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133038098-stage1-agent@example.test  Subject: Request assigned to you: CKSD-013235 — Never stuck
+
+[90mstdout[2m | tests/integration/whatsapp-stage1-create-request-core.test.ts[2m > [22m[2mStage 1 — shared ticket-creation core (web / core-direct / Email Intake parity)[2m > [22m[2mEmail Intake (approveAndCreate, type=approval): never leaves a ticket stuck in pending_approval with zero approvals rows
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133038098-stage1-agent@example.test  Subject: Request created: CKSD-013235 — Never stuck
+
+ [32m✓[39m tests/integration/whatsapp-stage1-create-request-core.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 1219[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage4-concurrency.test.ts[2m > [22m[2mStage 4 — concurrency[2m > [22m[2mTEST: concurrent CREATE confirmations produce exactly one ticket
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133039816-stage4-conc-create-requester@example.test  Subject: Request created: CKSD-013236 — Conv Fixture Service stage4-conc-1792133039898: Printer Issue stage4-conc-1792133039898: Printer Down
+
+ [32m✓[39m tests/integration/stage4-concurrency.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 938[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 4 — concurrency[2m > [22mTEST: concurrent CREATE confirmations produce exactly one ticket [33m 360[2mms[22m[39m
+ [32m✓[39m tests/integration/stage6-channel-readiness.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 1192[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 6, Part 1 — WhatsApp channel readiness diagnostic[2m > [22mrequesterMobileCoverage counts active users with/without a mobile number correctly [33m 404[2mms[22m[39m
+ [32m✓[39m tests/integration/stage3-2-org-assignment.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 1100[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 3.2 — deterministic org assignment & leak-proof cleanup[2m > [22mStep 7 / AC-3.2.4 — handle_new_user() no longer depends on unordered org selection[2m > [22ma raw new auth user (no follow-up correction) deterministically lands in the seed org, not a stray one — repeated 3x [33m 545[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage6-business-rules-assignment.test.ts[2m > [22m[2mStage 6, Part 12 — Business Rules genuinely evaluate real fields on WhatsApp-created tickets[2m > [22m[2ma WhatsApp ticket in sub-category A is assigned by Rule A, never Rule B
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133044258-stage6-rules-agent-a@example.test  Subject: Request assigned to you: CKSD-013237 — Conv Fixture Service stage6-rules-1792133044381-a: Something Is Not Working
+
+[90mstdout[2m | tests/integration/stage6-business-rules-assignment.test.ts[2m > [22m[2mStage 6, Part 12 — Business Rules genuinely evaluate real fields on WhatsApp-created tickets[2m > [22m[2ma WhatsApp ticket in sub-category B is assigned by Rule B, never Rule A
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133044258-stage6-rules-req-a@example.test  Subject: Your request has been assigned: CKSD-013237 — Conv Fixture Service stage6-rules-1792133044381-a: Something Is Not Working
+
+[90mstdout[2m | tests/integration/stage6-business-rules-assignment.test.ts[2m > [22m[2mStage 6, Part 12 — Business Rules genuinely evaluate real fields on WhatsApp-created tickets[2m > [22m[2ma WhatsApp ticket in sub-category B is assigned by Rule B, never Rule A
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133044258-stage6-rules-req-a@example.test  Subject: Request created: CKSD-013237 — Conv Fixture Service stage6-rules-1792133044381-a: Something Is Not Working
+
+[90mstdout[2m | tests/integration/stage6-business-rules-assignment.test.ts[2m > [22m[2mStage 6, Part 12 — Business Rules genuinely evaluate real fields on WhatsApp-created tickets
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133044258-stage6-rules-agent-b@example.test  Subject: Request assigned to you: CKSD-013238 — Conv Fixture Service stage6-rules-1792133044381-b: Something Is Not Working
+
+[90mstdout[2m | tests/integration/stage6-business-rules-assignment.test.ts[2m > [22m[2mStage 6, Part 12 — Business Rules genuinely evaluate real fields on WhatsApp-created tickets
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133044258-stage6-rules-req-b@example.test  Subject: Your request has been assigned: CKSD-013238 — Conv Fixture Service stage6-rules-1792133044381-b: Something Is Not Working
+
+[90mstdout[2m | tests/integration/stage6-business-rules-assignment.test.ts[2m > [22m[2mStage 6, Part 12 — Business Rules genuinely evaluate real fields on WhatsApp-created tickets
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133044258-stage6-rules-req-b@example.test  Subject: Request created: CKSD-013238 — Conv Fixture Service stage6-rules-1792133044381-b: Something Is Not Working
+
+ [32m✓[39m tests/integration/stage6-business-rules-assignment.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 1025[2mms[22m[39m
+ [32m✓[39m tests/integration/stage5-attachment-cleanup.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 790[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5.1 — staged attachment cleanup on cancel/expiry[2m > [22mCANCEL removes the staged Storage object for a not-yet-linked attachment [33m 416[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5.1 — staged attachment cleanup on cancel/expiry[2m > [22mlazy EXPIRY removes the staged Storage object for a not-yet-linked attachment [33m 373[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage1-1-intake-review-fixes.test.ts[2m > [22m[2mStage 1.1 Task 3/4 — Email Intake Review: sub-category + mandatory field UX[2m > [22m[2mcross-org sub-category injection via the reviewer payload: rejected, no request created
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133046937-stage1-1-intake-reviewer@example.test  Subject: Request created: CKSD-013239 — Subject
+
+[90mstdout[2m | tests/integration/stage1-1-intake-review-fixes.test.ts[2m > [22m[2mStage 1.1 Task 3/4 — Email Intake Review: sub-category + mandatory field UX[2m > [22m[2minvalid select option (not in the configured options list): rejected
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133046937-stage1-1-intake-reviewer@example.test  Subject: Request created: CKSD-013240 — Subject
+
+[90mstdout[2m | tests/integration/stage1-1-intake-review-fixes.test.ts[2m > [22m[2mStage 1.1 Task 3/4 — Email Intake Review: sub-category + mandatory field UX[2m > [22m[2mtechnician-only field (requester_can_view=false): never blocks conversion, even though it's required
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133046937-stage1-1-intake-reviewer@example.test  Subject: Request created: CKSD-013241 — Subject
+
+[90mstdout[2m | tests/integration/stage1-1-intake-review-fixes.test.ts[2m > [22m[2mStage 1.1 Task 3/4 — Email Intake Review: sub-category + mandatory field UX
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133046937-stage1-1-intake-reviewer@example.test  Subject: Request created: CKSD-013242 — Subject
+
+ [32m✓[39m tests/integration/stage1-1-intake-review-fixes.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 933[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage7b-config-drift.test.ts[2m > [22m[2mStage 7B — UAT-30: service deactivated mid-WhatsApp-conversation on a tagged fixture service[2m > [22m[2mdeactivating the service between REVIEW and CREATE blocks CREATE safely and never produces a stale ticket
+[22m[39m[UAT-30 evidence] post-deactivation CREATE outcome: {"kind":"processed","conversationId":"fae5dce0-e219-4706-ad6c-1d3256ad5bf9","state":"awaiting_service","deliveryFailed":false} conversation row: {"state":"awaiting_service","service_id":null,"request_id":null}
+
+ [32m✓[39m tests/integration/stage7b-config-drift.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 862[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 7B — UAT-30: service deactivated mid-WhatsApp-conversation on a tagged fixture service[2m > [22mdeactivating the service between REVIEW and CREATE blocks CREATE safely and never produces a stale ticket [33m 483[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 7B — UAT-30: service deactivated mid-WhatsApp-conversation on a tagged fixture service[2m > [22mdeactivating the service mid-flow (before Review, right after sub-category selection) is reconciled the same safe way on the next answer [33m 378[2mms[22m[39m
+[90mstderr[2m | tests/integration/stage4-config-drift.test.ts[2m > [22m[2mStage 4 — configuration drift before CREATE[2m > [22m[2mTEST: a new mandatory field added after REVIEW blocks CREATE and sends the conversation back to collect it
+[22m[39m{"ts":"2026-10-16T06:44:10.075Z","level":"error","event":"notifications.in_app_insert_failed","message":"Bulk in-app notification insert failed","route":"lib/notifications.ts#notify","errorCode":"notify_in_app_insert_failed","context":{"recipientCount":1,"types":["request_created"]},"error":{"message":"{\"code\":\"23503\",\"details\":\"Key (request_id)=(c2465dbe-7050-419f-b474-0348adb9c4df) is not present in table \\\"requests\\\".\",\"hint\":null,\"message\":\"insert or update on table \\\"notifications\\\" violates foreign key constraint \\\"notifications_request_id_fkey\\\"\"}"}}
+
+[90mstdout[2m | tests/integration/stage4-config-drift.test.ts[2m > [22m[2mStage 4 — configuration drift before CREATE[2m > [22m[2mTEST: a new mandatory field added after REVIEW blocks CREATE and sends the conversation back to collect it
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133049613-stage4-drift-req-a@example.test  Subject: Request created: CKSD-013243 — Conv Fixture Service stage4-drift-1792133049692-a: Printer Issue stage4-drift-1792133049692-a: Printer Down
+
+[90mstderr[2m | tests/integration/stage4-config-drift.test.ts[2m > [22m[2mStage 4 — configuration drift before CREATE[2m > [22m[2mTEST: a previously-selected option removed from the template invalidates that answer and re-asks the field
+[22m[39m{"ts":"2026-10-16T06:44:10.494Z","level":"error","event":"notifications.in_app_insert_failed","message":"Bulk in-app notification insert failed","route":"lib/notifications.ts#notify","errorCode":"notify_in_app_insert_failed","context":{"recipientCount":1,"types":["request_created"]},"error":{"message":"{\"code\":\"23503\",\"details\":\"Key (request_id)=(9b7d6fdf-f3ca-4df6-ab8d-563b2c8eda59) is not present in table \\\"requests\\\".\",\"hint\":null,\"message\":\"insert or update on table \\\"notifications\\\" violates foreign key constraint \\\"notifications_request_id_fkey\\\"\"}"}}
+
+[90mstdout[2m | tests/integration/stage4-config-drift.test.ts[2m > [22m[2mStage 4 — configuration drift before CREATE[2m > [22m[2mTEST: a previously-selected option removed from the template invalidates that answer and re-asks the field
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133049613-stage4-drift-req-b@example.test  Subject: Request created: CKSD-013244 — Conv Fixture Service stage4-drift-1792133049692-b: Printer Issue stage4-drift-1792133049692-b: Printer Down
+
+ [32m✓[39m tests/integration/stage4-config-drift.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 872[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 4 — configuration drift before CREATE[2m > [22mTEST: a new mandatory field added after REVIEW blocks CREATE and sends the conversation back to collect it [33m 454[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 4 — configuration drift before CREATE[2m > [22mTEST: a previously-selected option removed from the template invalidates that answer and re-asks the field [33m 418[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage6-web-whatsapp-parity.test.ts[2m > [22m[2mStage 6, Part 11 — web vs WhatsApp ticket-creation parity[2m > [22m[2mproduces business-identical tickets from equivalent web and WhatsApp submissions
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133050938-stage6-parity-agent@example.test  Subject: Request assigned to you: CKSD-013245 — Conv Fixture Service stage6-parity-1792133051089: Billing counter cannot print customer receipts.
+
+[90mstdout[2m | tests/integration/stage6-web-whatsapp-parity.test.ts[2m > [22m[2mStage 6, Part 11 — web vs WhatsApp ticket-creation parity[2m > [22m[2mproduces business-identical tickets from equivalent web and WhatsApp submissions
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133050938-stage6-parity-web-req@example.test  Subject: Your request has been assigned: CKSD-013245 — Conv Fixture Service stage6-parity-1792133051089: Billing counter cannot print customer receipts.
+
+[90mstdout[2m | tests/integration/stage6-web-whatsapp-parity.test.ts[2m > [22m[2mStage 6, Part 11 — web vs WhatsApp ticket-creation parity[2m > [22m[2mproduces business-identical tickets from equivalent web and WhatsApp submissions
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133050938-stage6-parity-web-req@example.test  Subject: Request created: CKSD-013245 — Conv Fixture Service stage6-parity-1792133051089: Billing counter cannot print customer receipts.
+
+[90mstdout[2m | tests/integration/stage6-web-whatsapp-parity.test.ts[2m > [22m[2mStage 6, Part 11 — web vs WhatsApp ticket-creation parity[2m > [22m[2mproduces business-identical tickets from equivalent web and WhatsApp submissions
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133050938-stage6-parity-agent@example.test  Subject: Request assigned to you: CKSD-013246 — Conv Fixture Service stage6-parity-1792133051089: Billing Counter Cannot Print Customer Receipts
+
+[90mstdout[2m | tests/integration/stage6-web-whatsapp-parity.test.ts[2m > [22m[2mStage 6, Part 11 — web vs WhatsApp ticket-creation parity[2m > [22m[2mproduces business-identical tickets from equivalent web and WhatsApp submissions
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133050938-stage6-parity-wa-req@example.test  Subject: Your request has been assigned: CKSD-013246 — Conv Fixture Service stage6-parity-1792133051089: Billing Counter Cannot Print Customer Receipts
+
+[90mstdout[2m | tests/integration/stage6-web-whatsapp-parity.test.ts[2m > [22m[2mStage 6, Part 11 — web vs WhatsApp ticket-creation parity
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133050938-stage6-parity-wa-req@example.test  Subject: Request created: CKSD-013246 — Conv Fixture Service stage6-parity-1792133051089: Billing Counter Cannot Print Customer Receipts
+
+ [32m✓[39m tests/integration/stage6-web-whatsapp-parity.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 831[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 6, Part 11 — web vs WhatsApp ticket-creation parity[2m > [22mproduces business-identical tickets from equivalent web and WhatsApp submissions [33m 449[2mms[22m[39m
+ [32m✓[39m tests/integration/stage7b-tenant-isolation.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 892[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage5-tenant-isolation.test.ts[2m > [22m[2mStage 5 — tenant isolation from Meta phone_number_id through ticket creation
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133053633-stage5-tenant-req-b@example.test  Subject: Request created: CKSD-013247 — Conv Fixture Service stage5-tenant-1792133053757-b: Printer Issue stage5-tenant-1792133053757-b: Printer Down
+
+ [32m✓[39m tests/integration/stage5-tenant-isolation.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 860[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage4-tenant-isolation.test.ts[2m > [22m[2mStage 4 — tenant isolation
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133054965-stage4-tenant-req-b@example.test  Subject: Request created: CKSD-013248 — Conv Fixture Service stage4-tenant-1792133055045-b: Printer Issue stage4-tenant-1792133055045-b: Printer Down
+
+ [32m✓[39m tests/integration/stage4-tenant-isolation.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 822[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage4-attachments.test.ts[2m > [22m[2mStage 4 — required-file attachment persistence[2m > [22m[2mwith a MediaStager that fails, the field is NOT satisfied and the requester is re-asked with a clear error
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133056203-stage4-attach-requester@example.test  Subject: Request created: CKSD-013249 — Conv Fixture Service stage4-attach-1792133056282: Printer Issue stage4-attach-1792133056282: Printer Down
+
+ [32m✓[39m tests/integration/stage4-attachments.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 735[2mms[22m[39m
+ [32m✓[39m tests/integration/stage4-expiry.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 743[2mms[22m[39m
+ [32m✓[39m tests/integration/stage5-webhook-security.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 717[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage4-idempotency.test.ts[2m > [22m[2mStage 4 — message idempotency
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133059673-stage4-idem-requester@example.test  Subject: Request created: CKSD-013250 — Conv Fixture Service stage4-idem-1792133059753: Printer Issue stage4-idem-1792133059753: Printer Down
+
+ [32m✓[39m tests/integration/stage4-idempotency.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 598[2mms[22m[39m
+ [32m✓[39m tests/integration/desk-holiday-001-holiday-calendar.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 696[2mms[22m[39m
+ [32m✓[39m tests/integration/desk-alertrule-001-alert-rules.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 661[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage7a-attachments-fixture.test.ts[2m > [22m[2mSTAGE 7 UAT (Agent 7a) — Step 13 attachments + UAT Fixture — Field Types (UAT-12)[2m > [22m[2mcreates the shared UAT Fixture — Field Types service and walks a full conversation collecting all 4 field types, incl. an invalid email attempt
+[22m[39m[STAGE7a-EVIDENCE] UAT-12/fixture-service-created: {"serviceId":"2610da55-463d-4d1b-b766-5183e8adf08c","teamId":"312c468a-e70b-4d1c-a9bc-d3a5497dbf15","categoryId":"7071aa7d-a3eb-4cc5-90c8-dfadb08bf473","subCategoryId":"24bd0bd5-d1dd-4ee0-8a31-aa37b0e7a5b8","name":"UAT Fixture — Field Types (uat7a-att-1792133062959-47s5ef)"}
+
+[90mstdout[2m | tests/integration/stage7a-attachments-fixture.test.ts[2m > [22m[2mSTAGE 7 UAT (Agent 7a) — Step 13 attachments + UAT Fixture — Field Types (UAT-12)[2m > [22m[2mcreates the shared UAT Fixture — Field Types service and walks a full conversation collecting all 4 field types, incl. an invalid email attempt
+[22m[39m[STAGE7a-EVIDENCE] UAT-12/final-ticket-all-four-field-types: {"request_no":"CKSD-013251","form_data":{"urgency":"high","contact_email":"uat7a.persona@example.test","affected_systems":["hardware","network"],"impact_confirmed":false},"category_id":"7071aa7d-a3eb-4cc5-90c8-dfadb08bf473","sub_category_id":"24bd0bd5-d1dd-4ee0-8a31-aa37b0e7a5b8"}
+
+[90mstdout[2m | tests/integration/stage7a-attachments-fixture.test.ts[2m > [22m[2mSTAGE 7 UAT (Agent 7a) — Step 13 attachments + UAT Fixture — Field Types (UAT-12)[2m > [22m[2mcreates the shared UAT Fixture — Field Types service and walks a full conversation collecting all 4 field types, incl. an invalid email attempt
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133062830-uat7a-att-1792133062959-47s5ef-uat12@example.test  Subject: Request created: CKSD-013251 — UAT Fixture — Field Types (uat7a-att-1792133062959-47s5ef): Testing All Four Dynamic Field Types End To
+
+ [32m✓[39m tests/integration/stage7a-attachments-fixture.test.ts [2m([22m[2m2 tests[22m[2m | [22m[33m1 skipped[39m[2m)[22m[33m 708[2mms[22m[39m
+   [33m[2m✓[22m[39m STAGE 7 UAT (Agent 7a) — Step 13 attachments + UAT Fixture — Field Types (UAT-12)[2m > [22mcreates the shared UAT Fixture — Field Types service and walks a full conversation collecting all 4 field types, incl. an invalid email attempt [33m 633[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage5-idempotency.test.ts[2m > [22m[2mStage 5 — webhook-level idempotency[2m > [22m[2ma duplicate Meta message id for the description never advances state twice
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133063992-stage5-idem-requester@example.test  Subject: Request created: CKSD-013252 — Conv Fixture Service stage5-idem-1792133064133: Printer Issue stage5-idem-1792133064133: Printer Down
+
+ [32m✓[39m tests/integration/stage5-idempotency.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 602[2mms[22m[39m
+   [33m[2m✓[22m[39m Stage 5 — webhook-level idempotency[2m > [22ma duplicate Meta message id for the description never advances state twice [33m 317[2mms[22m[39m
+ [32m✓[39m tests/integration/d04-project-authorization.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 648[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage5-webhook-e2e.test.ts[2m > [22m[2mStage 5 — full IT/Printer example, real webhook pipeline
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133066043-stage5-e2e-requester@example.test  Subject: Request created: CKSD-013253 — Conv Fixture Service stage5-e2e-1792133066175: Billing Counter Printer Is Not Printing
+
+ [32m✓[39m tests/integration/stage5-webhook-e2e.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 563[2mms[22m[39m
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2ma person who signs in correctly many times never uses up their allowance
+[22m[39m{"ts":"2026-10-16T06:44:27.061Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2ma person who signs in correctly many times never uses up their allowance
+[22m[39m{"ts":"2026-10-16T06:44:27.061Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2ma person who signs in correctly many times never uses up their allowance
+[22m[39m{"ts":"2026-10-16T06:44:27.062Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2ma person who signs in correctly many times never uses up their allowance
+[22m[39m{"ts":"2026-10-16T06:44:27.062Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2ma person who signs in correctly many times never uses up their allowance
+[22m[39m{"ts":"2026-10-16T06:44:27.062Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2ma person who signs in correctly many times never uses up their allowance
+[22m[39m{"ts":"2026-10-16T06:44:27.062Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2ma person who signs in correctly many times never uses up their allowance
+[22m[39m{"ts":"2026-10-16T06:44:27.062Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2ma person who signs in correctly many times never uses up their allowance
+[22m[39m{"ts":"2026-10-16T06:44:27.062Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2ma person who signs in correctly many times never uses up their allowance
+[22m[39m{"ts":"2026-10-16T06:44:27.062Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2ma person who signs in correctly many times never uses up their allowance
+[22m[39m{"ts":"2026-10-16T06:44:27.062Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mwith a trusted address, a stranger's wrong guesses do not lock the real person out from another address
+[22m[39m{"ts":"2026-10-16T06:44:27.063Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mwith a trusted address, a stranger's wrong guesses do not lock the real person out from another address
+[22m[39m{"ts":"2026-10-16T06:44:27.063Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mwith a trusted address, a stranger's wrong guesses do not lock the real person out from another address
+[22m[39m{"ts":"2026-10-16T06:44:27.063Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mwith a trusted address, a stranger's wrong guesses do not lock the real person out from another address
+[22m[39m{"ts":"2026-10-16T06:44:27.063Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mwith a trusted address, a stranger's wrong guesses do not lock the real person out from another address
+[22m[39m{"ts":"2026-10-16T06:44:27.063Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mwith a trusted address, a stranger's wrong guesses do not lock the real person out from another address
+[22m[39m{"ts":"2026-10-16T06:44:27.063Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mwith a trusted address, a stranger's wrong guesses do not lock the real person out from another address
+[22m[39m{"ts":"2026-10-16T06:44:27.063Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mwith a trusted address, a stranger's wrong guesses do not lock the real person out from another address
+[22m[39m{"ts":"2026-10-16T06:44:27.064Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mwith a trusted address, a stranger's wrong guesses do not lock the real person out from another address
+[22m[39m{"ts":"2026-10-16T06:44:27.064Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mwith a trusted address, a stranger's wrong guesses do not lock the real person out from another address
+[22m[39m{"ts":"2026-10-16T06:44:27.064Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.064Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.064Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.064Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.064Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.064Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.064Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.064Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.065Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.066Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/auth-throttling.test.ts[2m > [22m[2msign-in throttling counts failures[2m > [22m[2mone address trying many different accounts is slowed down (password spraying)
+[22m[39m{"ts":"2026-10-16T06:44:27.067Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+ [32m✓[39m tests/unit/auth-throttling.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 552[2mms[22m[39m
+   [33m[2m✓[22m[39m forgot password does not tell known from unknown addresses[2m > [22mboth answer in at least the same minimum time, and look the same [33m 530[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage3-1-title-contract.test.ts[2m > [22m[2mStage 3.1 — createRequestCore() titleOverride[2m > [22m[2ma valid titleOverride is stored verbatim, with NO service-name prefix
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133067926-stage3-1-title-requester@example.test  Subject: Request created: CKSD-013254 — A subject that satisfies the mandatory field
+
+[90mstdout[2m | tests/integration/stage3-1-title-contract.test.ts[2m > [22m[2mStage 3.1 — createRequestCore() titleOverride[2m > [22m[2ma titleOverride with surrounding whitespace is trimmed
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133067926-stage3-1-title-requester@example.test  Subject: Request created: CKSD-013255 — Billing Counter Printer Not Printing
+
+[90mstdout[2m | tests/integration/stage3-1-title-contract.test.ts[2m > [22m[2mStage 3.1 — createRequestCore() titleOverride[2m > [22m[2ma whitespace-only titleOverride falls back to the existing form-derived title (does not fail creation, never stores blank)
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133067926-stage3-1-title-requester@example.test  Subject: Request created: CKSD-013256 — Printer Issue
+
+[90mstdout[2m | tests/integration/stage3-1-title-contract.test.ts[2m > [22m[2mStage 3.1 — createRequestCore() titleOverride[2m > [22m[2man over-length titleOverride is bounded, not rejected — creation still succeeds
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133067926-stage3-1-title-requester@example.test  Subject: Request created: CKSD-013257 — A subject that satisfies the mandatory field
+
+[90mstdout[2m | tests/integration/stage3-1-title-contract.test.ts[2m > [22m[2mStage 3.1 — createRequestCore() titleOverride[2m > [22m[2msecurity: titleOverride does not bypass sub-category/org validation — an invalid selection is still rejected
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133067926-stage3-1-title-requester@example.test  Subject: Request created: CKSD-013258 — A subject that satisfies the mandatory field
+
+[90mstdout[2m | tests/integration/stage3-1-title-contract.test.ts[2m > [22m[2mStage 3.1 — createRequestCore() titleOverride[2m > [22m[2msecurity: titleOverride has no effect on priority (still DESK-derived from the service default)
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133067926-stage3-1-title-requester@example.test  Subject: Request created: CKSD-013259 — xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+[90mstderr[2m | tests/integration/stage3-1-title-contract.test.ts[2m > [22m[2mStage 3.1 — createRequestCore() titleOverride
+[22m[39m{"ts":"2026-10-16T06:44:28.404Z","level":"error","event":"notifications.in_app_insert_failed","message":"Bulk in-app notification insert failed","route":"lib/notifications.ts#notify","errorCode":"notify_in_app_insert_failed","context":{"recipientCount":1,"types":["request_created"]},"error":{"message":"{\"code\":\"23503\",\"details\":\"Key (request_id)=(3a4177a9-c191-4eec-8df9-e9773a4c9ed3) is not present in table \\\"requests\\\".\",\"hint\":null,\"message\":\"insert or update on table \\\"notifications\\\" violates foreign key constraint \\\"notifications_request_id_fkey\\\"\"}"}}
+
+[90mstdout[2m | tests/integration/stage3-1-title-contract.test.ts[2m > [22m[2mStage 3.1 — createRequestCore() titleOverride
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133067926-stage3-1-title-requester@example.test  Subject: Request created: CKSD-013260 — urgent: drop everything now
+
+ [32m✓[39m tests/integration/stage3-1-title-contract.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 466[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage1-1-create-request-core-security.test.ts[2m > [22m[2mStage 1.1 Task 2 — createRequestCore() cross-tenant hardening[2m > [22m[2m2F (control) — agent-tier acting user is exempt from the location restriction even when not at the location
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133068803-stage1-1-sec-requester-a@example.test  Subject: Request created: CKSD-013261 — Stage1.1 Location-Restricted Service A stage1-1-sec-1792133068901
+
+[90mstdout[2m | tests/integration/stage1-1-create-request-core-security.test.ts[2m > [22m[2mStage 1.1 Task 2 — createRequestCore() cross-tenant hardening
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133068803-stage1-1-sec-requester-a@example.test  Subject: Request created: CKSD-013262 — Stage1.1 Location-Restricted Service A stage1-1-sec-1792133068901
+
+[90mstderr[2m | tests/integration/stage1-1-create-request-core-security.test.ts[2m > [22m[2mStage 1.1 Task 2 — createRequestCore() cross-tenant hardening
+[22m[39m{"ts":"2026-10-16T06:44:29.281Z","level":"error","event":"notifications.in_app_insert_failed","message":"Bulk in-app notification insert failed","route":"lib/notifications.ts#notify","errorCode":"notify_in_app_insert_failed","context":{"recipientCount":1,"types":["request_created"]},"error":{"message":"{\"code\":\"23503\",\"details\":\"Key (request_id)=(f706a73d-3816-4d70-a8df-49d8b3227b4e) is not present in table \\\"requests\\\".\",\"hint\":null,\"message\":\"insert or update on table \\\"notifications\\\" violates foreign key constraint \\\"notifications_request_id_fkey\\\"\"}"}}
+
+[90mstdout[2m | tests/integration/stage1-1-create-request-core-security.test.ts[2m > [22m[2mStage 1.1 Task 2 — createRequestCore() cross-tenant hardening
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133068803-stage1-1-sec-requester-a@example.test  Subject: Request created: CKSD-013263 — Stage1.1 Service A stage1-1-sec-1792133068901
+
+ [32m✓[39m tests/integration/stage1-1-create-request-core-security.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 500[2mms[22m[39m
+ [32m✓[39m tests/integration/desk-storage-001-storage-proxy.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 414[2mms[22m[39m
+[90mstdout[2m | tests/integration/stage4-conversation-e2e.test.ts[2m > [22m[2mStage 4 — end-to-end persisted conversation (NEW through CREATE)
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133070485-stage4-e2e-requester@example.test  Subject: Request created: CKSD-013265 — Conv Fixture Service stage4-e2e-1792133070564: The Printer at the Billing Counter Has Stopped
+
+ [32m✓[39m tests/integration/stage4-conversation-e2e.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 485[2mms[22m[39m
+ [32m✓[39m tests/integration/analytics-store-filter.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 455[2mms[22m[39m
+   [33m[2m✓[22m[39m Analytics dashboard store filters (local database)[2m > [22mfollows the region choice exactly, and the region rows add up to the whole [33m 454[2mms[22m[39m
+ [32m✓[39m tests/integration/requester-cancel-own-open-ticket.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 419[2mms[22m[39m
+ [32m✓[39m tests/integration/stage5-mobile-change.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 376[2mms[22m[39m
+[90mstderr[2m | tests/integration/stage3-questionnaire-end-to-end.test.ts[2m > [22m[2mStage 3.1, Step 17 — corrected description/title contract, end-to-end
+[22m[39m{"ts":"2026-10-16T06:44:34.181Z","level":"error","event":"notifications.in_app_insert_failed","message":"Bulk in-app notification insert failed","route":"lib/notifications.ts#notify","errorCode":"notify_in_app_insert_failed","context":{"recipientCount":1,"types":["request_created"]},"error":{"message":"{\"code\":\"23503\",\"details\":\"Key (request_id)=(e3f1cf35-a939-4820-aaec-74faa23ebbf2) is not present in table \\\"requests\\\".\",\"hint\":null,\"message\":\"insert or update on table \\\"notifications\\\" violates foreign key constraint \\\"notifications_request_id_fkey\\\"\"}"}}
+
+[90mstdout[2m | tests/integration/stage3-questionnaire-end-to-end.test.ts[2m > [22m[2mStage 3.1, Step 17 — corrected description/title contract, end-to-end
+[22m[39m[EMAIL DISABLED] To: uat-desk-003-1792133073840-stage3-1-e2e-requester@example.test  Subject: Request created: CKSD-013269 — Stage3.1 E2E Service stage3-1-e2e-1792133073917: The AC Unit in Store 12 Has Stopped
+
+ [32m✓[39m tests/integration/stage3-questionnaire-end-to-end.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 339[2mms[22m[39m
+ [32m✓[39m tests/integration/desk-intake-001-dashboard-stats.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 293[2mms[22m[39m
+ [32m✓[39m tests/unit/ticket-pdf.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 259[2mms[22m[39m
+ [32m✓[39m tests/integration/store-master-upload.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 272[2mms[22m[39m
+ [32m✓[39m tests/unit/approval-code-burst.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 228[2mms[22m[39m
+ [32m✓[39m tests/integration/stage3-questionnaire-catalog-security.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 238[2mms[22m[39m
+ [32m✓[39m tests/unit/xlsx-zip-bomb.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 205[2mms[22m[39m
+ [32m✓[39m tests/unit/technician-dashboard-route.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 174[2mms[22m[39m
+[90mstderr[2m | tests/unit/cron-health-envelope.test.ts[2m > [22m[2mapp/api/business-rules/run — cron health envelope[2m > [22m[2ma mix of one failing and one succeeding rule: status stays 200, failure is reported, no operator alert (not a total failure)
+[22m[39m{"ts":"2026-10-16T06:44:39.191Z","level":"error","event":"cron.business_rules.rule_failed","message":"Rule rule-fail (sla_pct_elapsed) failed","route":"app/api/business-rules/run","orgId":"org-fail","errorCode":"business_rule_sla_pct_elapsed_failed","context":{"ruleId":"rule-fail","scheduleCheck":"sla_pct_elapsed"},"error":{"message":"simulated DB failure","stack":"Error: simulated DB failure\n    at D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\tests\\unit\\cron-health-envelope.test.ts:85:58\n    at D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\tests\\unit\\cron-health-envelope.test.ts:31:48\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)"}}
+
+[90mstderr[2m | tests/unit/cron-health-envelope.test.ts[2m > [22m[2mapp/api/business-rules/run — cron health envelope[2m > [22m[2mevery processed rule fails: status 502, ok=false, operator alerted once
+[22m[39m{"ts":"2026-10-16T06:44:39.218Z","level":"error","event":"cron.business_rules.rule_failed","message":"Rule rule-1 (sla_pct_elapsed) failed","route":"app/api/business-rules/run","orgId":"org-fail","errorCode":"business_rule_sla_pct_elapsed_failed","context":{"ruleId":"rule-1","scheduleCheck":"sla_pct_elapsed"},"error":{"message":"simulated DB failure","stack":"Error: simulated DB failure\n    at D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\tests\\unit\\cron-health-envelope.test.ts:114:58\n    at D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\tests\\unit\\cron-health-envelope.test.ts:31:48\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)"}}
+
+[90mstderr[2m | tests/unit/cron-health-envelope.test.ts[2m > [22m[2mapp/api/business-rules/run — cron health envelope[2m > [22m[2mevery processed rule fails: status 502, ok=false, operator alerted once
+[22m[39m{"ts":"2026-10-16T06:44:39.218Z","level":"error","event":"cron.business_rules.rule_failed","message":"Rule rule-2 (unassigned_minutes) failed","route":"app/api/business-rules/run","orgId":"org-fail","errorCode":"business_rule_unassigned_minutes_failed","context":{"ruleId":"rule-2","scheduleCheck":"unassigned_minutes"},"error":{"message":"simulated DB failure","stack":"Error: simulated DB failure\n    at D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\tests\\unit\\cron-health-envelope.test.ts:114:58\n    at D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\tests\\unit\\cron-health-envelope.test.ts:31:48\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)"}}
+
+ [32m✓[39m tests/unit/cron-health-envelope.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 161[2mms[22m[39m
+ [32m✓[39m tests/unit/xlsx-preview.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 145[2mms[22m[39m
+ [32m✓[39m tests/unit/oem-single-email.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 132[2mms[22m[39m
+ [32m✓[39m tests/unit/intake-module-guard.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 139[2mms[22m[39m
+ [32m✓[39m tests/unit/admin-update-whitelist.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 90[2mms[22m[39m
+ [32m✓[39m tests/unit/target-guard.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 65[2mms[22m[39m
+ [32m✓[39m tests/unit/public-body-limit.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 66[2mms[22m[39m
+ [32m✓[39m tests/unit/sla-business-hours.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 58[2mms[22m[39m
+ [32m✓[39m tests/unit/store-master-import.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 51[2mms[22m[39m
+ [32m✓[39m tests/unit/scheduled-reports-security.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 43[2mms[22m[39m
+ [32m✓[39m tests/unit/report-export-dates.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 38[2mms[22m[39m
+[90mstderr[2m | tests/unit/rate-limit-client-ip.test.ts[2m > [22m[2mlogin limit follows the account, not a header[2m > [22m[2mrotating X-Forwarded-For does not buy more password guesses for one account
+[22m[39m{"ts":"2026-10-16T06:44:44.730Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/rate-limit-client-ip.test.ts[2m > [22m[2mlogin limit follows the account, not a header[2m > [22m[2mrotating X-Forwarded-For does not buy more password guesses for one account
+[22m[39m{"ts":"2026-10-16T06:44:44.731Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/rate-limit-client-ip.test.ts[2m > [22m[2mlogin limit follows the account, not a header[2m > [22m[2mrotating X-Forwarded-For does not buy more password guesses for one account
+[22m[39m{"ts":"2026-10-16T06:44:44.732Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/rate-limit-client-ip.test.ts[2m > [22m[2mlogin limit follows the account, not a header[2m > [22m[2mrotating X-Forwarded-For does not buy more password guesses for one account
+[22m[39m{"ts":"2026-10-16T06:44:44.732Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/rate-limit-client-ip.test.ts[2m > [22m[2mlogin limit follows the account, not a header[2m > [22m[2mrotating X-Forwarded-For does not buy more password guesses for one account
+[22m[39m{"ts":"2026-10-16T06:44:44.732Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/rate-limit-client-ip.test.ts[2m > [22m[2mlogin limit follows the account, not a header[2m > [22m[2mrotating X-Forwarded-For does not buy more password guesses for one account
+[22m[39m{"ts":"2026-10-16T06:44:44.733Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/rate-limit-client-ip.test.ts[2m > [22m[2mlogin limit follows the account, not a header[2m > [22m[2mrotating X-Forwarded-For does not buy more password guesses for one account
+[22m[39m{"ts":"2026-10-16T06:44:44.733Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/rate-limit-client-ip.test.ts[2m > [22m[2mlogin limit follows the account, not a header[2m > [22m[2mrotating X-Forwarded-For does not buy more password guesses for one account
+[22m[39m{"ts":"2026-10-16T06:44:44.733Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/rate-limit-client-ip.test.ts[2m > [22m[2mlogin limit follows the account, not a header[2m > [22m[2mrotating X-Forwarded-For does not buy more password guesses for one account
+[22m[39m{"ts":"2026-10-16T06:44:44.733Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/rate-limit-client-ip.test.ts[2m > [22m[2mlogin limit follows the account, not a header[2m > [22m[2mrotating X-Forwarded-For does not buy more password guesses for one account
+[22m[39m{"ts":"2026-10-16T06:44:44.733Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+[90mstderr[2m | tests/unit/rate-limit-client-ip.test.ts[2m > [22m[2mlogin limit follows the account, not a header[2m > [22m[2mone account being tried does not lock out a different account
+[22m[39m{"ts":"2026-10-16T06:44:44.734Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"{\"message\":\"Invalid login credentials\"}"}}
+
+ [32m✓[39m tests/unit/rate-limit-client-ip.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 44[2mms[22m[39m
+ [32m✓[39m tests/unit/fetch-timeout.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 46[2mms[22m[39m
+ [32m✓[39m tests/unit/one-time-password.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 31[2mms[22m[39m
+ [32m✓[39m tests/unit/event-client-http.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 38[2mms[22m[39m
+ [32m✓[39m tests/unit/attachment-serving.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 32[2mms[22m[39m
+ [32m✓[39m tests/unit/inbound-claim.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 35[2mms[22m[39m
+ [32m✓[39m tests/unit/excel-parity.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m tests/unit/inbound-sender.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/unit/executive-stores.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/unit/approval-reminders.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/unit/executive-engine.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/unit/report-builder-access.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/unit/header-trust.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/unit/public-storage-route.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/unit/syslog-writer.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/unit/analytics-reports.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/unit/field-library.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/unit/analytics-scope.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/unit/resilient-fetch-retry.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/unit/whatsapp-webhook-hardening.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/unit/secrets.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/unit/proxy-public-routes.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/unit/approval-link.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/unit/whatsapp-graph-client.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/unit/oem-template.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/unit/sanitize-error.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/unit/csp-report.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+[90mstdout[2m | tests/unit/observability-alert.test.ts[2m > [22m[2malertOperator()[2m > [22m[2mdegrades safely when OPERATOR_ALERT_WEBHOOK_URL is not configured (this environment)
+[22m[39m{"ts":"2026-10-16T06:44:54.525Z","level":"debug","event":"observability.alert.skipped","message":"OPERATOR_ALERT_WEBHOOK_URL not configured — operator alert dropped","errorCode":"test.unconfigured"}
+
+[90mstderr[2m | tests/unit/observability-alert.test.ts[2m > [22m[2malertOperator()[2m > [22m[2ma non-OK webhook response is reported as a failed delivery without throwing
+[22m[39m{"ts":"2026-10-16T06:44:54.528Z","level":"warn","event":"observability.alert.delivery_failed","message":"Operator alert webhook responded 500","errorCode":"test.non_ok"}
+
+[90mstderr[2m | tests/unit/observability-alert.test.ts[2m > [22m[2malertOperator()[2m > [22m[2ma thrown network error is caught and reported, never propagated to the caller
+[22m[39m{"ts":"2026-10-16T06:44:54.528Z","level":"warn","event":"observability.alert.delivery_failed","message":"Operator alert webhook threw","errorCode":"test.throws","error":{"message":"ECONNREFUSED","stack":"Error: ECONNREFUSED\n    at D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\tests\\unit\\observability-alert.test.ts:103:49\n    at file:///D:/ANKUR%20AI%20PROJECTS/CitykartDesk-ZOHO%20Alternate/node_modules/@vitest/runner/dist/chunk-hooks.js:155:11\n    at file:///D:/ANKUR%20AI%20PROJECTS/CitykartDesk-ZOHO%20Alternate/node_modules/@vitest/runner/dist/chunk-hooks.js:752:26\n    at file:///D:/ANKUR%20AI%20PROJECTS/CitykartDesk-ZOHO%20Alternate/node_modules/@vitest/runner/dist/chunk-hooks.js:1897:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///D:/ANKUR%20AI%20PROJECTS/CitykartDesk-ZOHO%20Alternate/node_modules/@vitest/runner/dist/chunk-hooks.js:1863:10)\n    at runTest (file:///D:/ANKUR%20AI%20PROJECTS/CitykartDesk-ZOHO%20Alternate/node_modules/@vitest/runner/dist/chunk-hooks.js:1574:12)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at runSuite (file:///D:/ANKUR%20AI%20PROJECTS/CitykartDesk-ZOHO%20Alternate/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)\n    at runSuite (file:///D:/ANKUR%20AI%20PROJECTS/CitykartDesk-ZOHO%20Alternate/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)"}}
+
+ [32m✓[39m tests/unit/observability-alert.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/unit/events-client-click.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/unit/short-cache.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/unit/log-shipper-parsers.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/unit/executive-smart.test.ts [2m([22m[2m31 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/unit/notification-emails.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/unit/business-rules-notify-failures.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/unit/whatsapp-media-validate.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/unit/syslog-console-tap.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/unit/validate-requester-form-completion.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/unit/vapt-hardening-units.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/unit/weekly-monthly-reports.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/unit/questionnaire-title.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/unit/whatsapp-render.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/unit/syslog-shape.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/unit/chart-x-axis-labels.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/unit/inbound-sync-fast.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/unit/analytics-store-filter.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/unit/paging.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/unit/syslog-bundle.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/oauth-state.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/unit/duplicate-and-export.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/csat-token-and-emails.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/unit/ticket-copy.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/stage7-1-uat-findings.test.ts [2m([22m[2m32 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/intake-attachment-key.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/conversation-state-machine.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/in-batches.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/questionnaire-review.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/whatsapp-inbound-adapter.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/inbound-auth.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/email-config.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/popup-rules.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/conversation-file-progress.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/drill-bridge.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/questionnaire-question-plan.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/event-log.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/analytics-tat.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/title-field.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/unit/questionnaire-answers.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/attachment-rules.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/ticket-origin.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/questionnaire-adapter.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/approval-people.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/mail-host.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/bulk-reset.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/email-escaping.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/resolution-note.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/inbound-match.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/mobile-normalization.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/workload-groups.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/push-endpoint.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/project-progress.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/quote-strip.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/report-default-columns.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/no-service-change.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 1[2mms[22m[39m
+ [32m✓[39m tests/unit/status-change-comment-email.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/form-field-option-membership.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/report-builder-ist-dates.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/oem-store-assignment.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/queue-url.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/auth-settings-check.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/report-field-label-collision.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/rule-conditions-multi-value.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/approval-request-email.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/html-to-plain-text.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/whatsapp-intent.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/sla-breach.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/thread-tag.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/status-labels.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/audit-log-summary.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/logs-tabs.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/cron-routes-public.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/no-priority-change.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 1[2mms[22m[39m
+ [32m✓[39m tests/unit/inbound-oem-domain.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/whatsapp-signature.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/email-change.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/questionnaire-catalog-scoring.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 1[2mms[22m[39m
+ [32m✓[39m tests/unit/form-options-flatten-all.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/safe-next.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/task-priority-labels.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 1[2mms[22m[39m
+ [32m✓[39m tests/unit/ticket-source.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 1[2mms[22m[39m
+ [32m✓[39m tests/unit/queue-status-filter.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 1[2mms[22m[39m
+ [32m✓[39m tests/unit/resolution-remark.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 1[2mms[22m[39m
+ [32m✓[39m tests/unit/store-open-date.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/unit/conversation-commands.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 1[2mms[22m[39m
+ [32m✓[39m tests/unit/oem-message.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 1[2mms[22m[39m
+ [32m✓[39m tests/unit/dashboard-moment-compare.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 1[2mms[22m[39m
+ [32m✓[39m tests/unit/first-response-message.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 1[2mms[22m[39m
+ [2m[90m↓[39m[22m tests/integration/stage7-1-semantic-role-real-service.test.ts [2m([22m[2m1 test[22m[2m | [22m[33m1 skipped[39m[2m)[22m
+ [2m[90m↓[39m[22m tests/integration/stage7a-canonical-identity-search.test.ts [2m([22m[2m9 tests[22m[2m | [22m[33m9 skipped[39m[2m)[22m
+ [2m[90m↓[39m[22m tests/integration/stage7a-mandatory-fields-flow.test.ts [2m([22m[2m3 tests[22m[2m | [22m[33m3 skipped[39m[2m)[22m
+ [2m[90m↓[39m[22m tests/integration/stage7b-parity-sla-assignment.test.ts [2m([22m[2m4 tests[22m[2m | [22m[33m4 skipped[39m[2m)[22m
+ [32m✓[39m tests/unit/executive-dashboard.test.tsx [2m([22m[2m26 tests[22m[2m)[22m[33m 2352[2mms[22m[39m
+ [32m✓[39m tests/unit/comment-form-cc.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 939[2mms[22m[39m
+ [32m✓[39m tests/unit/fixed-reports.test.tsx [2m([22m[2m39 tests[22m[2m)[22m[33m 373[2mms[22m[39m
+ [32m✓[39m tests/unit/attachment-preview.test.tsx [2m([22m[2m23 tests[22m[2m)[22m[32m 162[2mms[22m[39m
+ [32m✓[39m tests/unit/use-request-drill.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 158[2mms[22m[39m
+ [32m✓[39m tests/unit/report-list-search.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 135[2mms[22m[39m
+ [32m✓[39m tests/unit/new-version-banner.test.tsx [2m([22m[2m7 tests[22m[2m)[22m[32m 110[2mms[22m[39m
+ [32m✓[39m tests/unit/team-dashboard-access.test.tsx [2m([22m[2m6 tests[22m[2m)[22m[32m 99[2mms[22m[39m
+ [32m✓[39m tests/unit/month-filter-multi.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 103[2mms[22m[39m
+ [32m✓[39m tests/unit/org-stores-oems-search.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 101[2mms[22m[39m
+ [32m✓[39m tests/unit/people-filter.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 101[2mms[22m[39m
+ [32m✓[39m tests/unit/mobile-nav-overflow.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 94[2mms[22m[39m
+ [32m✓[39m tests/unit/dashboard-drill-fresh.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 98[2mms[22m[39m
+ [32m✓[39m tests/unit/profile-team-names.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 109[2mms[22m[39m
+ [32m✓[39m tests/unit/group-filter.test.tsx [2m([22m[2m12 tests[22m[2m)[22m[32m 50[2mms[22m[39m
+ [32m✓[39m tests/unit/business-rules-search.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 44[2mms[22m[39m
+ [32m✓[39m tests/unit/log-retention.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 44[2mms[22m[39m
+ [32m✓[39m tests/unit/permission-matrix-not-enforced.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 46[2mms[22m[39m
+ [32m✓[39m tests/unit/weekly-report-fit-width.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 40[2mms[22m[39m
+ [32m✓[39m tests/unit/sidebar-copy.test.tsx [2m([22m[2m7 tests[22m[2m)[22m[32m 32[2mms[22m[39m
+ [32m✓[39m tests/unit/bell-auto-refresh.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32m✓[39m tests/unit/highest-open-banner.test.tsx [2m([22m[2m7 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32m✓[39m tests/unit/ticket-summary.test.tsx [2m([22m[2m7 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m tests/unit/countdown-hydration.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m tests/unit/notification-popups.test.tsx [2m([22m[2m10 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m tests/unit/india-time-display.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m238 passed[39m[22m[2m | [22m[33m4 skipped[39m[90m (242)[39m
+[2m      Tests [22m [1m[32m1789 passed[39m[22m[2m | [22m[33m18 skipped[39m[90m (1807)[39m
+[2m   Start at [22m 12:11:16
+[2m   Duration [22m 280.17s[2m (transform 2.33s, setup 2.23s, collect 18.30s, tests 174.29s, environment 13.59s, prepare 9.76s)[22m
+

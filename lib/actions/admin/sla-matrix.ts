@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logAdminAudit } from '@/lib/actions/admin/audit'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; rpc: (fn: string, args: Record<string, unknown>) => any }
@@ -51,7 +52,7 @@ export async function upsertFieldSlaOverride(input: FieldSlaOverrideInput): Prom
     p_updated_by: profile.id,
   })
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/sla-matrix.ts' }) }
 
   await logAdminAudit({
     orgId: profile.org_id,

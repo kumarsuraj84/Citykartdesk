@@ -9,6 +9,7 @@ import { storeFilterCount, type StoreFilter } from '@/lib/analytics/store-filter
 import { storeCodesMatching } from '@/lib/queries/store-dims'
 import type { Database } from '@/types/database'
 import type { ProfileWithTeams } from '@/types'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 type RequestStatus = Database['public']['Enums']['request_status']
 type RequestPriority = Database['public']['Enums']['request_priority']
@@ -179,7 +180,7 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
     q = q.order('created_at', { ascending: false }).limit(50)
 
     const { data, error } = await q
-    if (error) return { data: [], error: error.message }
+    if (error) return { data: [], error: sanitizeError(error, { route: 'lib/actions/analytics.ts' }) }
 
     type RequestQueryRow = {
       id: string; title: string; status: string; priority: string
@@ -307,7 +308,7 @@ async function getFilteredTasks(filter: DrawerFilter, profile: ProfileWithTeams)
     q = q.order('created_at', { ascending: false }).limit(50)
 
     const { data, error } = await q
-    if (error) return { data: [], error: error.message }
+    if (error) return { data: [], error: sanitizeError(error, { route: 'lib/actions/analytics.ts' }) }
 
     type TaskQueryRow = {
       id: string; title: string; status: string; priority: string; task_type: string

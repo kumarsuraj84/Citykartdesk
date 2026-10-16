@@ -9,6 +9,7 @@ import { isHtmlTemplate } from '@/lib/email/oem-template'
 import { sanitizeTemplateHtml } from '@/lib/email/sanitize-template'
 import type { Database } from '@/types/database'
 import { inBatchesDo } from '@/lib/queries/in-batches'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 type ActionResult<T = undefined> = { error?: string; data?: T }
 type OemUpdate = Database['public']['Tables']['oems']['Update']
@@ -64,7 +65,7 @@ export async function createOem(fields: OemInput): Promise<ActionResult<{ id: st
     .select('id')
     .single()
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/oems.ts' }) }
   // D-12: '/admin/oems' isn't a real route — the OEM admin UI lives on the
   // OEM tab of '/admin/org' (OrgStructureClient.tsx). deleteOem() below
   // already revalidated the right path; create/update didn't, so an edit
@@ -86,7 +87,7 @@ export async function updateOem(id: string, fields: Partial<OemInput>): Promise<
   if (fields.is_active !== undefined) update.is_active = fields.is_active
 
   const { error } = await admin.from('oems').update(update).eq('id', id).eq('org_id', guard.profile!.org_id!)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/oems.ts' }) }
   revalidatePath('/admin/org')
   return {}
 }
@@ -99,7 +100,7 @@ export async function deleteOem(id: string): Promise<ActionResult> {
   // Stores pointing at this OEM fall back to unmapped (no auto-email) rather
   // than blocking deletion — matches stores.oem_id's ON DELETE SET NULL.
   const { error } = await admin.from('oems').delete().eq('id', id).eq('org_id', guard.profile!.org_id!)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/oems.ts' }) }
   revalidatePath('/admin/org')
   return {}
 }

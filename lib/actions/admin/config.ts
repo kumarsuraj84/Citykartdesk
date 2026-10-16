@@ -14,6 +14,7 @@ import { mailHostProblem } from '@/lib/validation/mail-host'
 import { requireCapability } from '@/lib/permissions/policies'
 import { APP_SETTING_RULES } from '@/lib/permissions/matrix'
 import { rateLimit } from '@/lib/rate-limit'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -40,7 +41,7 @@ export async function updateAppSetting(
     .from('app_settings')
     .upsert({ key, value }, { onConflict: 'key' })
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/config.ts' }) }
   // Shared by both the Request Configuration "General" tab (auto_close_days)
   // and Platform Settings "Integrations" tab (email_from_name/address) —
   // revalidate both rather than hardcoding just the first caller, or the
@@ -74,7 +75,7 @@ export async function updateEmailFromSettings(name: string, address: string): Pr
       { onConflict: 'key' }
     )
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/config.ts' }) }
   revalidatePath('/admin/settings')
   return {}
 }
@@ -160,7 +161,7 @@ export async function saveMailboxSettings(input: {
   const { error } = await admin
     .from('email_smtp_settings')
     .upsert({ id: true, host, port, username: username || null, updated_by: profile.id, updated_at: new Date().toISOString() }, { onConflict: 'id' })
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/config.ts' }) }
 
   invalidateMailboxCache()
   await logAdminAudit({
@@ -179,7 +180,7 @@ export async function clearMailboxSettings(): Promise<{ error?: string }> {
   const admin = createAdminClient() as unknown as AnyClient & { rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ error?: { message: string } | null }> }
   await admin.rpc('email_smtp_clear_password')
   const { error } = await admin.from('email_smtp_settings').delete().eq('id', true)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/config.ts' }) }
 
   invalidateMailboxCache()
   await logAdminAudit({
@@ -235,7 +236,7 @@ export async function updateTaskTemplate(
   if (data.description !== undefined) update.description = data.description.trim() || null
 
   const { error } = await admin.from('task_templates').update(update).eq('id', id).eq('org_id', profile.org_id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/config.ts' }) }
   revalidatePath('/admin/task-config')
   return {}
 }
@@ -247,7 +248,7 @@ export async function deleteTaskTemplate(id: string): Promise<{ error?: string }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('task_templates').delete().eq('id', id).eq('org_id', profile.org_id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/config.ts' }) }
   revalidatePath('/admin/task-config')
   return {}
 }
@@ -317,7 +318,7 @@ export async function deleteTemplateItem(id: string): Promise<{ error?: string }
   if (!existingItem) return { error: 'Template item not found.' }
 
   const { error } = await admin.from('task_template_items').delete().eq('id', id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/config.ts' }) }
   revalidatePath('/admin/task-config')
   return {}
 }
@@ -338,7 +339,7 @@ export async function updateBusinessHours(
     .update({ start_time: data.start_time, end_time: data.end_time, is_active: data.is_active })
     .eq('day_of_week', dayOfWeek)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/config.ts' }) }
   revalidatePath('/admin/request-config')
   return {}
 }
@@ -377,7 +378,7 @@ export async function deleteHoliday(id: string): Promise<{ error?: string }> {
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('holidays').delete().eq('id', id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/config.ts' }) }
   revalidatePath('/admin/request-config')
   return {}
 }
@@ -451,7 +452,7 @@ export async function updateAlertRule(
   const update = pickFields(data, ['name', 'alert_type', 'entity_type', 'threshold_minutes', 'notify_roles', 'notify_assignee', 'notify_requester', 'channels', 'is_active'] as const)
   if (Object.keys(update).length === 0) return {}
   const { error } = await admin.from('alert_rules').update(update).eq('id', id).eq('org_id', profile.org_id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/config.ts' }) }
   revalidatePath('/admin/request-config')
   return {}
 }
@@ -463,7 +464,7 @@ export async function deleteAlertRule(id: string): Promise<{ error?: string }> {
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('alert_rules').delete().eq('id', id).eq('org_id', profile.org_id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/config.ts' }) }
   revalidatePath('/admin/request-config')
   return {}
 }
@@ -475,7 +476,7 @@ export async function toggleAlertRule(id: string, is_active: boolean): Promise<{
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('alert_rules').update({ is_active }).eq('id', id).eq('org_id', profile.org_id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/config.ts' }) }
   revalidatePath('/admin/request-config')
   return {}
 }
@@ -496,7 +497,7 @@ export async function updateRequestPriority(
   const update = pickFields(data, ['name', 'color', 'sla_multiplier', 'is_active', 'display_order'] as const)
   if (Object.keys(update).length === 0) return {}
   const { error } = await admin.from('request_priorities').update(update).eq('id', id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/config.ts' }) }
   revalidatePath('/admin/master-data')
   return {}
 }
@@ -513,7 +514,7 @@ export async function updateLogRetention(kind: LogKind, days: number): Promise<{
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('app_settings').upsert({ key: LOG_RETENTION[kind].key, value: String(days) }, { onConflict: 'key' })
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/config.ts' }) }
   revalidatePath('/admin/settings')
   return {}
 }
@@ -536,7 +537,7 @@ export async function updateRetentionPolicy(
     })
     .eq('id', id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/config.ts' }) }
   revalidatePath('/admin/settings')
   return {}
 }

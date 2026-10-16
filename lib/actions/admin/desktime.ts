@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { runDeskTimeSync, remapDeskTimeProjects, type DeskTimeSyncResult } from '@/lib/desktime/sync'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 type ActionResult<T = undefined> = { error?: string; data?: T }
 
@@ -39,7 +40,7 @@ export async function saveDeskTimeMapping(id: string, projectId: string | null):
     .update({ project_id: projectId })
     .eq('id', id)
     .eq('org_id', guard.profile!.org_id!)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/desktime.ts' }) }
 
   revalidatePath('/admin/desktime')
   return {}
@@ -65,7 +66,7 @@ export async function addAiApplication(name: string): Promise<ActionResult> {
 
   const admin = createAdminClient()
   const { error } = await admin.from('ai_applications').insert({ org_id: guard.profile!.org_id!, name: name.trim() })
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/desktime.ts' }) }
 
   revalidatePath('/admin/desktime')
   return {}
@@ -77,7 +78,7 @@ export async function toggleAiApplication(id: string, isActive: boolean): Promis
 
   const admin = createAdminClient()
   const { error } = await admin.from('ai_applications').update({ is_active: isActive }).eq('id', id).eq('org_id', guard.profile!.org_id!)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/desktime.ts' }) }
 
   revalidatePath('/admin/desktime')
   return {}
@@ -89,7 +90,7 @@ export async function removeAiApplication(id: string): Promise<ActionResult> {
 
   const admin = createAdminClient()
   const { error } = await admin.from('ai_applications').delete().eq('id', id).eq('org_id', guard.profile!.org_id!)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/desktime.ts' }) }
 
   revalidatePath('/admin/desktime')
   return {}

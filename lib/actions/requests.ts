@@ -928,7 +928,7 @@ export async function updateRequestCategory(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, service_id, team_id, priority, created_at, waiting_since, sub_category_id, assigned_to, paused_ms_total, service:services(sla_policy:sla_policies(config))')
+    .select('id, status, service_id, team_id, priority, created_at, waiting_since, sub_category_id, assigned_to, paused_ms_total, response_due_at, resolution_due_at, service:services(sla_policy:sla_policies(config))')
     .eq('id', requestId)
     .single()
 
@@ -943,6 +943,9 @@ export async function updateRequestCategory(
   if (!isOnTeam) return { error: 'Not authorized to reclassify requests for this technician group.' }
 
   if (request.sub_category_id === subCategoryId) return {}
+
+  // A finished ticket is not re-classified: it would move deadlines and priority of work that is already done (VAPT-056 / VA-TKT-12).
+  if (['resolved', 'closed', 'cancelled'].includes(request.status)) return { error: 'A resolved, closed or cancelled ticket cannot be re-classified. Re-open it first.' }
 
   // Validate the new sub-category is actually tagged to this request's service.
   const { data: tag } = await supabase
@@ -980,7 +983,7 @@ export async function updateRequestCategory(
   // reassigns it, and if nothing matches it's left unassigned rather than
   // silently stuck with whoever had it before.
   const admin = createAdminClient()
-  const { error: updateError } = await admin
+  const { data: updated, error: updateError } = await admin
     .from('requests')
     .update({
       category_id: subCat.category_id,
@@ -989,9 +992,16 @@ export async function updateRequestCategory(
       response_due_at: newResponseDue,
       resolution_due_at: newResolutionDue,
       assigned_to: null,
+      // An "assigned" ticket that loses its owner goes back to "open" (VAPT-055 / VA-TKT-11) instead of staying "assigned" to nobody;
+      // the Business Rules below then decide the new owner.
+      ...(request.status === 'assigned' ? { status: 'open' as const } : {}),
     })
     .eq('id', requestId)
+    // only if nobody changed the status since it was read (VAPT-058 / VA-TKT-15)
+    .eq('status', request.status)
+    .select('id')
 
+  if (!updateError && (!updated || updated.length === 0)) return { error: 'The ticket was changed by someone else just now. Please refresh and try again.' }
   if (updateError) return { error: sanitizeError(updateError, { route: 'requests.ts#updateRequestCategory', fallback: 'Failed to update category.' }) }
 
   const activityResult = await logActivity({
@@ -999,9 +1009,13 @@ export async function updateRequestCategory(
     actorId: profile.id,
     action: 'reclassified',
     metadata:
-      newPriority !== oldPriority
-        ? { sub_category_to: subCat.name, priority_from: oldPriority, priority_to: newPriority }
-        : { sub_category_to: subCat.name },
+      {
+        sub_category_to: subCat.name,
+        ...(newPriority !== oldPriority ? { priority_from: oldPriority, priority_to: newPriority } : {}),
+        // the deadlines before and after, so a change of deadline through re-classification can always be seen (VAPT-056)
+        response_due_from: request.response_due_at, response_due_to: newResponseDue,
+        resolution_due_from: request.resolution_due_at, resolution_due_to: newResolutionDue,
+      },
   })
   if (activityResult.error) return { error: activityResult.error }
 
@@ -1168,43 +1182,44 @@ export async function autoCloseRequests(): Promise<{ closed: number }> {
 
 export async function duplicateRequest(requestId: string): Promise<{ id?: string; error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile) return { error: 'Not authenticated.' }
+  if (!profile || !profile.org_id) return { error: 'Not authenticated.' }
 
   const supabase = await createClient()
-  const admin = createAdminClient()
 
+  // The caller must be able to see the original ticket (row-level security); nothing else of it is trusted.
   const { data: src } = await supabase
     .from('requests')
-    .select('title, description, service_id, team_id, priority, form_data, form_schema_snapshot, form_sections_snapshot')
+    .select('title, service_id, sub_category_id, form_data')
     .eq('id', requestId)
     .single()
 
   if (!src) return { error: 'Request not found.' }
 
-  const { data: newReq, error } = await admin
-    .from('requests')
-    .insert({
-      request_no:             '', // overwritten by trg_requests_assign_no before insert
-      title:                  src.title + ' (copy)',
-      description:            src.description,
-      service_id:             src.service_id,
-      team_id:                src.team_id,
-      requester_id:           profile.id,
-      priority:               src.priority,
-      status:                 'open',
-      form_data:              src.form_data,
-      form_schema_snapshot:   src.form_schema_snapshot,
-      form_sections_snapshot: src.form_sections_snapshot,
-    })
-    .select('id')
-    .single()
+  // A copy is a NEW ticket, so it goes through the same creation path as any other (VAPT-054 / VA-TKT-10): the service must still exist and be
+  // allowed for this person, the form is re-validated, and priority and deadlines are worked out again from the service and sub-category. It no
+  // longer copies the old priority, deadlines, team or the technician-only answers, and it is not made with the server key without those checks.
+  const title = (src.title + ' (copy)').slice(0, 120)
+  const result = await createRequestCore({
+    client: supabase,
+    orgId: profile.org_id,
+    requesterId: profile.id,
+    actingUserId: profile.id,
+    serviceId: src.service_id,
+    subCategoryId: src.sub_category_id ?? null,
+    formData: (src.form_data ?? {}) as Record<string, unknown>,
+    source: 'web',
+    sourceMetadata: { duplicated_from: requestId },
+    useAdminForWrites: true,
+    actingUserRoleForLocationCheck: profile.role,
+    actingUserLocationId: profile.location_id ?? null,
+    titleOverride: title,
+  })
+  if (result.error || !result.requestId) return { error: result.error ?? 'Failed to duplicate.' }
 
-  if (error || !newReq) return { error: sanitizeError(error, { route: 'requests.ts#duplicateRequest', fallback: 'Failed to duplicate.' }) }
-
-  await logActivity({ requestId: newReq.id, actorId: profile.id, action: 'created', metadata: { duplicated_from: requestId } }).catch(() => {})
+  await logActivity({ requestId: result.requestId, actorId: profile.id, action: 'created', metadata: { duplicated_from: requestId } }).catch(() => {})
 
   revalidatePath('/requests')
-  return { id: newReq.id }
+  return { id: result.requestId }
 }
 
 // ── Submit for Approval ───────────────────────────────────────────────────────
@@ -1309,7 +1324,7 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
   // approval wait, unlike the ad-hoc-approval path, which correctly pauses
   // it. pre_approval_status remembers what it actually was so a later full
   // approval resumes there instead of always forcing in_progress.
-  const { error: stErr } = await admin
+  const { data: moved, error: stErr0 } = await admin
     .from('requests')
     .update({
       status: 'pending_approval',
@@ -1318,6 +1333,10 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
       waiting_since: req.waiting_since ?? new Date().toISOString(),
     })
     .eq('id', requestId)
+    .eq('status', req.status)   // only if the status is still the one that was read (VAPT-058)
+    .select('id')
+  // nobody moved the ticket in the meantime: if somebody did, the approval is taken back below like for any other failure
+  const stErr = stErr0 ?? (moved && moved.length > 0 ? null : { message: 'The ticket changed while it was being submitted.', code: 'STATUS_RACE' })
   if (stErr) {
     // The approval exists but the ticket never moved to "pending approval": take the approval back, otherwise the ticket would be blocked
     // ("an approval is already in progress") with nobody to decide it (D-045).

@@ -10,6 +10,7 @@ import { escapeHtml } from '@/lib/email/escape'
 import { loadCcBook } from '@/lib/requests/cc-recipients'
 import { checkReportRecipients } from '@/lib/reporting/report-recipients'
 import type { Database, Json } from '@/types/database'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 type ScheduledReportRow = Database['public']['Tables']['scheduled_reports']['Row']
 
@@ -64,7 +65,7 @@ export async function getScheduledReports(): Promise<{ data?: ScheduledReport[];
     .eq('org_id', profile.org_id)
     .order('created_at', { ascending: false })
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/reports.ts' }) }
   return { data: (data ?? []).map(normalizeFilters) }
 }
 
@@ -138,7 +139,7 @@ export async function updateScheduledReport(
 
   const admin = createAdminClient()
   const { error } = await admin.from('scheduled_reports').update(update).eq('id', id).eq('org_id', profile.org_id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/reports.ts' }) }
   await recordAudit({ category: 'security', action: 'scheduled_report.updated', entityType: 'scheduled_report', entityId: id, after: update, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/reports')
   return {}
@@ -151,7 +152,7 @@ export async function deleteScheduledReport(id: string): Promise<{ error?: strin
 
   const admin = createAdminClient()
   const { error } = await admin.from('scheduled_reports').delete().eq('id', id).eq('org_id', profile.org_id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/reports.ts' }) }
   await recordAudit({ category: 'security', action: 'scheduled_report.deleted', entityType: 'scheduled_report', entityId: id, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/reports')
   return {}
@@ -170,7 +171,7 @@ export async function sendScheduledReport(id: string): Promise<{ error?: string 
     .eq('org_id', profile.org_id)
     .maybeSingle()
 
-  if (fetchErr) return { error: fetchErr.message }
+  if (fetchErr) return { error: sanitizeError(fetchErr, { route: 'lib/actions/admin/reports.ts' }) }
   if (!report) return { error: 'Report not found.' }
   if (!report.org_id) return { error: 'Report has no organization context.' }
 

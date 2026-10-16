@@ -17,6 +17,7 @@ import { toCSV } from '@/lib/export/csv'
 import { USER_EXPORT_COLUMNS, buildUsersExportRows, type ExportProfile } from '@/lib/export/users'
 import type { UserRole } from '@/types'
 import { inBatches, inBatchesDo } from '@/lib/queries/in-batches'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: any; rpc: (fn: string, args: Record<string, unknown>) => any }
@@ -91,7 +92,7 @@ export async function updateUserRole(
     .eq('id', userId)
     .eq('org_id', profile.org_id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/users.ts' }) }
   await recordAudit({ category: 'security', action: 'user.role_changed', entityType: 'user', entityId: userId, before: { role: target.role }, after: { role }, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/users')
   return {}
@@ -117,7 +118,7 @@ export async function toggleUserActive(
     .eq('id', userId)
     .eq('org_id', profile.org_id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/users.ts' }) }
   // D-010: the flag alone never stopped anyone signing in. Block (or restore) sign-in at the authentication service as well, so a
   // deactivated person cannot log in again or renew their session.
   const { error: banError } = await admin.auth.admin.updateUserById(userId, { ban_duration: isActive ? 'none' : '876000h' })
@@ -202,7 +203,7 @@ export async function updateUserProfile(
 
   const { error } = await admin.from('profiles').update(update).eq('id', userId).eq('org_id', profile.org_id)
   if (error) {
-    return { error: error.message }
+    return { error: sanitizeError(error, { route: 'lib/actions/admin/users.ts' }) }
   }
 
   let note: string | undefined
@@ -273,7 +274,7 @@ export async function addMobileNumber(
     // 23505 = idx_profile_mobile_numbers_org_mobile_unique caught a race the
     // checkMobileNotTaken() pre-check above missed (two concurrent adds).
     if (error.code === '23505') return { error: 'This mobile number is already registered to another user in this organization.' }
-    return { error: error.message }
+    return { error: sanitizeError(error, { route: 'lib/actions/admin/users.ts' }) }
   }
   await recordAudit({ category: 'security', action: 'user.mobile_added', entityType: 'user', entityId: userId, after: { mobile_number: normalized.normalized }, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/users')
@@ -304,7 +305,7 @@ export async function removeMobileNumber(
     .eq('profile_id', userId)
     .eq('org_id', profile.org_id)
     .eq('mobile_number', mobileNumber)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/users.ts' }) }
   revalidatePath('/admin/users')
   return {}
 }
@@ -335,12 +336,12 @@ export async function setUserTeams(
 
   // Replace all team memberships for this user
   const { error: delErr } = await admin.from('team_members').delete().eq('user_id', userId).eq('org_id', profile.org_id)
-  if (delErr) return { error: delErr.message }
+  if (delErr) return { error: sanitizeError(delErr, { route: 'lib/actions/admin/users.ts' }) }
 
   if (teamIds.length > 0) {
     const rows = teamIds.map(tid => ({ team_id: tid, user_id: userId, org_id: profile.org_id, is_lead: false }))
     const { error: insErr } = await admin.from('team_members').insert(rows)
-    if (insErr) return { error: insErr.message }
+    if (insErr) return { error: sanitizeError(insErr, { route: 'lib/actions/admin/users.ts' }) }
   }
 
   await recordAudit({ action: 'user.teams_set', entityType: 'user', entityId: userId, after: { team_ids: teamIds }, actorId: profile.id, orgId: profile.org_id })
@@ -452,7 +453,7 @@ export async function inviteUser(fields: {
     email: fields.email.trim().toLowerCase(),
     options: { data: { full_name: fields.full_name.trim() } },
   })
-  if (authErr) return { error: authErr.message }
+  if (authErr) return { error: sanitizeError(authErr, { route: 'lib/actions/admin/users.ts' }) }
   const inviteTokenHash: string | undefined = authData?.properties?.hashed_token
 
   const uid = authData?.user?.id
@@ -475,7 +476,7 @@ export async function inviteUser(fields: {
   const { error: profileErr } = await admin.from('profiles').update(profileUpdate).eq('id', uid)
   if (profileErr) {
     await undoInvite(admin, uid)
-    return { error: profileErr.message }
+    return { error: sanitizeError(profileErr, { route: 'lib/actions/admin/users.ts' }) }
   }
 
   // Attach the first mobile number, if any, as its own step AFTER role/
@@ -491,7 +492,7 @@ export async function inviteUser(fields: {
     if (mobileErr) {
       await undoInvite(admin, uid)
       if (mobileErr.code === '23505') return { error: 'This mobile number is already registered to another user in this organization.' }
-      return { error: mobileErr.message }
+      return { error: sanitizeError(mobileErr, { route: 'lib/actions/admin/users.ts' }) }
     }
   }
 
@@ -922,7 +923,7 @@ export async function adminSetPassword(userId: string, newPassword: string): Pro
     password: newPassword,
     email_confirm: true,
   })
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/users.ts' }) }
 
   // The user never chose this password themselves — force them to set their
   // own on next login before they can use the portal.
@@ -1017,7 +1018,7 @@ export async function listPasswordResetTargets(): Promise<{ error?: string; ids?
     .eq('is_active', true)
     .in('role', BULK_RESET_ROLES)
     .neq('id', profile.id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/users.ts' }) }
   return { ids: ((data ?? []) as { id: string }[]).map((r) => r.id) }
 }
 

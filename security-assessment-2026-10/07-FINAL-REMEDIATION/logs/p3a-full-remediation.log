@@ -1,0 +1,141 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit, supabase_db_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [none]
+
+ISOLATION GATE: PASSED  (21/21)
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate[39m
+
+ERROR:  system_log is append-only: rows cannot be changed or deleted
+CONTEXT:  PL/pgSQL function system_log_guard() line 7 at RAISE
+ [32m✓[39m tests/remediation/100-system-log-db.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 6847[2mms[22m[39m
+   [33m[2m✓[22m[39m hash chain[2m > [22maudit rows are chained and verify intact; a changed row and a removed row are found [33m 2677[2mms[22m[39m
+   [33m[2m✓[22m[39m hash chain under concurrency[2m > [22mtwenty audit rows written at the same instant get twenty consecutive positions and the chain verifies [33m 757[2mms[22m[39m
+   [33m[2m✓[22m[39m database audit triggers[2m > [22ma role change by the server is recorded with before and after, and a change to a column that is not watched is not [33m 1068[2mms[22m[39m
+   [33m[2m✓[22m[39m retention[2m > [22mold errors and very old audit rows move to the archive; recent rows stay; only the server can run it [33m 701[2mms[22m[39m
+ [32m✓[39m tests/remediation/20-db-critical.test.ts [2m([22m[2m16 tests[22m[2m)[22m[33m 839[2mms[22m[39m
+[90mstderr[2m | tests/remediation/91-reliability.test.ts[2m > [22m[2mreliability simulations[2m > [22m[2man upload whose database record fails leaves no orphan file behind
+[22m[39m[uploadAttachment] DB insert failed new row for relation "request_attachments" violates check constraint "tmp_reliability_fail"
+
+[90mstderr[2m | tests/remediation/91-reliability.test.ts[2m > [22m[2mreliability simulations[2m > [22m[2mstorage unavailable: the upload fails cleanly (no record, no crash), and works again once storage is back
+[22m[39m[uploadAttachment] Storage upload failed This operation was aborted
+
+NOTICE:  constraint "tmp_reliability_fail" of relation "request_attachments" does not exist, skipping
+ [32m✓[39m tests/remediation/91-reliability.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 64379[2mms[22m[39m
+   [33m[2m✓[22m[39m reliability simulations[2m > [22man upload whose database record fails leaves no orphan file behind [33m 632[2mms[22m[39m
+   [33m[2m✓[22m[39m reliability simulations[2m > [22mstorage unavailable: the upload fails cleanly (no record, no crash), and works again once storage is back [33m 28463[2mms[22m[39m
+   [33m[2m✓[22m[39m reliability simulations[2m > [22mAPI layer down: actions fail without crashing or changing anything, and everything works after it is back [33m 30068[2mms[22m[39m
+   [33m[2m✓[22m[39m reliability simulations[2m > [22mtwo overlapping runs of the scheduled business-rules job fire a rule once per ticket [33m 2108[2mms[22m[39m
+ [32m✓[39m tests/remediation/92-db-timeout.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 12366[2mms[22m[39m
+   [33m[2m✓[22m[39m statement timeout on the signed-in role[2m > [22mevery statement times out: the action fails cleanly, nothing changes; after the limit is restored it works [33m 6939[2mms[22m[39m
+ [32m✓[39m tests/remediation/105-system-log-screen.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 9263[2mms[22m[39m
+   [33m[2m✓[22m[39m who may use the screen[2m > [22monly administrators and platform owners; everyone else is refused [33m 449[2mms[22m[39m
+   [33m[2m✓[22m[39m the log[2m > [22mfilters by category, source, severity, click and text; pages of 100 with a next-page flag [33m 1125[2mms[22m[39m
+   [33m[2m✓[22m[39m grouped errors, export and the Claude bundle[2m > [22mthe bundle is redacted markdown naming the problem; copying it is itself audited [33m 365[2mms[22m[39m
+   [33m[2m✓[22m[39m grouped errors, export and the Claude bundle[2m > [22mCSV and JSON exports hold the rows and are audited with the filters used [33m 642[2mms[22m[39m
+   [33m[2m✓[22m[39m integrity check[2m > [22mreports an intact chain, and finds a record changed behind the application's back [33m 3705[2mms[22m[39m
+[90mstderr[2m | tests/remediation/104-system-log-audit-calls.test.ts[2m > [22m[2mapplication audit records[2m > [22m[2ma refused sign-in is a security event, and the password is never stored
+[22m[39m{"ts":"2026-10-16T06:38:50.706Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","errorCode":"invalid_credentials","error":{"message":"Invalid login credentials","stack":"AuthApiError: Invalid login credentials\n    at handleError (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\@supabase\\auth-js\\src\\lib\\fetch.ts:139:9)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at _handleRequest (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\@supabase\\auth-js\\src\\lib\\fetch.ts:232:5)\n    at _request (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\@supabase\\auth-js\\src\\lib\\fetch.ts:194:16)\n    at SupabaseAuthClient.signInWithPassword (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\@supabase\\auth-js\\src\\GoTrueClient.ts:1153:15)\n    at Module.signInWithPassword (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\lib\\actions\\auth.ts:33:37)\n    at D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\tests\\remediation\\104-system-log-audit-calls.test.ts:85:17\n    at file:///D:/ANKUR%20AI%20PROJECTS/CitykartDesk-ZOHO%20Alternate/node_modules/@vitest/runner/dist/chunk-hooks.js:752:20"}}
+
+ [32m✓[39m tests/remediation/104-system-log-audit-calls.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 4867[2mms[22m[39m
+   [33m[2m✓[22m[39m application audit records[2m > [22ma role change records who changed whose role, from what to what [33m 381[2mms[22m[39m
+   [33m[2m✓[22m[39m application audit records[2m > [22ma refused role change records nothing as a success (the guard stops a plain admin touching a platform owner) [33m 350[2mms[22m[39m
+   [33m[2m✓[22m[39m application audit records[2m > [22mdeactivating and reactivating a user are each recorded [33m 756[2mms[22m[39m
+   [33m[2m✓[22m[39m application audit records[2m > [22man export records who took which data out, with how many rows and which filters [33m 410[2mms[22m[39m
+   [33m[2m✓[22m[39m application audit records[2m > [22mcreating and deleting a scheduled report are recorded with the recipients [33m 726[2mms[22m[39m
+   [33m[2m✓[22m[39m application audit records[2m > [22ma refused sign-in is a security event, and the password is never stored [33m 373[2mms[22m[39m
+[90mstderr[2m | tests/remediation/111-invite-rollback.test.ts[2m > [22m[2minvite user rollback (D-048)[2m > [22m[2mwhen the profile step fails, the new account is removed and the same address can be invited again
+[22m[39m{"ts":"2026-10-16T06:38:53.694Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"lib/actions/admin/users.ts","errorCode":"23514","error":{"message":"{\"code\":\"23514\",\"details\":\"Failing row contains (978e52c7-b2fe-4e13-a3fe-42209f3dafa0, Invite A, null, user, t, 2026-10-16 06:38:53.640776+00, 2026-10-16 06:38:53.653738+00, null, null, null, null, boom-title, null, 00000000-0000-0000-0000-000000000001, null, null, f, null, t).\",\"hint\":null,\"message\":\"new row for relation \\\"profiles\\\" violates check constraint \\\"tmp_invite_fail\\\"\"}"}}
+
+[90mstderr[2m | tests/remediation/111-invite-rollback.test.ts[2m > [22m[2minvite user rollback (D-048)[2m > [22m[2mwhen attaching the mobile number fails, the new account is removed again
+[22m[39m{"ts":"2026-10-16T06:38:54.430Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"lib/actions/admin/users.ts","errorCode":"23514","error":{"message":"{\"code\":\"23514\",\"details\":\"Failing row contains (c796497b-d60d-4ba9-ab03-9637ff779ae5, 00000000-0000-0000-0000-000000000001, 9876500011, 2026-10-16 06:38:54.394492+00).\",\"hint\":null,\"message\":\"new row for relation \\\"profile_mobile_numbers\\\" violates check constraint \\\"tmp_invite_fail\\\"\"}"}}
+
+NOTICE:  constraint "tmp_invite_fail" of relation "profiles" does not exist, skipping
+NOTICE:  constraint "tmp_invite_fail" of relation "profile_mobile_numbers" does not exist, skipping
+ [32m✓[39m tests/remediation/111-invite-rollback.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 3952[2mms[22m[39m
+   [33m[2m✓[22m[39m invite user rollback (D-048)[2m > [22mwhen the profile step fails, the new account is removed and the same address can be invited again [33m 719[2mms[22m[39m
+   [33m[2m✓[22m[39m invite user rollback (D-048)[2m > [22mwhen attaching the mobile number fails, the new account is removed again [33m 665[2mms[22m[39m
+ [32m✓[39m tests/remediation/90-uat-lifecycle.test.ts [2m([22m[2m12 tests[22m[2m)[22m[33m 4098[2mms[22m[39m
+   [33m[2m✓[22m[39m UAT ticket lifecycle across roles[2m > [22massignment: a technician of the team assigns the ticket; the requester is told [33m 342[2mms[22m[39m
+   [33m[2m✓[22m[39m UAT ticket lifecycle across roles[2m > [22mhold due to purchase: only a technician sets it; a requester reply does not resume it; resuming needs its own remark [33m 329[2mms[22m[39m
+ [32m✓[39m tests/remediation/110-approval-hardening.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 4106[2mms[22m[39m
+   [33m[2m✓[22m[39m approval hardening[2m > [22mD-030 nobody decides a request they raised or sent[2m > [22mthe person who raised the request cannot approve or reject it, on the portal or from the e-mail; the other approver can [33m 349[2mms[22m[39m
+   [33m[2m✓[22m[39m approval hardening[2m > [22mD-030 nobody decides a request they raised or sent[2m > [22masking for a code on your own request is refused, and ordinary approvals are unaffected [33m 331[2mms[22m[39m
+[90mstderr[2m | tests/remediation/101-system-log-capture.test.ts[2m > [22m[2mlogger and sanitizer[2m > [22m[2ma logged error is stored with its source, a fingerprint, and a redacted message
+[22m[39m{"ts":"2026-10-16T06:39:06.386Z","level":"error","event":"cap1792132746346.email.send_failed","message":"could not mail suraj@citykart.org with token=abc123def456","route":"lib/email/send.ts","context":{"password":"[redacted]","ok":1}}
+
+[90mstderr[2m | tests/remediation/101-system-log-capture.test.ts[2m > [22m[2mlogger and sanitizer[2m > [22m[2msanitizeError records the REAL error (with its database code) while the user gets only the safe message
+[22m[39m{"ts":"2026-10-16T06:39:06.729Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"requests.ts#assignRequest","errorCode":"23503","error":{"message":"{\"code\":\"23503\",\"message\":\"cap1792132746346 insert or update violates foreign key constraint \\\"x_fkey\\\"\"}"}}
+
+[90mstderr[2m | tests/remediation/101-system-log-capture.test.ts[2m > [22m[2mlogger and sanitizer[2m > [22m[2ma permission denial (42501) is a security event with outcome denied
+[22m[39m{"ts":"2026-10-16T06:39:07.071Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"x.ts#y","errorCode":"42501","error":{"message":"{\"code\":\"42501\",\"message\":\"cap1792132746346 new row violates row-level security policy\"}"}}
+
+ [32m✓[39m tests/remediation/101-system-log-capture.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 4083[2mms[22m[39m
+   [33m[2m✓[22m[39m logger and sanitizer[2m > [22ma logged error is stored with its source, a fingerprint, and a redacted message [33m 343[2mms[22m[39m
+   [33m[2m✓[22m[39m logger and sanitizer[2m > [22msanitizeError records the REAL error (with its database code) while the user gets only the safe message [33m 342[2mms[22m[39m
+   [33m[2m✓[22m[39m logger and sanitizer[2m > [22ma permission denial (42501) is a security event with outcome denied [33m 324[2mms[22m[39m
+   [33m[2m✓[22m[39m failed calls to the database[2m > [22ma real PostgREST failure seen through the app's own client is recorded; an expected "no row" is not [33m 868[2mms[22m[39m
+   [33m[2m✓[22m[39m failed calls to the database[2m > [22ma call that cannot connect is recorded with the connection error [33m 326[2mms[22m[39m
+   [33m[2m✓[22m[39m unhandled errors reported by Next[2m > [22ma server-action error carries the request id, path, method and the signed-in user (from the proxy-signed header) [33m 338[2mms[22m[39m
+   [33m[2m✓[22m[39m unhandled errors reported by Next[2m > [22ma redirect or not-found is not an error [33m 332[2mms[22m[39m
+   [33m[2m✓[22m[39m flood control[2m > [22mtwenty identical failures are stored as ten, and an audit record is never dropped [33m 1155[2mms[22m[39m
+ [32m✓[39m tests/remediation/119-dashboard-drill-parity.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 3411[2mms[22m[39m
+   [33m[2m✓[22m[39m the normal dashboard numbers open pop-ups with exactly the same tickets[2m > [22mcreated, resolved and closed over a day and over a week (the Daily Activity and inflow / outflow cards) [33m 375[2mms[22m[39m
+   [33m[2m✓[22m[39m the normal dashboard numbers open pop-ups with exactly the same tickets[2m > [22mevery status, priority, group and technician row [33m 731[2mms[22m[39m
+ [32m✓[39m tests/remediation/70-rls-equivalence.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 2827[2mms[22m[39m
+   [33m[2m✓[22m[39m every kind of user sees exactly the tickets the visibility rules give them[2m > [22mstaff1 [33m 473[2mms[22m[39m
+   [33m[2m✓[22m[39m every kind of user sees exactly the tickets the visibility rules give them[2m > [22mmanager1 [33m 306[2mms[22m[39m
+[90mstderr[2m | tests/remediation/115-approval-compensation.test.ts[2m > [22m[2msending for approval takes back what it wrote when the last step fails (D-045)[2m > [22m[2mno approval or workflow is left behind, the ticket is unchanged, and sending works once the fault is gone
+[22m[39m{"ts":"2026-10-16T06:39:18.608Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"approvals.ts#sendAdHocApproval","errorCode":"23514","error":{"message":"{\"code\":\"23514\",\"details\":\"Failing row contains (d881a482-ee2b-4d3e-9a75-a8a2f68632d7, CKSD-012699, fixtures-d03 seedRequestLike 1792132758260, null, 859ce343-5b1d-40f1-be0c-8aa4b841eed8, 66ad87aa-e0de-48a5-9366-34e880e82d11, d661b6d9-8214-4f70-a142-9d10d5b4fad3, 0fb0316f-27e8-47e6-b1d5-8cdda8550abf, medium, pending_approval, {}, [], null, null, null, null, null, 2026-10-16 06:39:18.262128+00, 2026-10-16 06:39:18.600227+00, [], 2026-10-16 06:39:18.598+00, 00000000-0000-0000-0000-000000000001, null, null, null, null, null, null, null, null, 0, in_progress, 0).\",\"hint\":null,\"message\":\"new row for relation \\\"requests\\\" violates check constraint \\\"tmp_no_pending_approval\\\"\"}"}}
+
+NOTICE:  constraint "tmp_no_pending_approval" of relation "requests" does not exist, skipping
+ [32m✓[39m tests/remediation/115-approval-compensation.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 2820[2mms[22m[39m
+   [33m[2m✓[22m[39m sending for approval takes back what it wrote when the last step fails (D-045)[2m > [22mno approval or workflow is left behind, the ticket is unchanged, and sending works once the fault is gone [33m 682[2mms[22m[39m
+ [32m✓[39m tests/remediation/113-bulk-limits.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 2560[2mms[22m[39m
+ [32m✓[39m tests/remediation/117-org-references.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 2413[2mms[22m[39m
+ [32m✓[39m tests/remediation/112-mailbox-settings.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 2199[2mms[22m[39m
+ [32m✓[39m tests/remediation/114-status-races.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 2175[2mms[22m[39m
+ [32m✓[39m tests/remediation/120-team-dashboard-scope.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 2145[2mms[22m[39m
+ [32m✓[39m tests/remediation/116-oem-routing-failure.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 2134[2mms[22m[39m
+ [32m✓[39m tests/remediation/122-resolution-note-rules.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 2103[2mms[22m[39m
+ [32m✓[39m tests/remediation/120-store-open-date.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 2024[2mms[22m[39m
+ [32m✓[39m tests/remediation/118-status-transitions-db.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 2043[2mms[22m[39m
+ [32m✓[39m tests/remediation/121-approval-reminders.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 802[2mms[22m[39m
+ [32m✓[39m tests/remediation/80-ticket-number-overflow.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 805[2mms[22m[39m
+ [32m✓[39m tests/remediation/102-system-log-endpoints.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 634[2mms[22m[39m
+   [33m[2m✓[22m[39m browser events route[2m > [22mmirrors a browser error into the System Log with the page, the user and the click that preceded it [33m 417[2mms[22m[39m
+ [32m✓[39m tests/remediation/72-rls-cross-tenant.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 478[2mms[22m[39m
+ [32m✓[39m tests/remediation/60-approvals-export.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 439[2mms[22m[39m
+ [32m✓[39m tests/remediation/40-db-high.test.ts [2m([22m[2m14 tests[22m[2m)[22m[33m 382[2mms[22m[39m
+[90mstdout[2m | tests/remediation/30-delegate-approval.test.ts
+[22m[39m[EMAIL DISABLED] To: manager2@audit.test  Subject: Approval required: CKSD-013003 — d16-1792132789824 A
+
+ [32m✓[39m tests/remediation/30-delegate-approval.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 251[2mms[22m[39m
+ [32m✓[39m tests/remediation/50-delete-attachment.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 143[2mms[22m[39m
+ [32m✓[39m tests/remediation/71-requests-update-identity.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 119[2mms[22m[39m
+ [32m✓[39m tests/remediation/103-system-log-actor.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 87[2mms[22m[39m
+ [32m✓[39m tests/remediation/00-guard.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 1[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m33 passed[39m[22m[90m (33)[39m
+[2m      Tests [22m [1m[32m184 passed[39m[22m[90m (184)[39m
+[2m   Start at [22m 12:07:11
+[2m   Duration [22m 160.30s[2m (transform 643ms, setup 310ms, collect 2.61s, tests 147.79s, environment 3ms, prepare 1.30s)[22m
+

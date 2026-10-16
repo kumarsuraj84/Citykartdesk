@@ -4,6 +4,7 @@ import { pickFields } from '@/lib/utils/pick-fields'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -66,7 +67,7 @@ export async function updateTaskStatus(
   if (data.value) payload.value = data.value.trim().toLowerCase().replace(/\s+/g, '_')
 
   const { error } = await admin.from('task_statuses').update(payload).eq('id', id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/task-config.ts' }) }
   revalidatePath('/admin/task-config')
   return {}
 }
@@ -77,7 +78,7 @@ export async function deleteTaskStatus(id: string): Promise<{ error?: string }> 
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('task_statuses').delete().eq('id', id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/task-config.ts' }) }
   revalidatePath('/admin/task-config')
   return {}
 }
@@ -145,7 +146,7 @@ export async function updateTaskPriority(
   if (data.value) payload.value = data.value.trim().toLowerCase().replace(/\s+/g, '_')
 
   const { error } = await admin.from('task_priorities').update(payload).eq('id', id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/task-config.ts' }) }
   revalidatePath('/admin/task-config')
   return {}
 }
@@ -156,7 +157,7 @@ export async function deleteTaskPriority(id: string): Promise<{ error?: string }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin.from('task_priorities').delete().eq('id', id)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/task-config.ts' }) }
   revalidatePath('/admin/task-config')
   return {}
 }

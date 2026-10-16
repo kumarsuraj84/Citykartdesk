@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -26,7 +27,7 @@ export async function starReview(
     .eq('id', reviewId)
     .eq('org_id', profile.org_id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/flags.ts' }) }
   revalidatePath('/intake/inbox')
   return {}
 }
@@ -51,7 +52,7 @@ export async function escalateReview(
     .eq('id', reviewId)
     .eq('org_id', profile.org_id)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/flags.ts' }) }
   revalidatePath('/intake/inbox')
   revalidatePath(`/intake/review/${reviewId}`)
   return {}

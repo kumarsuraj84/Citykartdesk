@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { getApprovalWorkflowWithSteps, type ApprovalWorkflowStep } from '@/lib/queries/admin'
 import { requireCapability } from '@/lib/permissions/policies'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 type ActionResult<T = undefined> = T extends undefined
   ? { error?: string }
@@ -34,7 +35,7 @@ export async function createWorkflow(name: string): Promise<ActionResult<{ id: s
     .select('id')
     .single()
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/workflows.ts' }) }
 
   revalidatePath('/admin/approvals')
   return { data: { id: data.id } }
@@ -51,7 +52,7 @@ export async function updateWorkflow(id: string, name: string): Promise<ActionRe
     .eq('id', id)
     .eq('org_id', guard.profile!.org_id!)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/workflows.ts' }) }
 
   revalidatePath('/admin/approvals')
   return {}
@@ -81,7 +82,7 @@ export async function deleteWorkflow(id: string): Promise<ActionResult> {
     .eq('id', id)
     .eq('org_id', guard.profile!.org_id!)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/workflows.ts' }) }
 
   revalidatePath('/admin/approvals')
   return {}
@@ -161,7 +162,7 @@ export async function upsertWorkflowStep(input: UpsertStepInput): Promise<Action
       .eq('id', input.id)
       .select('id')
       .single()
-    if (error) return { error: error.message }
+    if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/workflows.ts' }) }
     id = data.id
   } else {
     const { data, error } = await admin
@@ -169,7 +170,7 @@ export async function upsertWorkflowStep(input: UpsertStepInput): Promise<Action
       .insert(payload)
       .select('id')
       .single()
-    if (error) return { error: error.message }
+    if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/workflows.ts' }) }
     id = data.id
   }
 
@@ -197,7 +198,7 @@ export async function deleteWorkflowStep(stepId: string): Promise<ActionResult> 
     .delete()
     .eq('id', stepId)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/workflows.ts' }) }
 
   revalidatePath('/admin/approvals')
   return {}
@@ -226,7 +227,7 @@ export async function bindWorkflowToService(
     .eq('id', serviceId)
     .eq('org_id', guard.profile!.org_id!)
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/workflows.ts' }) }
 
   revalidatePath('/admin/approvals')
   revalidatePath('/admin/services')

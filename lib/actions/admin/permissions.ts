@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { sanitizeError } from '@/lib/observability/sanitize-error'
 
 export async function savePermissionOverrides(
   overrides: { role_key: string; action_key: string; allowed: boolean }[]
@@ -36,7 +37,7 @@ export async function savePermissionOverrides(
     .from('permission_overrides')
     .upsert(rows, { onConflict: 'org_id,role_key,action_key' })
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/permissions.ts' }) }
 
   revalidatePath('/admin/roles')
   return {}
@@ -73,7 +74,7 @@ export async function createCustomRole(data: {
     .select('id')
     .single()
 
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/permissions.ts' }) }
 
   revalidatePath('/admin/roles')
   return { id: row.id }
@@ -86,7 +87,7 @@ export async function deleteCustomRole(roleId: string): Promise<{ error?: string
 
   const supabase = await createClient()
   const { error } = await supabase.from('custom_roles').delete().eq('id', roleId)
-  if (error) return { error: error.message }
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/permissions.ts' }) }
 
   revalidatePath('/admin/roles')
   return {}
