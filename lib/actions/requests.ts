@@ -229,6 +229,15 @@ export async function assignRequest(
     }
   }
 
+  // The new assignee must be an active member of staff of this organisation (VAPT VAPT-055): a manager could name anybody, even a plain requester
+  // or a deactivated person, who then could not even open the ticket.
+  if (assigneeId) {
+    const { data: target } = await createAdminClient().from('profiles').select('id, role, is_active, org_id').eq('id', assigneeId).maybeSingle()
+    if (!target || !target.is_active || target.org_id !== profile.org_id || !['agent', 'manager', 'admin', 'platform_owner'].includes(target.role as string)) {
+      return { error: 'A ticket can only be assigned to an active technician or manager of this organisation.' }
+    }
+  }
+
   const newStatus: RequestStatus =
     request.status === 'open' && assigneeId ? 'assigned' : (request.status as RequestStatus)
 
@@ -236,7 +245,8 @@ export async function assignRequest(
   // up"-ing while a manager reassigns to someone else in the same instant) —
   // without this, both calls report success but only the last write sticks,
   // silently leaving the loser believing they own a ticket they don't.
-  let updateQuery = supabase
+  // Written with the server's own key after the checks above: a signed-in user has no direct write right on tickets (migration 165).
+  let updateQuery = createAdminClient()
     .from('requests')
     .update({ assigned_to: assigneeId, status: newStatus })
     .eq('id', requestId)
@@ -685,7 +695,7 @@ export async function addComment(
 
   // First public agent comment on this request → record responded_at
   if (isAgent && !internal && !request.responded_at) {
-    await supabase
+    await createAdminClient()
       .from('requests')
       .update({ responded_at: new Date().toISOString() })
       .eq('id', requestId)
@@ -1536,15 +1546,19 @@ export async function updateRequestSource(requestId: string, source: string | nu
   const supabase = await createClient()
   const { data: current } = await supabase
     .from('requests')
-    .select('source_metadata')
+    .select('source_metadata, team_id')
     .eq('id', requestId)
     .single()
+  // Only the technician group of the ticket, or a manager / administrator, may change where a ticket came from (this used to rest on row security alone).
+  const sourceTeamId = (current as { team_id?: string } | null)?.team_id
+  const mayEditSource = !!current && (['manager', 'admin', 'platform_owner'].includes(profile.role) || (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === sourceTeamId)))
+  if (!mayEditSource) return { error: 'Not authorized to change the source of this request.' }
 
   const meta = { ...((current as { source_metadata?: Record<string, unknown> | null } | null)?.source_metadata ?? {}) }
   if (source) meta.created_via = source
   else delete meta.created_via
 
-  const { error } = await supabase
+  const { error } = await createAdminClient()
     .from('requests')
     .update({ source_metadata: meta as Json, updated_at: new Date().toISOString() } as RequestUpdate)
     .eq('id', requestId)

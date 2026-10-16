@@ -149,8 +149,9 @@ describe('D-008 a ticket cannot be forged through the API', () => {
     const mine = (await svc<{ id: string; title: string }[]>('GET', `/requests?team_id=eq.${t}&select=id,title&limit=1`)).json[0]
     const now = (await svc<{ priority: string }[]>('GET', `/requests?id=eq.${mine.id}&select=priority`)).json[0].priority
     expect((await asUser(agent1, 'PATCH', `/requests?id=eq.${mine.id}`, { priority: now === 'urgent' ? 'low' : 'urgent' })).status).toBeGreaterThanOrEqual(400)   // nobody sets the priority by hand
+    // and (migration 165) not the description or anything else directly: edits go through the server
     const upd = await asUser(agent1, 'PATCH', `/requests?id=eq.${mine.id}`, { description: 'edited by the technician' })
-    expect(upd.status).toBeLessThan(300)
+    expect(upd.status).toBeGreaterThanOrEqual(400)
   })
 })
 

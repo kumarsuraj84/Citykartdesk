@@ -27,7 +27,7 @@ describe('latency of security-sensitive operations (milliseconds)', () => {
     out['manager: count all tickets'] = await time(async () => { const r = await manager.from('requests').select('id', { count: 'exact', head: true }); if (r.error) throw r.error })
     out['technician: list own group tickets'] = await time(async () => { const r = await agent.from('requests').select('id,priority,status,title').limit(500); if (r.error) throw r.error })
     out['requester: list own tickets'] = await time(async () => { const r = await requester.from('requests').select('id,priority,status,title').limit(200); if (r.error) throw r.error })
-    out['technician: edit a ticket (update trigger path)'] = await time(async () => { const r = await agent.from('requests').update({ description: `perf ${Math.random()}` }).eq('id', fx.requestA.id); if (r.error) throw r.error })
+    out['technician: open one ticket by id'] = await time(async () => { const r = await agent.from('requests').select('id,priority,status,title,description').eq('id', fx.requestA.id).single(); if (r.error) throw r.error })
     out['requester: read attachments rows of a ticket'] = await time(async () => { const r = await requester.from('request_attachments').select('id').eq('request_id', fx.requestA.id); if (r.error) throw r.error })
     out['search: manager title search'] = await time(async () => { const r = await manager.from('requests').select('id,title').ilike('title', '%a%').limit(50); if (r.error) throw r.error })
     writeFileSync(`security-assessment-2026-10/05-REMEDIATION/perf-${process.env.PERF_LABEL ?? 'run'}.json`, JSON.stringify(out, null, 2))

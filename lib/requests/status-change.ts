@@ -312,7 +312,8 @@ export async function applyStatusChange(
   // bypass. The .eq('status', currentStatus) race guard applies unchanged either way, so
   // a genuine concurrent write still zero-matches and is still reported as a conflict.
   const requesterInitiated = !agentInitiated
-  const statusUpdateClient = requesterInitiated ? createAdminClient() : supabase
+  // Every ticket write is made with the server's own key, after the role and transition checks above (migration 165: a signed-in user has no direct write right).
+  const statusUpdateClient = createAdminClient()
   let statusUpdateQuery = statusUpdateClient
     .from('requests')
     .update(updatePayload)
@@ -578,7 +579,7 @@ export async function applyStatusChange(
 
   // Optional comment attached to the transition (always public)
   if (comment?.trim()) {
-    const { error: commentError } = await supabase.from('request_comments').insert({
+    const { error: commentError } = await createAdminClient().from('request_comments').insert({
       request_id: requestId,
       author_id: profile.id,
       body: comment.trim(),

@@ -1,0 +1,893 @@
+{
+ "admin_audit_log": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/audit.ts:18 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "business_rules": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/business-rules.ts:49 insert (admin)",
+   "lib/actions/admin/business-rules.ts:99 update (admin)",
+   "lib/actions/admin/business-rules.ts:138 delete (admin)",
+   "lib/actions/admin/business-rules.ts:158 update (admin)",
+   "lib/actions/admin/business-rules.ts:204 insert (admin)",
+   "lib/actions/admin/business-rules.ts:225 insert (admin)",
+   "lib/actions/admin/business-rules.ts:260 insert (admin)",
+   "lib/rules/actions.ts:105 update (admin)"
+  ],
+  "unknown": []
+ },
+ "service_categories": {
+  "user": [
+   "lib/actions/admin/categories.ts:57 insert (supabase)",
+   "lib/actions/admin/categories.ts:105 update (supabase)",
+   "lib/actions/admin/categories.ts:130 update (supabase)",
+   "lib/actions/admin/categories.ts:187 delete (supabase)",
+   "lib/actions/admin/categories.ts:386 insert (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "service_sub_categories": {
+  "user": [
+   "lib/actions/admin/categories.ts:245 update (supabase)",
+   "lib/actions/admin/categories.ts:275 insert (supabase)",
+   "lib/actions/admin/categories.ts:428 insert (supabase)",
+   "lib/actions/admin/categories.ts:479 update (supabase)",
+   "lib/actions/admin/categories.ts:508 update (supabase)",
+   "lib/actions/admin/categories.ts:558 delete (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "app_settings": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/config.ts:30 upsert (admin)",
+   "lib/actions/admin/config.ts:57 upsert (admin)",
+   "lib/actions/admin/config.ts:485 upsert (admin)",
+   "lib/approvals/reminders.ts:49 insert (admin)",
+   "lib/approvals/reminders.ts:53 update (admin)",
+   "lib/approvals/reminders.ts:69 update (admin)",
+   "lib/approvals/reminders.ts:70 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "email_smtp_settings": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/config.ts:143 upsert (admin)",
+   "lib/actions/admin/config.ts:164 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "task_templates": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/config.ts:189 insert (admin)",
+   "lib/actions/admin/config.ts:218 update (admin)",
+   "lib/actions/admin/config.ts:229 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "task_template_items": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/config.ts:274 update (admin)",
+   "lib/actions/admin/config.ts:276 insert (admin)",
+   "lib/actions/admin/config.ts:297 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "business_hours": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/config.ts:313 update (admin)"
+  ],
+  "unknown": []
+ },
+ "holidays": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/config.ts:334 insert (admin)",
+   "lib/actions/admin/config.ts:354 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "alert_rules": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/config.ts:393 insert (admin)",
+   "lib/actions/admin/config.ts:426 update (admin)",
+   "lib/actions/admin/config.ts:437 delete (admin)",
+   "lib/actions/admin/config.ts:448 update (admin)"
+  ],
+  "unknown": []
+ },
+ "request_priorities": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/config.ts:468 update (admin)"
+  ],
+  "unknown": []
+ },
+ "retention_policies": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/config.ts:499 update (admin)"
+  ],
+  "unknown": []
+ },
+ "desktime_project_map": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/desktime.ts:37 update (admin)",
+   "lib/desktime/sync.ts:141 upsert (admin)"
+  ],
+  "unknown": []
+ },
+ "ai_applications": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/desktime.ts:67 insert (admin)",
+   "lib/actions/admin/desktime.ts:79 update (admin)",
+   "lib/actions/admin/desktime.ts:91 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "form_templates": {
+  "user": [
+   "lib/actions/admin/form-templates.ts:94 insert (supabase)",
+   "lib/actions/admin/form-templates.ts:189 update (supabase)",
+   "lib/actions/admin/form-templates.ts:278 update (supabase)",
+   "lib/actions/admin/form-templates.ts:326 delete (supabase)",
+   "lib/actions/admin/form-templates.ts:411 insert (supabase)"
+  ],
+  "admin": [
+   "lib/actions/admin/field-library.ts:68 update (admin)",
+   "lib/actions/admin/field-library.ts:289 update (admin)",
+   "lib/actions/admin/form-templates.ts:148 insert (admin)",
+   "lib/actions/admin/form-templates.ts:249 update (admin)"
+  ],
+  "unknown": []
+ },
+ "form_field_library": {
+  "user": [
+   "lib/actions/admin/field-library.ts:89 insert (supabase)",
+   "lib/actions/admin/field-library.ts:178 update (supabase)"
+  ],
+  "admin": [
+   "lib/actions/admin/field-library.ts:143 update (admin)",
+   "lib/actions/admin/field-library.ts:199 delete (admin)",
+   "lib/actions/admin/field-library.ts:250 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "services": {
+  "user": [
+   "lib/actions/admin/form-templates.ts:356 update (supabase)",
+   "lib/actions/admin/form-templates.ts:427 update (supabase)",
+   "lib/actions/admin/services.ts:250 insert (supabase)",
+   "lib/actions/admin/services.ts:325 update (supabase)",
+   "lib/actions/admin/services.ts:381 update (supabase)",
+   "lib/actions/admin/services.ts:448 delete (supabase)"
+  ],
+  "admin": [
+   "lib/actions/admin/services.ts:117 update (admin)",
+   "lib/actions/admin/workflows.ts:223 update (admin)"
+  ],
+  "unknown": []
+ },
+ "notification_rules": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/notificationRules.ts:62 upsert (admin)"
+  ],
+  "unknown": []
+ },
+ "oems": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/oems.ts:54 insert (admin)",
+   "lib/actions/admin/oems.ts:88 update (admin)",
+   "lib/actions/admin/oems.ts:101 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "stores": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/oems.ts:133 update (admin)",
+   "lib/actions/admin/oems.ts:137 update (admin)",
+   "lib/actions/admin/org.ts:340 insert (admin)",
+   "lib/actions/admin/org.ts:401 update (admin)",
+   "lib/actions/admin/org.ts:414 delete (admin)",
+   "lib/actions/admin/storeMaster.ts:187 update (admin)",
+   "lib/actions/admin/storeMaster.ts:202 insert (admin)",
+   "lib/actions/admin/users.ts:211 update (admin)"
+  ],
+  "unknown": []
+ },
+ "departments": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/org.ts:41 insert (admin)",
+   "lib/actions/admin/org.ts:80 update (admin)",
+   "lib/actions/admin/org.ts:91 delete (admin)",
+   "lib/actions/admin/org.ts:134 insert (admin)",
+   "lib/actions/admin/org.ts:157 update (admin)"
+  ],
+  "unknown": []
+ },
+ "locations": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/org.ts:179 insert (admin)",
+   "lib/actions/admin/org.ts:221 update (admin)",
+   "lib/actions/admin/org.ts:232 delete (admin)",
+   "lib/actions/admin/org.ts:257 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "cost_centers": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/org.ts:433 insert (admin)",
+   "lib/actions/admin/org.ts:469 update (admin)",
+   "lib/actions/admin/org.ts:480 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "job_functions": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/org.ts:499 insert (admin)",
+   "lib/actions/admin/org.ts:528 update (admin)",
+   "lib/actions/admin/org.ts:539 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "designations": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/org.ts:558 insert (admin)",
+   "lib/actions/admin/org.ts:587 update (admin)",
+   "lib/actions/admin/org.ts:598 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "profiles": {
+  "user": [
+   "lib/actions/profile.ts:43 update (supabase)",
+   "lib/actions/profile.ts:88 update (supabase)"
+  ],
+  "admin": [
+   "lib/actions/admin/org.ts:647 update (admin)",
+   "lib/actions/admin/users.ts:87 update (admin)",
+   "lib/actions/admin/users.ts:113 update (admin)",
+   "lib/actions/admin/users.ts:202 update (admin)",
+   "lib/actions/admin/users.ts:474 update (admin)",
+   "lib/actions/admin/users.ts:749 update (admin)",
+   "lib/actions/admin/users.ts:908 update (admin)",
+   "lib/actions/admin/users.ts:1049 update (admin)",
+   "lib/actions/auth.ts:105 update (createAdminClient())"
+  ],
+  "unknown": []
+ },
+ "permission_overrides": {
+  "user": [
+   "lib/actions/admin/permissions.ts:35 upsert (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "custom_roles": {
+  "user": [
+   "lib/actions/admin/permissions.ts:64 insert (supabase)",
+   "lib/actions/admin/permissions.ts:88 delete (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "scheduled_reports": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/reports.ts:89 insert (admin)",
+   "lib/actions/admin/reports.ts:140 update (admin)",
+   "lib/actions/admin/reports.ts:153 delete (admin)",
+   "lib/actions/admin/reports.ts:216 update (admin)"
+  ],
+  "unknown": []
+ },
+ "service_sub_category_tags": {
+  "user": [
+   "lib/actions/admin/services.ts:262 insert (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "service_location_tags": {
+  "user": [
+   "lib/actions/admin/services.ts:275 insert (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "sla_policies": {
+  "user": [
+   "lib/actions/admin/sla-policies.ts:38 insert (supabase)",
+   "lib/actions/admin/sla-policies.ts:81 update (supabase)",
+   "lib/actions/admin/sla-policies.ts:108 update (supabase)",
+   "lib/actions/admin/sla-policies.ts:156 delete (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "task_statuses": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/task-config.ts:30 insert (admin)",
+   "lib/actions/admin/task-config.ts:68 update (admin)",
+   "lib/actions/admin/task-config.ts:79 delete (admin)",
+   "lib/actions/admin/task-config.ts:91 update (admin)"
+  ],
+  "unknown": []
+ },
+ "task_priorities": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/task-config.ts:112 insert (admin)",
+   "lib/actions/admin/task-config.ts:147 update (admin)",
+   "lib/actions/admin/task-config.ts:158 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "teams": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/teams.ts:57 insert (admin)",
+   "lib/actions/admin/teams.ts:87 update (admin)",
+   "lib/actions/admin/teams.ts:131 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "team_members": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/teams.ts:158 insert (admin)",
+   "lib/actions/admin/teams.ts:176 delete (admin)",
+   "lib/actions/admin/users.ts:336 delete (admin)",
+   "lib/actions/admin/users.ts:341 insert (admin)",
+   "lib/actions/admin/users.ts:503 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "profile_mobile_numbers": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/users.ts:266 insert (admin)",
+   "lib/actions/admin/users.ts:300 delete (admin)",
+   "lib/actions/admin/users.ts:485 insert (admin)",
+   "lib/actions/admin/users.ts:756 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "approval_workflows": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/workflows.ts:31 insert (admin)",
+   "lib/actions/admin/workflows.ts:48 update (admin)",
+   "lib/actions/admin/workflows.ts:78 delete (admin)",
+   "lib/actions/approvals.ts:171 insert (admin)",
+   "lib/actions/approvals.ts:187 delete (admin)",
+   "lib/actions/approvals.ts:198 delete (admin)",
+   "lib/actions/approvals.ts:221 delete (admin)",
+   "lib/approvals/isolate-workflow.ts:36 insert (admin)",
+   "lib/approvals/isolate-workflow.ts:43 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "approval_workflow_steps": {
+  "user": [],
+  "admin": [
+   "lib/actions/admin/workflows.ts:158 update (admin)",
+   "lib/actions/admin/workflows.ts:167 insert (admin)",
+   "lib/actions/admin/workflows.ts:195 delete (admin)",
+   "lib/actions/approvals.ts:185 insert (admin)",
+   "lib/actions/approvals.ts:321 insert (admin)",
+   "lib/actions/approvals.ts:444 update (admin)",
+   "lib/approvals/isolate-workflow.ts:45 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "approvals": {
+  "user": [],
+  "admin": [
+   "lib/actions/approvals.ts:192 insert (admin)",
+   "lib/actions/approvals.ts:220 delete (admin)",
+   "lib/actions/intake/work.ts:285 insert (admin)",
+   "lib/actions/intake/work.ts:302 delete (admin)",
+   "lib/actions/requests.ts:1287 insert (admin)",
+   "lib/actions/requests.ts:1314 delete (admin)",
+   "lib/approvals/decision.ts:135 update (admin)",
+   "lib/approvals/decision.ts:245 update (admin)",
+   "lib/approvals/decision.ts:298 update (admin)",
+   "lib/approvals/isolate-workflow.ts:50 update (admin)"
+  ],
+  "unknown": []
+ },
+ "requests": {
+  "user": [
+   "lib/actions/requests.ts:239 update (supabase)",
+   "lib/actions/requests.ts:688 update (supabase)",
+   "lib/actions/requests.ts:1547 update (supabase)",
+   "lib/requests/create-request-core.ts:482 insert (writeClient)",
+   "lib/requests/status-change.ts:316 update (statusUpdateClient)",
+   "lib/requests/status-change.ts:431 update (statusUpdateClient)",
+   "lib/requests/status-change.ts:443 update (statusUpdateClient)"
+  ],
+  "admin": [
+   "lib/actions/approvals.ts:209 update (admin)",
+   "lib/actions/intake/work.ts:299 update (admin)",
+   "lib/actions/requests.ts:818 update (admin)",
+   "lib/actions/requests.ts:973 update (admin)",
+   "lib/actions/requests.ts:1174 insert (admin)",
+   "lib/actions/requests.ts:1302 update (admin)",
+   "lib/approvals/decision.ts:193 update (admin)",
+   "lib/approvals/decision.ts:352 update (admin)",
+   "lib/requests/auto-close.ts:28 update (admin)",
+   "lib/requests/create-request-core.ts:138 update (admin)",
+   "lib/requests/create-request-core.ts:516 update (admin)",
+   "lib/requests/email-reply-comment.ts:95 update (admin)",
+   "lib/rules/actions.ts:149 update (admin)",
+   "lib/rules/actions.ts:177 update (admin)",
+   "lib/rules/actions.ts:200 update (admin)",
+   "lib/rules/actions.ts:296 update (admin)",
+   "lib/rules/actions.ts:343 update (admin)"
+  ],
+  "unknown": []
+ },
+ "request_attachments": {
+  "user": [
+   "lib/actions/attachments.ts:154 insert (supabase)"
+  ],
+  "admin": [
+   "lib/actions/attachments.ts:231 update (admin)",
+   "lib/whatsapp/media.ts:158 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "csat_surveys": {
+  "user": [
+   "lib/actions/requests.ts:1512 update (supabase)"
+  ],
+  "admin": [
+   "lib/actions/csatPublic.ts:26 update (admin)",
+   "lib/csat/issue.ts:73 insert (admin)",
+   "lib/csat/issue.ts:83 update (admin)",
+   "lib/csat/issue.ts:84 update (admin)",
+   "lib/csat/reminders.ts:37 update (admin)",
+   "lib/csat/reminders.ts:42 update (admin)",
+   "lib/csat/reminders.ts:44 update (admin)"
+  ],
+  "unknown": []
+ },
+ "intake_audit_log": {
+  "user": [],
+  "admin": [
+   "lib/actions/intake/channels.ts:33 insert (admin)",
+   "lib/actions/intake/reviews.ts:24 insert (admin)",
+   "lib/actions/intake/rules.ts:78 insert (admin)",
+   "lib/actions/intake/whatsapp-channel.ts:30 insert (admin)",
+   "lib/actions/intake/_shared.ts:21 insert (admin)",
+   "lib/whatsapp/webhook-handler.ts:81 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "intake_channels": {
+  "user": [
+   "lib/actions/intake/channels.ts:62 insert (supabase)",
+   "lib/actions/intake/channels.ts:112 update (supabase)",
+   "lib/actions/intake/channels.ts:140 update (supabase)",
+   "lib/actions/intake/channels.ts:166 delete (supabase)",
+   "lib/actions/intake/channels.ts:268 update (rls)",
+   "lib/actions/intake/channels.ts:383 update (supabase)",
+   "lib/actions/intake/whatsapp-channel.ts:54 insert (supabase)",
+   "lib/actions/intake/whatsapp-channel.ts:147 update (supabase)",
+   "lib/actions/intake/whatsapp-channel.ts:247 update (rls)",
+   "app/api/intake/oauth/callback/route.ts:116 update (rls)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "intake_messages": {
+  "user": [
+   "lib/actions/intake/communication.ts:28 update (supabase)",
+   "lib/actions/intake/communication.ts:49 update (supabase)",
+   "lib/actions/intake/reviews.ts:159 update (supabase)"
+  ],
+  "admin": [
+   "lib/actions/intake/communication.ts:141 update (admin)",
+   "lib/actions/intake/work.ts:156 update (admin)",
+   "lib/actions/intake/work.ts:325 update (admin)",
+   "lib/actions/intake/work.ts:384 update (admin)"
+  ],
+  "unknown": []
+ },
+ "intake_notes": {
+  "user": [
+   "lib/actions/intake/communication.ts:73 insert (supabase)"
+  ],
+  "admin": [
+   "lib/actions/intake/communication.ts:104 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "intake_reviews": {
+  "user": [
+   "lib/actions/intake/flags.ts:23 update (supabase)",
+   "lib/actions/intake/flags.ts:45 update (supabase)",
+   "lib/actions/intake/reviews.ts:38 update (supabase)",
+   "lib/actions/intake/reviews.ts:59 update (supabase)",
+   "lib/actions/intake/reviews.ts:107 update (supabase)",
+   "lib/actions/intake/reviews.ts:143 update (supabase)"
+  ],
+  "admin": [
+   "lib/actions/intake/communication.ts:151 update (admin)",
+   "lib/actions/intake/work.ts:136 update (admin)",
+   "lib/actions/intake/work.ts:144 update (admin)",
+   "lib/actions/intake/work.ts:310 update (admin)",
+   "lib/actions/intake/work.ts:370 update (admin)",
+   "lib/actions/intake/work.ts:434 insert (admin)",
+   "lib/actions/intake/work.ts:503 update (admin)"
+  ],
+  "unknown": []
+ },
+ "intake_rules": {
+  "user": [],
+  "admin": [
+   "lib/actions/intake/rules.ts:96 insert (admin)",
+   "lib/actions/intake/rules.ts:120 update (admin)",
+   "lib/actions/intake/rules.ts:142 update (admin)",
+   "lib/actions/intake/rules.ts:161 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "tasks": {
+  "user": [
+   "lib/actions/projects.ts:457 update (supabase)",
+   "lib/actions/tasks.ts:127 insert (supabase)",
+   "lib/actions/tasks.ts:190 update (supabase)",
+   "lib/actions/tasks.ts:297 update (supabase)",
+   "lib/actions/tasks.ts:301 update (supabase)",
+   "lib/actions/tasks.ts:305 update (supabase)",
+   "lib/actions/tasks.ts:309 update (supabase)",
+   "lib/actions/tasks.ts:313 update (supabase)",
+   "lib/actions/tasks.ts:372 update (supabase)",
+   "lib/actions/tasks.ts:388 update (supabase)",
+   "lib/actions/tasks.ts:405 update (supabase)",
+   "lib/actions/tasks.ts:433 update (supabase)",
+   "lib/actions/tasks.ts:463 update (supabase)",
+   "lib/actions/tasks.ts:513 insert (supabase)",
+   "lib/actions/tasks.ts:642 update (supabase)",
+   "lib/actions/tasks.ts:786 delete (supabase)"
+  ],
+  "admin": [
+   "lib/actions/intake/work.ts:351 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "kb_articles": {
+  "user": [
+   "lib/actions/knowledge-base.ts:42 insert (supabase)",
+   "lib/actions/knowledge-base.ts:92 update (supabase)",
+   "lib/actions/knowledge-base.ts:115 update (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "notifications": {
+  "user": [
+   "lib/actions/notifications.ts:19 update (supabase)",
+   "lib/actions/notifications.ts:39 update (supabase)",
+   "lib/actions/notifications.ts:64 update (supabase)",
+   "lib/actions/notifications.ts:91 update (supabase)"
+  ],
+  "admin": [
+   "lib/approvals/decision.ts:26 update (admin)",
+   "lib/notifications.ts:142 insert (admin)",
+   "app/api/alerts/run/route.ts:107 update (admin)"
+  ],
+  "unknown": []
+ },
+ "notification_preferences": {
+  "user": [
+   "lib/actions/notifications.ts:113 upsert (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "project_activity": {
+  "user": [],
+  "admin": [
+   "lib/actions/projects.ts:45 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "projects": {
+  "user": [
+   "lib/actions/projects.ts:88 insert (supabase)",
+   "lib/actions/projects.ts:249 update (supabase)",
+   "lib/actions/projects.ts:293 update (supabase)"
+  ],
+  "admin": [
+   "lib/actions/projects.ts:184 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "milestones": {
+  "user": [
+   "lib/actions/projects.ts:360 insert (supabase)",
+   "lib/actions/projects.ts:411 update (supabase)",
+   "lib/actions/projects.ts:443 delete (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "project_members": {
+  "user": [
+   "lib/actions/projects.ts:481 insert (supabase)",
+   "lib/actions/projects.ts:504 delete (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "project_updates": {
+  "user": [
+   "lib/actions/projects.ts:537 insert (supabase)",
+   "lib/actions/projects.ts:558 delete (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "push_subscriptions": {
+  "user": [
+   "lib/actions/push.ts:24 upsert (supabase)",
+   "lib/actions/push.ts:45 delete (supabase)"
+  ],
+  "admin": [
+   "lib/push/send.ts:51 delete (admin)"
+  ],
+  "unknown": []
+ },
+ "saved_reports": {
+  "user": [
+   "lib/actions/reporting.ts:56 insert (supabase)",
+   "lib/actions/reporting.ts:78 update (supabase)",
+   "lib/actions/reporting.ts:89 delete (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "request_collaborators": {
+  "user": [
+   "lib/actions/requests.ts:545 insert (supabase)",
+   "lib/actions/requests.ts:618 delete (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "request_comments": {
+  "user": [
+   "lib/actions/requests.ts:695 insert (supabase)",
+   "lib/actions/requests.ts:875 delete (supabase)",
+   "lib/requests/status-change.ts:581 insert (supabase)"
+  ],
+  "admin": [
+   "lib/email/inbound.ts:71 insert (admin)",
+   "lib/requests/create-request-core.ts:116 insert (admin)",
+   "lib/requests/create-request-core.ts:125 insert (admin)",
+   "lib/requests/email-reply-comment.ts:49 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "related_requests": {
+  "user": [
+   "lib/actions/requests.ts:1453 insert (supabase)",
+   "lib/actions/requests.ts:1490 delete (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "task_attachments": {
+  "user": [],
+  "admin": [],
+  "unknown": [
+   "lib/actions/task-attachments.ts:78 insert (any))"
+  ]
+ },
+ "task_activity": {
+  "user": [],
+  "admin": [
+   "lib/actions/tasks.ts:80 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "task_assignees": {
+  "user": [
+   "lib/actions/tasks.ts:424 upsert (sb)",
+   "lib/actions/tasks.ts:455 delete (sb)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "task_comments": {
+  "user": [
+   "lib/actions/tasks.ts:480 insert (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "task_dependencies": {
+  "user": [
+   "lib/actions/tasks.ts:597 insert (supabase)",
+   "lib/actions/tasks.ts:623 delete (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "task_custom_fields": {
+  "user": [
+   "lib/actions/tasks.ts:685 insert (supabase)",
+   "lib/actions/tasks.ts:718 update (supabase)",
+   "lib/actions/tasks.ts:732 delete (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "task_custom_field_values": {
+  "user": [
+   "lib/actions/tasks.ts:747 upsert (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "request_activity": {
+  "user": [],
+  "admin": [
+   "lib/activity.ts:42 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "approval_decisions": {
+  "user": [],
+  "admin": [
+   "lib/approvals/decision.ts:106 insert (admin)",
+   "lib/approvals/decision.ts:286 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "approval_email_codes": {
+  "user": [],
+  "admin": [
+   "lib/approvals/email-code.ts:14 update (admin)",
+   "lib/approvals/email-code.ts:16 insert (admin)",
+   "lib/approvals/email-code.ts:37 update (admin)",
+   "lib/approvals/email-code.ts:45 update (admin)"
+  ],
+  "unknown": []
+ },
+ "conversation_events": {
+  "user": [],
+  "admin": [
+   "lib/conversations/repository.ts:85 insert (admin)",
+   "lib/conversations/repository.ts:302 update (admin)"
+  ],
+  "unknown": []
+ },
+ "request_conversations": {
+  "user": [],
+  "admin": [
+   "lib/conversations/repository.ts:158 update (admin)",
+   "lib/conversations/repository.ts:192 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "conversation_attachments": {
+  "user": [],
+  "admin": [
+   "lib/conversations/repository.ts:388 insert (admin)",
+   "lib/conversations/repository.ts:432 update (admin)"
+  ],
+  "unknown": []
+ },
+ "desktime_sync_runs": {
+  "user": [],
+  "admin": [
+   "lib/desktime/sync.ts:30 insert (admin)",
+   "lib/desktime/sync.ts:152 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "desktime_time_logs": {
+  "user": [],
+  "admin": [
+   "lib/desktime/sync.ts:125 upsert (admin)",
+   "lib/desktime/sync.ts:194 update (admin)"
+  ],
+  "unknown": []
+ },
+ "desktime_app_logs": {
+  "user": [],
+  "admin": [
+   "lib/desktime/sync.ts:129 upsert (admin)"
+  ],
+  "unknown": []
+ },
+ "processed_inbound_emails": {
+  "user": [],
+  "admin": [
+   "lib/email/inbound-claim.ts:19 insert (admin)",
+   "lib/email/inbound-claim.ts:25 delete (admin)",
+   "lib/email/inbound.ts:177 insert (admin)",
+   "lib/email/inbound.ts:185 insert (admin)",
+   "lib/email/inbound.ts:193 insert (admin)",
+   "lib/email/inbound.ts:200 insert (admin)",
+   "lib/email/inbound.ts:212 insert (admin)",
+   "lib/email/inbound.ts:230 insert (admin)",
+   "lib/email/inbound.ts:246 insert (admin)",
+   "lib/email/inbound.ts:261 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "error_reports": {
+  "user": [
+   "lib/error-reporting.ts:23 insert (supabase)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "app_event_log": {
+  "user": [],
+  "admin": [
+   "lib/events/record.ts:87 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "request_time_entries": {
+  "user": [
+   "lib/requests/status-change.ts:335 update (supabase)",
+   "lib/requests/status-change.ts:341 insert (supabase)"
+  ],
+  "admin": [
+   "lib/requests/status-change.ts:356 update (admin)",
+   "lib/rules/actions.ts:321 update (admin)"
+  ],
+  "unknown": []
+ },
+ "system_log": {
+  "user": [
+   "lib/syslog/record.ts:37 insert (c)"
+  ],
+  "admin": [],
+  "unknown": []
+ },
+ "owner_audit_log": {
+  "user": [],
+  "admin": [
+   "lib/whatsapp/webhook-handler.ts:73 insert (admin)"
+  ],
+  "unknown": []
+ },
+ "business_rule_events": {
+  "user": [],
+  "admin": [
+   "app/api/business-rules/run/route.ts:193 insert (admin)",
+   "app/api/business-rules/run/route.ts:201 delete (admin)"
+  ],
+  "unknown": []
+ }
+}

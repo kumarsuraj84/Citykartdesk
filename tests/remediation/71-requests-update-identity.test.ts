@@ -24,12 +24,13 @@ const stored = async () => (await svc<Record<string, string>[]>('GET', `/request
 
 describe('ticket update rule after migration 158', () => {
   for (const who of ['agent', 'manager'] as const) {
-    it(`${who}: an ordinary update works`, async () => {
+    // Since migration 165 even an ordinary edit is refused: a signed-in user has no direct write right on tickets (the server writes them after its own checks)
+    it(`${who}: even an ordinary update through the API is refused (tickets are written by the server only)`, async () => {
       const s = who === 'agent' ? agent : manager
+      const before = await stored()
       const r = await asUser<{ id: string }[]>(s, 'PATCH', `/requests?id=eq.${ticket}`, { title: `identity ${tag} by ${who}` }, { Prefer: 'return=representation' })
-      expect(r.status).toBe(200)
-      expect(r.json).toHaveLength(1)
-      expect((await stored()).title).toBe(`identity ${tag} by ${who}`)
+      expect(r.status === 200 ? r.json : []).toHaveLength(0)
+      expect((await stored()).title).toBe(before.title)
     })
 
     it(`${who}: changing the requester is refused`, async () => {

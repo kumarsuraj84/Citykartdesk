@@ -59,9 +59,17 @@ describe('statement timeout on the signed-in role', () => {
     // the API answers with an error (statement timeout), not data and not a hang
     expect(direct!.status).toBeGreaterThanOrEqual(400)
     expect(direct!.body).toMatch(/57014|statement timeout|canceling statement/i)
-    // the action reports an error (or the app's error screen takes over) and never claims success
-    expect(outcome.error).toBeTruthy()
-    expect((await db.from('requests').select('status').eq('id', t.id).single()).data?.status).toBe('in_progress')
+    // The action never ends half-done: either it reports an error and nothing changed, or (the server writes tickets with its own key, which the signed-in
+    // role's time limit does not touch) it completes with the status AND the remark recorded.
+    const after = (await db.from('requests').select('status').eq('id', t.id).single()).data?.status
+    if (outcome.error) {
+      expect(after).toBe('in_progress')
+    } else {
+      expect(after).toBe('waiting_user')
+      const { data: remark } = await db.from('request_comments').select('id').eq('request_id', t.id).eq('body', 'Please send a photo.')
+      expect(remark?.length).toBe(1)
+      await db.from('requests').update({ status: 'in_progress', waiting_since: null }).eq('id', t.id)
+    }
     // recovered
     actAs(fx.agentA)
     expect((await updateRequestStatus(t.id, 'waiting_user', 'Please send a photo.')).error).toBeUndefined()

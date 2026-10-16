@@ -279,6 +279,16 @@ export async function setupD03Fixtures(): Promise<D03Fixtures> {
       // which itself retries each deletion a bounded number of times for
       // transient Auth/Postgres contention under sustained suite load)
       // rather than silently leaking a stale auth user the way this used to.
+      // The application sends notifications in the background (fire-and-forget). One that lands just after the tickets were deleted still names a fixture user and
+      // would block that user's deletion (NO ACTION foreign keys): wait for them to settle, then clear what refers to the fixture users.
+      await new Promise((r) => setTimeout(r, 1500))
+      for (const [table, column] of [
+        ['notifications', 'user_id'], ['notifications', 'actor_id'], ['request_activity', 'actor_id'], ['request_comments', 'author_id'],
+        ['request_collaborators', 'user_id'], ['request_collaborators', 'added_by'], ['approval_decisions', 'decided_by'], ['request_time_entries', 'user_id'],
+      ] as const) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        try { await (admin as any).from(table).delete().in(column, fixtureUserIds) } catch { /* best effort: a refusal here shows up as the user deletion error below */ }
+      }
       await deleteTestUsers(admin, [
         { id: requesterA.id, label: 'requesterA' },
         { id: requesterB.id, label: 'requesterB' },
