@@ -48,15 +48,27 @@ describe('approval hardening', () => {
   afterAll(async () => { await fx?.cleanup() }, 120_000)
   beforeEach(() => { sent.length = 0; jar.clear() })
 
-  /** A ticket raised by `requester`, sent for approval by `sender` to the manager and the admin. */
+  /**
+   * A ticket raised by `requester`, sent for approval by `sender` to the manager and the admin.
+   * Since remediation phase 2 the requester and the sender cannot be CHOSEN as approvers (see tests/vapt/21-approvals-separation). This suite tests the
+   * decision-time rule on top of that (defence in depth, and approvals that were created before the new rule), so when the requester or the sender is one of
+   * the two approvers their step is written directly, as old data would have it.
+   */
   async function start(requester: TestUser, sender: TestUser) {
     const req = await seedRequestLike(fx, { requesterId: requester.id, serviceId: fx.teamA.serviceId, teamId: fx.teamA.id, assignedTo: fx.agentA.id, status: 'in_progress' })
     actAs(sender)
-    const res = await sendAdHocApproval(req.id, [fx.manager.id, fx.admin.id])
+    const allowed = [fx.manager.id, fx.admin.id].filter((id) => id !== requester.id && id !== sender.id)
+    const res = await sendAdHocApproval(req.id, allowed)
     expect(res.error).toBeUndefined()
-    await waitFor(() => sent.filter((m) => /Approval required/.test(m.subject)).length >= 2)
-    const { data: approval } = await admin.from('approvals').select('id').eq('request_id', req.id).single()
-    const tokenFor = (u: TestUser) => /\/approve\/([A-Za-z0-9._-]+)\?do=approve/.exec(sent.find((m) => m.to.toLowerCase() === u.email.toLowerCase() && /Approval required/.test(m.subject))?.html ?? '')?.[1] ?? ''
+    await waitFor(() => sent.filter((m) => /Approval required/.test(m.subject)).length >= allowed.length)
+    const { data: approval } = await admin.from('approvals').select('id, workflow_id').eq('request_id', req.id).single()
+    const legacy = [fx.manager.id, fx.admin.id].filter((id) => !allowed.includes(id))
+    if (legacy.length) {
+      const { data: steps } = await admin.from('approval_workflow_steps').select('step_order').eq('workflow_id', approval!.workflow_id)
+      let next = Math.max(0, ...(steps ?? []).map((x) => x.step_order)) + 1
+      for (const id of legacy) await admin.from('approval_workflow_steps').insert({ workflow_id: approval!.workflow_id, step_order: next++, approver_type: 'specific_user', approver_user_id: id })
+    }
+    const tokenFor = (u: TestUser) => signApprovalToken(approval!.id as string, u.id) ?? ''
     return { req, approvalId: approval!.id as string, manager: tokenFor(fx.manager), adminTok: tokenFor(fx.admin) }
   }
   const approvalStatus = async (id: string) => (await admin.from('approvals').select('status').eq('id', id).single()).data!.status

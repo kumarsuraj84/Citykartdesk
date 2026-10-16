@@ -232,6 +232,7 @@ export type Database = {
       }
       approval_workflow_steps: {
         Row: {
+          added_by: string | null
           approver_type: Database["public"]["Enums"]["approver_type"]
           approver_user_id: string | null
           id: string
@@ -239,6 +240,7 @@ export type Database = {
           workflow_id: string
         }
         Insert: {
+          added_by?: string | null
           approver_type: Database["public"]["Enums"]["approver_type"]
           approver_user_id?: string | null
           id?: string
@@ -246,6 +248,7 @@ export type Database = {
           workflow_id: string
         }
         Update: {
+          added_by?: string | null
           approver_type?: Database["public"]["Enums"]["approver_type"]
           approver_user_id?: string | null
           id?: string

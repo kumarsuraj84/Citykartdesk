@@ -11,6 +11,7 @@ import { logActivity } from '@/lib/activity'
 import { archiveApprovalNotifications, decideApproval, type ApprovalDb } from '@/lib/approvals/decision'
 import { notify } from '@/lib/notifications'
 import { rateLimit } from '@/lib/rate-limit'
+import { firstBarredApprover } from '@/lib/approvals/separation'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import type { RequestPriority, RequestStatus } from '@/types'
 
@@ -20,6 +21,7 @@ export async function searchUsersForDelegation(
   query: string
 ): Promise<{ id: string; full_name: string }[]> {
   const supabase = await createClient()
+  if (!(await getCurrentProfile())) return []     // an explicit sign-in check: the page layout is not a guard for a Server Action
   const safe = query.replace(/[%_]/g, '\\$&').trim()
   const { data } = await supabase
     .from('profiles')
@@ -41,6 +43,8 @@ export async function searchManagersForApproval(
 ): Promise<{ id: string; full_name: string; role: string }[]> {
   const profile = await getCurrentProfile()
   if (!profile || !profile.org_id) return []
+  // Only staff send requests for approval, so only staff may search for approvers (VAPT-057: any employee could use this to test e-mail addresses)
+  if (!['agent', 'manager', 'admin', 'platform_owner'].includes(profile.role)) return []
 
   const q = query.trim()
   if (!q) return []
@@ -70,9 +74,10 @@ export async function searchManagersForApproval(
   // Looks like (or might be) an email — cross-reference auth.users.
   const { data: authData } = await admin.auth.admin.listUsers({ perPage: 1000 })
   const qLower = q.toLowerCase()
+  // an address is matched only when it is typed in full: typing "pri" or "psharma@" must not reveal who owns which address
   const matchingIds = new Set(
     (authData?.users ?? [])
-      .filter((u) => u.email?.toLowerCase().includes(qLower))
+      .filter((u) => qLower.includes('@') && u.email?.toLowerCase() === qLower)
       .map((u) => u.id)
   )
   if (matchingIds.size === 0) return byName as { id: string; full_name: string; role: string }[] ?? []
@@ -153,6 +158,8 @@ export async function sendAdHocApproval(
 
   const approvers = await loadValidApprovers(admin, req.org_id, approverIds)
   if (!approvers) return { error: 'One or more selected users were not found.' }
+  const barred = firstBarredApprover(approverIds, { requesterId: req.requester_id, senderId: profile.id })
+  if (barred) return { error: barred }
 
   // Block if an approval is already open
   const { data: existing } = await admin
@@ -298,7 +305,7 @@ export async function addAdHocApprovers(
 
   const { data: approval } = await admin
     .from('approvals')
-    .select('id, workflow_id, current_step')
+    .select('id, workflow_id, current_step, requested_by')
     .eq('request_id', requestId)
     .eq('status', 'pending')
     .maybeSingle()
@@ -308,6 +315,9 @@ export async function addAdHocApprovers(
 
   const approvers = await loadValidApprovers(admin, req.org_id, approverIds)
   if (!approvers) return { error: 'One or more selected users were not found.' }
+  // nobody adds themselves, the requester or the sender as an approver (VAPT-016)
+  const barredAdd = firstBarredApprover(approverIds, { requesterId: req.requester_id, senderId: approval.requested_by ?? null, actorId: profile.id })
+  if (barredAdd) return { error: barredAdd }
 
   const { data: existingSteps } = await admin
     .from('approval_workflow_steps')
@@ -324,6 +334,7 @@ export async function addAdHocApprovers(
       step_order: nextOrder + i,
       approver_type: 'specific_user' as const,
       approver_user_id: a.id,
+      added_by: profile.id,
     }))
   )
   if (stepErr) return { error: sanitizeError(stepErr, { route: 'approvals.ts#addAdHocApprovers', fallback: 'Failed to add approvers.' }) }
@@ -377,7 +388,7 @@ export async function delegateApproval(
 
   const { data: approval } = await supabase
     .from('approvals')
-    .select('id, request_id, workflow_id, current_step, status')
+    .select('id, request_id, workflow_id, current_step, status, requested_by')
     .eq('id', approvalId)
     .single()
 
@@ -428,7 +439,10 @@ export async function delegateApproval(
   // Same gate sendAdHocApproval() applies to its initial approver list — an
   // inactive or cross-org target would still get RLS-granted approve/reject
   // access via is_request_approver(), which checks nothing but this row.
-  const { data: req } = await admin.from('requests').select('org_id').eq('id', approval.request_id).single()
+  const { data: req } = await admin.from('requests').select('org_id, requester_id').eq('id', approval.request_id).single()
+  // separation of duties on delegation too (VAPT-016): not the requester, not the sender, not the delegator themselves
+  const barredDelegate = firstBarredApprover([newApproverId], { requesterId: req?.requester_id ?? null, senderId: approval.requested_by ?? null, actorId: profile.id })
+  if (barredDelegate) return { error: barredDelegate === 'You cannot add yourself as an approver.' ? 'You cannot delegate an approval to yourself.' : barredDelegate }
   const { data: newApprover } = await admin
     .from('profiles')
     .select('id')
