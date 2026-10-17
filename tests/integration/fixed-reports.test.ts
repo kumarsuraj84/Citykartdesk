@@ -48,9 +48,15 @@ describe('fixed reports (local database)', () => {
     // offer agree with the database
     const base = await loadFixedReport(profile, 'admin-summary-report')
     if ('error' in base) throw new Error(base.error)
-    const tech = base.filters.combos.find((c) => c.tech !== 'Unassigned')!.tech
-    const mine = await loadFixedReport(profile, 'admin-summary-report', { ...emptyReportFilter(), techs: [tech] })
-    if ('error' in mine) throw new Error(mine.error)
+    // a technician who really has rows in this report (the filter offers every technician with tickets in the group, some of whom have none in this report's categories)
+    let tech = ''
+    let mine: Awaited<ReturnType<typeof loadFixedReport>> | undefined
+    for (const candidate of [...new Set(base.filters.combos.map((c) => c.tech))].filter((t) => t !== 'Unassigned')) {
+      const trial = await loadFixedReport(profile, 'admin-summary-report', { ...emptyReportFilter(), techs: [candidate] })
+      if ('error' in trial) throw new Error(trial.error)
+      if (trial.table.rows.some((r) => r.kind === 'row')) { tech = candidate; mine = trial; break }
+    }
+    if (!mine || 'error' in mine) throw new Error('no technician with rows in this report')
     const ofTech = base.filters.combos.filter((c) => c.tech === tech && OPEN_LIST.includes(c.status)).reduce((n, c) => n + c.count, 0)
     expect(mine.table.rows.at(-1)?.cells[res_total(mine.table)]).toBe(ofTech)
     expect(mine.table.rows.filter((r) => r.kind === 'row').every((r) => r.key.startsWith(tech + '|') || r.cells[0] === '' || r.cells[0] === tech)).toBe(true)
