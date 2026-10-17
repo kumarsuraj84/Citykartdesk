@@ -154,15 +154,19 @@ describe('approval hardening', () => {
       expect((await verifyApprovalCode(manager, code)).error).toMatch(/not right|expired/i)                    // used up
       expect((await decideByEmail(manager, 'approve', 'no proof any more')).error).toMatch(/confirm it is you/i)
     })
-    it('asking for a new code cancels the old one', async () => {
+    it('a code that is still usable is not replaced; after a lock-out a new one is made and the old one stops working (VAPT-044)', async () => {
       const { manager } = await start(fx.requesterA, fx.agentA)
       anonymous()
       await requestApprovalCode(manager)
       const first = lastCode()
       sent.length = 0
-      await requestApprovalCode(manager)
+      expect((await requestApprovalCode(manager)).error).toMatch(/already sent/i)      // the link holder cannot cancel the approver's code
+      expect(sent).toHaveLength(0)
+      for (let i = 0; i < 5; i++) await verifyApprovalCode(manager, wrong(first))       // the first code locks
+      expect((await requestApprovalCode(manager)).error).toBeUndefined()
       const second = lastCode()
-      if (first !== second) expect((await verifyApprovalCode(manager, first)).error).toMatch(/not right|expired/i)
+      expect(second).not.toBe(first)
+      expect((await verifyApprovalCode(manager, first)).error).toBeTruthy()             // the locked one is dead
       expect((await verifyApprovalCode(manager, second)).error).toBeUndefined()
     })
     it('locks after five wrong tries, even for the right code, until a new one is asked for', async () => {

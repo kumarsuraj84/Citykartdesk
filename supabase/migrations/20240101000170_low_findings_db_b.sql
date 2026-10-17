@@ -16,17 +16,17 @@ REVOKE ALL ON public._grant_snapshots FROM PUBLIC, anon, authenticated;
 
 INSERT INTO public._grant_snapshots (stage, kind, grantee, object_name, privilege)
 SELECT '170', 'table', 'anon', c.relname, '-'
-FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p') AND c.relname IN ('push_subscriptions', 'profiles')
+FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p') AND c.relname IN ('push_subscriptions', 'profiles', 'task_attachments')
 ON CONFLICT DO NOTHING;
 INSERT INTO public._grant_snapshots (stage, kind, grantee, object_name, privilege)
 SELECT '170', 'table', r.rolname, c.relname, a.privilege_type
 FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) a JOIN pg_roles r ON r.oid = a.grantee
-WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p') AND r.rolname IN ('anon', 'authenticated') AND c.relname IN ('push_subscriptions', 'profiles')
+WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p') AND r.rolname IN ('anon', 'authenticated') AND c.relname IN ('push_subscriptions', 'profiles', 'task_attachments')
 ON CONFLICT DO NOTHING;
 INSERT INTO public._grant_snapshots (stage, kind, grantee, object_name, privilege)
 SELECT '170', 'column', r.rolname, c.relname || '.' || t.attname, a.privilege_type
 FROM pg_class c JOIN pg_attribute t ON t.attrelid = c.oid AND t.attnum > 0 AND NOT t.attisdropped CROSS JOIN LATERAL aclexplode(t.attacl) a JOIN pg_roles r ON r.oid = a.grantee
-WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p') AND r.rolname IN ('anon', 'authenticated') AND c.relname IN ('push_subscriptions', 'profiles')
+WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p') AND r.rolname IN ('anon', 'authenticated') AND c.relname IN ('push_subscriptions', 'profiles', 'task_attachments')
 ON CONFLICT DO NOTHING;
 
 -- ── VAPT-061 / VA-DB-10: a display name is changed through the application only ──────────────────────────────────────────────────────────────
@@ -126,6 +126,11 @@ CREATE POLICY profiles_select ON public.profiles FOR SELECT USING (
   id = auth.uid()
   OR (org_id = current_org_id() AND (current_user_role() <> 'user' OR id = ANY (current_user_visible_people())))
 );
+
+-- A missing grant found while testing 021: task_attachments has a row-level read policy, but signed-in users were never granted the table right, so the Tasks
+-- page (which lists attachments with the user's own login) got nothing and the file-store read rule for task files raised "permission denied" for every read.
+-- Rows stay protected by task_attachments_select; writes stay with the server only (migration 167).
+GRANT SELECT ON public.task_attachments TO authenticated;
 
 -- ── VAPT-021 / VA-DB-06 (rest): a file can be read only through the attachment row of ITS OWN ticket ────────────────────────────────────────────
 -- The file-store read rule granted access when ANY attachment row pointed at the file and the person could see that row's ticket. A requester could create a

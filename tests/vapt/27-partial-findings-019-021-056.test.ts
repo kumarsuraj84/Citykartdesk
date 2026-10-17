@@ -126,9 +126,14 @@ describe('VAPT-021: files in the file store', () => {
   it('FORGED REFERENCE: a row on my own ticket that points at another ticket\'s file opens nothing, and cannot even be created through the data API', async () => {
     const forged = await http('POST', '/rest/v1/request_attachments', { token: fx.requesterA.accessToken, body: { request_id: fx.requestA.id, uploaded_by: fx.requesterA.id, file_name: 'x.txt', file_size: 1, mime_type: 'text/plain', storage_path: pathB }, headers: { Prefer: 'return=representation' } })
     expect(forged.status).toBeGreaterThanOrEqual(400)
-    // and if such a row already existed (created before the rule, here by the server), it still opens nothing
-    const legacy = await admin().from('request_attachments').insert({ request_id: fx.requestA.id, uploaded_by: fx.requesterA.id, file_name: 'x.txt', file_size: 1, mime_type: 'text/plain', storage_path: pathB }).select('id').single()
+    // (a path can have only one attachment row, so a second row cannot point at a file that already has one) but a file that has NO row yet could be
+    // claimed by a row made before the rule existed - here created by the server on requester A's own ticket. It must still open nothing.
+    const orphan = `${reqB}/${tag}-orphan.txt`
+    await putFile(orphan, 'orphan-contents')
+    const legacy = await admin().from('request_attachments').insert({ request_id: fx.requestA.id, uploaded_by: fx.requesterA.id, file_name: 'x.txt', file_size: 1, mime_type: 'text/plain', storage_path: orphan }).select('id').single()
+    expect(legacy.error?.message).toBeUndefined()
     created.rows.push(legacy.data!.id)
+    expect((await storageGet(orphan, fx.requesterA.accessToken)).status).toBeGreaterThanOrEqual(400)
     expect((await storageGet(pathB, fx.requesterA.accessToken)).status).toBeGreaterThanOrEqual(400)
     expect((await storageGet(pathBInternal, fx.requesterA.accessToken)).status).toBeGreaterThanOrEqual(400)
   })

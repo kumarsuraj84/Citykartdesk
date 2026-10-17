@@ -42,19 +42,25 @@ describe('attribution of server-side changes', () => {
     expect(row).toMatchObject({ actor_id: null, actor_role: 'service_role', request_id: null })
   })
   it('a header forged by a client is never trusted: the browser cannot send the proxy-signed id, and a signed-in user\'s own token ignores x-actor-id', async () => {
-    // a user changing their own profile through the API while claiming to be somebody else
-    const r = await fetch(`${API}/rest/v1/profiles?id=eq.${staff.id}`, {
-      method: 'PATCH',
-      headers: { apikey: ANON, Authorization: `Bearer ${staff.token}`, 'Content-Type': 'application/json', 'x-actor-id': other.id, 'x-request-id': 'forged-request' },
-      body: JSON.stringify({ full_name: `${tag} renamed` }),
-    })
-    expect(r.status).toBeLessThan(400)
-    const rows = await lastRows(staff.id)
-    const mine = rows.find((x) => x.after_data?.full_name === `${tag} renamed`)!
-    expect(mine).toBeTruthy()
-    expect(mine.actor_id).toBe(staff.id)          // the real caller, never the forged one
-    expect(mine.request_id).toBeNull()
-    expect(rows.some((x) => x.actor_id === other.id)).toBe(false)
+    // A signed-in administrator changes a record through the data API while claiming to be somebody else. (This used to be a person renaming their own
+    // profile; direct name changes were closed on purpose in migration 170, so the example is a service description, which an administrator may still write.)
+    const svcRow = (await svc<{ id: string; description: string | null }[]>('GET', '/services?select=id,description&limit=1')).json[0]
+    try {
+      const r = await fetch(`${API}/rest/v1/services?id=eq.${svcRow.id}`, {
+        method: 'PATCH',
+        headers: { apikey: ANON, Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json', 'x-actor-id': other.id, 'x-request-id': 'forged-request' },
+        body: JSON.stringify({ description: `${tag} renamed` }),
+      })
+      expect(r.status).toBeLessThan(400)
+      const rows = (await svc<{ actor_id: string | null; request_id: string | null; after_data: Record<string, string> | null }[]>('GET', `/system_log?entity_type=eq.services&entity_id=eq.${svcRow.id}&order=created_at.desc&limit=10&select=actor_id,request_id,after_data`)).json
+      const mine = rows.find((x) => x.after_data?.description === `${tag} renamed`)!
+      expect(mine).toBeTruthy()
+      expect(mine.actor_id).toBe(admin.id)          // the real caller, never the forged one
+      expect(mine.request_id).toBeNull()
+      expect(rows.some((x) => x.actor_id === other.id)).toBe(false)
+    } finally {
+      await svc('PATCH', `/services?id=eq.${svcRow.id}`, { description: svcRow.description })
+    }
   })
   it('the service role with an invalid actor id is recorded without an actor', async () => {
     await http('PATCH', `/rest/v1/profiles?id=eq.${staff.id}`, { key: process.env.SUPABASE_SERVICE_ROLE_KEY!, token: process.env.SUPABASE_SERVICE_ROLE_KEY!, body: { job_title: `${tag} three` }, headers: { 'x-actor-id': 'not-a-uuid; drop table' } })

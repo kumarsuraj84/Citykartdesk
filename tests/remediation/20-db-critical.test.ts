@@ -114,12 +114,11 @@ describe('D-003 profiles: a user cannot rewrite their own organization, role, ac
     expect((await profileRow(agent.id)).full_name).toBe(other.full_name)
   })
 
-  it('POSITIVE: a user can still change their own name and avatar', async () => {
+  it('a user can no longer change their own name or avatar by calling the data API (the application checks the name and writes it: migration 170)', async () => {
     const before = await profileRow(staff.id)
     const r = await asUser(staff, 'PATCH', `/profiles?id=eq.${staff.id}`, { full_name: 'Audit Staff 1 (renamed)', avatar_url: null })
-    expect(r.status).toBeLessThan(300)
-    expect((await profileRow(staff.id)).full_name).toBe('Audit Staff 1 (renamed)')
-    await svc('PATCH', `/profiles?id=eq.${staff.id}`, { full_name: before.full_name })
+    expect(r.status).toBeGreaterThanOrEqual(400)
+    expect((await profileRow(staff.id)).full_name).toBe(before.full_name)
   })
   it('after setting a new password the SERVER clears the forced-reset flag; the user cannot clear it themselves (VAPT VA-API-02)', async () => {
     const u = await createUser(`clearflag-${tag}@audit.test`, 'Clear Flag'); extraUsers.push(u.id)
@@ -136,9 +135,12 @@ describe('D-003 profiles: a user cannot rewrite their own organization, role, ac
     const row = await profileRow(u.id)
     expect(row.role).toBe('agent'); expect(row.is_active).toBe(false); expect(row.employee_id).toBe('E-1')
   })
-  it('POSITIVE: reading profiles is unchanged (everyone in the organization can still be listed)', async () => {
-    const r = await asUser<unknown[]>(staff, 'GET', '/profiles?select=id,full_name&limit=5')
-    expect(r.status).toBe(200)
-    expect(r.json.length).toBe(5)
+  it('reading profiles: staff can still list the organization; an ordinary user sees only the people they deal with (VAPT-019, migration 170)', async () => {
+    const asStaff = await asUser<unknown[]>(agent, 'GET', '/profiles?select=id,full_name&limit=5')
+    expect(asStaff.status).toBe(200)
+    expect(asStaff.json.length).toBe(5)
+    const asUserRole = await asUser<unknown[]>(staff, 'GET', '/profiles?select=id,full_name&limit=1000')
+    expect(asUserRole.status).toBe(200)
+    expect(asUserRole.json.length).toBeLessThan(40)                       // themself and the people on their own tickets, never the 300+ of the organization
   })
 })
