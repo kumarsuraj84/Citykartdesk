@@ -30,8 +30,11 @@ function smtpTransport(creds: ImapCredentials) {
     host: smtpHost,
     port: 587,
     secure: false,
+    // The connection must be upgraded to TLS (STARTTLS) - never fall back to plain text - and the server's certificate must be valid for its name
+    // (VAPT scan finding NEW-001: certificate checking used to be switched off here, so anybody on the network path could read the mailbox login or token).
+    requireTLS: true,
     auth,
-    tls: { rejectUnauthorized: false },
+    tls: { rejectUnauthorized: true, minVersion: 'TLSv1.2' },
   })
 }
 

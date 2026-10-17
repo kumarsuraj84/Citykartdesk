@@ -23,6 +23,7 @@ import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus 
 import type { Database, Json } from '@/types/database'
 import { inBatches } from '@/lib/queries/in-batches'
 import { exportAllowed, auditExportEvent, checkReportConfigShape, EXPORT_LIMIT_MESSAGE } from '@/lib/security/export-guard'
+import { submissionKey, claimSubmission, releaseSubmission, findSubmittedTicket } from '@/lib/requests/submission-key'
 
 type RequestUpdate = Database['public']['Tables']['requests']['Update']
 
@@ -133,6 +134,15 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
   const orgId = requesterProfile?.org_id
   if (!orgId) return { error: 'Requester profile not found.' }
 
+  // Double-submit protection: the same person sending the same service with the same answers again within a few seconds (a double click, a retry after a slow
+  // answer, a second tab) gets the first ticket back instead of a duplicate. Claimed atomically in the database, so simultaneous submissions make one ticket.
+  const submissionId = submissionKey({ requesterId, serviceId, subCategoryId: submittedSubCategoryId, projectId, formData: parsedFormData })
+  if (!(await claimSubmission(submissionId))) {
+    const existing = await findSubmittedTicket(requesterId, submissionId)
+    if (existing) return { requestId: existing }
+    return { error: 'Your request is already being submitted. Please wait a moment and check My Requests.' }
+  }
+
   const result = await createRequestCore({
     client: supabase,
     orgId,
@@ -143,6 +153,7 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
     formData: parsedFormData,
     projectId,
     source: 'web',
+    sourceMetadata: { submission_key: submissionId },
     // A ticket is always inserted by the server (VAPT VA-DB-02): the database gives a signed-in user no direct INSERT on requests, so the
     // service, form, priority and routing chosen here cannot be skipped by calling the data API. Who the requester is was checked above.
     useAdminForWrites: true,
@@ -154,8 +165,8 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
     actingUserLocationId: actingProfile?.location_id ?? null,
   })
 
-  if (result.error) return { error: result.error }
-  if (!result.requestId) return { error: 'Failed to create request.' }
+  if (result.error) { await releaseSubmission(submissionId); return { error: result.error } }
+  if (!result.requestId) { await releaseSubmission(submissionId); return { error: 'Failed to create request.' } }
   const requestId = result.requestId
 
   revalidatePath('/requests')

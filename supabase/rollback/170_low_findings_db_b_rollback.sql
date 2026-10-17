@@ -3,6 +3,7 @@
 BEGIN;
 DROP FUNCTION IF EXISTS public.rate_limit_hit(text, integer, integer);
 DROP FUNCTION IF EXISTS public.webhook_seen_once(text, integer);
+DROP FUNCTION IF EXISTS public.webhook_seen_forget(text);
 DROP TABLE IF EXISTS public.rate_limit_counters;
 DROP TABLE IF EXISTS public.webhook_seen;
 

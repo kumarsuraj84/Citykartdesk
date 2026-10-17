@@ -92,6 +92,12 @@ $function$;
 REVOKE ALL ON FUNCTION public.webhook_seen_once(text, integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.webhook_seen_once(text, integer) TO service_role;
 
+-- Lets a delivery / submission key be used again (the work behind it failed, so a retry must be allowed through).
+CREATE OR REPLACE FUNCTION public.webhook_seen_forget(p_key text) RETURNS void
+LANGUAGE sql SECURITY DEFINER SET search_path TO 'public' AS $function$ DELETE FROM public.webhook_seen WHERE key = left(p_key, 300) $function$;
+REVOKE ALL ON FUNCTION public.webhook_seen_forget(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.webhook_seen_forget(text) TO service_role;
+
 -- ── VAPT-019 / VA-DB-07 (rest): an ordinary user sees only the people they actually deal with ────────────────────────────────────────────────
 -- Until now every signed-in person could list the whole organisation's staff (names and roles) through the data API. Staff (technician and above) still see
 -- everybody, because assigning, approving and collaborating need it. A person with the role "user" now sees: themself, their own manager, their direct and
