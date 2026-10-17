@@ -30,7 +30,7 @@ BEGIN
     ALTER FUNCTION public.get_home_dashboard(boolean, boolean, uuid, boolean) RENAME TO get_home_dashboard_core;
   END IF;
 END $$;
-REVOKE ALL ON FUNCTION public.get_home_dashboard_core(boolean, boolean, uuid, boolean) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.get_home_dashboard_core(boolean, boolean, uuid, boolean) FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.get_home_dashboard(
   p_is_manager boolean DEFAULT false,
@@ -78,7 +78,8 @@ GRANT EXECUTE ON FUNCTION public.get_home_dashboard(boolean, boolean, uuid, bool
 -- already locked (internal ones: ticket numbers, credentials, retention, organisation delete ...) are NOT opened by this step. Row-security policies keep
 -- working: they run as the signed-in user, who keeps EXECUTE. The list of functions changed here is kept in _m169_function_grants so the rollback can put
 -- back exactly these and nothing else.
-CREATE TABLE IF NOT EXISTS public._m169_function_grants (sig text PRIMARY KEY);
+-- one row per function and per role that held EXECUTE explicitly (or PUBLIC) before this step, so the rollback restores exactly that
+CREATE TABLE IF NOT EXISTS public._m169_function_grants (sig text NOT NULL, grantee text NOT NULL, PRIMARY KEY (sig, grantee));
 ALTER TABLE public._m169_function_grants ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public._m169_function_grants FROM PUBLIC, anon, authenticated;
 
@@ -86,16 +87,21 @@ DO $$
 DECLARE r record; v_public boolean;
 BEGIN
   FOR r IN
-    SELECT p.oid, p.oid::regprocedure AS sig, p.proacl
+    SELECT p.oid, p.oid::regprocedure AS sig, p.proacl, p.proowner AS owner
     FROM   pg_proc p
     JOIN   pg_namespace n ON n.oid = p.pronamespace
     WHERE  n.nspname = 'public' AND p.prokind IN ('f', 'p')
       AND  NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')
   LOOP
+    -- record who holds EXECUTE now (no access list at all = the default = PUBLIC)
+    INSERT INTO public._m169_function_grants (sig, grantee)
+      SELECT r.sig::text, CASE x.grantee WHEN 0 THEN 'PUBLIC' ELSE (SELECT rolname FROM pg_roles WHERE oid = x.grantee) END
+      FROM aclexplode(coalesce(r.proacl, acldefault('f', r.owner))) x
+      WHERE x.privilege_type = 'EXECUTE' AND (x.grantee = 0 OR x.grantee IN (SELECT oid FROM pg_roles WHERE rolname IN ('anon', 'authenticated', 'service_role')))
+    ON CONFLICT DO NOTHING;
     -- open to everyone = no access list at all (the default) or an entry for PUBLIC (grantee 0)
     v_public := r.proacl IS NULL OR EXISTS (SELECT 1 FROM aclexplode(r.proacl) x WHERE x.grantee = 0 AND x.privilege_type = 'EXECUTE');
     IF v_public THEN
-      INSERT INTO public._m169_function_grants (sig) VALUES (r.sig::text) ON CONFLICT DO NOTHING;
       EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated, service_role', r.sig);
       EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC', r.sig);
     END IF;

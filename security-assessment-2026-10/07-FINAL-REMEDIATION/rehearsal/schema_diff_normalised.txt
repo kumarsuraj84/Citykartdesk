@@ -1,6 +1,4 @@
-statements only in expected: 193; only in actual: 247
+statements only in expected: 191; only in actual: 194
 EXPECTED> CREATE TABLE public.approval_workflow_steps ( id uuid DEFAULT gen_random_uuid() NOT NULL, workflow_id uuid NOT NULL, step_order integer NOT NULL, approver_type public.approver_type NOT NULL, approver_user_id uuid, CONSTRAINT approver_ref_check CHECK ((((approv
-EXPECTED> CREATE POLICY field_sla_overrides_write ON public.field_sla_overrides USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'manager'::public.user_role, 'platform_owner'::public.user_role])))) WITH C
 ACTUAL>   CREATE TABLE public.approval_workflow_steps ( id uuid DEFAULT gen_random_uuid() NOT NULL, workflow_id uuid NOT NULL, step_order integer NOT NULL, approver_type public.approver_type NOT NULL, approver_user_id uuid, added_by uuid, CONSTRAINT approver_ref_check C
 ACTUAL>   ALTER TABLE ONLY public.approval_workflow_steps ADD CONSTRAINT approval_workflow_steps_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id) ON DELETE SET NULL
-ACTUAL>   CREATE POLICY field_sla_overrides_write ON public.field_sla_overrides USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'manager'::public.user_role, 'platform_owner'::public.user_role]))))

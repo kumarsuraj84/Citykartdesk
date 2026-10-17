@@ -22,7 +22,7 @@ import { logger } from '@/lib/observability/logger'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus } from '@/types'
 import type { Database, Json } from '@/types/database'
 import { inBatches } from '@/lib/queries/in-batches'
-import { exportAllowed, auditExportEvent, checkReportConfigShape, EXPORT_LIMIT_MESSAGE } from '@/lib/security/export-guard'
+import { exportAllowed, auditExportEvent, EXPORT_LIMIT_MESSAGE } from '@/lib/security/export-guard'
 import { submissionKey, claimSubmission, releaseSubmission, findSubmittedTicket } from '@/lib/requests/submission-key'
 
 type RequestUpdate = Database['public']['Tables']['requests']['Update']

@@ -2,7 +2,6 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
-import { validateAttachment } from '@/lib/attachments/validate'
 import { buildPublicStorageUrl } from '@/lib/storage/publicUrl'
 import { validateAttachmentServer } from '@/lib/attachments/validate-server'
 

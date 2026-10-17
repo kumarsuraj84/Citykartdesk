@@ -1,0 +1,518 @@
+T|admin_audit_log|auth:1000|anon:0000|svc:11|rls:1
+T|ai_applications|auth:1000|anon:0000|svc:11|rls:1
+T|alert_rules|auth:1111|anon:1111|svc:11|rls:1
+T|app_event_log|auth:0000|anon:0000|svc:11|rls:1
+T|app_settings|auth:1111|anon:0000|svc:11|rls:1
+T|approval_decisions|auth:1111|anon:0000|svc:11|rls:1
+T|approval_email_codes|auth:0000|anon:0000|svc:11|rls:1
+T|approval_workflow_steps|auth:1111|anon:0000|svc:11|rls:1
+T|approval_workflows|auth:1111|anon:0000|svc:11|rls:1
+T|approvals|auth:1111|anon:0000|svc:11|rls:1
+T|assignment_rules|auth:1111|anon:1111|svc:11|rls:1
+T|business_hours|auth:1111|anon:0000|svc:11|rls:1
+T|business_rule_events|auth:1000|anon:0000|svc:11|rls:1
+T|business_rules|auth:1111|anon:0000|svc:11|rls:1
+T|conversation_attachments|auth:0000|anon:0000|svc:11|rls:1
+T|conversation_events|auth:0000|anon:0000|svc:11|rls:1
+T|cost_centers|auth:1111|anon:1111|svc:11|rls:1
+T|csat_surveys|auth:1010|anon:0000|svc:11|rls:1
+T|custom_roles|auth:1111|anon:0000|svc:11|rls:1
+T|departments|auth:1111|anon:1111|svc:11|rls:1
+T|designations|auth:1111|anon:0000|svc:11|rls:1
+T|desktime_app_logs|auth:1000|anon:0000|svc:11|rls:1
+T|desktime_project_map|auth:1000|anon:0000|svc:11|rls:1
+T|desktime_sync_runs|auth:1000|anon:0000|svc:11|rls:1
+T|desktime_time_logs|auth:1000|anon:0000|svc:11|rls:1
+T|email_smtp_settings|auth:0000|anon:0000|svc:11|rls:1
+T|error_reports|auth:0000|anon:0000|svc:11|rls:1
+T|escalation_policies|auth:1000|anon:0000|svc:11|rls:1
+T|field_sla_overrides|auth:1111|anon:0000|svc:11|rls:1
+T|form_field_library|auth:1111|anon:0000|svc:11|rls:1
+T|form_templates|auth:1111|anon:1000|svc:11|rls:1
+T|global_sla_config|auth:1111|anon:1111|svc:11|rls:1
+T|holidays|auth:1111|anon:0000|svc:11|rls:1
+T|intake_attachments|auth:1000|anon:0000|svc:11|rls:1
+T|intake_audit_log|auth:1000|anon:0000|svc:11|rls:1
+T|intake_channels|auth:1111|anon:0000|svc:11|rls:1
+T|intake_classifications|auth:1000|anon:0000|svc:11|rls:1
+T|intake_messages|auth:1000|anon:0000|svc:11|rls:1
+T|intake_notes|auth:0000|anon:0000|svc:11|rls:1
+T|intake_outbound|auth:0000|anon:0000|svc:11|rls:1
+T|intake_pipeline_config|auth:1110|anon:0000|svc:11|rls:1
+T|intake_reviews|auth:1010|anon:0000|svc:11|rls:1
+T|intake_rules|auth:1111|anon:0000|svc:11|rls:1
+T|intake_threads|auth:1000|anon:0000|svc:11|rls:1
+T|job_functions|auth:1111|anon:0000|svc:11|rls:1
+T|kb_article_services|auth:1000|anon:0000|svc:11|rls:1
+T|kb_articles|auth:1110|anon:0000|svc:11|rls:1
+T|license_keys|auth:1000|anon:0000|svc:11|rls:1
+T|locations|auth:1111|anon:1111|svc:11|rls:1
+T|milestones|auth:1111|anon:0000|svc:11|rls:1
+T|notification_preferences|auth:0000|anon:0000|svc:11|rls:1
+T|notification_rules|auth:1111|anon:1000|svc:11|rls:1
+T|notifications|auth:1111|anon:0000|svc:11|rls:1
+T|oems|auth:1111|anon:1000|svc:11|rls:1
+T|org_module_access|auth:1000|anon:1000|svc:11|rls:1
+T|org_signup_requests|auth:0000|anon:0000|svc:11|rls:1
+T|organizations|auth:1000|anon:1000|svc:11|rls:1
+T|owner_audit_log|auth:1000|anon:0000|svc:11|rls:1
+T|permission_overrides|auth:1111|anon:0000|svc:11|rls:1
+T|processed_inbound_emails|auth:0000|anon:0000|svc:11|rls:1
+T|profile_mobile_numbers|auth:1111|anon:1000|svc:11|rls:1
+T|profiles|auth:1101|anon:0000|svc:11|rls:1
+T|project_activity|auth:1000|anon:0000|svc:11|rls:1
+T|project_members|auth:1101|anon:0000|svc:11|rls:1
+T|project_updates|auth:1101|anon:0000|svc:11|rls:1
+T|projects|auth:1110|anon:0000|svc:11|rls:1
+T|push_subscriptions|auth:1111|anon:0000|svc:11|rls:1
+T|related_requests|auth:1101|anon:0000|svc:11|rls:1
+T|request_activity|auth:1111|anon:0000|svc:11|rls:1
+T|request_attachments|auth:1111|anon:1111|svc:11|rls:1
+T|request_collaborators|auth:1101|anon:0000|svc:11|rls:1
+T|request_comments|auth:1111|anon:0000|svc:11|rls:1
+T|request_conversations|auth:1000|anon:0000|svc:11|rls:1
+T|request_priorities|auth:1111|anon:0000|svc:11|rls:1
+T|request_sequences|auth:1111|anon:0000|svc:11|rls:1
+T|request_time_entries|auth:1111|anon:1111|svc:11|rls:1
+T|requests|auth:1111|anon:0000|svc:11|rls:1
+T|retention_policies|auth:1111|anon:0000|svc:11|rls:1
+T|saved_reports|auth:1111|anon:0000|svc:11|rls:1
+T|scheduled_reports|auth:1111|anon:1111|svc:11|rls:1
+T|service_categories|auth:1111|anon:1000|svc:11|rls:1
+T|service_location_tags|auth:1111|anon:1000|svc:11|rls:1
+T|service_sub_categories|auth:1111|anon:1111|svc:11|rls:1
+T|service_sub_category_tags|auth:1111|anon:1000|svc:11|rls:1
+T|services|auth:1111|anon:1000|svc:11|rls:1
+T|sla_escalation_events|auth:1111|anon:1111|svc:11|rls:1
+T|sla_escalation_rules|auth:1111|anon:0000|svc:11|rls:1
+T|sla_policies|auth:1111|anon:1000|svc:11|rls:1
+T|stores|auth:1111|anon:1000|svc:11|rls:1
+T|system_log_archive|auth:0000|anon:0000|svc:11|rls:1
+T|system_log_chain_head|auth:0000|anon:0000|svc:10|rls:0
+T|system_log|auth:1000|anon:0000|svc:11|rls:1
+T|task_activity|auth:1111|anon:1111|svc:11|rls:1
+T|task_assignees|auth:1111|anon:1111|svc:11|rls:1
+T|task_attachments|auth:0000|anon:0000|svc:11|rls:1
+T|task_comments|auth:1111|anon:1111|svc:11|rls:1
+T|task_custom_field_values|auth:1111|anon:1111|svc:11|rls:1
+T|task_custom_fields|auth:1111|anon:1111|svc:11|rls:1
+T|task_dependencies|auth:1101|anon:0000|svc:11|rls:1
+T|task_priorities|auth:1111|anon:0000|svc:11|rls:1
+T|task_statuses|auth:1111|anon:0000|svc:11|rls:1
+T|task_template_items|auth:1111|anon:1111|svc:11|rls:1
+T|task_templates|auth:1111|anon:1111|svc:11|rls:1
+T|tasks|auth:1111|anon:0000|svc:11|rls:1
+T|team_members|auth:1111|anon:0000|svc:11|rls:1
+T|teams|auth:1000|anon:1000|svc:11|rls:1
+F|can_manage_collaborators(uuid)|auth:1|anon:1|svc:1
+F|can_view_project(uuid)|auth:1|anon:1|svc:1
+F|commit_conversation_transition(uuid,integer,conversation_state,uuid,text,uuid[],uuid,uuid,text,text,jsonb,text,uuid,text,timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone,uuid,jsonb)|auth:0|anon:0|svc:1
+F|current_org_id()|auth:1|anon:1|svc:1
+F|current_user_approver_request_ids()|auth:1|anon:1|svc:1
+F|current_user_collab_request_ids()|auth:1|anon:1|svc:1
+F|current_user_role()|auth:1|anon:1|svc:1
+F|current_user_subordinate_ids()|auth:1|anon:1|svc:1
+F|current_user_team_ids()|auth:1|anon:1|svc:1
+F|email_smtp_clear_password()|auth:0|anon:0|svc:1
+F|email_smtp_has_password()|auth:0|anon:0|svc:1
+F|email_smtp_read_password()|auth:0|anon:0|svc:1
+F|email_smtp_store_password(text)|auth:0|anon:0|svc:1
+F|generate_request_no()|auth:0|anon:0|svc:1
+F|get_enabled_modules()|auth:1|anon:1|svc:1
+F|get_home_dashboard(boolean,boolean,uuid,boolean)|auth:1|anon:1|svc:1
+F|guard_attachment_client_write()|auth:1|anon:1|svc:1
+F|guard_profile_client_update()|auth:1|anon:1|svc:1
+F|guard_request_client_write()|auth:1|anon:1|svc:1
+F|handle_new_user()|auth:1|anon:1|svc:1
+F|has_module_access(module_slug)|auth:1|anon:1|svc:1
+F|intake_read_credential(uuid)|auth:0|anon:0|svc:1
+F|intake_store_credential(uuid,text)|auth:0|anon:0|svc:1
+F|intake_validation_stats()|auth:1|anon:1|svc:1
+F|is_agent()|auth:1|anon:1|svc:1
+F|is_owner_org()|auth:1|anon:1|svc:1
+F|is_request_approver(uuid)|auth:1|anon:1|svc:1
+F|is_request_collaborator(uuid)|auth:1|anon:1|svc:1
+F|is_team_member(uuid)|auth:1|anon:1|svc:1
+F|merge_request_form_data(uuid,jsonb)|auth:0|anon:0|svc:1
+F|org_read_desktime_key(uuid)|auth:0|anon:0|svc:1
+F|org_store_desktime_key(uuid,text)|auth:0|anon:0|svc:1
+F|owner_delete_org(uuid)|auth:0|anon:0|svc:1
+F|purge_app_event_log(integer)|auth:0|anon:0|svc:1
+F|replace_email_in_list(text[],text,text)|auth:0|anon:0|svc:1
+F|replace_user_email(uuid,text,text)|auth:0|anon:0|svc:1
+F|request_identity_unchanged(uuid,uuid,uuid,uuid,uuid)|auth:1|anon:1|svc:1
+F|request_status_transition_allowed(text,text)|auth:1|anon:1|svc:1
+F|retag_service_categories(uuid,uuid[])|auth:1|anon:1|svc:1
+F|retag_service_locations(uuid,uuid[])|auth:1|anon:1|svc:1
+F|seed_default_sla_config(uuid)|auth:0|anon:0|svc:1
+F|set_request_org_id()|auth:1|anon:1|svc:1
+F|set_task_org_id()|auth:1|anon:1|svc:1
+F|set_updated_at()|auth:1|anon:1|svc:1
+F|system_log_archive_old(integer,integer)|auth:0|anon:0|svc:1
+F|system_log_audit_trigger()|auth:1|anon:1|svc:1
+F|system_log_chain()|auth:1|anon:1|svc:1
+F|system_log_clean(jsonb)|auth:1|anon:1|svc:1
+F|system_log_guard()|auth:1|anon:1|svc:1
+F|system_log_hash_input(system_log)|auth:1|anon:1|svc:1
+F|system_log_verify_chain(bigint,integer)|auth:0|anon:0|svc:1
+F|touch_updated_at()|auth:1|anon:1|svc:1
+F|trg_assign_request_no()|auth:0|anon:0|svc:1
+F|trg_seed_org_sla_config()|auth:0|anon:0|svc:1
+F|upsert_field_sla_override(uuid,uuid,text,text,text,text,text,numeric,numeric,uuid)|auth:0|anon:0|svc:1
+P|admin_audit_log|admin_audit_no_insert|INSERT||false
+P|admin_audit_log|admin_audit_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|ai_applications|ai_applications_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|alert_rules|alert_rules_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|alert_rules|alert_rules_select|SELECT|(org_id = current_org_id())|
+P|app_settings|app_settings_read|SELECT|true|
+P|app_settings|app_settings_write|ALL|(current_user_role() = 'platform_owner'::user_role)|(current_user_role() = 'platform_owner'::user_role)
+P|approval_decisions|approval_decisions_insert_deny|INSERT||false
+P|approval_decisions|approval_decisions_select|SELECT|(EXISTS ( SELECT 1
+   FROM (approvals a
+     JOIN requests r ON ((r.id = a.request_id)))
+  WHERE ((a.id = approval_decisions.approval_id) AND (r.org_id = current_org_id()) AND ((r.requester_id = auth.uid()) OR (r.team_id = ANY (current_user_team_ids())) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))))|
+P|approval_workflow_steps|approval_workflow_steps_admin|ALL|((EXISTS ( SELECT 1
+   FROM approval_workflows w
+  WHERE ((w.id = approval_workflow_steps.workflow_id) AND (w.org_id = current_org_id())))) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|((EXISTS ( SELECT 1
+   FROM approval_workflows w
+  WHERE ((w.id = approval_workflow_steps.workflow_id) AND (w.org_id = current_org_id())))) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))
+P|approval_workflow_steps|approval_workflow_steps_select|SELECT|(EXISTS ( SELECT 1
+   FROM approval_workflows w
+  WHERE ((w.id = approval_workflow_steps.workflow_id) AND (w.org_id = current_org_id()))))|
+P|approval_workflows|workflows_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|approval_workflows|workflows_select|SELECT|(org_id = current_org_id())|
+P|approvals|approvals_insert_deny|INSERT||false
+P|approvals|approvals_select|SELECT|((EXISTS ( SELECT 1
+   FROM requests r
+  WHERE ((r.id = approvals.request_id) AND (r.org_id = current_org_id()) AND ((r.requester_id = auth.uid()) OR (r.team_id = ANY (current_user_team_ids())) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))))) OR is_request_approver(request_id))|
+P|assignment_rules|rules_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|assignment_rules|rules_select|SELECT|(org_id = current_org_id())|
+P|business_hours|biz_hours_all|ALL|(current_user_role() = 'platform_owner'::user_role)|(current_user_role() = 'platform_owner'::user_role)
+P|business_hours|biz_hours_select|SELECT|true|
+P|business_rule_events|business_rule_events_no_insert|INSERT||false
+P|business_rule_events|business_rule_events_select|SELECT|(EXISTS ( SELECT 1
+   FROM business_rules r
+  WHERE ((r.id = business_rule_events.rule_id) AND (r.org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))))|
+P|business_rules|business_rules_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|business_rules|business_rules_write|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))
+P|cost_centers|cc_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|cost_centers|cc_select|SELECT|(org_id = current_org_id())|
+P|csat_surveys|csat_insert_system|INSERT||((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))
+P|csat_surveys|csat_select|SELECT|((requester_id = auth.uid()) OR ((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|csat_surveys|csat_update_requester|UPDATE|((requester_id = auth.uid()) AND (submitted_at IS NULL))|
+P|custom_roles|custom_roles_delete|DELETE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))|
+P|custom_roles|custom_roles_insert|INSERT||((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))
+P|custom_roles|custom_roles_select|SELECT|(org_id = current_org_id())|
+P|custom_roles|custom_roles_update|UPDATE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))|
+P|departments|dept_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|departments|dept_select|SELECT|(org_id = current_org_id())|
+P|designations|designations_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))
+P|designations|designations_select|SELECT|(org_id = current_org_id())|
+P|desktime_app_logs|desktime_app_logs_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|desktime_project_map|desktime_project_map_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|desktime_sync_runs|desktime_sync_runs_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|desktime_time_logs|desktime_time_logs_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|error_reports|error_reports_insert|INSERT||(auth.uid() IS NOT NULL)
+P|error_reports|error_reports_select|SELECT|((current_user_role() = 'platform_owner'::user_role) OR ((current_user_role() = 'admin'::user_role) AND (org_id = current_org_id())))|
+P|escalation_policies|escalation_policies_delete|DELETE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))|
+P|escalation_policies|escalation_policies_insert|INSERT||((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))
+P|escalation_policies|escalation_policies_select|SELECT|(org_id = current_org_id())|
+P|escalation_policies|escalation_policies_update|UPDATE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|field_sla_overrides|field_sla_overrides_select|SELECT|(org_id = current_org_id())|
+P|field_sla_overrides|field_sla_overrides_write|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|form_field_library|form_field_library_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))
+P|form_field_library|form_field_library_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|form_templates|form_templates_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|form_templates|form_templates_select|SELECT|((org_id = current_org_id()) AND ((is_active = true) OR (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role]))))|
+P|global_sla_config|sla_config_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|global_sla_config|sla_config_select|SELECT|(org_id = current_org_id())|
+P|holidays|holidays_all|ALL|(current_user_role() = 'platform_owner'::user_role)|(current_user_role() = 'platform_owner'::user_role)
+P|holidays|holidays_select|SELECT|true|
+P|intake_attachments|intake_attachments_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|intake_audit_log|intake_audit_no_insert|INSERT||false
+P|intake_audit_log|intake_audit_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|intake_channels|intake_channels_delete|DELETE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))|
+P|intake_channels|intake_channels_insert|INSERT||((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))
+P|intake_channels|intake_channels_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|intake_channels|intake_channels_update|UPDATE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))|(org_id = current_org_id())
+P|intake_classifications|intake_class_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|intake_messages|intake_messages_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|intake_messages|intake_messages_update|UPDATE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|(org_id = current_org_id())
+P|intake_notes|intake_notes_author_delete|DELETE|(author_id = auth.uid())|
+P|intake_notes|intake_notes_org_read|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|intake_notes|intake_notes_org_write|INSERT||(org_id = current_org_id())
+P|intake_outbound|intake_outbound_org_read|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|intake_pipeline_config|intake_config_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|intake_pipeline_config|intake_config_update|UPDATE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))|(org_id = current_org_id())
+P|intake_pipeline_config|intake_config_upsert|INSERT||((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))
+P|intake_reviews|intake_reviews_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|intake_reviews|intake_reviews_update|UPDATE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|(org_id = current_org_id())
+P|intake_rules|intake_rules_delete|DELETE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))|
+P|intake_rules|intake_rules_insert|INSERT||((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))
+P|intake_rules|intake_rules_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|intake_rules|intake_rules_update|UPDATE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))|(org_id = current_org_id())
+P|intake_threads|intake_threads_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|job_functions|job_functions_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))
+P|job_functions|job_functions_select|SELECT|(org_id = current_org_id())|
+P|kb_article_services|kb_svc_select|SELECT|(EXISTS ( SELECT 1
+   FROM kb_articles
+  WHERE ((kb_articles.id = kb_article_services.article_id) AND (kb_articles.org_id = current_org_id()))))|
+P|kb_article_services|kb_svc_write|ALL|((EXISTS ( SELECT 1
+   FROM kb_articles
+  WHERE ((kb_articles.id = kb_article_services.article_id) AND (kb_articles.org_id = current_org_id())))) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|kb_articles|kb_delete|DELETE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))|
+P|kb_articles|kb_insert|INSERT||((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))
+P|kb_articles|kb_select|SELECT|((org_id = current_org_id()) AND ((status = 'published'::kb_article_status) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|kb_articles|kb_update|UPDATE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|license_keys|license_keys_owner|ALL|is_owner_org()|
+P|locations|loc_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|locations|loc_select|SELECT|(org_id = current_org_id())|
+P|milestones|milestones_delete|DELETE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|milestones|milestones_insert|INSERT||((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))
+P|milestones|milestones_select|SELECT|((org_id = current_org_id()) AND can_view_project(project_id))|
+P|milestones|milestones_update|UPDATE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|notification_preferences|prefs_delete|DELETE|(user_id = auth.uid())|
+P|notification_preferences|prefs_insert|INSERT||(user_id = auth.uid())
+P|notification_preferences|prefs_select|SELECT|(user_id = auth.uid())|
+P|notification_preferences|prefs_update|UPDATE|(user_id = auth.uid())|
+P|notification_rules|notification_rules_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|notification_rules|notification_rules_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|notifications|notifications_insert_own_only|INSERT||(user_id = auth.uid())
+P|notifications|notifications_select|SELECT|(user_id = auth.uid())|
+P|notifications|notifications_update|UPDATE|(user_id = auth.uid())|(user_id = auth.uid())
+P|objects|Service role only upload v2|INSERT||(bucket_id = 'request-attachments'::text)
+P|objects|storage_intake_attachments_select|SELECT|((bucket_id = 'intake-attachments'::text) AND (EXISTS ( SELECT 1
+   FROM intake_attachments ia
+  WHERE ((ia.storage_path = objects.name) AND (ia.org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))))|
+P|objects|storage_request_attachments_delete|DELETE|((bucket_id = 'request-attachments'::text) AND (owner = auth.uid()))|
+P|objects|storage_request_attachments_select|SELECT|((bucket_id = 'request-attachments'::text) AND (EXISTS ( SELECT 1
+   FROM request_attachments ra
+  WHERE ((ra.storage_path = objects.name) AND (ra.deleted_at IS NULL) AND (EXISTS ( SELECT 1
+           FROM requests r
+          WHERE ((r.id = ra.request_id) AND ((r.requester_id = auth.uid()) OR is_team_member(r.team_id) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role]))))))))))|
+P|objects|task_attach_storage_delete|DELETE|((bucket_id = 'task-attachments'::text) AND (owner = auth.uid()))|
+P|objects|task_attach_storage_insert|INSERT||((bucket_id = 'task-attachments'::text) AND (auth.uid() IS NOT NULL))
+P|objects|task_attach_storage_select|SELECT|((bucket_id = 'task-attachments'::text) AND (EXISTS ( SELECT 1
+   FROM (task_attachments ta
+     JOIN tasks t ON ((t.id = ta.task_id)))
+  WHERE ((ta.storage_path = objects.name) AND (t.org_id = current_org_id()) AND ((t.created_by = auth.uid()) OR (t.assignee_id = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])) OR ((t.team_id IS NOT NULL) AND (t.team_id = ANY (current_user_team_ids()))))))))|
+P|oems|oems_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|oems|oems_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|org_module_access|org_module_access_select|SELECT|((org_id = current_org_id()) OR is_owner_org())|
+P|org_module_access|org_module_access_write|ALL|is_owner_org()|
+P|organizations|org_module_select|SELECT|(id = ( SELECT profiles.org_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid())))|
+P|organizations|org_owner_write|ALL|is_owner_org()|
+P|organizations|org_select|SELECT|((id = ( SELECT profiles.org_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))) OR is_owner_org())|
+P|owner_audit_log|owner_audit_insert|INSERT||is_owner_org()
+P|owner_audit_log|owner_audit_read|SELECT|is_owner_org()|
+P|permission_overrides|perm_overrides_delete|DELETE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))|
+P|permission_overrides|perm_overrides_select|SELECT|(org_id = current_org_id())|
+P|permission_overrides|perm_overrides_update|UPDATE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))|
+P|permission_overrides|perm_overrides_upsert|INSERT||((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))
+P|profile_mobile_numbers|profile_mobile_numbers_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|profile_mobile_numbers|profile_mobile_numbers_select|SELECT|((org_id = current_org_id()) OR (profile_id = auth.uid()))|
+P|profiles|profiles_select|SELECT|((org_id = current_org_id()) OR (id = auth.uid()))|
+P|profiles|profiles_update_own|UPDATE|(auth.uid() = id)|((auth.uid() = id) AND ((role = current_user_role()) OR (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role]))))
+P|project_activity|project_activity_select|SELECT|((org_id = current_org_id()) AND can_view_project(project_id))|
+P|project_members|project_members_delete|DELETE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|project_members|project_members_insert|INSERT||((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))
+P|project_members|project_members_select|SELECT|((org_id = current_org_id()) AND ((user_id = auth.uid()) OR can_view_project(project_id)))|
+P|project_updates|project_updates_delete|DELETE|((org_id = current_org_id()) AND ((author_id = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|project_updates|project_updates_insert|INSERT||((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])) AND (author_id = auth.uid()))
+P|project_updates|project_updates_select|SELECT|((org_id = current_org_id()) AND can_view_project(project_id))|
+P|projects|projects_insert|INSERT||((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))
+P|projects|projects_select|SELECT|((org_id = current_org_id()) AND ((owner_id = auth.uid()) OR (functional_owner_id = auth.uid()) OR (created_by = auth.uid()) OR (EXISTS ( SELECT 1
+   FROM project_members pm
+  WHERE ((pm.project_id = projects.id) AND (pm.user_id = auth.uid())))) OR ((team_id IS NOT NULL) AND (team_id = ANY (current_user_team_ids()))) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|projects|projects_update|UPDATE|((org_id = current_org_id()) AND ((owner_id = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|push_subscriptions|push_subscriptions_own|ALL|(user_id = auth.uid())|
+P|related_requests|related_delete|DELETE|((org_id = current_org_id()) AND ((created_by = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|related_requests|related_insert|INSERT||((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))
+P|related_requests|related_select|SELECT|(org_id = current_org_id())|
+P|request_activity|request_activity_insert_deny|INSERT||false
+P|request_activity|request_activity_select|SELECT|(EXISTS ( SELECT 1
+   FROM requests r
+  WHERE ((r.id = request_activity.request_id) AND (r.org_id = current_org_id()) AND ((r.requester_id = auth.uid()) OR (r.team_id = ANY (current_user_team_ids())) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))))|
+P|request_attachments|request_attachments_insert|INSERT||((uploaded_by = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM requests r
+  WHERE ((r.id = request_attachments.request_id) AND ((r.requester_id = auth.uid()) OR is_team_member(r.team_id) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])) OR is_request_collaborator(r.id))))))
+P|request_attachments|request_attachments_select|SELECT|((deleted_at IS NULL) AND (EXISTS ( SELECT 1
+   FROM requests r
+  WHERE ((r.id = request_attachments.request_id) AND (r.org_id = current_org_id()) AND ((r.requester_id = auth.uid()) OR (r.team_id = ANY (current_user_team_ids())) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))))) AND ((is_internal = false) OR (( SELECT r2.team_id
+   FROM requests r2
+  WHERE (r2.id = request_attachments.request_id)) = ANY (current_user_team_ids())) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|request_attachments|request_attachments_update|UPDATE|((uploaded_by = auth.uid()) OR ((EXISTS ( SELECT 1
+   FROM requests r
+  WHERE ((r.id = request_attachments.request_id) AND (r.org_id = current_org_id())))) AND ((( SELECT r2.team_id
+   FROM requests r2
+  WHERE (r2.id = request_attachments.request_id)) = ANY (current_user_team_ids())) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))))|((uploaded_by = auth.uid()) OR ((EXISTS ( SELECT 1
+   FROM requests r
+  WHERE ((r.id = request_attachments.request_id) AND (r.org_id = current_org_id())))) AND ((( SELECT r2.team_id
+   FROM requests r2
+  WHERE (r2.id = request_attachments.request_id)) = ANY (current_user_team_ids())) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))))
+P|request_collaborators|collab_delete|DELETE|(((added_by = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))) AND (EXISTS ( SELECT 1
+   FROM requests r
+  WHERE ((r.id = request_collaborators.request_id) AND (r.org_id = current_org_id())))))|
+P|request_collaborators|collab_insert|INSERT||can_manage_collaborators(request_id)
+P|request_collaborators|collab_select|SELECT|((user_id = auth.uid()) OR (added_by = auth.uid()) OR can_manage_collaborators(request_id))|
+P|request_comments|comments_immutable|DELETE|false|
+P|request_comments|comments_select|SELECT|(((EXISTS ( SELECT 1
+   FROM requests r
+  WHERE ((r.id = request_comments.request_id) AND (r.org_id = current_org_id()) AND ((r.requester_id = auth.uid()) OR (r.team_id = ANY (current_user_team_ids())) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])) OR (r.requester_id = ANY (current_user_subordinate_ids())) OR (r.assigned_to = ANY (current_user_subordinate_ids())))))) OR is_request_approver(request_id)) AND ((NOT is_internal) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])) OR (EXISTS ( SELECT 1
+   FROM requests r2
+  WHERE ((r2.id = request_comments.request_id) AND (r2.team_id = ANY (current_user_team_ids()))))) OR (is_request_collaborator(request_id) AND is_agent())))|
+P|request_comments|request_comments_insert|INSERT||((author_id = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM requests r
+  WHERE ((r.id = request_comments.request_id) AND ((r.requester_id = auth.uid()) OR is_team_member(r.team_id) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])) OR is_request_collaborator(r.id))))))
+P|request_conversations|request_conversations_select|SELECT|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|request_priorities|rp_admin|ALL|(current_user_role() = 'platform_owner'::user_role)|(current_user_role() = 'platform_owner'::user_role)
+P|request_priorities|rp_select|SELECT|true|
+P|request_sequences|request_sequences_no_direct_access|ALL|false|
+P|request_time_entries|time_entries_delete|DELETE|((user_id = auth.uid()) OR (EXISTS ( SELECT 1
+   FROM requests r
+  WHERE ((r.id = request_time_entries.request_id) AND (r.org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))))|
+P|request_time_entries|time_entries_insert|INSERT||((user_id = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM requests r
+  WHERE ((r.id = request_time_entries.request_id) AND (r.org_id = current_org_id()) AND ((r.team_id = ANY (current_user_team_ids())) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))))))
+P|request_time_entries|time_entries_select|SELECT|((user_id = auth.uid()) OR (EXISTS ( SELECT 1
+   FROM requests r
+  WHERE ((r.id = request_time_entries.request_id) AND (r.org_id = current_org_id()) AND ((r.requester_id = auth.uid()) OR (r.team_id = ANY (current_user_team_ids())) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))))))|
+P|request_time_entries|time_entries_update|UPDATE|(user_id = auth.uid())|
+P|requests|requests_insert|INSERT||((requester_id = auth.uid()) AND (org_id = current_org_id()))
+P|requests|requests_select|SELECT|((org_id = ( SELECT current_org_id() AS current_org_id)) AND ((requester_id = ( SELECT auth.uid() AS uid)) OR (team_id = ANY (( SELECT current_user_team_ids() AS current_user_team_ids)::uuid[])) OR (( SELECT current_user_role() AS current_user_role) = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])) OR (id = ANY (( SELECT current_user_collab_request_ids() AS current_user_collab_request_ids)::uuid[])) OR (id = ANY (( SELECT current_user_approver_request_ids() AS current_user_approver_request_ids)::uuid[])) OR (requester_id = ANY (( SELECT current_user_subordinate_ids() AS current_user_subordinate_ids)::uuid[])) OR (assigned_to = ANY (( SELECT current_user_subordinate_ids() AS current_user_subordinate_ids)::uuid[]))))|
+P|requests|requests_update|UPDATE|((org_id = ( SELECT current_org_id() AS current_org_id)) AND ((team_id = ANY (( SELECT current_user_team_ids() AS current_user_team_ids)::uuid[])) OR (( SELECT current_user_role() AS current_user_role) = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|(request_identity_unchanged(id, org_id, requester_id, service_id, team_id) AND ((team_id = ANY (( SELECT current_user_team_ids() AS current_user_team_ids)::uuid[])) OR (( SELECT current_user_role() AS current_user_role) = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))
+P|retention_policies|retention_admin|ALL|(current_user_role() = 'platform_owner'::user_role)|(current_user_role() = 'platform_owner'::user_role)
+P|retention_policies|retention_select|SELECT|(current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role]))|
+P|saved_reports|saved_reports_delete|DELETE|((org_id = current_org_id()) AND ((created_by = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|saved_reports|saved_reports_insert|INSERT||((org_id = current_org_id()) AND (created_by = auth.uid()))
+P|saved_reports|saved_reports_select|SELECT|(org_id = current_org_id())|
+P|saved_reports|saved_reports_update|UPDATE|((org_id = current_org_id()) AND ((created_by = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|(org_id = ( SELECT sr.org_id
+   FROM saved_reports sr
+  WHERE (sr.id = saved_reports.id)))
+P|scheduled_reports|scheduled_reports_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|scheduled_reports|scheduled_reports_select|SELECT|(org_id = current_org_id())|
+P|service_categories|categories_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|service_categories|categories_select|SELECT|(org_id = current_org_id())|
+P|service_location_tags|service_location_tags_admin|ALL|(EXISTS ( SELECT 1
+   FROM services s
+  WHERE ((s.id = service_location_tags.service_id) AND (s.org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))))|
+P|service_location_tags|service_location_tags_select|SELECT|(EXISTS ( SELECT 1
+   FROM services s
+  WHERE ((s.id = service_location_tags.service_id) AND (s.org_id = current_org_id()))))|
+P|service_sub_categories|sub_categories_admin_write|ALL|((EXISTS ( SELECT 1
+   FROM service_categories c
+  WHERE ((c.id = service_sub_categories.category_id) AND (c.org_id = current_org_id())))) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))|((EXISTS ( SELECT 1
+   FROM service_categories c
+  WHERE ((c.id = service_sub_categories.category_id) AND (c.org_id = current_org_id())))) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])))
+P|service_sub_categories|sub_categories_select|SELECT|((is_active = true) AND (EXISTS ( SELECT 1
+   FROM service_categories c
+  WHERE ((c.id = service_sub_categories.category_id) AND (c.org_id = current_org_id())))))|
+P|service_sub_category_tags|service_sub_category_tags_admin|ALL|(EXISTS ( SELECT 1
+   FROM services s
+  WHERE ((s.id = service_sub_category_tags.service_id) AND (s.org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))))|
+P|service_sub_category_tags|service_sub_category_tags_select|SELECT|(EXISTS ( SELECT 1
+   FROM services s
+  WHERE ((s.id = service_sub_category_tags.service_id) AND (s.org_id = current_org_id()))))|
+P|services|services_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|services|services_select|SELECT|((org_id = current_org_id()) AND ((is_active = true) OR (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role]))))|
+P|sla_escalation_events|esc_events_admin|ALL|((EXISTS ( SELECT 1
+   FROM requests r
+  WHERE ((r.id = sla_escalation_events.request_id) AND (r.org_id = current_org_id())))) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|((EXISTS ( SELECT 1
+   FROM requests r
+  WHERE ((r.id = sla_escalation_events.request_id) AND (r.org_id = current_org_id())))) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))
+P|sla_escalation_rules|sla_rules_all|ALL|(current_user_role() = 'platform_owner'::user_role)|(current_user_role() = 'platform_owner'::user_role)
+P|sla_escalation_rules|sla_rules_select|SELECT|true|
+P|sla_policies|sla_policies_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|sla_policies|sla_policies_select|SELECT|((org_id = current_org_id()) AND ((is_active = true) OR (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role]))))|
+P|stores|stores_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|stores|stores_select|SELECT|(org_id = current_org_id())|
+P|system_log|system_log_select|SELECT|((( SELECT current_user_role() AS current_user_role) = ANY (ARRAY['admin'::user_role, 'platform_owner'::user_role])) AND ((org_id = ( SELECT current_org_id() AS current_org_id)) OR ((org_id IS NULL) AND (( SELECT current_user_role() AS current_user_role) = 'platform_owner'::user_role))))|
+P|task_activity|task_activity_insert_deny|INSERT||false
+P|task_activity|task_activity_select|SELECT|(EXISTS ( SELECT 1
+   FROM tasks t
+  WHERE ((t.id = task_activity.task_id) AND ((t.created_by = auth.uid()) OR (t.assignee_id = auth.uid()) OR ((t.task_type = 'team'::task_type) AND is_team_member(t.team_id))))))|
+P|task_assignees|task_assignees_delete|DELETE|(EXISTS ( SELECT 1
+   FROM tasks t
+  WHERE ((t.id = task_assignees.task_id) AND ((t.created_by = auth.uid()) OR (t.assignee_id = auth.uid()) OR ((t.task_type = 'team'::task_type) AND is_team_member(t.team_id))))))|
+P|task_assignees|task_assignees_insert|INSERT||(EXISTS ( SELECT 1
+   FROM tasks t
+  WHERE ((t.id = task_assignees.task_id) AND ((t.created_by = auth.uid()) OR (t.assignee_id = auth.uid()) OR ((t.task_type = 'team'::task_type) AND is_team_member(t.team_id))))))
+P|task_assignees|task_assignees_select|SELECT|(EXISTS ( SELECT 1
+   FROM tasks t
+  WHERE ((t.id = task_assignees.task_id) AND ((t.created_by = auth.uid()) OR (t.assignee_id = auth.uid()) OR ((t.task_type = 'team'::task_type) AND is_team_member(t.team_id))))))|
+P|task_attachments|task_attachments_delete|DELETE|((uploaded_by = auth.uid()) OR ((EXISTS ( SELECT 1
+   FROM tasks t
+  WHERE ((t.id = task_attachments.task_id) AND (t.org_id = current_org_id())))) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|task_attachments|task_attachments_insert|INSERT||((uploaded_by = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM tasks t
+  WHERE ((t.id = task_attachments.task_id) AND (t.org_id = current_org_id()) AND ((t.created_by = auth.uid()) OR (t.assignee_id = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])) OR ((t.team_id IS NOT NULL) AND (t.team_id = ANY (current_user_team_ids()))))))))
+P|task_attachments|task_attachments_select|SELECT|(EXISTS ( SELECT 1
+   FROM tasks t
+  WHERE ((t.id = task_attachments.task_id) AND (t.org_id = current_org_id()) AND ((t.created_by = auth.uid()) OR (t.assignee_id = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])) OR ((t.team_id IS NOT NULL) AND (t.team_id = ANY (current_user_team_ids())))))))|
+P|task_comments|task_comments_insert|INSERT||((author_id = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM tasks t
+  WHERE ((t.id = task_comments.task_id) AND ((t.created_by = auth.uid()) OR (t.assignee_id = auth.uid()) OR ((t.task_type = 'team'::task_type) AND is_team_member(t.team_id)))))))
+P|task_comments|task_comments_select|SELECT|((EXISTS ( SELECT 1
+   FROM tasks t
+  WHERE ((t.id = task_comments.task_id) AND ((t.created_by = auth.uid()) OR (t.assignee_id = auth.uid()) OR ((t.task_type = 'team'::task_type) AND is_team_member(t.team_id)))))) AND ((is_internal = false) OR is_agent() OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|task_comments|task_comments_update|UPDATE|(author_id = auth.uid())|(author_id = auth.uid())
+P|task_custom_field_values|custom_field_values_delete|DELETE|(EXISTS ( SELECT 1
+   FROM tasks t
+  WHERE ((t.id = task_custom_field_values.task_id) AND (t.org_id = current_org_id()) AND ((t.created_by = auth.uid()) OR (t.assignee_id = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))))|
+P|task_custom_field_values|custom_field_values_select|SELECT|(EXISTS ( SELECT 1
+   FROM tasks t
+  WHERE ((t.id = task_custom_field_values.task_id) AND (t.org_id = current_org_id()) AND ((t.created_by = auth.uid()) OR (t.assignee_id = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))))|
+P|task_custom_field_values|custom_field_values_update|UPDATE|(EXISTS ( SELECT 1
+   FROM tasks t
+  WHERE ((t.id = task_custom_field_values.task_id) AND (t.org_id = current_org_id()) AND ((t.created_by = auth.uid()) OR (t.assignee_id = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))))|
+P|task_custom_field_values|custom_field_values_upsert|INSERT||(EXISTS ( SELECT 1
+   FROM tasks t
+  WHERE ((t.id = task_custom_field_values.task_id) AND (t.org_id = current_org_id()) AND ((t.created_by = auth.uid()) OR (t.assignee_id = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))))
+P|task_custom_fields|custom_fields_delete|DELETE|((EXISTS ( SELECT 1
+   FROM teams tm
+  WHERE ((tm.id = task_custom_fields.team_id) AND (tm.org_id = current_org_id())))) AND ((created_by = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|task_custom_fields|custom_fields_insert|INSERT||((EXISTS ( SELECT 1
+   FROM teams tm
+  WHERE ((tm.id = task_custom_fields.team_id) AND (tm.org_id = current_org_id())))) AND ((team_id = ANY (current_user_team_ids())) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))
+P|task_custom_fields|custom_fields_select|SELECT|((EXISTS ( SELECT 1
+   FROM teams tm
+  WHERE ((tm.id = task_custom_fields.team_id) AND (tm.org_id = current_org_id())))) AND ((team_id = ANY (current_user_team_ids())) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|task_custom_fields|custom_fields_update|UPDATE|((EXISTS ( SELECT 1
+   FROM teams tm
+  WHERE ((tm.id = task_custom_fields.team_id) AND (tm.org_id = current_org_id())))) AND ((created_by = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|task_dependencies|task_deps_delete|DELETE|((org_id = current_org_id()) AND ((created_by = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|task_dependencies|task_deps_insert|INSERT||((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['agent'::user_role, 'manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))
+P|task_dependencies|task_deps_select|SELECT|((org_id = current_org_id()) AND ((EXISTS ( SELECT 1
+   FROM tasks t
+  WHERE ((t.id = task_dependencies.task_id) AND ((t.created_by = auth.uid()) OR (t.assignee_id = auth.uid()) OR ((t.task_type = 'team'::task_type) AND is_team_member(t.team_id)))))) OR (EXISTS ( SELECT 1
+   FROM tasks t
+  WHERE ((t.id = task_dependencies.depends_on_task_id) AND ((t.created_by = auth.uid()) OR (t.assignee_id = auth.uid()) OR ((t.task_type = 'team'::task_type) AND is_team_member(t.team_id)))))) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|task_priorities|tp_admin|ALL|(current_user_role() = 'platform_owner'::user_role)|(current_user_role() = 'platform_owner'::user_role)
+P|task_priorities|tp_select|SELECT|true|
+P|task_statuses|ts_admin|ALL|(current_user_role() = 'platform_owner'::user_role)|(current_user_role() = 'platform_owner'::user_role)
+P|task_statuses|ts_select|SELECT|true|
+P|task_template_items|tmpl_item_select|SELECT|(EXISTS ( SELECT 1
+   FROM task_templates tt
+  WHERE ((tt.id = task_template_items.template_id) AND (tt.org_id = current_org_id()))))|
+P|task_template_items|tmpl_item_write|ALL|((EXISTS ( SELECT 1
+   FROM task_templates tt
+  WHERE ((tt.id = task_template_items.template_id) AND (tt.org_id = current_org_id())))) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|((EXISTS ( SELECT 1
+   FROM task_templates tt
+  WHERE ((tt.id = task_template_items.template_id) AND (tt.org_id = current_org_id())))) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))
+P|task_templates|task_templates_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|
+P|task_templates|task_templates_select|SELECT|(org_id = current_org_id())|
+P|tasks|tasks_delete|DELETE|((org_id = current_org_id()) AND ((created_by = auth.uid()) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|tasks|tasks_insert|INSERT||((org_id = current_org_id()) AND (created_by = auth.uid()))
+P|tasks|tasks_select|SELECT|((org_id = current_org_id()) AND ((created_by = auth.uid()) OR (assignee_id = auth.uid()) OR ((task_type = 'team'::task_type) AND (team_id = ANY (current_user_team_ids()))) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|
+P|tasks|tasks_update|UPDATE|((org_id = current_org_id()) AND ((created_by = auth.uid()) OR (assignee_id = auth.uid()) OR ((task_type = 'team'::task_type) AND (team_id = ANY (current_user_team_ids()))) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))|((org_id = ( SELECT t.org_id
+   FROM tasks t
+  WHERE (t.id = tasks.id))) AND ((created_by = auth.uid()) OR (assignee_id = auth.uid()) OR ((task_type = 'team'::task_type) AND (team_id = ANY (current_user_team_ids()))) OR (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role]))))
+P|team_members|team_members_delete|DELETE|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))|
+P|team_members|team_members_insert|INSERT||((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['manager'::user_role, 'admin'::user_role, 'platform_owner'::user_role])))
+P|team_members|team_members_select|SELECT|(org_id = current_org_id())|
+P|teams|teams_admin|ALL|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))|((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))
+P|teams|teams_select|SELECT|(org_id = current_org_id())|

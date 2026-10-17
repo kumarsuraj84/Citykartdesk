@@ -4,7 +4,8 @@
 // waiting locks sampled during the run. Output: security-assessment-2026-10/07-FINAL-REMEDIATION/perf/perf-<PERF_LABEL>.json
 import { describe, it, beforeAll, afterAll } from 'vitest'
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { setupD03Fixtures, clientForToken, getAdmin, type D03Fixtures } from '../setup/fixtures-d03'
 
 let fx: D03Fixtures
@@ -22,11 +23,14 @@ async function time(fn: () => Promise<unknown>) {
   return { ...stats(xs), errors }
 }
 const psql = (sql: string) => execFileSync('docker', ['exec', DB, 'psql', '-U', 'postgres', '-d', 'postgres', '-tA', '-c', sql], { encoding: 'utf8' }).trim()
-function dockerStats() {
+// Sampling runs in a separate process and never blocks the test (a blocking sampler would add its own seconds to the latencies being measured).
+const run = promisify(execFile)
+async function sample() {
   try {
-    const j = JSON.parse(execFileSync('docker', ['stats', '--no-stream', '--format', '{{json .}}', DB], { encoding: 'utf8' }).trim())
-    return { cpu: j.CPUPerc, mem: j.MemUsage }
-  } catch { return { cpu: 'n/a', mem: 'n/a' } }
+    const st = JSON.parse((await run('docker', ['stats', '--no-stream', '--format', '{{json .}}', DB], { encoding: 'utf8' })).stdout.trim())
+    const q = (await run('docker', ['exec', DB, 'psql', '-U', 'postgres', '-d', 'postgres', '-tA', '-F', ',', '-c', 'select (select count(*) from pg_stat_activity), (select count(*) from pg_locks where not granted)'], { encoding: 'utf8' })).stdout.trim().split(',')
+    return { cpu: st.CPUPerc as string, mem: st.MemUsage as string, connections: Number(q[0]), waiting_locks: Number(q[1]) }
+  } catch { return null }
 }
 
 describe('latency and throughput at scale', () => {
@@ -63,10 +67,9 @@ describe('latency and throughput at scale', () => {
     const samples: { cpu: string; mem: string; connections: number; waiting_locks: number }[] = []
     for (const parallel of [1, 10, 25]) {
       const per: number[] = []; let errors = 0
-      const batches = Math.floor(120 / parallel)
-      const sampler = setInterval(() => {
-        try { const s = dockerStats(); samples.push({ ...s, connections: Number(psql('select count(*) from pg_stat_activity')), waiting_locks: Number(psql('select count(*) from pg_locks where not granted')) }) } catch { /* sampling is best effort */ }
-      }, 4000)
+      const batches = Math.floor(Number(process.env.PERF_WRITES ?? 600) / parallel)
+      let inFlight = false
+      const sampler = setInterval(() => { if (inFlight) return; inFlight = true; void sample().then((s) => { if (s) samples.push(s) }).finally(() => { inFlight = false }) }, 3000)
       const started = performance.now()
       for (let b = 0; b < batches; b++) {
         await Promise.all(Array.from({ length: parallel }, async (_, k) => {
@@ -82,11 +85,36 @@ describe('latency and throughput at scale', () => {
       writes[`${parallel} parallel updates`] = { ...stats(per), errors, updates: per.length, seconds: Math.round(seconds * 10) / 10, updates_per_second: Math.round((per.length / seconds) * 10) / 10 }
     }
     out.writes = writes
+
+    // ── System Log appends: every audit/security row takes the single hash-chain lock (system_log_chain_head FOR UPDATE), so this is where parallel writers queue ──
+    const logWrites: Record<string, unknown> = {}
+    const seqBefore = Number(psql('select seq from system_log_chain_head'))
+    let appended = 0
+    for (const parallel of [1, 10, 25]) {
+      const per: number[] = []; let errors = 0
+      const batches = Math.floor(Number(process.env.PERF_LOG_WRITES ?? 600) / parallel)
+      const started = performance.now()
+      for (let b = 0; b < batches; b++) {
+        await Promise.all(Array.from({ length: parallel }, async (_, k) => {
+          const t = performance.now()
+          const r = await (admin as unknown as { from: (t: string) => { insert: (v: object) => Promise<{ error: unknown }> } }).from('system_log').insert({ category: 'audit', source: 'server_action', action: 'perf.append', message: `perf ${parallel} ${b} ${k}`, org_id: fx.orgId })
+          if (r.error) errors++; else appended++
+          per.push(performance.now() - t)
+        }))
+      }
+      const seconds = (performance.now() - started) / 1000
+      logWrites[`${parallel} parallel chained appends`] = { ...stats(per), errors, appends: per.length, seconds: Math.round(seconds * 10) / 10, appends_per_second: Math.round((per.length / seconds) * 10) / 10 }
+    }
+    out.system_log_appends = logWrites
+    const seqAfter = Number(psql('select seq from system_log_chain_head'))
+    out.chain_sequence_gap = (seqAfter - seqBefore) - appended              // 0 = every successful append took exactly one position in the chain (none lost, none duplicated)
     out.database_samples = samples
     out.system_log_rows = Number(psql('select count(*) from system_log'))
-    out.chain_still_valid = psql("select (system_log_verify_chain(0, 1000)::jsonb)->>'ok'")
+    // the hash chain of the audit rows is re-computed over the newest rows; the function returns the rows that do NOT fit, so 0 means intact
+    out.chain_broken_rows = Number(psql('select count(*) from system_log_verify_chain((select greatest(seq - 20000, 0) from system_log_chain_head), 20000)'))
+    out.chain_rows_verified = 20000
     mkdirSync('security-assessment-2026-10/07-FINAL-REMEDIATION/perf', { recursive: true })
     writeFileSync(`security-assessment-2026-10/07-FINAL-REMEDIATION/perf/perf-${process.env.PERF_LABEL ?? 'run'}.json`, JSON.stringify(out, null, 2))
     console.log(JSON.stringify(out, null, 1))
-  })
+  }, 900_000)
 })

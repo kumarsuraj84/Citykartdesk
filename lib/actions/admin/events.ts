@@ -4,7 +4,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { toCSV } from '@/lib/export/csv'
 import { EVENT_KINDS } from '@/lib/events/record'
-import { exportAllowed, auditExportEvent, checkReportConfigShape, EXPORT_LIMIT_MESSAGE } from '@/lib/security/export-guard'
+import { exportAllowed, auditExportEvent, EXPORT_LIMIT_MESSAGE } from '@/lib/security/export-guard'
 
 export interface EventFilters {
   days: number

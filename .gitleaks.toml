@@ -1,0 +1,9 @@
+# Citykart Desk - secret-scan configuration. The only allow-listed text is the literal redaction marker that the log writer and the tests use
+# in place of a secret; it is not a secret and matches the generic-key rule.
+title = "citykart-desk gitleaks"
+[extend]
+useDefault = true
+[[allowlists]]
+description = "the literal word REDACTED written in place of a secret"
+regexTarget = "match"
+regexes = ['''(?i)\[?REDACTED\]?''']

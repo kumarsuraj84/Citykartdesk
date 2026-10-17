@@ -1,0 +1,127 @@
+{
+  "label": "final-3k-b",
+  "at": "2026-10-17T07:00:58.971Z",
+  "tickets": 3253,
+  "runs_per_operation": 40,
+  "reads_ms": {
+    "manager: list 1000 tickets": {
+      "p50": 4.1,
+      "p95": 7.1,
+      "p99": 8.8,
+      "runs": 40,
+      "errors": 0
+    },
+    "manager: count all tickets": {
+      "p50": 3.7,
+      "p95": 4.2,
+      "p99": 4.5,
+      "runs": 40,
+      "errors": 0
+    },
+    "technician: list own group tickets": {
+      "p50": 5.6,
+      "p95": 7.5,
+      "p99": 8.7,
+      "runs": 40,
+      "errors": 0
+    },
+    "requester: list own tickets": {
+      "p50": 5.6,
+      "p95": 6.8,
+      "p99": 7.2,
+      "runs": 40,
+      "errors": 0
+    },
+    "technician: open one ticket": {
+      "p50": 2.3,
+      "p95": 2.7,
+      "p99": 2.9,
+      "runs": 40,
+      "errors": 0
+    },
+    "requester: attachment rows of a ticket": {
+      "p50": 3,
+      "p95": 3.8,
+      "p99": 3.9,
+      "runs": 40,
+      "errors": 0
+    },
+    "manager: title search": {
+      "p50": 2.1,
+      "p95": 2.5,
+      "p99": 2.7,
+      "runs": 40,
+      "errors": 0
+    },
+    "requester: list people they can see (profile rule)": {
+      "p50": 476.3,
+      "p95": 499.3,
+      "p99": 518,
+      "runs": 40,
+      "errors": 0
+    },
+    "technician: list people": {
+      "p50": 7.4,
+      "p95": 8,
+      "p99": 8.2,
+      "runs": 40,
+      "errors": 0
+    },
+    "requester: home dashboard": {
+      "p50": 2.7,
+      "p95": 5,
+      "p99": 5.1,
+      "runs": 40,
+      "errors": 0
+    },
+    "manager: home dashboard": {
+      "p50": 3.6,
+      "p95": 4.5,
+      "p99": 5.4,
+      "runs": 40,
+      "errors": 0
+    },
+    "technician: activity of one ticket": {
+      "p50": 2.6,
+      "p95": 3,
+      "p99": 3.5,
+      "runs": 40,
+      "errors": 0
+    }
+  },
+  "writes": {
+    "1 parallel updates": {
+      "p50": 2.6,
+      "p95": 4,
+      "p99": 4.6,
+      "runs": 120,
+      "errors": 0,
+      "updates": 120,
+      "seconds": 0.3,
+      "updates_per_second": 356.5
+    },
+    "10 parallel updates": {
+      "p50": 5.2,
+      "p95": 8.1,
+      "p99": 22.4,
+      "runs": 120,
+      "errors": 0,
+      "updates": 120,
+      "seconds": 0.1,
+      "updates_per_second": 1159
+    },
+    "25 parallel updates": {
+      "p50": 10.3,
+      "p95": 15.2,
+      "p99": 15.9,
+      "runs": 100,
+      "errors": 0,
+      "updates": 100,
+      "seconds": 0.1,
+      "updates_per_second": 1609.7
+    }
+  },
+  "database_samples": [],
+  "system_log_rows": 12552,
+  "chain_broken_rows": 0
+}

@@ -1,0 +1,174 @@
+{
+  "label": "baseline-100k",
+  "at": "2026-10-17T07:28:56.367Z",
+  "tickets": 100255,
+  "runs_per_operation": 40,
+  "reads_ms": {
+    "manager: list 1000 tickets": {
+      "p50": 5,
+      "p95": 7.5,
+      "p99": 8.3,
+      "runs": 40,
+      "errors": 0
+    },
+    "manager: count all tickets": {
+      "p50": 18.8,
+      "p95": 21.4,
+      "p99": 22.9,
+      "runs": 40,
+      "errors": 0
+    },
+    "technician: list own group tickets": {
+      "p50": 24.8,
+      "p95": 26,
+      "p99": 28.8,
+      "runs": 40,
+      "errors": 0
+    },
+    "requester: list own tickets": {
+      "p50": 22.1,
+      "p95": 22.7,
+      "p99": 23.4,
+      "runs": 40,
+      "errors": 0
+    },
+    "technician: open one ticket": {
+      "p50": 2.2,
+      "p95": 2.9,
+      "p99": 3.1,
+      "runs": 40,
+      "errors": 0
+    },
+    "requester: attachment rows of a ticket": {
+      "p50": 2.8,
+      "p95": 3.4,
+      "p99": 3.5,
+      "runs": 40,
+      "errors": 0
+    },
+    "manager: title search": {
+      "p50": 2.3,
+      "p95": 2.9,
+      "p99": 3.2,
+      "runs": 40,
+      "errors": 0
+    },
+    "requester: list people they can see (profile rule)": {
+      "p50": 4.4,
+      "p95": 4.9,
+      "p99": 5.2,
+      "runs": 40,
+      "errors": 0
+    },
+    "technician: list people": {
+      "p50": 4.3,
+      "p95": 5,
+      "p99": 5.3,
+      "runs": 40,
+      "errors": 0
+    },
+    "requester: home dashboard": {
+      "p50": 3.7,
+      "p95": 6.5,
+      "p99": 8.3,
+      "runs": 40,
+      "errors": 0
+    },
+    "manager: home dashboard": {
+      "p50": 3.2,
+      "p95": 4,
+      "p99": 4,
+      "runs": 40,
+      "errors": 0
+    },
+    "technician: activity of one ticket": {
+      "p50": 2.4,
+      "p95": 3.1,
+      "p99": 3.4,
+      "runs": 40,
+      "errors": 0
+    }
+  },
+  "writes": {
+    "1 parallel updates": {
+      "p50": 2.3,
+      "p95": 3.2,
+      "p99": 4,
+      "runs": 3000,
+      "errors": 0,
+      "updates": 3000,
+      "seconds": 7.6,
+      "updates_per_second": 394.3
+    },
+    "10 parallel updates": {
+      "p50": 3.7,
+      "p95": 5,
+      "p99": 9.5,
+      "runs": 3000,
+      "errors": 0,
+      "updates": 3000,
+      "seconds": 1.4,
+      "updates_per_second": 2084.8
+    },
+    "25 parallel updates": {
+      "p50": 5.9,
+      "p95": 9.1,
+      "p99": 11.9,
+      "runs": 3000,
+      "errors": 0,
+      "updates": 3000,
+      "seconds": 1,
+      "updates_per_second": 2902.5
+    }
+  },
+  "system_log_appends": {
+    "1 parallel chained appends": {
+      "p50": 2.2,
+      "p95": 2.9,
+      "p99": 3.5,
+      "runs": 3000,
+      "errors": 0,
+      "appends": 3000,
+      "seconds": 6.9,
+      "appends_per_second": 434.6
+    },
+    "10 parallel chained appends": {
+      "p50": 6.1,
+      "p95": 9.5,
+      "p99": 10.4,
+      "runs": 3000,
+      "errors": 0,
+      "appends": 3000,
+      "seconds": 2.9,
+      "appends_per_second": 1050.3
+    },
+    "25 parallel chained appends": {
+      "p50": 13.2,
+      "p95": 22.1,
+      "p99": 24.8,
+      "runs": 3000,
+      "errors": 0,
+      "appends": 3000,
+      "seconds": 2.7,
+      "appends_per_second": 1107.7
+    }
+  },
+  "chain_sequence_gap": 0,
+  "database_samples": [
+    {
+      "cpu": "23.16%",
+      "mem": "356.5MiB / 62.68GiB",
+      "connections": 22,
+      "waiting_locks": 0
+    },
+    {
+      "cpu": "22.88%",
+      "mem": "356.6MiB / 62.68GiB",
+      "connections": 27,
+      "waiting_locks": 0
+    }
+  ],
+  "system_log_rows": 127924,
+  "chain_broken_rows": 0,
+  "chain_rows_verified": 20000
+}

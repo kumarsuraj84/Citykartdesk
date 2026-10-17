@@ -1,0 +1,1 @@
+ACL IDENTICAL for anon and authenticated (ignoring TRUNCATE/REFERENCES/TRIGGER/MAINTAIN)

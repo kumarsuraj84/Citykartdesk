@@ -16,10 +16,17 @@ DO $$
 DECLARE r record;
 BEGIN
   IF to_regclass('public._m169_function_grants') IS NOT NULL THEN
-    FOR r IN SELECT sig FROM public._m169_function_grants LOOP
+    -- first remove every explicit entry, then put back exactly the ones recorded (PUBLIC, anon, authenticated, service_role)
+    FOR r IN SELECT DISTINCT sig FROM public._m169_function_grants LOOP
       BEGIN
-        EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO PUBLIC', r.sig);
+        EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon, authenticated, service_role', r.sig);
       EXCEPTION WHEN undefined_function THEN NULL;  -- a function that no longer exists
+      END;
+    END LOOP;
+    FOR r IN SELECT sig, grantee FROM public._m169_function_grants LOOP
+      BEGIN
+        EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO %s', r.sig, CASE r.grantee WHEN 'PUBLIC' THEN 'PUBLIC' ELSE quote_ident(r.grantee) END);
+      EXCEPTION WHEN undefined_function THEN NULL;
       END;
     END LOOP;
     DROP TABLE public._m169_function_grants;

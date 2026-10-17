@@ -83,8 +83,9 @@ DROP POLICY IF EXISTS sla_config_admin ON public.global_sla_config;
 CREATE POLICY sla_config_admin ON public.global_sla_config FOR ALL TO authenticated
   USING (org_id = public.current_org_id() AND public.current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role]));
 DROP POLICY IF EXISTS field_sla_overrides_write ON public.field_sla_overrides;
-CREATE POLICY field_sla_overrides_write ON public.field_sla_overrides FOR ALL TO authenticated
-  USING (org_id = public.current_org_id() AND public.current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role]));
+CREATE POLICY field_sla_overrides_write ON public.field_sla_overrides FOR ALL
+  USING (org_id = public.current_org_id() AND public.current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role]))
+  WITH CHECK (org_id = public.current_org_id() AND public.current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role]));
 
 -- (the TRUNCATE / TRIGGER / REFERENCES revoke and the is_internal back-fill are not undone: they have no functional effect)
 COMMIT;

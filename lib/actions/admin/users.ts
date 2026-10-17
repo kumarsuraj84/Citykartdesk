@@ -21,7 +21,7 @@ import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { loadCcBook, resetCcBookCache } from '@/lib/requests/cc-recipients'
 import { organisationMailDomains, isOrganisationAddress } from '@/lib/email/org-domains'
 import { loadPolicies } from '@/lib/permissions/policies'
-import { exportAllowed, auditExportEvent, checkReportConfigShape, EXPORT_LIMIT_MESSAGE } from '@/lib/security/export-guard'
+import { exportAllowed, auditExportEvent, EXPORT_LIMIT_MESSAGE } from '@/lib/security/export-guard'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: any; rpc: (fn: string, args: Record<string, unknown>) => any }

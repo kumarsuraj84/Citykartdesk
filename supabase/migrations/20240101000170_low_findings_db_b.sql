@@ -130,7 +130,7 @@ GRANT EXECUTE ON FUNCTION public.current_user_visible_people() TO authenticated,
 DROP POLICY IF EXISTS profiles_select ON public.profiles;
 CREATE POLICY profiles_select ON public.profiles FOR SELECT USING (
   id = auth.uid()
-  OR (org_id = current_org_id() AND (current_user_role() <> 'user' OR id = ANY (current_user_visible_people())))
+  OR (org_id = current_org_id() AND (current_user_role() <> 'user' OR id IN (SELECT unnest(current_user_visible_people()))))
 );
 
 -- A missing grant found while testing 021: task_attachments has a row-level read policy, but signed-in users were never granted the table right, so the Tasks

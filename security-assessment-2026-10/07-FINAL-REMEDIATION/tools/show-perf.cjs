@@ -1,0 +1,5 @@
+const j = require(require('path').resolve(process.argv[2]))
+console.log('label', j.label, 'tickets', j.tickets)
+for (const [k, v] of Object.entries(j.reads_ms)) console.log(k.padEnd(52), 'p50', String(v.p50).padStart(7), 'p95', String(v.p95).padStart(7), 'p99', String(v.p99).padStart(7), 'err', v.errors)
+for (const [k, v] of Object.entries(j.writes)) console.log(k.padEnd(24), JSON.stringify(v))
+console.log('chain broken rows:', j.chain_broken_rows, '| system_log rows:', j.system_log_rows, '| samples:', JSON.stringify((j.database_samples || []).slice(0, 2)))

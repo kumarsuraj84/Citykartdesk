@@ -4,7 +4,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { loadFixedReport } from '@/lib/queries/fixed-reports'
 import { buildReportWorkbook } from '@/lib/reporting/analytics/report-table-xlsx'
 import { parseReportFilter } from '@/lib/reporting/analytics/report-filter'
-import { exportAllowed, auditExportEvent, checkReportConfigShape, EXPORT_LIMIT_MESSAGE } from '@/lib/security/export-guard'
+import { exportAllowed, auditExportEvent, EXPORT_LIMIT_MESSAGE } from '@/lib/security/export-guard'
 
 type Result = { data?: string; filename?: string; error?: string }
 
