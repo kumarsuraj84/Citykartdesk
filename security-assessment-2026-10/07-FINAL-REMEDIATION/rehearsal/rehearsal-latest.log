@@ -1,0 +1,40 @@
+== 1. rebuild baseline (migrations 0-163)
+Finished [36msupabase db reset[39m on branch [36msecurity/remediation-phase2-local[39m.
+{"target":"local","version":"","message":"Reset local database."}
+== forward 164
+== forward 165
+== forward 166
+== forward 167
+== forward 168
+== forward 169
+== 3. rollback in reverse order
+-- rollback 169
+   expected = state before migration 169:
+   IDENTICAL (only-expected 0, only-actual 0)
+-- rollback 168
+   expected = state before migration 168:
+   IDENTICAL (only-expected 0, only-actual 0)
+-- rollback 167
+   expected = state before migration 167:
+   IDENTICAL (only-expected 0, only-actual 0)
+-- rollback 166
+   expected = state before migration 166:
+   IDENTICAL (only-expected 0, only-actual 0)
+-- rollback 165
+   expected = state before migration 165:
+   IDENTICAL (only-expected 0, only-actual 0)
+-- rollback 164
+   expected = state before migration 164:
+   IDENTICAL (only-expected 0, only-actual 0)
+-- full schema + ACL comparison after the complete rollback (baseline vs rolled back)
+statements only in expected: 193; only in actual: 247
+EXPECTED> CREATE TABLE public.approval_workflow_steps ( id uuid DEFAULT gen_random_uuid() NOT NULL, workflow_id uuid NOT NULL, step_order integer NOT NULL, approver_type public.approver_type NOT NULL,
+EXPECTED> CREATE POLICY field_sla_overrides_write ON public.field_sla_overrides USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'mana
+ACTUAL>   CREATE TABLE public.approval_workflow_steps ( id uuid DEFAULT gen_random_uuid() NOT NULL, workflow_id uuid NOT NULL, step_order integer NOT NULL, approver_type public.approver_type NOT NULL,
+ACTUAL>   ALTER TABLE ONLY public.approval_workflow_steps ADD CONSTRAINT approval_workflow_steps_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id) ON DELETE SET NULL
+ACTUAL>   CREATE POLICY field_sla_overrides_write ON public.field_sla_overrides USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'mana
+26 ACL differences
+   table or sequence ACL differences: 0
+== 4. re-apply 164-169
+   re-applied final = first final:
+   IDENTICAL (only-expected 0, only-actual 0)

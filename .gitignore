@@ -58,3 +58,5 @@ supabase/.temp
 /local_storage_files.tar.gz
 /local-backup-*.dump
 /main-config-mirror-*.dump
+/security-assessment-2026-10/07-FINAL-REMEDIATION/rehearsal/*.dump
+/security-assessment-2026-10/07-FINAL-REMEDIATION/rehearsal/schema_*.sql

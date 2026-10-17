@@ -7,6 +7,33 @@
 
 BEGIN;
 
+-- The privileges of anon and authenticated on the objects this migration touches are written down first, so the rollback restores EXACTLY what was there
+-- (production's grants may differ from a database built from the migrations; nothing is guessed). The table is locked and removed by the last rollback.
+CREATE TABLE IF NOT EXISTS public._grant_snapshots (
+  stage text NOT NULL, kind text NOT NULL, grantee text NOT NULL, object_name text NOT NULL, privilege text NOT NULL,
+  PRIMARY KEY (stage, kind, grantee, object_name, privilege)
+);
+ALTER TABLE public._grant_snapshots ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public._grant_snapshots FROM PUBLIC, anon, authenticated;
+
+-- a marker row for every object present now ('-'), so the rollback touches only these
+INSERT INTO public._grant_snapshots (stage, kind, grantee, object_name, privilege)
+SELECT '167', CASE c.relkind WHEN 'S' THEN 'sequence' ELSE 'table' END, 'anon', c.relname, '-'
+FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p', 'S') AND c.relname IN ('task_attachments', 'request_attachments')
+ON CONFLICT DO NOTHING;
+INSERT INTO public._grant_snapshots (stage, kind, grantee, object_name, privilege)
+SELECT '167', CASE c.relkind WHEN 'S' THEN 'sequence' ELSE 'table' END, r.rolname, c.relname, a.privilege_type
+FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) a JOIN pg_roles r ON r.oid = a.grantee
+WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p', 'S') AND r.rolname IN ('anon', 'authenticated') AND c.relname IN ('task_attachments', 'request_attachments')
+ON CONFLICT DO NOTHING;
+-- column-level privileges (for example UPDATE on single columns of profiles)
+INSERT INTO public._grant_snapshots (stage, kind, grantee, object_name, privilege)
+SELECT '167', 'column', r.rolname, c.relname || '.' || t.attname, a.privilege_type
+FROM pg_class c JOIN pg_attribute t ON t.attrelid = c.oid AND t.attnum > 0 AND NOT t.attisdropped CROSS JOIN LATERAL aclexplode(t.attacl) a JOIN pg_roles r ON r.oid = a.grantee
+WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p') AND r.rolname IN ('anon', 'authenticated') AND c.relname IN ('task_attachments', 'request_attachments')
+ON CONFLICT DO NOTHING;
+
+
 -- ── projects: the same test the application already makes (can_view_project), now in the database ─────────────────────────────────────────
 DROP POLICY IF EXISTS project_members_insert ON public.project_members;
 CREATE POLICY project_members_insert ON public.project_members FOR INSERT TO authenticated

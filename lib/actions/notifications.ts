@@ -3,6 +3,7 @@
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 
 type ActionResult = { error?: string }
@@ -106,11 +107,11 @@ export async function setNotificationPreference(
   eventType: string,
   enabled: boolean
 ): Promise<ActionResult> {
-  const supabase = await createClient()
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
 
-  const { error } = await supabase
+  // Written by the server for the signed-in person only (their own row): a database built from the migrations gives the user's own session no write right here.
+  const { error } = await createAdminClient()
     .from('notification_preferences')
     .upsert({ user_id: profile.id, event_type: eventType, enabled })
 

@@ -1,0 +1,567 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_db_ckdesk_audit, supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [only the user's own browser: chrome.exe(pid 58396) 182.72.84.10:3210 CLOSE_WAIT - NOT the audit; the audit never uses this browser]
+
+ISOLATION GATE: PASSED  (21/21)
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate[39m
+
+ [31m❯[39m tests/vapt/10-confidentiality-exploits.test.ts [2m([22m[2m5 tests[22m[2m | [22m[31m3 failed[39m[2m)[22m[33m 4662[2mms[22m[39m
+   [32m✓[39m VA-INT-01: a file attached to an internal note stays staff-only[2m > [22mthe requester cannot list or download it, and it is flagged internal[32m 154[2mms[22m[39m
+   [33m[2m✓[22m[39m VA-INT-03: internal-note text is not pushed to people who cannot read the note[2m > [22man ordinary-user collaborator gets no notification carrying the note text [33m 2615[2mms[22m[39m
+[31m   [31m×[31m VA-INT-13: mobile numbers of other people are not readable by an ordinary user[2m > [22ma requester sees at most their own number; a manager cannot attach a number to someone else[39m[32m 11[2mms[22m[39m
+[31m     → expected [ { …(2) } ] to deeply equal [][39m
+[31m   [31m×[31m VA-INT-10: files cannot be written straight into the task-attachments bucket by an ordinary user[2m > [22ma direct Storage API upload is refused[39m[32m 23[2mms[22m[39m
+[31m     → expected null not to be null[39m
+[31m   [31m×[31m VA-API-02: a user cannot switch off their own "must change password" flag[2m > [22mthe flag stays on after the user tries to clear it through the data API[39m[32m 13[2mms[22m[39m
+[31m     → expected false to be true // Object.is equality[39m
+[90mstderr[2m | tests/vapt/23-permission-matrix-and-rules.test.ts[2m > [22m[2mwhat a Business Rule may do to a ticket[2m > [22m[2mcannot revive a cancelled ticket or close one that was never resolved; can still do the moves a person could
+[22m[39m{"ts":"2026-10-17T03:42:41.647Z","level":"warn","event":"rules.status_move_refused","message":"A Business Rule tried a status move that is not allowed","route":"rules/actions.ts#runSetStatus","requestId":"b7452d0d-14d2-4f22-890e-e401c68b2a9b","context":{"from":"cancelled","to":"in_progress","ruleId":"6b32425a-7159-4546-94c7-f8eea35ccbc1"}}
+
+[90mstderr[2m | tests/vapt/23-permission-matrix-and-rules.test.ts[2m > [22m[2mwhat a Business Rule may do to a ticket[2m > [22m[2mcannot revive a cancelled ticket or close one that was never resolved; can still do the moves a person could
+[22m[39m{"ts":"2026-10-17T03:42:41.672Z","level":"warn","event":"rules.status_move_refused","message":"A Business Rule tried a status move that is not allowed","route":"rules/actions.ts#runSetStatus","requestId":"903000f3-44e7-43f1-af3b-b4e19ac0f1b4","context":{"from":"in_progress","to":"closed","ruleId":"080827b3-51d5-4860-b690-cb23e74469b1"}}
+
+[90mstderr[2m | tests/vapt/23-permission-matrix-and-rules.test.ts[2m > [22m[2mwhat a Business Rule may do to a ticket[2m > [22m[2mcannot revive a cancelled ticket or close one that was never resolved; can still do the moves a person could
+[22m[39m{"ts":"2026-10-17T03:42:41.726Z","level":"warn","event":"rules.status_move_refused","message":"A Business Rule tried a status move that is not allowed","route":"rules/actions.ts#runSetStatus","requestId":"c87cea23-df85-4342-90b0-cbc3feb8ba34","context":{"from":"hold_purchase_ho","to":"waiting_user","ruleId":"ab9a93ae-b707-4102-8d93-a6e832cdadd0"}}
+
+ [32m✓[39m tests/vapt/23-permission-matrix-and-rules.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 3136[2mms[22m[39m
+[90mstdout[2m | tests/vapt/90-performance.test.ts[2m > [22m[2mlatency of security-sensitive operations (milliseconds)[2m > [22m[2mmeasures and records
+[22m[39m{
+ "label": "run",
+ "at": "2026-10-17T03:42:44.155Z",
+ "tickets_in_audit_db": 3004,
+ "manager: list 1000 tickets (row security over the whole organisation)": {
+  "p50": 4.4,
+  "p95": 5.7,
+  "p99": 6.2,
+  "runs": 40
+ },
+ "manager: count all tickets": {
+  "p50": 4.6,
+  "p95": 5.4,
+  "p99": 5.9,
+  "runs": 40
+ },
+ "technician: list own group tickets": {
+  "p50": 5.6,
+  "p95": 6.5,
+  "p99": 6.9,
+  "runs": 40
+ },
+ "requester: list own tickets": {
+  "p50": 5.1,
+  "p95": 5.9,
+  "p99": 6.4,
+  "runs": 40
+ },
+ "technician: open one ticket by id": {
+  "p50": 2.3,
+  "p95": 2.9,
+  "p99": 3.5,
+  "runs": 40
+ },
+ "requester: read attachments rows of a ticket": {
+  "p50": 3.2,
+  "p95": 4.1,
+  "p99": 4.7,
+  "runs": 40
+ },
+ "search: manager title search": {
+  "p50": 2.7,
+  "p95": 3.2,
+  "p99": 4.3,
+  "runs": 40
+ }
+}
+
+ [32m✓[39m tests/vapt/90-performance.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 3058[2mms[22m[39m
+   [33m[2m✓[22m[39m latency of security-sensitive operations (milliseconds)[2m > [22mmeasures and records [33m 1205[2mms[22m[39m
+ [31m❯[39m tests/vapt/30-onboarding-and-password-enforcement.test.ts [2m([22m[2m5 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 2970[2mms[22m[39m
+   [33m[2m✓[22m[39m bulk import without a password column[2m > [22mgives every new account its own random one-time password and flags it "must change password"; the old shared default does not work [33m 416[2mms[22m[39m
+[31m   [31m×[31m bulk import without a password column[2m > [22ma person who has not chosen their own password yet can do nothing through the data API or the server actions[39m[32m 80[2mms[22m[39m
+[31m     → expected 5 to be less than or equal to 1[39m
+   [32m✓[39m bulk import without a password column[2m > [22mafter choosing their own password through the application the flag is cleared (by the server) and everything works[32m 291[2mms[22m[39m
+[31m   [31m×[31m bulk import without a password column[2m > [22ma flagged person cannot clear the flag themselves through the data API[39m[32m 81[2mms[22m[39m
+[31m     → expected false to be true // Object.is equality[39m
+   [32m✓[39m invitation mode[2m > [22msends a set-your-password e-mail and hands out no password[32m 144[2mms[22m[39m
+[90mstderr[2m | tests/vapt/21-approvals-separation.test.ts[2m > [22m[2mchoosing approvers[2m > [22m[2madding approvers to a pending approval: not yourself, not the requester, not the sender
+[22m[39m{"ts":"2026-10-17T03:42:51.441Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"approvals.ts#addAdHocApprovers","errorCode":"PGRST204","error":{"message":"{\"code\":\"PGRST204\",\"details\":null,\"hint\":null,\"message\":\"Could not find the 'added_by' column of 'approval_workflow_steps' in the schema cache\"}"}}
+
+ [31m❯[39m tests/vapt/21-approvals-separation.test.ts [2m([22m[2m6 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 2885[2mms[22m[39m
+   [32m✓[39m choosing approvers[2m > [22mthe requester and the sender cannot be named as approvers[32m 150[2mms[22m[39m
+[31m   [31m×[31m choosing approvers[2m > [22madding approvers to a pending approval: not yourself, not the requester, not the sender[39m[32m 234[2mms[22m[39m
+[31m     → expected 'Failed to add approvers.' to be undefined[39m
+   [32m✓[39m choosing approvers[2m > [22mdelegating: not to yourself, not to the requester, not to the sender; to a colleague is fine[32m 274[2mms[22m[39m
+   [32m✓[39m choosing approvers[2m > [22mthe requester and the sender still cannot decide (the original rule)[32m 146[2mms[22m[39m
+   [32m✓[39m who can look up approvers and read approval routes[2m > [22ma requester cannot search for approvers; staff can (and an e-mail is matched only when typed in full)[32m 135[2mms[22m[39m
+[31m   [31m×[31m who can look up approvers and read approval routes[2m > [22ma requester cannot list approval routes or steps of other people's tickets[39m[32m 80[2mms[22m[39m
+[31m     → expected [ { …(2) } ] to deeply equal [][39m
+[90mstderr[2m | tests/vapt/24-ticket-low-findings.test.ts[2m > [22m[2mVAPT-059: database error text does not reach the browser[2m > [22m[2msanitizeError hides table and constraint names
+[22m[39m{"ts":"2026-10-17T03:42:55.048Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"test","errorCode":"23505","error":{"message":"{\"code\":\"23505\",\"message\":\"duplicate key value violates unique constraint \\\"services_name_key\\\"\"}"}}
+{"ts":"2026-10-17T03:42:55.049Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"test","error":{"message":"{\"message\":\"relation \\\"profiles\\\" does not exist\"}"}}
+
+ [31m❯[39m tests/vapt/24-ticket-low-findings.test.ts [2m([22m[2m15 tests[22m[2m | [22m[31m3 failed[39m[2m)[22m[33m 2700[2mms[22m[39m
+   [32m✓[39m VAPT-054: a copy of a ticket is a new ticket, made through the normal creation path[2m > [22mpriority and deadlines are worked out again, not copied; the original priority is not carried over[32m 90[2mms[22m[39m
+   [32m✓[39m VAPT-054: a copy of a ticket is a new ticket, made through the normal creation path[2m > [22ma service that is no longer available cannot be copied into, and somebody else's ticket cannot be copied[32m 91[2mms[22m[39m
+   [32m✓[39m VAPT-055 / 056: re-classification[2m > [22ma finished ticket is not re-classified[32m 124[2mms[22m[39m
+   [32m✓[39m VAPT-055 / 056: re-classification[2m > [22ma requester cannot re-classify at all (the original rule)[32m 34[2mms[22m[39m
+   [32m✓[39m VAPT-058: a decision does not drag a ticket back to life[2m > [22mwhen the ticket was closed meanwhile, an approval granted afterwards leaves it closed[32m 140[2mms[22m[39m
+   [32m✓[39m VAPT-058: a decision does not drag a ticket back to life[2m > [22ma second decision on an approval that is already decided is refused and not recorded[32m 183[2mms[22m[39m
+   [32m✓[39m VAPT-059: database error text does not reach the browser[2m > [22msanitizeError hides table and constraint names[32m 1[2mms[22m[39m
+   [32m✓[39m VAPT-062: the home dashboard works out the role itself[2m > [22ma requester who claims to be a manager and an agent gets the requester's view only[32m 6[2mms[22m[39m
+   [32m✓[39m VAPT-062: the home dashboard works out the role itself[2m > [22ma real technician still gets the technician's numbers; a real manager still gets the team numbers[32m 16[2mms[22m[39m
+[31m   [31m×[31m VAPT-062: the home dashboard works out the role itself[2m > [22mnobody signed out can call it, and the inner function is not reachable at all[39m[32m 6[2mms[22m[39m
+[31m     → expected 200 to be greater than or equal to 400[39m
+[31m   [31m×[31m VAPT-063: the activity log[2m > [22ma requester cannot read it through the data API; staff can[39m[32m 18[2mms[22m[39m
+[31m     → expected [ { …(6) }, { …(6) } ] to deeply equal [][39m
+   [32m✓[39m VAPT-063: the activity log[2m > [22mthe ticket page still shows the requester their history, without rule names or e-mail addresses[32m 119[2mms[22m[39m
+   [32m✓[39m VAPT-063: the activity log[2m > [22mthe allow-list keeps only what the History tab shows[32m 0[2mms[22m[39m
+[31m   [31m×[31m VAPT-064: functions are not public by default[2m > [22mthe anonymous role cannot call the application's own functions[39m[32m 2[2mms[22m[39m
+[31m     → current_user_role: expected 200 to be greater than or equal to 400[39m
+   [32m✓[39m VAPT-064: functions are not public by default[2m > [22msigned-in users still can (row-security policies depend on it)[32m 3[2mms[22m[39m
+ [32m✓[39m tests/vapt/20-ticket-actions-authz.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 2364[2mms[22m[39m
+ [31m❯[39m tests/vapt/22-projects-tasks-files-privacy.test.ts [2m([22m[2m8 tests[22m[2m | [22m[31m7 failed[39m[2m)[22m[33m 1977[2mms[22m[39m
+[31m   [31m×[31m projects[2m > [22ma technician of another group cannot add himself to a project of group A, and so cannot read it; the project's own technician can add a member[39m[32m 15[2mms[22m[39m
+[31m     → expected undefined to be '42501' // Object.is equality[39m
+[31m   [31m×[31m projects[2m > [22mmilestones and updates of a project need access to that project[39m[32m 4[2mms[22m[39m
+[31m     → expected undefined to be '42501' // Object.is equality[39m
+[31m   [31m×[31m tasks[2m > [22man ordinary employee cannot create a task at all, and a technician cannot create one inside another group's project[39m[32m 11[2mms[22m[39m
+[31m     → expected undefined to be '42501' // Object.is equality[39m
+   [32m✓[39m tasks[2m > [22ma technician can still create an ordinary task for a colleague[32m 16[2mms[22m[39m
+[31m   [31m×[31m task files[2m > [22mnobody can forge a file record or upload / delete in the task store directly[39m[32m 16[2mms[22m[39m
+[31m     → uat-desk-003-1792208580011-requester-a@example.test: expected null not to be null[39m
+[31m   [31m×[31m ticket files and comments[2m > [22man uploader cannot restore or alter an attachment row directly[39m[32m 18[2mms[22m[39m
+[31m     → expected null not to be null[39m
+[31m   [31m×[31m re-pointing a record at another ticket[2m > [22ma requester cannot move a survey answer to another ticket[39m[32m 10[2mms[22m[39m
+[31m     → expected 'cf6fcb7a-1507-42bf-be4c-02dd645d0c13' to be 'c6840bc3-fd2b-44de-8c53-5c292d502a44' // Object.is equality[39m
+[31m   [31m×[31m internal configuration is not readable by an ordinary employee[2m > [22malert rules, escalation rules, permission overrides, scheduled reports and group membership of others[39m[32m 3[2mms[22m[39m
+[31m     → alert_rules: expected 4 to be +0 // Object.is equality[39m
+ [31m❯[39m tests/vapt/11-integrity-exploits.test.ts [2m([22m[2m6 tests[22m[2m | [22m[31m5 failed[39m[2m)[22m[33m 1937[2mms[22m[39m
+[31m   [31m×[31m VA-DB-01 / VA-TKT-01: priority and SLA deadlines cannot be changed by hand, whatever the role[2m > [22ma technician of the group cannot change the priority of a ticket through the data API[39m[32m 19[2mms[22m[39m
+[31m     → expected null not to be null[39m
+[31m   [31m×[31m VA-DB-01 / VA-TKT-01: priority and SLA deadlines cannot be changed by hand, whatever the role[2m > [22ma manager cannot change the priority either[39m[32m 16[2mms[22m[39m
+[31m     → expected null not to be null[39m
+[31m   [31m×[31m VA-DB-01 / VA-TKT-01: priority and SLA deadlines cannot be changed by hand, whatever the role[2m > [22ma technician cannot push the deadline of a ticket a year ahead[39m[32m 8[2mms[22m[39m
+[31m     → expected null not to be null[39m
+[31m   [31m×[31m VA-DB-01 / VA-TKT-01: priority and SLA deadlines cannot be changed by hand, whatever the role[2m > [22ma requester cannot create a ticket straight in the database (priority, service and form would be skipped)[39m[32m 16[2mms[22m[39m
+[31m     → expected null not to be null[39m
+[31m   [31m×[31m VA-DB-03: configuration the screens reserve for administrators is not writable by a manager[2m > [22ma manager cannot change an SLA policy or a service through the data API[39m[32m 7[2mms[22m[39m
+[31m     → expected [ Array(1) ] to deeply equal [][39m
+   [32m✓[39m VA-DB-03: configuration the screens reserve for administrators is not writable by a manager[2m > [22man administrator still can[32m 12[2mms[22m[39m
+ [32m✓[39m tests/vapt/12-email-reply-participant.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 1899[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 22 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/10-confidentiality-exploits.test.ts[2m > [22mVA-INT-13: mobile numbers of other people are not readable by an ordinary user[2m > [22ma requester sees at most their own number; a manager cannot attach a number to someone else
+[31m[1mAssertionError[22m: expected [ { …(2) } ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   {[39m
+[31m+     "mobile_number": "+919908558258",[39m
+[31m+     "profile_id": "238cd269-b9f9-49a6-bab4-d1bb874b3d47",[39m
+[31m+   },[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/vapt/10-confidentiality-exploits.test.ts:[2m74:24[22m[39m
+    [90m 72| [39m    [35mconst[39m asA [33m=[39m [34mclientForToken[39m(fx[33m.[39mrequesterA[33m.[39maccessToken)
+    [90m 73| [39m    const { data } = await asA.from('profile_mobile_numbers').select('…
+    [90m 74| [39m    [34mexpect[39m(data [33m??[39m [])[33m.[39m[34mtoEqual[39m([])
+    [90m   | [39m                       [31m^[39m
+    [90m 75| [39m
+    [90m 76| [39m    [35mconst[39m asManager [33m=[39m [34mclientForToken[39m(fx[33m.[39mmanager[33m.[39maccessToken)
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/10-confidentiality-exploits.test.ts[2m > [22mVA-INT-10: files cannot be written straight into the task-attachments bucket by an ordinary user[2m > [22ma direct Storage API upload is refused
+[31m[1mAssertionError[22m: expected null not to be null[39m
+[36m [2m❯[22m tests/vapt/10-confidentiality-exploits.test.ts:[2m89:23[22m[39m
+    [90m 87| [39m    const { error } = await asA.storage.from('task-attachments').uploa…
+    [90m 88| [39m    if (!error) await admin().storage.from('task-attachments').remove(…
+    [90m 89| [39m    [34mexpect[39m(error)[33m.[39mnot[33m.[39m[34mtoBeNull[39m()
+    [90m   | [39m                      [31m^[39m
+    [90m 90| [39m  })
+    [90m 91| [39m})
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/10-confidentiality-exploits.test.ts[2m > [22mVA-API-02: a user cannot switch off their own "must change password" flag[2m > [22mthe flag stays on after the user tries to clear it through the data API
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m tests/vapt/10-confidentiality-exploits.test.ts:[2m99:39[22m[39m
+    [90m 97| [39m    await asA.from('profiles').update({ must_reset_password: false }).…
+    [90m 98| [39m    const { data } = await admin().from('profiles').select('must_reset…
+    [90m 99| [39m    [34mexpect[39m(data[33m?.[39mmust_reset_password)[33m.[39m[34mtoBe[39m([35mtrue[39m)
+    [90m   | [39m                                      [31m^[39m
+    [90m100| [39m    await admin().from('profiles').update({ must_reset_password: false…
+    [90m101| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/11-integrity-exploits.test.ts[2m > [22mVA-DB-01 / VA-TKT-01: priority and SLA deadlines cannot be changed by hand, whatever the role[2m > [22ma technician of the group cannot change the priority of a ticket through the data API
+[31m[1mAssertionError[22m: expected null not to be null[39m
+[36m [2m❯[22m tests/vapt/11-integrity-exploits.test.ts:[2m16:23[22m[39m
+    [90m 14| [39m    [35mconst[39m before [33m=[39m [35mawait[39m [34mrow[39m(fx[33m.[39mrequestA[33m.[39mid)
+    [90m 15| [39m    const { error } = await clientForToken(fx.agentA.accessToken).from…
+    [90m 16| [39m    [34mexpect[39m(error)[33m.[39mnot[33m.[39m[34mtoBeNull[39m()
+    [90m   | [39m                      [31m^[39m
+    [90m 17| [39m    [34mexpect[39m(([35mawait[39m [34mrow[39m(fx[33m.[39mrequestA[33m.[39mid))[33m.[39mpriority)[33m.[39m[34mtoBe[39m(before[33m.[39mpriority)
+    [90m 18| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/11-integrity-exploits.test.ts[2m > [22mVA-DB-01 / VA-TKT-01: priority and SLA deadlines cannot be changed by hand, whatever the role[2m > [22ma manager cannot change the priority either
+[31m[1mAssertionError[22m: expected null not to be null[39m
+[36m [2m❯[22m tests/vapt/11-integrity-exploits.test.ts:[2m22:23[22m[39m
+    [90m 20| [39m    [35mconst[39m before [33m=[39m [35mawait[39m [34mrow[39m(fx[33m.[39mrequestA[33m.[39mid)
+    [90m 21| [39m    const { error } = await clientForToken(fx.manager.accessToken).fro…
+    [90m 22| [39m    [34mexpect[39m(error)[33m.[39mnot[33m.[39m[34mtoBeNull[39m()
+    [90m   | [39m                      [31m^[39m
+    [90m 23| [39m    [34mexpect[39m(([35mawait[39m [34mrow[39m(fx[33m.[39mrequestA[33m.[39mid))[33m.[39mpriority)[33m.[39m[34mtoBe[39m(before[33m.[39mpriority)
+    [90m 24| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/11-integrity-exploits.test.ts[2m > [22mVA-DB-01 / VA-TKT-01: priority and SLA deadlines cannot be changed by hand, whatever the role[2m > [22ma technician cannot push the deadline of a ticket a year ahead
+[31m[1mAssertionError[22m: expected null not to be null[39m
+[36m [2m❯[22m tests/vapt/11-integrity-exploits.test.ts:[2m29:23[22m[39m
+    [90m 27| [39m    [35mconst[39m far [33m=[39m [35mnew[39m [33mDate[39m([33mDate[39m[33m.[39m[34mnow[39m() [33m+[39m [34m365[39m [33m*[39m [34m86_400_000[39m)[33m.[39m[34mtoISOString[39m()
+    [90m 28| [39m    const { error } = await clientForToken(fx.agentA.accessToken).from…
+    [90m 29| [39m    [34mexpect[39m(error)[33m.[39mnot[33m.[39m[34mtoBeNull[39m()
+    [90m   | [39m                      [31m^[39m
+    [90m 30| [39m    [35mconst[39m after [33m=[39m [35mawait[39m [34mrow[39m(fx[33m.[39mrequestA[33m.[39mid)
+    [90m 31| [39m    [34mexpect[39m(after[33m.[39mresolution_due_at)[33m.[39m[34mtoBe[39m(before[33m.[39mresolution_due_at)
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/11-integrity-exploits.test.ts[2m > [22mVA-DB-01 / VA-TKT-01: priority and SLA deadlines cannot be changed by hand, whatever the role[2m > [22ma requester cannot create a ticket straight in the database (priority, service and form would be skipped)
+[31m[1mAssertionError[22m: expected null not to be null[39m
+[36m [2m❯[22m tests/vapt/11-integrity-exploits.test.ts:[2m39:23[22m[39m
+    [90m 37| [39m    })[33m.[39m[34mselect[39m([32m'id'[39m)
+    [90m 38| [39m    if (data?.length) await getAdmin().from('requests').delete().in('i…
+    [90m 39| [39m    [34mexpect[39m(error)[33m.[39mnot[33m.[39m[34mtoBeNull[39m()
+    [90m   | [39m                      [31m^[39m
+    [90m 40| [39m  })
+    [90m 41| [39m})
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/11-integrity-exploits.test.ts[2m > [22mVA-DB-03: configuration the screens reserve for administrators is not writable by a manager[2m > [22ma manager cannot change an SLA policy or a service through the data API
+[31m[1mAssertionError[22m: expected [ Array(1) ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   {[39m
+[31m+     "id": "663f7e7a-d65a-47bc-b453-d568d150f6f5",[39m
+[31m+   },[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/vapt/11-integrity-exploits.test.ts:[2m47:23[22m[39m
+    [90m 45| [39m    [35mconst[39m asManager [33m=[39m [34mclientForToken[39m(fx[33m.[39mmanager[33m.[39maccessToken)
+    [90m 46| [39m    const { data: svc } = await asManager.from('services').update({ de…
+    [90m 47| [39m    [34mexpect[39m(svc [33m??[39m [])[33m.[39m[34mtoEqual[39m([])
+    [90m   | [39m                      [31m^[39m
+    [90m 48| [39m    const { data: pol } = await asManager.from('sla_policies').update(…
+    [90m 49| [39m    [34mexpect[39m(pol [33m??[39m [])[33m.[39m[34mtoEqual[39m([])
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/21-approvals-separation.test.ts[2m > [22mchoosing approvers[2m > [22madding approvers to a pending approval: not yourself, not the requester, not the sender
+[31m[1mAssertionError[22m: expected 'Failed to add approvers.' to be undefined[39m
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+"Failed to add approvers."
+
+[36m [2m❯[22m tests/vapt/21-approvals-separation.test.ts:[2m45:66[22m[39m
+    [90m 43| [39m    [34mactAs[39m(fx[33m.[39magentA)
+    [90m 44| [39m    expect((await addAdHocApprovers(t.id, [fx.agentA.id])).error).toBe…
+    [90m 45| [39m    expect((await addAdHocApprovers(t.id, [fx.admin.id])).error).toBeU…
+    [90m   | [39m                                                                 [31m^[39m
+    [90m 46| [39m    const { data: steps } = await admin().from('approval_workflow_step…
+    [90m 47| [39m    expect(steps?.find((s) => s.approver_user_id === fx.admin.id)?.add…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/21-approvals-separation.test.ts[2m > [22mwho can look up approvers and read approval routes[2m > [22ma requester cannot list approval routes or steps of other people's tickets
+[31m[1mAssertionError[22m: expected [ { …(2) } ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   {[39m
+[31m+     "id": "93443abb-a717-4599-b0ad-2154d3158a57",[39m
+[31m+     "name": "Ad-hoc approval CKSD-003601",[39m
+[31m+   },[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/vapt/21-approvals-separation.test.ts:[2m88:96[22m[39m
+    [90m 86| [39m    [35mconst[39m wf [33m=[39m ([35mawait[39m [34mpending[39m(t[33m.[39mid))[33m![39m[33m.[39mworkflow_id
+    [90m 87| [39m    const other = clientForToken(fx.requesterB.accessToken)           …
+    [90m 88| [39m    expect((await other.from('approval_workflows').select('id,name').e…
+    [90m   | [39m                                                                                               [31m^[39m
+    [90m 89| [39m    expect((await other.from('approval_workflow_steps').select('id').e…
+    [90m 90| [39m    const owner = clientForToken(fx.requesterA.accessToken)           …
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/22-projects-tasks-files-privacy.test.ts[2m > [22mprojects[2m > [22ma technician of another group cannot add himself to a project of group A, and so cannot read it; the project's own technician can add a member
+[31m[1mAssertionError[22m: expected undefined to be '42501' // Object.is equality[39m
+
+[32m- Expected:[39m 
+"42501"
+
+[31m+ Received:[39m 
+undefined
+
+[36m [2m❯[22m tests/vapt/22-projects-tasks-files-privacy.test.ts:[2m26:25[22m[39m
+    [90m 24| [39m    [35mconst[39m asB [33m=[39m [34mclientForToken[39m(fx[33m.[39magentB[33m.[39maccessToken)
+    [90m 25| [39m    const { error } = await asB.from('project_members').insert({ proje…
+    [90m 26| [39m    [34mexpect[39m(error[33m?.[39mcode)[33m.[39m[34mtoBe[39m([32m'42501'[39m)
+    [90m   | [39m                        [31m^[39m
+    [90m 27| [39m    expect(((await asB.from('projects').select('id').eq('id', projectA…
+    [90m 28| [39m    [35mconst[39m asA [33m=[39m [34mclientForToken[39m(fx[33m.[39magentA[33m.[39maccessToken)
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/22-projects-tasks-files-privacy.test.ts[2m > [22mprojects[2m > [22mmilestones and updates of a project need access to that project
+[31m[1mAssertionError[22m: expected undefined to be '42501' // Object.is equality[39m
+
+[32m- Expected:[39m 
+"42501"
+
+[31m+ Received:[39m 
+undefined
+
+[36m [2m❯[22m tests/vapt/22-projects-tasks-files-privacy.test.ts:[2m34:144[22m[39m
+    [90m 32| [39m  it('milestones and updates of a project need access to that project'…
+    [90m 33| [39m    [35mconst[39m asB [33m=[39m [34mclientForToken[39m(fx[33m.[39magentB[33m.[39maccessToken)
+    [90m 34| [39m    expect((await asB.from('milestones').insert({ project_id: projectA…
+    [90m   | [39m                                                                                                                                               [31m^[39m
+    [90m 35| [39m    expect((await asB.from('project_updates').insert({ project_id: pro…
+    [90m 36| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/22-projects-tasks-files-privacy.test.ts[2m > [22mtasks[2m > [22man ordinary employee cannot create a task at all, and a technician cannot create one inside another group's project
+[31m[1mAssertionError[22m: expected undefined to be '42501' // Object.is equality[39m
+
+[32m- Expected:[39m 
+"42501"
+
+[31m+ Received:[39m 
+undefined
+
+[36m [2m❯[22m tests/vapt/22-projects-tasks-files-privacy.test.ts:[2m42:151[22m[39m
+    [90m 40| [39m  it('an ordinary employee cannot create a task at all, and a technici…
+    [90m 41| [39m    [35mconst[39m asReq [33m=[39m [34mclientForToken[39m(fx[33m.[39mrequesterA[33m.[39maccessToken)
+    [90m 42| [39m    expect((await asReq.from('tasks').insert({ title: 'x', org_id: fx.…
+    [90m   | [39m                                                                                                                                                      [31m^[39m
+    [90m 43| [39m    [35mconst[39m asB [33m=[39m [34mclientForToken[39m(fx[33m.[39magentB[33m.[39maccessToken)
+    [90m 44| [39m    expect((await asB.from('tasks').insert({ title: 'x', org_id: fx.or…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/22-projects-tasks-files-privacy.test.ts[2m > [22mtask files[2m > [22mnobody can forge a file record or upload / delete in the task store directly
+[31m[1mAssertionError[22m: uat-desk-003-1792208580011-requester-a@example.test: expected null not to be null[39m
+[36m [2m❯[22m tests/vapt/22-projects-tasks-files-privacy.test.ts:[2m61:39[22m[39m
+    [90m 59| [39m      [34mexpect[39m(rec[33m.[39merror[33m?.[39mcode[33m,[39m who[33m.[39memail)[33m.[39m[34mtoBe[39m([32m'42501'[39m)
+    [90m 60| [39m      const up = await c.storage.from('task-attachments').upload(`vapt…
+    [90m 61| [39m      [34mexpect[39m(up[33m.[39merror[33m,[39m who[33m.[39memail)[33m.[39mnot[33m.[39m[34mtoBeNull[39m()
+    [90m   | [39m                                      [31m^[39m
+    [90m 62| [39m    }
+    [90m 63| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/22-projects-tasks-files-privacy.test.ts[2m > [22mticket files and comments[2m > [22man uploader cannot restore or alter an attachment row directly
+[31m[1mAssertionError[22m: expected null not to be null[39m
+[36m [2m❯[22m tests/vapt/22-projects-tasks-files-privacy.test.ts:[2m72:88[22m[39m
+    [90m 70| [39m    await c.from('request_attachments').update({ deleted_at: null }).e…
+    [90m 71| [39m    expect((await admin().from('request_attachments').select('deleted_…
+    [90m 72| [39m    expect((await c.from('request_attachments').delete().eq('id', row!…
+    [90m   | [39m                                                                                       [31m^[39m
+    [90m 73| [39m    await admin().from('request_attachments').delete().eq('id', row!.i…
+    [90m 74| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/22-projects-tasks-files-privacy.test.ts[2m > [22mre-pointing a record at another ticket[2m > [22ma requester cannot move a survey answer to another ticket
+[31m[1mAssertionError[22m: expected 'cf6fcb7a-1507-42bf-be4c-02dd645d0c13' to be 'c6840bc3-fd2b-44de-8c53-5c292d502a44' // Object.is equality[39m
+
+Expected: [32m"c[7m6840bc3-fd2b-44de-8c53-5c292d502a44[27m"[39m
+Received: [31m"c[7mf6fcb7a-1507-42bf-be4c-02dd645d0c13[27m"[39m
+
+[36m [2m❯[22m tests/vapt/22-projects-tasks-files-privacy.test.ts:[2m83:113[22m[39m
+    [90m 81| [39m    [35mconst[39m c [33m=[39m [34mclientForToken[39m(fx[33m.[39mrequesterA[33m.[39maccessToken)
+    [90m 82| [39m    await c.from('csat_surveys').update({ request_id: fx.requestB.id, …
+    [90m 83| [39m    expect((await admin().from('csat_surveys').select('request_id').eq…
+    [90m   | [39m                                                                                                                [31m^[39m
+    [90m 84| [39m    [35mawait[39m [34madmin[39m()[33m.[39m[35mfrom[39m([32m'csat_surveys'[39m)[33m.[39m[35mdelete[39m()[33m.[39m[34meq[39m([32m'id'[39m[33m,[39m s[33m![39m[33m.[39mid)
+    [90m 85| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/22-projects-tasks-files-privacy.test.ts[2m > [22minternal configuration is not readable by an ordinary employee[2m > [22malert rules, escalation rules, permission overrides, scheduled reports and group membership of others
+[31m[1mAssertionError[22m: alert_rules: expected 4 to be +0 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 0[39m
+[31m+ 4[39m
+
+[36m [2m❯[22m tests/vapt/22-projects-tasks-files-privacy.test.ts:[2m92:90[22m[39m
+    [90m 90| [39m    [35mconst[39m asReq [33m=[39m [34mclientForToken[39m(fx[33m.[39mrequesterA[33m.[39maccessToken)
+    [90m 91| [39m    for (const table of ['alert_rules', 'escalation_policies', 'permis…
+    [90m 92| [39m      expect(((await asReq.from(table).select('id').limit(5)).data ?? …
+    [90m   | [39m                                                                                         [31m^[39m
+    [90m 93| [39m    }
+    [90m 94| [39m    const members = (await asReq.from('team_members').select('user_id'…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/24-ticket-low-findings.test.ts[2m > [22mVAPT-062: the home dashboard works out the role itself[2m > [22mnobody signed out can call it, and the inner function is not reachable at all
+[31m[1mAssertionError[22m: expected 200 to be greater than or equal to 400[39m
+[36m [2m❯[22m tests/vapt/24-ticket-low-findings.test.ts:[2m128:110[22m[39m
+    [90m126| [39m  })
+    [90m127| [39m  it('nobody signed out can call it, and the inner function is not rea…
+    [90m128| [39m    expect((await http('POST', '/rest/v1/rpc/get_home_dashboard', { bo…
+    [90m   | [39m                                                                                                             [31m^[39m
+    [90m129| [39m    [34mexpect[39m(([35mawait[39m [34mdash[39m(fx[33m.[39madmin[33m.[39maccessToken[33m,[39m {}))[33m.[39mstatus)[33m.[39m[34mtoBe[39m([34m200[39m)
+    [90m130| [39m    const inner = await http('POST', '/rest/v1/rpc/get_home_dashboard_…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/24-ticket-low-findings.test.ts[2m > [22mVAPT-063: the activity log[2m > [22ma requester cannot read it through the data API; staff can
+[31m[1mAssertionError[22m: expected [ { …(6) }, { …(6) } ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   {[39m
+[31m+     "action": "priority_changed",[39m
+[31m+     "actor_id": null,[39m
+[31m+     "created_at": "2026-10-17T03:42:55.087637+00:00",[39m
+[31m+     "id": "2be91b47-92d7-4ac9-90df-e8dbe77b1311",[39m
+[31m+     "metadata": {[39m
+[31m+       "priority_from": "low",[39m
+[31m+       "priority_to": "high",[39m
+[31m+       "rule_id": "r1",[39m
+[31m+       "rule_name": "Secret rule name",[39m
+[31m+       "via": "business_rule",[39m
+[31m+     },[39m
+[31m+     "request_id": "21902a3c-f6ff-4189-a2cd-219d382e11a2",[39m
+[31m+   },[39m
+[31m+   {[39m
+[31m+     "action": "comment_added",[39m
+[31m+     "actor_id": "f6945155-cfd4-44d9-8b6a-67eaf02006c2",[39m
+[31m+     "created_at": "2026-10-17T03:42:55.084109+00:00",[39m
+[31m+     "id": "e382f9ac-43cc-4c9a-a872-a7f165486bb4",[39m
+[31m+     "metadata": {[39m
+[31m+       "cc": [[39m
+[31m+         {[39m
+[31m+           "email": "oem-contact@vendor.example",[39m
+[31m+           "name": "OEM Contact",[39m
+[31m+         },[39m
+[31m+       ],[39m
+[31m+     },[39m
+[31m+     "request_id": "21902a3c-f6ff-4189-a2cd-219d382e11a2",[39m
+[31m+   },[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/vapt/24-ticket-low-findings.test.ts:[2m142:30[22m[39m
+    [90m140| [39m    const asRequester = await http<unknown[]>('GET', `/rest/v1/request…
+    [90m141| [39m    [34mexpect[39m(asRequester[33m.[39mstatus)[33m.[39m[34mtoBe[39m([34m200[39m)
+    [90m142| [39m    [34mexpect[39m(asRequester[33m.[39mjson)[33m.[39m[34mtoEqual[39m([])
+    [90m   | [39m                             [31m^[39m
+    [90m143| [39m    const asAgent = await http<unknown[]>('GET', `/rest/v1/request_act…
+    [90m144| [39m    expect((asAgent.json as unknown[]).length).toBeGreaterThanOrEqual(…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/24-ticket-low-findings.test.ts[2m > [22mVAPT-064: functions are not public by default[2m > [22mthe anonymous role cannot call the application's own functions
+[31m[1mAssertionError[22m: current_user_role: expected 200 to be greater than or equal to 400[39m
+[36m [2m❯[22m tests/vapt/24-ticket-low-findings.test.ts:[2m173:28[22m[39m
+    [90m171| [39m    for (const fn of ['current_user_role', 'current_org_id', 'is_agent…
+    [90m172| [39m      [35mconst[39m r [33m=[39m [35mawait[39m [34mhttp[39m([32m'POST'[39m[33m,[39m [32m`/rest/v1/rpc/[39m[36m${[39mfn[36m}[39m[32m`[39m[33m,[39m { body[33m:[39m {} })
+    [90m173| [39m      [34mexpect[39m(r[33m.[39mstatus[33m,[39m fn)[33m.[39m[34mtoBeGreaterThanOrEqual[39m([34m400[39m)
+    [90m   | [39m                           [31m^[39m
+    [90m174| [39m    }
+    [90m175| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/30-onboarding-and-password-enforcement.test.ts[2m > [22mbulk import without a password column[2m > [22ma person who has not chosen their own password yet can do nothing through the data API or the server actions
+[31m[1mAssertionError[22m: expected 5 to be less than or equal to 1[39m
+[36m [2m❯[22m tests/vapt/30-onboarding-and-password-enforcement.test.ts:[2m88:83[22m[39m
+    [90m 86| [39m    [35mconst[39m db [33m=[39m [34mclientForToken[39m(token[33m![39m)
+    [90m 87| [39m    expect(((await db.from('requests').select('id').limit(5)).data ?? …
+    [90m 88| [39m    expect(((await db.from('profiles').select('id').limit(5)).data ?? …
+    [90m   | [39m                                                                                  [31m^[39m
+    [90m 89| [39m    vi.mocked(createClient).mockResolvedValue(sessionFor(token!) as ne…
+    [90m 90| [39m    expect(await getCurrentProfile()).toBeNull()                      …
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/22]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/vapt/30-onboarding-and-password-enforcement.test.ts[2m > [22mbulk import without a password column[2m > [22ma flagged person cannot clear the flag themselves through the data API
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m tests/vapt/30-onboarding-and-password-enforcement.test.ts:[2m111:132[22m[39m
+    [90m109| [39m    const { token } = await signIn(credentials[1].email, credentials[1…
+    [90m110| [39m    await clientForToken(token!).from('profiles').update({ must_reset_…
+    [90m111| [39m    expect((await admin().from('profiles').select('must_reset_password…
+    [90m   | [39m                                                                                                                                   [31m^[39m
+    [90m112| [39m  })
+    [90m113| [39m})
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/22]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m6 failed[39m[22m[2m | [22m[1m[32m4 passed[39m[22m[90m (10)[39m
+[2m      Tests [22m [1m[31m22 failed[39m[22m[2m | [22m[1m[32m46 passed[39m[22m[90m (68)[39m
+[2m   Start at [22m 09:12:34
+[2m   Duration [22m 32.15s[2m (transform 392ms, setup 110ms, collect 1.20s, tests 27.59s, environment 1ms, prepare 422ms)[22m
+

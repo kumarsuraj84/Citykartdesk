@@ -86,7 +86,7 @@ describe('SystemLogWriter', () => {
   })
 
   it('a retry that fails again keeps the unsent rows', async () => {
-    let t = 0, n = 0
+    const t = 0; let n = 0
     const spool = memorySpool(); spool.append([row('a'), row('b'), row('c'), row('d')])
     const w = new SystemLogWriter({ insert: async () => { if (++n > 1) throw new Error('down again') }, spool, now: () => t }, { batchSize: 2 })
     expect(await w.retrySpool()).toBe(2)

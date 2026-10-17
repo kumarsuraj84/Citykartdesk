@@ -157,7 +157,7 @@ export async function rejectReview(reviewId: string, notes?: string): Promise<{ 
   if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/reviews.ts' }) }
 
   // Reflect on the source message.
-  await supabase.from('intake_messages').update({ status: 'rejected' }).eq('id', review.message_id).eq('org_id', profile.org_id)
+  await (createAdminClient() as unknown as AnyClient).from('intake_messages').update({ status: 'rejected' }).eq('id', review.message_id).eq('org_id', profile.org_id)
 
   await logIntakeAudit({ orgId: profile.org_id!, actorId: profile.id, entityId: reviewId, action: 'review_rejected' })
   revalidatePath('/intake/queue')

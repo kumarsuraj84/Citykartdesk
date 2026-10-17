@@ -1,0 +1,805 @@
+1c1
+< \restrict RobX3nnuVqiSmBjt2v2QFX2sh6SCTbilW83Tgo0gVyoqZsckskhkf2XNS78G4Ly
+---
+> \restrict 4JLGqIjyhBcUdfJxiKkCjn2cw1dqYT2s8KLHcjwakCO6bJLtNwAvyNOIaPx12c4
+826,828c826
+<     AS $$
+<   SELECT org_id FROM profiles WHERE id = auth.uid() AND is_active
+< $$;
+---
+>     AS $$ SELECT org_id FROM profiles WHERE id = auth.uid() AND is_active $$;
+851,853c849
+<     AS $$
+<   SELECT role FROM public.profiles WHERE id = auth.uid() AND is_active
+< $$;
+---
+>     AS $$ SELECT role FROM public.profiles WHERE id = auth.uid() AND is_active $$;
+1187,1199c1183,1186
+<     IF NEW.id IS DISTINCT FROM OLD.id
+<        OR NEW.org_id IS DISTINCT FROM OLD.org_id
+<        OR NEW.role IS DISTINCT FROM OLD.role
+<        OR NEW.is_active IS DISTINCT FROM OLD.is_active
+<        OR NEW.manager_id IS DISTINCT FROM OLD.manager_id
+<        OR NEW.store_id IS DISTINCT FROM OLD.store_id
+<        OR NEW.department_id IS DISTINCT FROM OLD.department_id
+<        OR NEW.location_id IS DISTINCT FROM OLD.location_id
+<        OR NEW.cost_center_id IS DISTINCT FROM OLD.cost_center_id
+<        OR NEW.function_id IS DISTINCT FROM OLD.function_id
+<        OR NEW.designation_id IS DISTINCT FROM OLD.designation_id
+<        OR NEW.employee_id IS DISTINCT FROM OLD.employee_id
+<        OR NEW.job_title IS DISTINCT FROM OLD.job_title
+---
+>     IF NEW.id IS DISTINCT FROM OLD.id OR NEW.org_id IS DISTINCT FROM OLD.org_id OR NEW.role IS DISTINCT FROM OLD.role OR NEW.is_active IS DISTINCT FROM OLD.is_active
+>        OR NEW.manager_id IS DISTINCT FROM OLD.manager_id OR NEW.store_id IS DISTINCT FROM OLD.store_id OR NEW.department_id IS DISTINCT FROM OLD.department_id
+>        OR NEW.location_id IS DISTINCT FROM OLD.location_id OR NEW.cost_center_id IS DISTINCT FROM OLD.cost_center_id OR NEW.function_id IS DISTINCT FROM OLD.function_id
+>        OR NEW.designation_id IS DISTINCT FROM OLD.designation_id OR NEW.employee_id IS DISTINCT FROM OLD.employee_id OR NEW.job_title IS DISTINCT FROM OLD.job_title
+4108a4096
+>     added_by uuid,
+6530a6519,6520
+>     ADD CONSTRAINT approval_workflow_steps_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+> ALTER TABLE ONLY public.approval_workflow_steps
+7025c7015
+< CREATE POLICY alert_rules_select ON public.alert_rules FOR SELECT USING ((org_id = public.current_org_id()));
+---
+> CREATE POLICY alert_rules_select ON public.alert_rules FOR SELECT TO authenticated USING ((org_id = public.current_org_id()));
+7043c7033
+< CREATE POLICY approval_workflow_steps_select ON public.approval_workflow_steps FOR SELECT USING ((EXISTS ( SELECT 1
+---
+> CREATE POLICY approval_workflow_steps_select ON public.approval_workflow_steps FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
+7085c7075
+< CREATE POLICY csat_update_requester ON public.csat_surveys FOR UPDATE USING (((requester_id = auth.uid()) AND (submitted_at IS NULL)));
+---
+> CREATE POLICY csat_update_requester ON public.csat_surveys FOR UPDATE TO authenticated USING (((requester_id = auth.uid()) AND (submitted_at IS NULL)));
+7141c7131
+< CREATE POLICY escalation_policies_select ON public.escalation_policies FOR SELECT USING ((org_id = public.current_org_id()));
+---
+> CREATE POLICY escalation_policies_select ON public.escalation_policies FOR SELECT TO authenticated USING ((org_id = public.current_org_id()));
+7145c7135
+< CREATE POLICY field_sla_overrides_write ON public.field_sla_overrides USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'manager'::public.user_role, 'platform_owner'::public.user_role])))) WITH CHECK (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'manager'::public.user_role, 'platform_owner'::public.user_role]))));
+---
+> CREATE POLICY field_sla_overrides_write ON public.field_sla_overrides TO authenticated USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'manager'::public.user_role, 'platform_owner'::public.user_role]))));
+7213c7203
+< CREATE POLICY milestones_insert ON public.milestones FOR INSERT WITH CHECK (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['agent'::public.user_role, 'manager'::public.user_role, 'admin'::public.user_role, 'platform_owner'::public.user_role]))));
+---
+> CREATE POLICY milestones_insert ON public.milestones FOR INSERT TO authenticated WITH CHECK (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['agent'::public.user_role, 'manager'::public.user_role, 'admin'::public.user_role, 'platform_owner'::public.user_role]))));
+7215c7205
+< CREATE POLICY milestones_update ON public.milestones FOR UPDATE USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['agent'::public.user_role, 'manager'::public.user_role, 'admin'::public.user_role, 'platform_owner'::public.user_role]))));
+---
+> CREATE POLICY milestones_update ON public.milestones FOR UPDATE TO authenticated USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['agent'::public.user_role, 'manager'::public.user_role, 'admin'::public.user_role, 'platform_owner'::public.user_role]))));
+7243c7233
+< CREATE POLICY perm_overrides_select ON public.permission_overrides FOR SELECT USING ((org_id = public.current_org_id()));
+---
+> CREATE POLICY perm_overrides_select ON public.permission_overrides FOR SELECT TO authenticated USING ((org_id = public.current_org_id()));
+7253,7254c7243,7244
+< CREATE POLICY profile_mobile_numbers_admin ON public.profile_mobile_numbers USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'manager'::public.user_role, 'platform_owner'::public.user_role]))));
+< CREATE POLICY profile_mobile_numbers_select ON public.profile_mobile_numbers FOR SELECT USING (((org_id = public.current_org_id()) OR (profile_id = auth.uid())));
+---
+> CREATE POLICY profile_mobile_numbers_admin ON public.profile_mobile_numbers TO authenticated USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'manager'::public.user_role, 'platform_owner'::public.user_role]))));
+> CREATE POLICY profile_mobile_numbers_select ON public.profile_mobile_numbers FOR SELECT TO authenticated USING (((org_id = public.current_org_id()) OR (profile_id = auth.uid())));
+7261,7262c7251,7252
+< CREATE POLICY project_members_delete ON public.project_members FOR DELETE USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['agent'::public.user_role, 'manager'::public.user_role, 'admin'::public.user_role, 'platform_owner'::public.user_role]))));
+< CREATE POLICY project_members_insert ON public.project_members FOR INSERT WITH CHECK (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['agent'::public.user_role, 'manager'::public.user_role, 'admin'::public.user_role, 'platform_owner'::public.user_role]))));
+---
+> CREATE POLICY project_members_delete ON public.project_members FOR DELETE TO authenticated USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['agent'::public.user_role, 'manager'::public.user_role, 'admin'::public.user_role, 'platform_owner'::public.user_role]))));
+> CREATE POLICY project_members_insert ON public.project_members FOR INSERT TO authenticated WITH CHECK (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['agent'::public.user_role, 'manager'::public.user_role, 'admin'::public.user_role, 'platform_owner'::public.user_role]))));
+7266c7256
+< CREATE POLICY project_updates_insert ON public.project_updates FOR INSERT WITH CHECK (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['agent'::public.user_role, 'manager'::public.user_role, 'admin'::public.user_role, 'platform_owner'::public.user_role])) AND (author_id = auth.uid())));
+---
+> CREATE POLICY project_updates_insert ON public.project_updates FOR INSERT TO authenticated WITH CHECK (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['agent'::public.user_role, 'manager'::public.user_role, 'admin'::public.user_role, 'platform_owner'::public.user_role])) AND (author_id = auth.uid())));
+7279c7269
+< CREATE POLICY related_select ON public.related_requests FOR SELECT USING ((org_id = public.current_org_id()));
+---
+> CREATE POLICY related_select ON public.related_requests FOR SELECT TO authenticated USING ((org_id = public.current_org_id()));
+7315c7305
+< CREATE POLICY requests_insert ON public.requests FOR INSERT WITH CHECK (((requester_id = auth.uid()) AND (org_id = public.current_org_id())));
+---
+> CREATE POLICY requests_insert ON public.requests FOR INSERT TO authenticated WITH CHECK (((requester_id = auth.uid()) AND (org_id = public.current_org_id())));
+7334c7324
+< CREATE POLICY scheduled_reports_select ON public.scheduled_reports FOR SELECT USING ((org_id = public.current_org_id()));
+---
+> CREATE POLICY scheduled_reports_select ON public.scheduled_reports FOR SELECT TO authenticated USING ((org_id = public.current_org_id()));
+7352c7342
+< CREATE POLICY services_admin ON public.services USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'manager'::public.user_role, 'platform_owner'::public.user_role]))));
+---
+> CREATE POLICY services_admin ON public.services TO authenticated USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'manager'::public.user_role, 'platform_owner'::public.user_role]))));
+7354c7344
+< CREATE POLICY sla_config_admin ON public.global_sla_config USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'manager'::public.user_role, 'platform_owner'::public.user_role]))));
+---
+> CREATE POLICY sla_config_admin ON public.global_sla_config TO authenticated USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'manager'::public.user_role, 'platform_owner'::public.user_role]))));
+7359c7349
+< CREATE POLICY sla_policies_admin ON public.sla_policies USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'manager'::public.user_role, 'platform_owner'::public.user_role]))));
+---
+> CREATE POLICY sla_policies_admin ON public.sla_policies TO authenticated USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'manager'::public.user_role, 'platform_owner'::public.user_role]))));
+7428c7418
+< CREATE POLICY tasks_insert ON public.tasks FOR INSERT WITH CHECK (((org_id = public.current_org_id()) AND (created_by = auth.uid())));
+---
+> CREATE POLICY tasks_insert ON public.tasks FOR INSERT TO authenticated WITH CHECK (((org_id = public.current_org_id()) AND (created_by = auth.uid())));
+7430c7420
+< CREATE POLICY tasks_update ON public.tasks FOR UPDATE USING (((org_id = public.current_org_id()) AND ((created_by = auth.uid()) OR (assignee_id = auth.uid()) OR ((task_type = 'team'::public.task_type) AND (team_id = ANY (public.current_user_team_ids()))) OR (public.current_user_role() = ANY (ARRAY['manager'::public.user_role, 'admin'::public.user_role, 'platform_owner'::public.user_role]))))) WITH CHECK (((org_id = ( SELECT t.org_id
+---
+> CREATE POLICY tasks_update ON public.tasks FOR UPDATE TO authenticated USING (((org_id = public.current_org_id()) AND ((created_by = auth.uid()) OR (assignee_id = auth.uid()) OR ((task_type = 'team'::public.task_type) AND (team_id = ANY (public.current_user_team_ids()))) OR (public.current_user_role() = ANY (ARRAY['manager'::public.user_role, 'admin'::public.user_role, 'platform_owner'::public.user_role]))))) WITH CHECK (((org_id = ( SELECT t.org_id
+7436c7426
+< CREATE POLICY team_members_select ON public.team_members FOR SELECT USING ((org_id = public.current_org_id()));
+---
+> CREATE POLICY team_members_select ON public.team_members FOR SELECT TO authenticated USING ((org_id = public.current_org_id()));
+7449c7439
+< CREATE POLICY time_entries_update ON public.request_time_entries FOR UPDATE USING ((user_id = auth.uid()));
+---
+> CREATE POLICY time_entries_update ON public.request_time_entries FOR UPDATE TO authenticated USING ((user_id = auth.uid()));
+7463c7453
+< CREATE POLICY workflows_select ON public.approval_workflows FOR SELECT USING ((org_id = public.current_org_id()));
+---
+> CREATE POLICY workflows_select ON public.approval_workflows FOR SELECT TO authenticated USING ((org_id = public.current_org_id()));
+7484c7474
+< CREATE POLICY task_attach_storage_delete ON storage.objects FOR DELETE USING (((bucket_id = 'task-attachments'::text) AND (owner = auth.uid())));
+---
+> CREATE POLICY task_attach_storage_delete ON storage.objects FOR DELETE TO authenticated USING (((bucket_id = 'task-attachments'::text) AND (owner = auth.uid())));
+7668,7669c7658,7660
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.request_conversations TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.request_conversations TO authenticated;
+---
+> GRANT ALL ON FUNCTION public.can_manage_collaborators(p_request_id uuid) TO service_role;
+> GRANT ALL ON FUNCTION public.can_view_project(p_project_id uuid) TO authenticated;
+> GRANT ALL ON FUNCTION public.can_view_project(p_project_id uuid) TO service_role;
+7670a7662,7663
+> GRANT MAINTAIN ON TABLE public.request_conversations TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.request_conversations TO authenticated;
+7672a7666,7671
+> GRANT ALL ON FUNCTION public.current_org_id() TO authenticated;
+> GRANT ALL ON FUNCTION public.current_org_id() TO service_role;
+> GRANT ALL ON FUNCTION public.current_user_approver_request_ids() TO authenticated;
+> GRANT ALL ON FUNCTION public.current_user_approver_request_ids() TO service_role;
+> GRANT ALL ON FUNCTION public.current_user_collab_request_ids() TO authenticated;
+> GRANT ALL ON FUNCTION public.current_user_collab_request_ids() TO service_role;
+7673a7673
+> GRANT ALL ON FUNCTION public.current_user_role() TO authenticated;
+7674a7675
+> GRANT ALL ON FUNCTION public.current_user_subordinate_ids() TO service_role;
+7675a7677
+> GRANT ALL ON FUNCTION public.current_user_team_ids() TO service_role;
+7686c7688,7689
+< GRANT ALL ON FUNCTION public.get_home_dashboard(p_is_manager boolean, p_is_agent boolean, p_team_id uuid, p_has_tasks boolean) TO authenticated;
+---
+> GRANT ALL ON FUNCTION public.get_enabled_modules() TO authenticated;
+> GRANT ALL ON FUNCTION public.get_enabled_modules() TO service_role;
+7738a7742,7747
+> GRANT ALL ON FUNCTION public.guard_attachment_client_write() TO authenticated;
+> GRANT ALL ON FUNCTION public.guard_attachment_client_write() TO service_role;
+> GRANT ALL ON FUNCTION public.guard_profile_client_update() TO authenticated;
+> GRANT ALL ON FUNCTION public.guard_profile_client_update() TO service_role;
+> GRANT ALL ON FUNCTION public.guard_request_client_write() TO authenticated;
+> GRANT ALL ON FUNCTION public.guard_request_client_write() TO service_role;
+7739a7749
+> GRANT ALL ON FUNCTION public.handle_new_user() TO authenticated;
+7740a7751
+> GRANT ALL ON FUNCTION public.has_module_access(p_module public.module_slug) TO service_role;
+7745a7757
+> GRANT ALL ON FUNCTION public.intake_validation_stats() TO service_role;
+7746a7759,7761
+> GRANT ALL ON FUNCTION public.is_agent() TO authenticated;
+> GRANT ALL ON FUNCTION public.is_owner_org() TO authenticated;
+> GRANT ALL ON FUNCTION public.is_owner_org() TO service_role;
+7747a7763,7765
+> GRANT ALL ON FUNCTION public.is_request_approver(p_request_id uuid) TO service_role;
+> GRANT ALL ON FUNCTION public.is_request_collaborator(p_request_id uuid) TO authenticated;
+> GRANT ALL ON FUNCTION public.is_request_collaborator(p_request_id uuid) TO service_role;
+7748a7767
+> GRANT ALL ON FUNCTION public.is_team_member(p_team_id uuid) TO authenticated;
+7762a7782,7785
+> GRANT ALL ON FUNCTION public.request_identity_unchanged(p_id uuid, p_org uuid, p_requester uuid, p_service uuid, p_team uuid) TO authenticated;
+> GRANT ALL ON FUNCTION public.request_identity_unchanged(p_id uuid, p_org uuid, p_requester uuid, p_service uuid, p_team uuid) TO service_role;
+> GRANT ALL ON FUNCTION public.request_status_transition_allowed(p_from text, p_to text) TO authenticated;
+> GRANT ALL ON FUNCTION public.request_status_transition_allowed(p_from text, p_to text) TO service_role;
+7763a7787
+> GRANT ALL ON FUNCTION public.retag_service_categories(p_service_id uuid, p_sub_category_ids uuid[]) TO service_role;
+7764a7789
+> GRANT ALL ON FUNCTION public.retag_service_locations(p_service_id uuid, p_location_ids uuid[]) TO service_role;
+7770a7796,7799
+> GRANT ALL ON FUNCTION public.set_request_org_id() TO authenticated;
+> GRANT ALL ON FUNCTION public.set_request_org_id() TO service_role;
+> GRANT ALL ON FUNCTION public.set_task_org_id() TO authenticated;
+> GRANT ALL ON FUNCTION public.set_task_org_id() TO service_role;
+7771a7801
+> GRANT ALL ON FUNCTION public.set_updated_at() TO authenticated;
+7813a7844,7851
+> GRANT ALL ON FUNCTION public.system_log_audit_trigger() TO authenticated;
+> GRANT ALL ON FUNCTION public.system_log_audit_trigger() TO service_role;
+> GRANT ALL ON FUNCTION public.system_log_chain() TO authenticated;
+> GRANT ALL ON FUNCTION public.system_log_chain() TO service_role;
+> GRANT ALL ON FUNCTION public.system_log_clean(p jsonb) TO authenticated;
+> GRANT ALL ON FUNCTION public.system_log_clean(p jsonb) TO service_role;
+> GRANT ALL ON FUNCTION public.system_log_guard() TO authenticated;
+> GRANT ALL ON FUNCTION public.system_log_guard() TO service_role;
+7815a7854,7855
+> GRANT ALL ON FUNCTION public.system_log_hash_input(r public.system_log) TO authenticated;
+> GRANT ALL ON FUNCTION public.system_log_hash_input(r public.system_log) TO service_role;
+7817a7858,7859
+> GRANT ALL ON FUNCTION public.touch_updated_at() TO authenticated;
+> GRANT ALL ON FUNCTION public.touch_updated_at() TO service_role;
+7976,7977d8017
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.admin_audit_log TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.admin_audit_log TO authenticated;
+7979,7980c8019,8020
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.ai_applications TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.ai_applications TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.admin_audit_log TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.admin_audit_log TO authenticated;
+7982,7983c8022,8023
+< GRANT ALL ON TABLE public.alert_rules TO anon;
+< GRANT ALL ON TABLE public.alert_rules TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.ai_applications TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.ai_applications TO authenticated;
+7984a8025,8026
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.alert_rules TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.alert_rules TO authenticated;
+7985a8028
+> GRANT UPDATE ON SEQUENCE public.app_event_log_id_seq TO service_role;
+7988,7989d8030
+< GRANT UPDATE ON SEQUENCE public.app_event_log_id_seq TO service_role;
+< GRANT ALL ON TABLE public.app_settings TO authenticated;
+7991,7992c8032
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.approval_decisions TO anon;
+< GRANT ALL ON TABLE public.approval_decisions TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.app_settings TO authenticated;
+7993a8034,8035
+> GRANT MAINTAIN ON TABLE public.approval_decisions TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.approval_decisions TO authenticated;
+7995,7996d8036
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.approval_workflow_steps TO anon;
+< GRANT ALL ON TABLE public.approval_workflow_steps TO authenticated;
+7998,7999c8038,8039
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.approval_workflows TO anon;
+< GRANT ALL ON TABLE public.approval_workflows TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.approval_workflow_steps TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.approval_workflow_steps TO authenticated;
+8001,8002c8041,8042
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.approvals TO anon;
+< GRANT ALL ON TABLE public.approvals TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.approval_workflows TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.approval_workflows TO authenticated;
+8004,8005c8044,8045
+< GRANT ALL ON TABLE public.assignment_rules TO anon;
+< GRANT ALL ON TABLE public.assignment_rules TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.approvals TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.approvals TO authenticated;
+8007c8047,8048
+< GRANT ALL ON TABLE public.business_hours TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.assignment_rules TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.assignment_rules TO authenticated;
+8009,8010c8050
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.business_rule_events TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.business_rule_events TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.business_hours TO authenticated;
+8012,8013c8052,8053
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.business_rules TO anon;
+< GRANT ALL ON TABLE public.business_rules TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.business_rule_events TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.business_rule_events TO authenticated;
+8015,8016c8055,8056
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.conversation_attachments TO anon;
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.conversation_attachments TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.business_rules TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.business_rules TO authenticated;
+8018,8019c8058,8059
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.conversation_events TO anon;
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.conversation_events TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.conversation_attachments TO anon;
+> GRANT MAINTAIN ON TABLE public.conversation_attachments TO authenticated;
+8021,8022c8061,8062
+< GRANT ALL ON TABLE public.cost_centers TO anon;
+< GRANT ALL ON TABLE public.cost_centers TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.conversation_events TO anon;
+> GRANT MAINTAIN ON TABLE public.conversation_events TO authenticated;
+8024,8025c8064,8065
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.csat_surveys TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE public.csat_surveys TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.cost_centers TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.cost_centers TO authenticated;
+8027,8028c8067,8068
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.custom_roles TO anon;
+< GRANT ALL ON TABLE public.custom_roles TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.csat_surveys TO anon;
+> GRANT SELECT,MAINTAIN,UPDATE ON TABLE public.csat_surveys TO authenticated;
+8030,8031c8070,8071
+< GRANT ALL ON TABLE public.departments TO anon;
+< GRANT ALL ON TABLE public.departments TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.custom_roles TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.custom_roles TO authenticated;
+8033,8034c8073,8074
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.designations TO anon;
+< GRANT ALL ON TABLE public.designations TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.departments TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.departments TO authenticated;
+8036,8037c8076,8077
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_app_logs TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_app_logs TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.designations TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.designations TO authenticated;
+8039,8040c8079,8080
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_project_map TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_project_map TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.desktime_app_logs TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.desktime_app_logs TO authenticated;
+8042,8043c8082,8083
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_sync_runs TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_sync_runs TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.desktime_project_map TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.desktime_project_map TO authenticated;
+8045,8046c8085,8086
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_time_logs TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_time_logs TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.desktime_sync_runs TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.desktime_sync_runs TO authenticated;
+8047a8088,8089
+> GRANT MAINTAIN ON TABLE public.desktime_time_logs TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.desktime_time_logs TO authenticated;
+8049,8050d8090
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.error_reports TO anon;
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.error_reports TO authenticated;
+8052,8053c8092,8093
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.escalation_policies TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.escalation_policies TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.error_reports TO anon;
+> GRANT MAINTAIN ON TABLE public.error_reports TO authenticated;
+8055,8056c8095,8096
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.field_sla_overrides TO anon;
+< GRANT ALL ON TABLE public.field_sla_overrides TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.escalation_policies TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.escalation_policies TO authenticated;
+8058,8059c8098,8099
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.form_field_library TO anon;
+< GRANT ALL ON TABLE public.form_field_library TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.field_sla_overrides TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.field_sla_overrides TO authenticated;
+8061,8062c8101,8102
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.form_templates TO anon;
+< GRANT ALL ON TABLE public.form_templates TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.form_field_library TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.form_field_library TO authenticated;
+8064,8065c8104,8105
+< GRANT ALL ON TABLE public.global_sla_config TO anon;
+< GRANT ALL ON TABLE public.global_sla_config TO authenticated;
+---
+> GRANT SELECT,MAINTAIN ON TABLE public.form_templates TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.form_templates TO authenticated;
+8067c8107,8108
+< GRANT ALL ON TABLE public.holidays TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.global_sla_config TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.global_sla_config TO authenticated;
+8069,8070c8110
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_attachments TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_attachments TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.holidays TO authenticated;
+8072,8073c8112,8113
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_audit_log TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_audit_log TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.intake_attachments TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.intake_attachments TO authenticated;
+8075,8076c8115,8116
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_channels TO anon;
+< GRANT ALL ON TABLE public.intake_channels TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.intake_audit_log TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.intake_audit_log TO authenticated;
+8078,8079c8118,8119
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_classifications TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_classifications TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.intake_channels TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.intake_channels TO authenticated;
+8081,8082c8121,8122
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_messages TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_messages TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.intake_classifications TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.intake_classifications TO authenticated;
+8084,8085c8124,8125
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_notes TO anon;
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_notes TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.intake_messages TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.intake_messages TO authenticated;
+8087,8088c8127,8128
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_outbound TO anon;
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_outbound TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.intake_notes TO anon;
+> GRANT MAINTAIN ON TABLE public.intake_notes TO authenticated;
+8090,8091c8130,8131
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_pipeline_config TO anon;
+< GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE public.intake_pipeline_config TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.intake_outbound TO anon;
+> GRANT MAINTAIN ON TABLE public.intake_outbound TO authenticated;
+8093,8094c8133,8134
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_reviews TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE public.intake_reviews TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.intake_pipeline_config TO anon;
+> GRANT SELECT,INSERT,MAINTAIN,UPDATE ON TABLE public.intake_pipeline_config TO authenticated;
+8096,8097c8136,8137
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_rules TO anon;
+< GRANT ALL ON TABLE public.intake_rules TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.intake_reviews TO anon;
+> GRANT SELECT,MAINTAIN,UPDATE ON TABLE public.intake_reviews TO authenticated;
+8099,8100c8139,8140
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_threads TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_threads TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.intake_rules TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.intake_rules TO authenticated;
+8102,8103c8142,8143
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.job_functions TO anon;
+< GRANT ALL ON TABLE public.job_functions TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.intake_threads TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.intake_threads TO authenticated;
+8105,8106c8145,8146
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.kb_article_services TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.kb_article_services TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.job_functions TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.job_functions TO authenticated;
+8108,8109c8148,8149
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.kb_articles TO anon;
+< GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE public.kb_articles TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.kb_article_services TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.kb_article_services TO authenticated;
+8111,8112c8151,8152
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.license_keys TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.license_keys TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.kb_articles TO anon;
+> GRANT SELECT,INSERT,MAINTAIN,UPDATE ON TABLE public.kb_articles TO authenticated;
+8114,8115c8154,8155
+< GRANT ALL ON TABLE public.locations TO anon;
+< GRANT ALL ON TABLE public.locations TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.license_keys TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.license_keys TO authenticated;
+8117,8118c8157,8158
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.milestones TO anon;
+< GRANT ALL ON TABLE public.milestones TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.locations TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.locations TO authenticated;
+8120,8121c8160,8161
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.notification_preferences TO anon;
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.notification_preferences TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.milestones TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.milestones TO authenticated;
+8123,8124c8163,8164
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.notification_rules TO anon;
+< GRANT ALL ON TABLE public.notification_rules TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.notification_preferences TO anon;
+> GRANT MAINTAIN ON TABLE public.notification_preferences TO authenticated;
+8126,8127c8166,8167
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.notifications TO anon;
+< GRANT ALL ON TABLE public.notifications TO authenticated;
+---
+> GRANT SELECT,MAINTAIN ON TABLE public.notification_rules TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.notification_rules TO authenticated;
+8129,8130c8169,8170
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.oems TO anon;
+< GRANT ALL ON TABLE public.oems TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.notifications TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.notifications TO authenticated;
+8132,8133c8172,8173
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.org_module_access TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.org_module_access TO authenticated;
+---
+> GRANT SELECT,MAINTAIN ON TABLE public.oems TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.oems TO authenticated;
+8135,8136c8175,8176
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.org_signup_requests TO anon;
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.org_signup_requests TO authenticated;
+---
+> GRANT SELECT,MAINTAIN ON TABLE public.org_module_access TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.org_module_access TO authenticated;
+8138,8139c8178,8179
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.organizations TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.organizations TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.org_signup_requests TO anon;
+> GRANT MAINTAIN ON TABLE public.org_signup_requests TO authenticated;
+8141,8142c8181,8182
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.owner_audit_log TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.owner_audit_log TO authenticated;
+---
+> GRANT SELECT,MAINTAIN ON TABLE public.organizations TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.organizations TO authenticated;
+8144,8145c8184,8185
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.permission_overrides TO anon;
+< GRANT ALL ON TABLE public.permission_overrides TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.owner_audit_log TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.owner_audit_log TO authenticated;
+8146a8187,8188
+> GRANT MAINTAIN ON TABLE public.permission_overrides TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.permission_overrides TO authenticated;
+8148,8149d8189
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.profile_mobile_numbers TO anon;
+< GRANT ALL ON TABLE public.profile_mobile_numbers TO authenticated;
+8151,8152c8191,8192
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.profiles TO anon;
+< GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.profiles TO authenticated;
+---
+> GRANT SELECT,MAINTAIN ON TABLE public.profile_mobile_numbers TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.profile_mobile_numbers TO authenticated;
+8154,8155c8194,8195
+< GRANT UPDATE(full_name) ON TABLE public.profiles TO authenticated;
+< GRANT UPDATE(avatar_url) ON TABLE public.profiles TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.profiles TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN ON TABLE public.profiles TO authenticated;
+8157,8158d8196
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.project_activity TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.project_activity TO authenticated;
+8160,8161c8198,8199
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.project_members TO anon;
+< GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.project_members TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.project_activity TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.project_activity TO authenticated;
+8163,8164c8201,8202
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.project_updates TO anon;
+< GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.project_updates TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.project_members TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN ON TABLE public.project_members TO authenticated;
+8166,8167c8204,8205
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.projects TO anon;
+< GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE public.projects TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.project_updates TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN ON TABLE public.project_updates TO authenticated;
+8169,8170c8207,8208
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.push_subscriptions TO anon;
+< GRANT ALL ON TABLE public.push_subscriptions TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.projects TO anon;
+> GRANT SELECT,INSERT,MAINTAIN,UPDATE ON TABLE public.projects TO authenticated;
+8172,8173c8210,8211
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.related_requests TO anon;
+< GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.related_requests TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.push_subscriptions TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.push_subscriptions TO authenticated;
+8175,8176c8213,8214
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.request_activity TO anon;
+< GRANT ALL ON TABLE public.request_activity TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.related_requests TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN ON TABLE public.related_requests TO authenticated;
+8178,8179c8216,8217
+< GRANT ALL ON TABLE public.request_attachments TO anon;
+< GRANT ALL ON TABLE public.request_attachments TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.request_activity TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_activity TO authenticated;
+8181,8182c8219,8220
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.request_collaborators TO anon;
+< GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.request_collaborators TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_attachments TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_attachments TO authenticated;
+8184,8185c8222,8223
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.request_comments TO anon;
+< GRANT ALL ON TABLE public.request_comments TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.request_collaborators TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN ON TABLE public.request_collaborators TO authenticated;
+8187c8225,8226
+< GRANT ALL ON TABLE public.request_priorities TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.request_comments TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_comments TO authenticated;
+8189,8190c8228
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.request_sequences TO anon;
+< GRANT ALL ON TABLE public.request_sequences TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_priorities TO authenticated;
+8192,8193c8230,8231
+< GRANT ALL ON TABLE public.request_time_entries TO anon;
+< GRANT ALL ON TABLE public.request_time_entries TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.request_sequences TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_sequences TO authenticated;
+8195,8196c8233,8234
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.requests TO anon;
+< GRANT ALL ON TABLE public.requests TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_time_entries TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_time_entries TO authenticated;
+8198c8236,8237
+< GRANT ALL ON TABLE public.retention_policies TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.requests TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.requests TO authenticated;
+8200,8201c8239
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.saved_reports TO anon;
+< GRANT ALL ON TABLE public.saved_reports TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.retention_policies TO authenticated;
+8203,8204c8241,8242
+< GRANT ALL ON TABLE public.scheduled_reports TO anon;
+< GRANT ALL ON TABLE public.scheduled_reports TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.saved_reports TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.saved_reports TO authenticated;
+8206,8207c8244,8245
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.service_categories TO anon;
+< GRANT ALL ON TABLE public.service_categories TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.scheduled_reports TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.scheduled_reports TO authenticated;
+8209,8210c8247,8248
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.service_location_tags TO anon;
+< GRANT ALL ON TABLE public.service_location_tags TO authenticated;
+---
+> GRANT SELECT,MAINTAIN ON TABLE public.service_categories TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.service_categories TO authenticated;
+8212,8213c8250,8251
+< GRANT ALL ON TABLE public.service_sub_categories TO anon;
+< GRANT ALL ON TABLE public.service_sub_categories TO authenticated;
+---
+> GRANT SELECT,MAINTAIN ON TABLE public.service_location_tags TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.service_location_tags TO authenticated;
+8215,8216c8253,8254
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.service_sub_category_tags TO anon;
+< GRANT ALL ON TABLE public.service_sub_category_tags TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.service_sub_categories TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.service_sub_categories TO authenticated;
+8218,8219c8256,8257
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.services TO anon;
+< GRANT ALL ON TABLE public.services TO authenticated;
+---
+> GRANT SELECT,MAINTAIN ON TABLE public.service_sub_category_tags TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.service_sub_category_tags TO authenticated;
+8221,8222c8259,8260
+< GRANT ALL ON TABLE public.sla_escalation_events TO anon;
+< GRANT ALL ON TABLE public.sla_escalation_events TO authenticated;
+---
+> GRANT SELECT,MAINTAIN ON TABLE public.services TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.services TO authenticated;
+8224c8262,8263
+< GRANT ALL ON TABLE public.sla_escalation_rules TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.sla_escalation_events TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.sla_escalation_events TO authenticated;
+8226,8227c8265
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.sla_policies TO anon;
+< GRANT ALL ON TABLE public.sla_policies TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.sla_escalation_rules TO authenticated;
+8229,8230c8267,8268
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.stores TO anon;
+< GRANT ALL ON TABLE public.stores TO authenticated;
+---
+> GRANT SELECT,MAINTAIN ON TABLE public.sla_policies TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.sla_policies TO authenticated;
+8231a8270,8271
+> GRANT SELECT,MAINTAIN ON TABLE public.stores TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.stores TO authenticated;
+8233a8274
+> GRANT UPDATE ON SEQUENCE public.system_log_id_seq TO service_role;
+8236,8238d8276
+< GRANT UPDATE ON SEQUENCE public.system_log_id_seq TO service_role;
+< GRANT ALL ON TABLE public.task_activity TO anon;
+< GRANT ALL ON TABLE public.task_activity TO authenticated;
+8240,8241c8278,8279
+< GRANT ALL ON TABLE public.task_assignees TO anon;
+< GRANT ALL ON TABLE public.task_assignees TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_activity TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_activity TO authenticated;
+8243,8244c8281,8282
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.task_attachments TO anon;
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.task_attachments TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_assignees TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_assignees TO authenticated;
+8246,8247c8284,8285
+< GRANT ALL ON TABLE public.task_comments TO anon;
+< GRANT ALL ON TABLE public.task_comments TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.task_attachments TO anon;
+> GRANT MAINTAIN ON TABLE public.task_attachments TO authenticated;
+8249,8250c8287,8288
+< GRANT ALL ON TABLE public.task_custom_field_values TO anon;
+< GRANT ALL ON TABLE public.task_custom_field_values TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_comments TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_comments TO authenticated;
+8252,8253c8290,8291
+< GRANT ALL ON TABLE public.task_custom_fields TO anon;
+< GRANT ALL ON TABLE public.task_custom_fields TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_custom_field_values TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_custom_field_values TO authenticated;
+8255,8256c8293,8294
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.task_dependencies TO anon;
+< GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.task_dependencies TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_custom_fields TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_custom_fields TO authenticated;
+8258c8296,8297
+< GRANT ALL ON TABLE public.task_priorities TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.task_dependencies TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN ON TABLE public.task_dependencies TO authenticated;
+8260c8299
+< GRANT ALL ON TABLE public.task_statuses TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_priorities TO authenticated;
+8262,8263c8301
+< GRANT ALL ON TABLE public.task_template_items TO anon;
+< GRANT ALL ON TABLE public.task_template_items TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_statuses TO authenticated;
+8265,8266c8303,8304
+< GRANT ALL ON TABLE public.task_templates TO anon;
+< GRANT ALL ON TABLE public.task_templates TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_template_items TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_template_items TO authenticated;
+8268,8269c8306,8307
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.tasks TO anon;
+< GRANT ALL ON TABLE public.tasks TO authenticated;
+---
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_templates TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_templates TO authenticated;
+8271,8272c8309,8310
+< GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.team_members TO anon;
+< GRANT ALL ON TABLE public.team_members TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.tasks TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.tasks TO authenticated;
+8274,8275c8312,8313
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.teams TO anon;
+< GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.teams TO authenticated;
+---
+> GRANT MAINTAIN ON TABLE public.team_members TO anon;
+> GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.team_members TO authenticated;
+8276a8315,8316
+> GRANT SELECT,MAINTAIN ON TABLE public.teams TO anon;
+> GRANT SELECT,MAINTAIN ON TABLE public.teams TO authenticated;
+8390a8431
+> ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO PUBLIC;
+8455c8496
+< \unrestrict RobX3nnuVqiSmBjt2v2QFX2sh6SCTbilW83Tgo0gVyoqZsckskhkf2XNS78G4Ly
+---
+> \unrestrict 4JLGqIjyhBcUdfJxiKkCjn2cw1dqYT2s8KLHcjwakCO6bJLtNwAvyNOIaPx12c4

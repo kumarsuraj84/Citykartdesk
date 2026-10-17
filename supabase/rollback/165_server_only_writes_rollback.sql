@@ -1,28 +1,34 @@
--- Rollback of 20240101000165_server_only_writes.sql: gives back the previous table privileges (row security policies still apply as before).
+-- Rollback of 20240101000165_server_only_writes.sql: puts back the table, sequence and default privileges EXACTLY as recorded when the migration ran
+-- (row security policies still apply as before). Run it BEFORE the rollback of 164 (reverse order).
 BEGIN;
-GRANT INSERT, UPDATE, DELETE ON public.requests TO authenticated;
-GRANT INSERT, UPDATE, DELETE ON public.requests TO anon;
+-- Put back the privileges recorded by the migration (only for the objects that existed then).
 DO $$
-DECLARE t text;
+DECLARE r record;
 BEGIN
-  FOREACH t IN ARRAY ARRAY[
-    'approvals', 'approval_decisions', 'approval_workflows', 'approval_workflow_steps', 'approval_email_codes',
-    'team_members', 'teams', 'profile_mobile_numbers', 'locations', 'departments', 'cost_centers', 'designations', 'job_functions', 'stores', 'oems',
-    'business_hours', 'holidays', 'request_priorities', 'app_settings', 'retention_policies', 'global_sla_config', 'field_sla_overrides',
-    'business_rules', 'business_rule_events', 'assignment_rules', 'alert_rules', 'notification_rules', 'intake_rules', 'scheduled_reports',
-    'task_statuses', 'task_priorities', 'task_templates', 'task_template_items',
-    'request_activity', 'task_activity', 'project_activity', 'request_conversations', 'conversation_attachments', 'conversation_events',
-    'processed_inbound_emails', 'email_smtp_settings', 'admin_audit_log', 'owner_audit_log', 'intake_audit_log', 'app_event_log', 'ai_applications',
-    'desktime_app_logs', 'desktime_project_map', 'desktime_sync_runs', 'desktime_time_logs'
-  ] LOOP
-    IF to_regclass('public.' || t) IS NOT NULL THEN
-      EXECUTE format('GRANT INSERT, UPDATE, DELETE ON public.%I TO authenticated', t);
+  IF to_regclass('public._grant_snapshots') IS NULL THEN
+    RAISE EXCEPTION 'The grant record of migration 165 (public._grant_snapshots) is missing: this rollback cannot restore the previous privileges exactly.';
+  END IF;
+  FOR r IN SELECT DISTINCT kind, object_name FROM public._grant_snapshots WHERE stage = '165' AND kind IN ('table', 'sequence') LOOP
+    IF to_regclass('public.' || quote_ident(r.object_name)) IS NOT NULL THEN
+      EXECUTE format('REVOKE ALL ON %s public.%I FROM anon, authenticated', CASE r.kind WHEN 'sequence' THEN 'SEQUENCE' ELSE 'TABLE' END, r.object_name);
     END IF;
   END LOOP;
+  FOR r IN SELECT kind, grantee, object_name, privilege FROM public._grant_snapshots WHERE stage = '165' AND kind IN ('table', 'sequence') AND privilege <> '-' LOOP
+    IF to_regclass('public.' || quote_ident(r.object_name)) IS NOT NULL THEN
+      EXECUTE format('GRANT %s ON %s public.%I TO %I', r.privilege, CASE r.kind WHEN 'sequence' THEN 'SEQUENCE' ELSE 'TABLE' END, r.object_name, r.grantee);
+    END IF;
+  END LOOP;
+  FOR r IN SELECT grantee, object_name, privilege FROM public._grant_snapshots WHERE stage = '165' AND kind = 'column' LOOP
+    IF to_regclass('public.' || quote_ident(split_part(r.object_name, '.', 1))) IS NOT NULL THEN
+      EXECUTE format('GRANT %s (%I) ON TABLE public.%I TO %I', r.privilege, split_part(r.object_name, '.', 2), split_part(r.object_name, '.', 1), r.grantee);
+    END IF;
+  END LOOP;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated;
+  FOR r IN SELECT kind, grantee, privilege FROM public._grant_snapshots WHERE stage = '165' AND kind IN ('default_r', 'default_S') LOOP
+    EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT %s ON %s TO %I', r.privilege, CASE r.kind WHEN 'default_S' THEN 'SEQUENCES' ELSE 'TABLES' END, r.grantee);
+  END LOOP;
+  DELETE FROM public._grant_snapshots WHERE stage = '165';
+  IF NOT EXISTS (SELECT 1 FROM public._grant_snapshots) THEN DROP TABLE public._grant_snapshots; END IF;
 END $$;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon;
-GRANT UPDATE ON SEQUENCE public.system_log_id_seq, public.app_event_log_id_seq TO authenticated;
 COMMIT;

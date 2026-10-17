@@ -1,0 +1,1 @@
+psql: error: /var/tmp/privs.sql: No such file or directory

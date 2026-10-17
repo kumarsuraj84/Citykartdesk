@@ -1,0 +1,109 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_db_ckdesk_audit, supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [only the user's own browser: chrome.exe(pid 58396) 182.72.84.10:3210 ESTABLISHED - NOT the audit; the audit never uses this browser]
+
+ISOLATION GATE: PASSED  (21/21)
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate[39m
+
+ [32m✓[39m tests/vapt/10-confidentiality-exploits.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 4653[2mms[22m[39m
+   [33m[2m✓[22m[39m VA-INT-03: internal-note text is not pushed to people who cannot read the note[2m > [22man ordinary-user collaborator gets no notification carrying the note text [33m 2614[2mms[22m[39m
+ [32m✓[39m tests/vapt/30-onboarding-and-password-enforcement.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 3073[2mms[22m[39m
+   [33m[2m✓[22m[39m bulk import without a password column[2m > [22mgives every new account its own random one-time password and flags it "must change password"; the old shared default does not work [33m 404[2mms[22m[39m
+   [33m[2m✓[22m[39m bulk import without a password column[2m > [22mafter choosing their own password through the application the flag is cleared (by the server) and everything works [33m 306[2mms[22m[39m
+[90mstdout[2m | tests/vapt/90-performance.test.ts[2m > [22m[2mlatency of security-sensitive operations (milliseconds)[2m > [22m[2mmeasures and records
+[22m[39m{
+ "label": "run",
+ "at": "2026-10-17T05:02:38.610Z",
+ "tickets_in_audit_db": 3252,
+ "manager: list 1000 tickets (row security over the whole organisation)": {
+  "p50": 5.9,
+  "p95": 6.9,
+  "p99": 7.1,
+  "runs": 40
+ },
+ "manager: count all tickets": {
+  "p50": 5.3,
+  "p95": 5.7,
+  "p99": 6,
+  "runs": 40
+ },
+ "technician: list own group tickets": {
+  "p50": 6.6,
+  "p95": 6.9,
+  "p99": 7.4,
+  "runs": 40
+ },
+ "requester: list own tickets": {
+  "p50": 6.5,
+  "p95": 7,
+  "p99": 7.5,
+  "runs": 40
+ },
+ "technician: open one ticket by id": {
+  "p50": 3.1,
+  "p95": 3.7,
+  "p99": 4.7,
+  "runs": 40
+ },
+ "requester: read attachments rows of a ticket": {
+  "p50": 3.8,
+  "p95": 4.2,
+  "p99": 4.3,
+  "runs": 40
+ },
+ "search: manager title search": {
+  "p50": 3.1,
+  "p95": 3.9,
+  "p99": 4.5,
+  "runs": 40
+ }
+}
+
+ [32m✓[39m tests/vapt/90-performance.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 3379[2mms[22m[39m
+   [33m[2m✓[22m[39m latency of security-sensitive operations (milliseconds)[2m > [22mmeasures and records [33m 1444[2mms[22m[39m
+[90mstderr[2m | tests/vapt/23-permission-matrix-and-rules.test.ts[2m > [22m[2mwhat a Business Rule may do to a ticket[2m > [22m[2mcannot revive a cancelled ticket or close one that was never resolved; can still do the moves a person could
+[22m[39m{"ts":"2026-10-17T05:02:43.766Z","level":"warn","event":"rules.status_move_refused","message":"A Business Rule tried a status move that is not allowed","route":"rules/actions.ts#runSetStatus","requestId":"ed356ae2-8a31-49dc-98f7-6bd805286d44","context":{"from":"cancelled","to":"in_progress","ruleId":"91f79eb0-4420-41c2-8b80-77945de9b7a2"}}
+
+[90mstderr[2m | tests/vapt/23-permission-matrix-and-rules.test.ts[2m > [22m[2mwhat a Business Rule may do to a ticket[2m > [22m[2mcannot revive a cancelled ticket or close one that was never resolved; can still do the moves a person could
+[22m[39m{"ts":"2026-10-17T05:02:43.802Z","level":"warn","event":"rules.status_move_refused","message":"A Business Rule tried a status move that is not allowed","route":"rules/actions.ts#runSetStatus","requestId":"88f063f8-5431-49ee-b4af-8b3b7dc29a8c","context":{"from":"in_progress","to":"closed","ruleId":"509ca3a6-c928-4430-9184-563bacb93146"}}
+
+[90mstderr[2m | tests/vapt/23-permission-matrix-and-rules.test.ts[2m > [22m[2mwhat a Business Rule may do to a ticket[2m > [22m[2mcannot revive a cancelled ticket or close one that was never resolved; can still do the moves a person could
+[22m[39m{"ts":"2026-10-17T05:02:43.875Z","level":"warn","event":"rules.status_move_refused","message":"A Business Rule tried a status move that is not allowed","route":"rules/actions.ts#runSetStatus","requestId":"0e4ecda2-1238-4ce1-a605-6eca62bafa63","context":{"from":"hold_purchase_ho","to":"waiting_user","ruleId":"70c42da3-a43e-49ac-9244-5fb63e6cf99e"}}
+
+ [32m✓[39m tests/vapt/23-permission-matrix-and-rules.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 3525[2mms[22m[39m
+ [32m✓[39m tests/vapt/21-approvals-separation.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 2957[2mms[22m[39m
+   [33m[2m✓[22m[39m choosing approvers[2m > [22mdelegating: not to yourself, not to the requester, not to the sender; to a colleague is fine [33m 312[2mms[22m[39m
+[90mstderr[2m | tests/vapt/24-ticket-low-findings.test.ts[2m > [22m[2mVAPT-059: database error text does not reach the browser[2m > [22m[2msanitizeError hides table and constraint names
+[22m[39m{"ts":"2026-10-17T05:02:50.598Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"test","errorCode":"23505","error":{"message":"{\"code\":\"23505\",\"message\":\"duplicate key value violates unique constraint \\\"services_name_key\\\"\"}"}}
+{"ts":"2026-10-17T05:02:50.599Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"test","error":{"message":"{\"message\":\"relation \\\"profiles\\\" does not exist\"}"}}
+
+ [32m✓[39m tests/vapt/24-ticket-low-findings.test.ts [2m([22m[2m15 tests[22m[2m)[22m[33m 2774[2mms[22m[39m
+ [32m✓[39m tests/vapt/20-ticket-actions-authz.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 2412[2mms[22m[39m
+ [32m✓[39m tests/vapt/22-projects-tasks-files-privacy.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 2107[2mms[22m[39m
+ [32m✓[39m tests/vapt/12-email-reply-participant.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 1942[2mms[22m[39m
+ [32m✓[39m tests/vapt/11-integrity-exploits.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 1970[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m10 passed[39m[22m[90m (10)[39m
+[2m      Tests [22m [1m[32m68 passed[39m[22m[90m (68)[39m
+[2m   Start at [22m 10:32:28
+[2m   Duration [22m 33.53s[2m (transform 423ms, setup 113ms, collect 1.26s, tests 28.79s, environment 1ms, prepare 422ms)[22m
+

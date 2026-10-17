@@ -20,17 +20,17 @@ export async function markMessageRead(
   isRead: boolean,
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile) return { error: 'Unauthorized.' }
+  if (!profile || !canReview(profile.role)) return { error: 'Unauthorized.' }
   const moduleError = await requireModuleEnabled('intake')
   if (moduleError) return { error: moduleError }
 
-  const supabase = (await createClient()) as unknown as AnyClient
-  // RLS silently returns zero rows (not an error) when the caller can't see this
-  // message — .select().maybeSingle() lets us tell "updated" from "no-op" apart.
+  // Written by the server after the caller is known to be a reviewer of this organisation. .select().maybeSingle() tells "updated" from "no such message".
+  const supabase = createAdminClient() as unknown as AnyClient
   const { data, error } = await supabase
     .from('intake_messages')
     .update({ is_read: isRead })
     .eq('id', messageId)
+    .eq('org_id', profile.org_id)
     .select('id')
     .maybeSingle()
   if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/communication.ts' }) }
@@ -43,15 +43,16 @@ export async function archiveMessage(
   archived: boolean,
 ): Promise<{ error?: string }> {
   const profile = await getCurrentProfile()
-  if (!profile) return { error: 'Unauthorized.' }
+  if (!profile || !canReview(profile.role)) return { error: 'Unauthorized.' }
   const moduleError = await requireModuleEnabled('intake')
   if (moduleError) return { error: moduleError }
 
-  const supabase = (await createClient()) as unknown as AnyClient
+  const supabase = createAdminClient() as unknown as AnyClient
   const { data, error } = await supabase
     .from('intake_messages')
     .update({ is_archived: archived })
     .eq('id', messageId)
+    .eq('org_id', profile.org_id)
     .select('id')
     .maybeSingle()
   if (error) return { error: sanitizeError(error, { route: 'lib/actions/intake/communication.ts' }) }
@@ -71,7 +72,10 @@ export async function addNote(
   if (moduleError) return { error: moduleError }
   if (!body.trim()) return { error: 'Note body cannot be empty.' }
 
-  const supabase = (await createClient()) as unknown as AnyClient
+  const supabase = createAdminClient() as unknown as AnyClient
+  // the message must belong to the caller's organisation
+  const { data: msg } = await supabase.from('intake_messages').select('id').eq('id', messageId).eq('org_id', profile.org_id).maybeSingle()
+  if (!msg) return { error: 'Message not found.' }
   const { data, error } = await supabase
     .from('intake_notes')
     .insert({
@@ -83,7 +87,7 @@ export async function addNote(
     .select('id')
     .single()
 
-  return { id: data?.id, error: error?.message }
+  return { id: data?.id, error: error ? sanitizeError(error, { route: 'lib/actions/intake/communication.ts' }) : undefined }
 }
 
 export async function deleteNote(noteId: string): Promise<{ error?: string }> {

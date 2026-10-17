@@ -1,0 +1,475 @@
+== 1. rebuild baseline (migrations 0-163)
+Finished [36msupabase db reset[39m on branch [36msecurity/remediation-phase2-local[39m.
+{"target":"local","version":"","message":"Reset local database."}
+== forward 164
+== forward 165
+== forward 166
+== forward 167
+== forward 168
+== forward 169
+== 3. rollback in reverse order
+-- rollback 169
+   expected = state before migration 169:
+   IDENTICAL (only-expected 0, only-actual 0)
+-- rollback 168
+   expected = state before migration 168:
+   IDENTICAL (only-expected 0, only-actual 0)
+-- rollback 167
+   expected = state before migration 167:
+   IDENTICAL (only-expected 0, only-actual 0)
+-- rollback 166
+   expected = state before migration 166:
+   IDENTICAL (only-expected 0, only-actual 0)
+-- rollback 165
+   expected = state before migration 165:
+   IDENTICAL (only-expected 0, only-actual 0)
+-- rollback 164
+   expected = state before migration 164:
+   IDENTICAL (only-expected 0, only-actual 0)
+-- full schema + ACL comparison after the complete rollback (baseline vs rolled back)
+statements only in expected: 193; only in actual: 247
+EXPECTED> CREATE TABLE public.approval_workflow_steps ( id uuid DEFAULT gen_random_uuid() NOT NULL, workflow_id uuid NOT NULL, step_order integer NOT NULL, approver_type public.approver_type NOT NULL,
+EXPECTED> CREATE POLICY field_sla_overrides_write ON public.field_sla_overrides USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'mana
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.request_conversations TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.request_conversations TO authenticated
+EXPECTED> GRANT ALL ON FUNCTION public.get_home_dashboard(p_is_manager boolean, p_is_agent boolean, p_team_id uuid, p_has_tasks boolean) TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.admin_audit_log TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.admin_audit_log TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.ai_applications TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.ai_applications TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.alert_rules TO anon
+EXPECTED> GRANT ALL ON TABLE public.alert_rules TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.app_settings TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.approval_decisions TO anon
+EXPECTED> GRANT ALL ON TABLE public.approval_decisions TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.approval_workflow_steps TO anon
+EXPECTED> GRANT ALL ON TABLE public.approval_workflow_steps TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.approval_workflows TO anon
+EXPECTED> GRANT ALL ON TABLE public.approval_workflows TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.approvals TO anon
+EXPECTED> GRANT ALL ON TABLE public.approvals TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.assignment_rules TO anon
+EXPECTED> GRANT ALL ON TABLE public.assignment_rules TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.business_hours TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.business_rule_events TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.business_rule_events TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.business_rules TO anon
+EXPECTED> GRANT ALL ON TABLE public.business_rules TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.conversation_attachments TO anon
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.conversation_attachments TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.conversation_events TO anon
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.conversation_events TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.cost_centers TO anon
+EXPECTED> GRANT ALL ON TABLE public.cost_centers TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.csat_surveys TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE public.csat_surveys TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.custom_roles TO anon
+EXPECTED> GRANT ALL ON TABLE public.custom_roles TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.departments TO anon
+EXPECTED> GRANT ALL ON TABLE public.departments TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.designations TO anon
+EXPECTED> GRANT ALL ON TABLE public.designations TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_app_logs TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_app_logs TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_project_map TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_project_map TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_sync_runs TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_sync_runs TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_time_logs TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.desktime_time_logs TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.error_reports TO anon
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.error_reports TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.escalation_policies TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.escalation_policies TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.field_sla_overrides TO anon
+EXPECTED> GRANT ALL ON TABLE public.field_sla_overrides TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.form_field_library TO anon
+EXPECTED> GRANT ALL ON TABLE public.form_field_library TO authenticated
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.form_templates TO anon
+EXPECTED> GRANT ALL ON TABLE public.form_templates TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.global_sla_config TO anon
+EXPECTED> GRANT ALL ON TABLE public.global_sla_config TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.holidays TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_attachments TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_attachments TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_audit_log TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_audit_log TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_channels TO anon
+EXPECTED> GRANT ALL ON TABLE public.intake_channels TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_classifications TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_classifications TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_messages TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_messages TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_notes TO anon
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_notes TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_outbound TO anon
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_outbound TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_pipeline_config TO anon
+EXPECTED> GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE public.intake_pipeline_config TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_reviews TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE public.intake_reviews TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_rules TO anon
+EXPECTED> GRANT ALL ON TABLE public.intake_rules TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_threads TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.intake_threads TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.job_functions TO anon
+EXPECTED> GRANT ALL ON TABLE public.job_functions TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.kb_article_services TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.kb_article_services TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.kb_articles TO anon
+EXPECTED> GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE public.kb_articles TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.license_keys TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.license_keys TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.locations TO anon
+EXPECTED> GRANT ALL ON TABLE public.locations TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.milestones TO anon
+EXPECTED> GRANT ALL ON TABLE public.milestones TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.notification_preferences TO anon
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.notification_preferences TO authenticated
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.notification_rules TO anon
+EXPECTED> GRANT ALL ON TABLE public.notification_rules TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.notifications TO anon
+EXPECTED> GRANT ALL ON TABLE public.notifications TO authenticated
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.oems TO anon
+EXPECTED> GRANT ALL ON TABLE public.oems TO authenticated
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.org_module_access TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.org_module_access TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.org_signup_requests TO anon
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.org_signup_requests TO authenticated
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.organizations TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.organizations TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.owner_audit_log TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.owner_audit_log TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.permission_overrides TO anon
+EXPECTED> GRANT ALL ON TABLE public.permission_overrides TO authenticated
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.profile_mobile_numbers TO anon
+EXPECTED> GRANT ALL ON TABLE public.profile_mobile_numbers TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.profiles TO anon
+EXPECTED> GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.profiles TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.project_activity TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.project_activity TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.project_members TO anon
+EXPECTED> GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.project_members TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.project_updates TO anon
+EXPECTED> GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.project_updates TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.projects TO anon
+EXPECTED> GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE public.projects TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.push_subscriptions TO anon
+EXPECTED> GRANT ALL ON TABLE public.push_subscriptions TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.related_requests TO anon
+EXPECTED> GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.related_requests TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.request_activity TO anon
+EXPECTED> GRANT ALL ON TABLE public.request_activity TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.request_attachments TO anon
+EXPECTED> GRANT ALL ON TABLE public.request_attachments TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.request_collaborators TO anon
+EXPECTED> GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.request_collaborators TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.request_comments TO anon
+EXPECTED> GRANT ALL ON TABLE public.request_comments TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.request_priorities TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.request_sequences TO anon
+EXPECTED> GRANT ALL ON TABLE public.request_sequences TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.request_time_entries TO anon
+EXPECTED> GRANT ALL ON TABLE public.request_time_entries TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.requests TO anon
+EXPECTED> GRANT ALL ON TABLE public.requests TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.retention_policies TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.saved_reports TO anon
+EXPECTED> GRANT ALL ON TABLE public.saved_reports TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.scheduled_reports TO anon
+EXPECTED> GRANT ALL ON TABLE public.scheduled_reports TO authenticated
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.service_categories TO anon
+EXPECTED> GRANT ALL ON TABLE public.service_categories TO authenticated
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.service_location_tags TO anon
+EXPECTED> GRANT ALL ON TABLE public.service_location_tags TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.service_sub_categories TO anon
+EXPECTED> GRANT ALL ON TABLE public.service_sub_categories TO authenticated
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.service_sub_category_tags TO anon
+EXPECTED> GRANT ALL ON TABLE public.service_sub_category_tags TO authenticated
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.services TO anon
+EXPECTED> GRANT ALL ON TABLE public.services TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.sla_escalation_events TO anon
+EXPECTED> GRANT ALL ON TABLE public.sla_escalation_events TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.sla_escalation_rules TO authenticated
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.sla_policies TO anon
+EXPECTED> GRANT ALL ON TABLE public.sla_policies TO authenticated
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.stores TO anon
+EXPECTED> GRANT ALL ON TABLE public.stores TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.task_activity TO anon
+EXPECTED> GRANT ALL ON TABLE public.task_activity TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.task_assignees TO anon
+EXPECTED> GRANT ALL ON TABLE public.task_assignees TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.task_attachments TO anon
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.task_attachments TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.task_comments TO anon
+EXPECTED> GRANT ALL ON TABLE public.task_comments TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.task_custom_field_values TO anon
+EXPECTED> GRANT ALL ON TABLE public.task_custom_field_values TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.task_custom_fields TO anon
+EXPECTED> GRANT ALL ON TABLE public.task_custom_fields TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.task_dependencies TO anon
+EXPECTED> GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.task_dependencies TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.task_priorities TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.task_statuses TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.task_template_items TO anon
+EXPECTED> GRANT ALL ON TABLE public.task_template_items TO authenticated
+EXPECTED> GRANT ALL ON TABLE public.task_templates TO anon
+EXPECTED> GRANT ALL ON TABLE public.task_templates TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.tasks TO anon
+EXPECTED> GRANT ALL ON TABLE public.tasks TO authenticated
+EXPECTED> GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.team_members TO anon
+EXPECTED> GRANT ALL ON TABLE public.team_members TO authenticated
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.teams TO anon
+EXPECTED> GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.teams TO authenticated
+ACTUAL>   CREATE TABLE public.approval_workflow_steps ( id uuid DEFAULT gen_random_uuid() NOT NULL, workflow_id uuid NOT NULL, step_order integer NOT NULL, approver_type public.approver_type NOT NULL,
+ACTUAL>   ALTER TABLE ONLY public.approval_workflow_steps ADD CONSTRAINT approval_workflow_steps_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id) ON DELETE SET NULL
+ACTUAL>   CREATE POLICY field_sla_overrides_write ON public.field_sla_overrides USING (((org_id = public.current_org_id()) AND (public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'mana
+ACTUAL>   GRANT ALL ON FUNCTION public.can_manage_collaborators(p_request_id uuid) TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.can_view_project(p_project_id uuid) TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.can_view_project(p_project_id uuid) TO service_role
+ACTUAL>   GRANT MAINTAIN ON TABLE public.request_conversations TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.request_conversations TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.current_org_id() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.current_org_id() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.current_user_approver_request_ids() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.current_user_approver_request_ids() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.current_user_collab_request_ids() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.current_user_collab_request_ids() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.current_user_role() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.current_user_subordinate_ids() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.current_user_team_ids() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.get_enabled_modules() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.get_enabled_modules() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.guard_attachment_client_write() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.guard_attachment_client_write() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.guard_profile_client_update() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.guard_profile_client_update() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.guard_request_client_write() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.guard_request_client_write() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.handle_new_user() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.has_module_access(p_module public.module_slug) TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.intake_validation_stats() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.is_agent() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.is_owner_org() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.is_owner_org() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.is_request_approver(p_request_id uuid) TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.is_request_collaborator(p_request_id uuid) TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.is_request_collaborator(p_request_id uuid) TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.is_team_member(p_team_id uuid) TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.request_identity_unchanged(p_id uuid, p_org uuid, p_requester uuid, p_service uuid, p_team uuid) TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.request_identity_unchanged(p_id uuid, p_org uuid, p_requester uuid, p_service uuid, p_team uuid) TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.request_status_transition_allowed(p_from text, p_to text) TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.request_status_transition_allowed(p_from text, p_to text) TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.retag_service_categories(p_service_id uuid, p_sub_category_ids uuid[]) TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.retag_service_locations(p_service_id uuid, p_location_ids uuid[]) TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.set_request_org_id() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.set_request_org_id() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.set_task_org_id() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.set_task_org_id() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.set_updated_at() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.system_log_audit_trigger() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.system_log_audit_trigger() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.system_log_chain() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.system_log_chain() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.system_log_clean(p jsonb) TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.system_log_clean(p jsonb) TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.system_log_guard() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.system_log_guard() TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.system_log_hash_input(r public.system_log) TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.system_log_hash_input(r public.system_log) TO service_role
+ACTUAL>   GRANT ALL ON FUNCTION public.touch_updated_at() TO authenticated
+ACTUAL>   GRANT ALL ON FUNCTION public.touch_updated_at() TO service_role
+ACTUAL>   GRANT MAINTAIN ON TABLE public.admin_audit_log TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.admin_audit_log TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.ai_applications TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.ai_applications TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.alert_rules TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.alert_rules TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.app_settings TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.approval_decisions TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.approval_decisions TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.approval_workflow_steps TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.approval_workflow_steps TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.approval_workflows TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.approval_workflows TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.approvals TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.approvals TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.assignment_rules TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.assignment_rules TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.business_hours TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.business_rule_events TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.business_rule_events TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.business_rules TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.business_rules TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.conversation_attachments TO anon
+ACTUAL>   GRANT MAINTAIN ON TABLE public.conversation_attachments TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.conversation_events TO anon
+ACTUAL>   GRANT MAINTAIN ON TABLE public.conversation_events TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.cost_centers TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.cost_centers TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.csat_surveys TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN,UPDATE ON TABLE public.csat_surveys TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.custom_roles TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.custom_roles TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.departments TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.departments TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.designations TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.designations TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.desktime_app_logs TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.desktime_app_logs TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.desktime_project_map TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.desktime_project_map TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.desktime_sync_runs TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.desktime_sync_runs TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.desktime_time_logs TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.desktime_time_logs TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.error_reports TO anon
+ACTUAL>   GRANT MAINTAIN ON TABLE public.error_reports TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.escalation_policies TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.escalation_policies TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.field_sla_overrides TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.field_sla_overrides TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.form_field_library TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.form_field_library TO authenticated
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.form_templates TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.form_templates TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.global_sla_config TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.global_sla_config TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.holidays TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.intake_attachments TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.intake_attachments TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.intake_audit_log TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.intake_audit_log TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.intake_channels TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.intake_channels TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.intake_classifications TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.intake_classifications TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.intake_messages TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.intake_messages TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.intake_notes TO anon
+ACTUAL>   GRANT MAINTAIN ON TABLE public.intake_notes TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.intake_outbound TO anon
+ACTUAL>   GRANT MAINTAIN ON TABLE public.intake_outbound TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.intake_pipeline_config TO anon
+ACTUAL>   GRANT SELECT,INSERT,MAINTAIN,UPDATE ON TABLE public.intake_pipeline_config TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.intake_reviews TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN,UPDATE ON TABLE public.intake_reviews TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.intake_rules TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.intake_rules TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.intake_threads TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.intake_threads TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.job_functions TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.job_functions TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.kb_article_services TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.kb_article_services TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.kb_articles TO anon
+ACTUAL>   GRANT SELECT,INSERT,MAINTAIN,UPDATE ON TABLE public.kb_articles TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.license_keys TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.license_keys TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.locations TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.locations TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.milestones TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.milestones TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.notification_preferences TO anon
+ACTUAL>   GRANT MAINTAIN ON TABLE public.notification_preferences TO authenticated
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.notification_rules TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.notification_rules TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.notifications TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.notifications TO authenticated
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.oems TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.oems TO authenticated
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.org_module_access TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.org_module_access TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.org_signup_requests TO anon
+ACTUAL>   GRANT MAINTAIN ON TABLE public.org_signup_requests TO authenticated
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.organizations TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.organizations TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.owner_audit_log TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.owner_audit_log TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.permission_overrides TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.permission_overrides TO authenticated
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.profile_mobile_numbers TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.profile_mobile_numbers TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.profiles TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN ON TABLE public.profiles TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.project_activity TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.project_activity TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.project_members TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN ON TABLE public.project_members TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.project_updates TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN ON TABLE public.project_updates TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.projects TO anon
+ACTUAL>   GRANT SELECT,INSERT,MAINTAIN,UPDATE ON TABLE public.projects TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.push_subscriptions TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.push_subscriptions TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.related_requests TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN ON TABLE public.related_requests TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.request_activity TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_activity TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_attachments TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_attachments TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.request_collaborators TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN ON TABLE public.request_collaborators TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.request_comments TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_comments TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_priorities TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.request_sequences TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_sequences TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_time_entries TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.request_time_entries TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.requests TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.requests TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.retention_policies TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.saved_reports TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.saved_reports TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.scheduled_reports TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.scheduled_reports TO authenticated
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.service_categories TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.service_categories TO authenticated
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.service_location_tags TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.service_location_tags TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.service_sub_categories TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.service_sub_categories TO authenticated
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.service_sub_category_tags TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.service_sub_category_tags TO authenticated
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.services TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.services TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.sla_escalation_events TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.sla_escalation_events TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.sla_escalation_rules TO authenticated
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.sla_policies TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.sla_policies TO authenticated
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.stores TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.stores TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_activity TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_activity TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_assignees TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_assignees TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.task_attachments TO anon
+ACTUAL>   GRANT MAINTAIN ON TABLE public.task_attachments TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_comments TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_comments TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_custom_field_values TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_custom_field_values TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_custom_fields TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_custom_fields TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.task_dependencies TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN ON TABLE public.task_dependencies TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_priorities TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_statuses TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_template_items TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_template_items TO authenticated
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_templates TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.task_templates TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.tasks TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.tasks TO authenticated
+ACTUAL>   GRANT MAINTAIN ON TABLE public.team_members TO anon
+ACTUAL>   GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE public.team_members TO authenticated
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.teams TO anon
+ACTUAL>   GRANT SELECT,MAINTAIN ON TABLE public.teams TO authenticated
+ACTUAL>   ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO PUBLIC
+26 ACL differences
+   table or sequence ACL differences: 0
+== 4. re-apply 164-169
+   re-applied final = first final:
+   IDENTICAL (only-expected 0, only-actual 0)

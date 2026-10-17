@@ -328,15 +328,18 @@ export async function addAdHocApprovers(
   if (fresh.length === 0) return { error: 'Everyone you selected is already an approver on this request.' }
 
   const nextOrder = Math.max(0, ...(existingSteps ?? []).map((s) => s.step_order)) + 1
-  const { error: stepErr } = await admin.from('approval_workflow_steps').insert(
-    fresh.map((a, i) => ({
-      workflow_id: approval.workflow_id,
-      step_order: nextOrder + i,
-      approver_type: 'specific_user' as const,
-      approver_user_id: a.id,
-      added_by: profile.id,
-    }))
-  )
+  const stepRows = fresh.map((a, i) => ({
+    workflow_id: approval.workflow_id,
+    step_order: nextOrder + i,
+    approver_type: 'specific_user' as const,
+    approver_user_id: a.id,
+  }))
+  let { error: stepErr } = await admin.from('approval_workflow_steps').insert(stepRows.map((r) => ({ ...r, added_by: profile.id })))
+  // Release order (expand/contract): the new application may be live before migration 166 adds the column added_by. Until then the step is saved without
+  // it (who added the step is then not recorded); nothing else changes. The two codes are "column does not exist" (database) and "not in the schema cache" (API).
+  if (stepErr && (stepErr.code === '42703' || stepErr.code === 'PGRST204')) {
+    ;({ error: stepErr } = await admin.from('approval_workflow_steps').insert(stepRows))
+  }
   if (stepErr) return { error: sanitizeError(stepErr, { route: 'approvals.ts#addAdHocApprovers', fallback: 'Failed to add approvers.' }) }
 
   await logActivity({
