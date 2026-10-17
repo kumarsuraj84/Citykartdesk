@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logAdminAudit } from '@/lib/actions/admin/audit'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { assertRefsInOrg } from './orgScopeGuard'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; rpc: (fn: string, args: Record<string, unknown>) => any }
@@ -38,6 +39,9 @@ export async function upsertFieldSlaOverride(input: FieldSlaOverrideInput): Prom
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const admin = createAdminClient() as unknown as AnyClient
+
+  const refError = await assertRefsInOrg(admin, profile.org_id, [{ table: 'services', id: input.serviceId, label: 'service' }])
+  if (refError) return { error: refError }
 
   const { error } = await admin.rpc('upsert_field_sla_override', {
     p_org_id: profile.org_id,

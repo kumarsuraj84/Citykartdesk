@@ -61,14 +61,14 @@ describe('VAPT-055 / 056: re-classification', () => {
     for (const status of ['resolved', 'closed', 'cancelled']) {
       const t = await newTicket(status)
       actAs(fx.agentA)
-      const r = await updateRequestCategory(t.id, '00000000-0000-0000-0000-0000000000aa')
+      const r = await updateRequestCategory(t.id, "00000000-0000-0000-0000-0000000000aa", "testing the finished-ticket rule")
       expect(r.error, status).toMatch(/cannot be re-classified/)
     }
   })
   it('a requester cannot re-classify at all (the original rule)', async () => {
     const t = await newTicket('open')
     actAs(fx.requesterA)
-    expect((await updateRequestCategory(t.id, '00000000-0000-0000-0000-0000000000aa')).error).toBeTruthy()
+    expect((await updateRequestCategory(t.id, "00000000-0000-0000-0000-0000000000aa", "testing the finished-ticket rule")).error).toBeTruthy()
   })
 })
 

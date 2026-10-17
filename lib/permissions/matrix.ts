@@ -18,11 +18,16 @@ export const POLICY_OPTIONS = {
   business_rules_write: ['manager_up', 'admin_up'],
   workflow_edit: ['manager_up', 'admin_up'],
   intake_priority_override: ['allowed', 'denied'],
+  // VAPT-052: may an administrator invite an address outside the organisation's own mail domain(s)? (default: yes, as today)
+  external_invites: ['allowed', 'org_domains_only'],
+  // VAPT-053: may a scheduled report go to an OEM contact kept in Master Data? (default: yes, as today)
+  report_recipients: ['users_and_oem', 'users_only'],
 } as const
 export type PolicyKey = keyof typeof POLICY_OPTIONS
 export type PolicyValues = { [K in PolicyKey]: (typeof POLICY_OPTIONS)[K][number] }
 export const DEFAULT_POLICIES: PolicyValues = {
   global_settings_write: 'manager_up', business_rules_write: 'manager_up', workflow_edit: 'manager_up', intake_priority_override: 'allowed',
+  external_invites: 'allowed', report_recipients: 'users_and_oem',
 }
 
 export const POLICY_LABELS: Record<PolicyKey, { title: string; help: string; options: Record<string, string> }> = {
@@ -40,6 +45,16 @@ export const POLICY_LABELS: Record<PolicyKey, { title: string; help: string; opt
     title: 'Approval workflows and their steps',
     help: 'Whoever edits a step decides who approves.',
     options: { manager_up: 'Managers, administrators and platform owners (today)', admin_up: 'Administrators and platform owners' },
+  },
+  external_invites: {
+    title: 'Inviting people whose e-mail address is not at the company\'s own mail domain',
+    help: 'The invitation e-mail carries a sign-in link. The domain is taken from the company mailbox (and ORG_MAIL_DOMAINS, if set); if none is known nothing is refused.',
+    options: { allowed: 'Any address may be invited (today)', org_domains_only: 'Only addresses at the company\'s own mail domain' },
+  },
+  report_recipients: {
+    title: 'Who a scheduled report may be e-mailed to',
+    help: 'Reports hold the organisation\'s tickets. A manager can add or change OEM contact addresses, so OEM contacts may or may not count.',
+    options: { users_and_oem: 'Active users and OEM contacts (today)', users_only: 'Active users only' },
   },
   intake_priority_override: {
     title: 'Priority chosen by the reviewer when an e-mail becomes a ticket',

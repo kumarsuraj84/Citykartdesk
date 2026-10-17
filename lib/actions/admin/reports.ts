@@ -11,6 +11,7 @@ import { loadCcBook } from '@/lib/requests/cc-recipients'
 import { checkReportRecipients } from '@/lib/reporting/report-recipients'
 import type { Database, Json } from '@/types/database'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { loadPolicies } from '@/lib/permissions/policies'
 
 type ScheduledReportRow = Database['public']['Tables']['scheduled_reports']['Row']
 
@@ -50,7 +51,8 @@ const FREQUENCIES = ['daily', 'weekly', 'monthly'] as const
 
 async function checkRecipients(orgId: string, raw: unknown) {
   const book = await loadCcBook(orgId)
-  return checkReportRecipients(raw, (email) => book.has(email))
+  const oemAllowed = (await loadPolicies()).report_recipients !== 'users_only'
+  return checkReportRecipients(raw, (email) => { const c = book.get(email); return !!c && (c.kind === 'user' || oemAllowed) })
 }
 
 export async function getScheduledReports(): Promise<{ data?: ScheduledReport[]; error?: string }> {

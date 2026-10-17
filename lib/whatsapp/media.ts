@@ -1,6 +1,7 @@
 import { findAttachmentsForConversation, updateAttachmentStatus, type ConversationAttachment } from '@/lib/conversations'
 import type { WhatsAppGraphClient } from './graph-client'
 import { ALLOWED_MIME_SET as ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES as MAX_ATTACHMENT_SIZE, contentMatchesDeclaredType } from '@/lib/attachments/validate'
+import { inspectBytes } from '@/lib/attachments/scan'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; storage: any }
@@ -40,6 +41,9 @@ export async function retrieveAndValidateMedia(client: WhatsAppGraphClient, medi
   if (!contentMatchesDeclaredType(download.buffer, declaredType)) {
     return { ok: false, reason: 'content_mismatch', message: 'Content does not match declared type' }
   }
+  // macros and the malware scanner (when one is configured): the same content inspection every web upload gets (VAPT-065)
+  const inspected = await inspectBytes(download.buffer)
+  if (!inspected.ok) return { ok: false, reason: 'content_mismatch', message: inspected.error }
 
   return { ok: true, buffer: download.buffer, mimeType: declaredType, size: download.buffer.length }
 }

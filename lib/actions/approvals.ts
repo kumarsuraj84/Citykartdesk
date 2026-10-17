@@ -21,11 +21,19 @@ export async function searchUsersForDelegation(
   query: string
 ): Promise<{ id: string; full_name: string }[]> {
   const supabase = await createClient()
-  if (!(await getCurrentProfile())) return []     // an explicit sign-in check: the page layout is not a guard for a Server Action
+  const me = await getCurrentProfile()
+  if (!me || !me.org_id) return []     // an explicit sign-in check: the page layout is not a guard for a Server Action
+  // Staff may search (they delegate, assign and add approvers). A person with the role "user" may only when an approval is really waiting for them
+  // (VAPT-019): otherwise this picker would list the whole staff to anyone.
+  if (me.role === 'user') {
+    const { count } = await supabase.from('approval_workflow_steps').select('id', { count: 'exact', head: true }).eq('approver_user_id', me.id)
+    if (!count) return []
+  }
   const safe = query.replace(/[%_]/g, '\\$&').trim()
-  const { data } = await supabase
+  const { data } = await createAdminClient()
     .from('profiles')
     .select('id, full_name')
+    .eq('org_id', me.org_id)
     .eq('is_active', true)
     .ilike('full_name', `%${safe}%`)
     .order('full_name')

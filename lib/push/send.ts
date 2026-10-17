@@ -1,5 +1,6 @@
 import webpush from 'web-push'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { isAcceptablePushEndpoint } from '@/lib/push/endpoint'
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? ''
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY ?? ''
@@ -32,6 +33,12 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
     .eq('user_id', userId)
   if (!subs || subs.length === 0) return
 
+  // Whatever is stored, the server only posts to a real push service (VAPT-036): a row that does not pass is dropped, never contacted.
+  const bad = subs.filter((s) => !isAcceptablePushEndpoint(s.endpoint))
+  if (bad.length > 0) await admin.from('push_subscriptions').delete().in('id', bad.map((s) => s.id))
+  const good = subs.filter((s) => isAcceptablePushEndpoint(s.endpoint))
+  if (good.length === 0) return
+
   const json = JSON.stringify({
     title: payload.title,
     body: payload.body,
@@ -39,7 +46,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
   })
 
   await Promise.all(
-    subs.map(async (s) => {
+    good.map(async (s) => {
       try {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },

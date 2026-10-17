@@ -1,10 +1,15 @@
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentProfile } from '@/lib/queries/profiles'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { KnowledgeBaseClient } from './KnowledgeBaseClient'
 
 export const dynamic = 'force-dynamic'
 
 export default async function KnowledgeBasePage() {
+  const profile = await getCurrentProfile()
+  if (!profile) redirect('/login')
+  if (!['admin', 'manager', 'platform_owner'].includes(profile.role)) redirect('/home')
   const supabase = await createClient()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

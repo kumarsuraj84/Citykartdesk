@@ -476,18 +476,38 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
     setSubOpen(true)
   }
 
+  // Choosing a sub-category does not save at once: it moves the ticket's priority and deadlines, so the technician must say why first (VAPT-056 / VA-TKT-12).
+  // The server enforces the same rule; this box only asks for it.
+  const [pendingPick, setPendingPick] = useState<AllowedSubCategory | null>(null)
+  const [reason, setReason] = useState('')
+  const [reasonError, setReasonError] = useState<string | null>(null)
+
   function pickSubCategory(sc: AllowedSubCategory) {
     if (sc.id === cur.id) { setSubOpen(false); return }
+    setSubOpen(false); setPendingPick(sc); setReason(''); setReasonError(null)
+  }
+
+  function cancelPick() {
+    setPendingPick(null); setReason(''); setReasonError(null)
+    setPendingCategoryId(savedCategoryId)
+  }
+
+  function confirmPick() {
+    const sc = pendingPick
+    if (!sc) return
+    const text = reason.trim()
+    if (text.length < 10) { setReasonError('Please say why (at least 10 characters).'); return }
     const prev = cur
     const seq = ++seqRef.current
-    setCur({ id: sc.id, name: sc.name, categoryName: sc.category_name }); setSubOpen(false); setError(null)
+    setCur({ id: sc.id, name: sc.name, categoryName: sc.category_name }); setPendingPick(null); setError(null)
     startTransition(async () => {
-      const result = await updateRequestCategory(requestId, sc.id)
+      const result = await updateRequestCategory(requestId, sc.id, text)
       if (result?.error && seqRef.current === seq) {
         setError(result.error)
         setCur(prev)
         setPendingCategoryId(savedCategoryId)
       }
+      setReason('')
     })
   }
 
@@ -545,6 +565,27 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
                     {sc.name}
                   </button>
                 ))}
+              </div>
+            )}
+            {pendingPick && (
+              <div className="absolute right-0 top-full z-50 mt-1 w-64 space-y-2 rounded-xl border border-border bg-card p-3 shadow-xl">
+                <p className="text-[11px] font-medium text-foreground">Why change the sub-category to &ldquo;{pendingPick.name}&rdquo;?</p>
+                <textarea
+                  autoFocus
+                  value={reason}
+                  onChange={(e) => { setReason(e.target.value); setReasonError(null) }}
+                  placeholder="e.g. The requester described a printer fault, not a laptop fault"
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-input bg-background px-2 py-1.5 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <p className="text-[10px] leading-snug text-muted-foreground">The priority and the deadlines are worked out again from the new sub-category. The reason is kept in the ticket history.</p>
+                {reasonError && <p className="text-[11px] text-destructive">{reasonError}</p>}
+                <div className="flex gap-2">
+                  <button onClick={confirmPick} disabled={isPending} className="btn-gradient flex-1 !py-1 !text-xs">
+                    {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Change sub-category'}
+                  </button>
+                  <button onClick={cancelPick} className="btn-soft !py-1 !text-xs">Cancel</button>
+                </div>
               </div>
             )}
           </div>

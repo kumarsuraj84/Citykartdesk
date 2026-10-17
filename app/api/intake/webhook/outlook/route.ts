@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { secureCompare } from '@/lib/secure-compare'
 import { getSecret } from '@/lib/secrets'
+import { firstDelivery, sharedRateLimited } from '@/lib/security/shared-limits'
+
+const REPLAY_WINDOW_SECONDS = 24 * 60 * 60
+// Microsoft's validation token is a short opaque string. Only that shape is echoed back (VAPT-042): the endpoint cannot be used to reflect arbitrary text.
+// (Microsoft's real token reads like "Validation: Testing client application reachability for subscription Request-Id: <guid>", so spaces and colons are allowed.)
+const VALIDATION_TOKEN_SHAPE = /^[A-Za-z0-9 ._~+=:/-]{1,512}$/
+function echoValidationToken(token: string): NextResponse {
+  if (!VALIDATION_TOKEN_SHAPE.test(token)) return new NextResponse('Bad Request', { status: 400 })
+  return new NextResponse(token, { status: 200, headers: { 'Content-Type': 'text/plain', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' } })
+}
 
 // POST /api/intake/webhook/outlook?token=<INTAKE_WEBHOOK_TOKEN>
 // GET  /api/intake/webhook/outlook?validationToken=...   (Microsoft subscription validation)
@@ -24,12 +34,7 @@ import { getSecret } from '@/lib/secrets'
 export async function GET(req: NextRequest) {
   // Microsoft subscription validation handshake.
   const validationToken = req.nextUrl.searchParams.get('validationToken')
-  if (validationToken) {
-    return new NextResponse(validationToken, {
-      status: 200,
-      headers: { 'Content-Type': 'text/plain' },
-    })
-  }
+  if (validationToken) return echoValidationToken(validationToken)
   return NextResponse.json({ ok: true })
 }
 
@@ -41,12 +46,7 @@ export async function POST(req: NextRequest) {
 
   // Microsoft Graph also sends a validationToken in some POST scenarios (the subscription handshake carries no clientState).
   const validationToken = req.nextUrl.searchParams.get('validationToken')
-  if (validationToken) {
-    return new NextResponse(validationToken, {
-      status: 200,
-      headers: { 'Content-Type': 'text/plain' },
-    })
-  }
+  if (validationToken) return echoValidationToken(validationToken)
 
   let body: unknown
   try { body = await req.json() } catch { return NextResponse.json({ ok: true }) }
@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
   }> | undefined
 
   if (!notifications?.length) return NextResponse.json({ ok: true })
+  if (await sharedRateLimited('outlook-webhook', 600, 60)) return NextResponse.json({ ok: true })
 
   const workerUrl = process.env.INTAKE_WORKER_URL
   const workerSecret = getSecret('intake_worker')
@@ -75,6 +76,9 @@ export async function POST(req: NextRequest) {
 
     // Verify clientState matches our webhook token (not the worker secret).
     if (!notification.clientState || !secureCompare(notification.clientState, webhookToken)) continue
+
+    // the same notification delivered again is not forwarded twice (VAPT-042)
+    if (!(await firstDelivery(`outlook:${notification.subscriptionId ?? ''}:${messageId}`, REPLAY_WINDOW_SECONDS))) continue
 
     // Find the channel for this subscription.
     const { data: channel } = await admin

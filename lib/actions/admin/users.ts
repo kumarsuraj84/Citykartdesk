@@ -18,6 +18,10 @@ import { USER_EXPORT_COLUMNS, buildUsersExportRows, type ExportProfile } from '@
 import type { UserRole } from '@/types'
 import { inBatches, inBatchesDo } from '@/lib/queries/in-batches'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { loadCcBook, resetCcBookCache } from '@/lib/requests/cc-recipients'
+import { organisationMailDomains, isOrganisationAddress } from '@/lib/email/org-domains'
+import { loadPolicies } from '@/lib/permissions/policies'
+import { exportAllowed, auditExportEvent, checkReportConfigShape, EXPORT_LIMIT_MESSAGE } from '@/lib/security/export-guard'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: any; rpc: (fn: string, args: Record<string, unknown>) => any }
@@ -390,6 +394,13 @@ export async function inviteUser(fields: {
   const { limited } = await rateLimit(`admin-invite-user:${profile.id}`, 10, 60_000)
   if (limited) return { error: 'Too many invites sent. Please wait a minute.' }
 
+  // An address outside the organisation's own mail domain(s): refused when the owner has switched that on, and always written to the audit trail (VAPT-052).
+  const domains = await organisationMailDomains()
+  const external = domains.length > 0 && !isOrganisationAddress(fields.email, domains)
+  if (external && (await loadPolicies()).external_invites === 'org_domains_only') {
+    return { error: 'Invitations can only be sent to addresses at the company mail domain (' + domains.join(', ') + ').' }
+  }
+
   const admin = createAdminClient() as unknown as AnyClient
 
   // createAdminClient() bypasses RLS — without this, nothing stops these ids
@@ -506,7 +517,8 @@ export async function inviteUser(fields: {
     if (teamErr) return { error: `User invited, but technician group assignment failed: ${teamErr.message}` }
   }
 
-  await recordAudit({ action: 'user.invited', entityType: 'user', entityId: uid, entityLabel: fields.email, after: { email: fields.email, role: profileUpdate.role, team_ids: fields.team_ids ?? [] }, actorId: profile.id, orgId: profile.org_id })
+  resetCcBookCache()
+  await recordAudit({ action: 'user.invited', entityType: 'user', entityId: uid, entityLabel: fields.email, after: { email: fields.email, role: profileUpdate.role, team_ids: fields.team_ids ?? [], ...(external ? { external_domain: true } : {}) }, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/users')
 
   // The account is fully set up — now email the "set your password" link through the
@@ -818,6 +830,12 @@ export async function adminSendPasswordReset(email: string): Promise<{ error?: s
   const { limited } = await rateLimit(`admin-password-reset:${profile.id}`, 10, 60_000)
   if (limited) return { error: 'Too many reset emails sent. Please wait a minute.' }
 
+  // Only an existing, active user of the administrator's own organisation (VAPT-052 / VA-ADM-16): a reset link is never mailed to an address that is not one of
+  // the organisation's people, so this cannot be used to send mail from the company mailbox to arbitrary addresses.
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
+  const book = await loadCcBook(profile.org_id)
+  if (book.get(email.trim().toLowerCase())?.kind !== 'user') return { error: 'That address does not belong to an active user of your organisation.' }
+
   const { error } = await emailPasswordResetLink(email)
   await recordAudit({ category: 'security', action: 'user.password_reset_sent', outcome: error ? 'failure' : 'success', entityType: 'user', entityLabel: email, actorId: profile.id, orgId: profile.org_id })
   if (error) return { error }
@@ -943,6 +961,8 @@ export async function exportUsersCsv(): Promise<string> {
   if (!profile || !['admin', 'platform_owner'].includes(profile.role)) throw new Error('Unauthorized.')
   if (!profile.org_id) throw new Error('Your account is not linked to an organisation.')
 
+  if (!(await exportAllowed(profile.id, 'users'))) throw new Error(EXPORT_LIMIT_MESSAGE)
+  await auditExportEvent(profile, 'users', null)
   const admin = createAdminClient() as unknown as AnyClient
   const orgId = profile.org_id
 

@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { validateAttachment, ALLOWED_MIME_SET as ALLOWED_MIME_TYPES, ALLOWED_EXTENSIONS, MAX_FILE_SIZE_BYTES as MAX_FILE_SIZE } from '@/lib/attachments/validate'
+import { uploadAllowed, UPLOAD_LIMIT_MESSAGE } from '@/lib/attachments/quota'
+import { validateAttachmentServer } from '@/lib/attachments/validate-server'
 
 
 
@@ -23,6 +25,7 @@ export async function uploadTaskAttachment(
   const supabase = await createClient()
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'You must be signed in to upload files.' }
+  if (!(await uploadAllowed(profile.id))) return { error: UPLOAD_LIMIT_MESSAGE }
 
   const file = formData.get('file')
   if (!file || !(file instanceof File)) return { error: 'No file provided.' }
@@ -38,7 +41,7 @@ export async function uploadTaskAttachment(
 
   // Buffer-level check: confirms the file's actual bytes match the declared
   // MIME type instead of trusting the client-supplied Content-Type alone.
-  const magicByteCheck = await validateAttachment(file)
+  const magicByteCheck = await validateAttachmentServer(file)
   if (!magicByteCheck.valid) return { error: magicByteCheck.error ?? 'File content does not match its declared type.' }
 
   // Verify access to the task

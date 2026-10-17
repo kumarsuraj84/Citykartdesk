@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { secureCompare } from '@/lib/secure-compare'
 import { getSecret } from '@/lib/secrets'
+import { verifyGoogleOidc } from '@/lib/intake/google-oidc'
+import { firstDelivery, sharedRateLimited } from '@/lib/security/shared-limits'
+
+// A delivery older than this is not acted on (Pub/Sub retries with back-off well inside it); a repeat of the same message id is dropped (VAPT-042).
+const MAX_AGE_MS = 60 * 60 * 1000
+const REPLAY_WINDOW_SECONDS = 24 * 60 * 60
 
 // POST /api/intake/webhook/gmail?token=<INTAKE_WEBHOOK_TOKEN>
 //
@@ -33,11 +39,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
+  // Google's own signature, when configured (GMAIL_PUSH_OIDC_AUDIENCE and GMAIL_PUSH_OIDC_EMAIL): the shared token in the URL alone can be copied from a
+  // log, the signed token cannot. Once configured it is REQUIRED; with nothing configured the shared token is all there is (a decision / setting, see the
+  // release notes).
+  const audience = process.env.GMAIL_PUSH_OIDC_AUDIENCE
+  const pushEmail = process.env.GMAIL_PUSH_OIDC_EMAIL
+  if (audience && pushEmail) {
+    const check = await verifyGoogleOidc(req.headers.get('authorization'), { audience, email: pushEmail })
+    if (!check.ok) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
+  // The caller is authenticated from here on; a flood of valid-looking deliveries still cannot cost more than this many database lookups a minute.
+  if (await sharedRateLimited('gmail-webhook', 600, 60)) return NextResponse.json({ ok: true })
+
   let body: unknown
   try { body = await req.json() } catch { return NextResponse.json({ ok: true }) }
 
   const message = (body as Record<string, unknown>)?.message as Record<string, string> | undefined
   if (!message?.data) return NextResponse.json({ ok: true })
+
+  // replay window and repeat protection
+  const published = message.publishTime ? Date.parse(message.publishTime) : NaN
+  if (Number.isFinite(published) && Date.now() - published > MAX_AGE_MS) return NextResponse.json({ ok: true })
+  if (message.messageId && !(await firstDelivery(`gmail:${message.messageId}`, REPLAY_WINDOW_SECONDS))) return NextResponse.json({ ok: true })
 
   let payload: { emailAddress?: string; historyId?: string }
   try {

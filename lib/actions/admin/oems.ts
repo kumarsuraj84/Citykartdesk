@@ -10,6 +10,8 @@ import { sanitizeTemplateHtml } from '@/lib/email/sanitize-template'
 import type { Database } from '@/types/database'
 import { inBatchesDo } from '@/lib/queries/in-batches'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { recordAudit } from '@/lib/syslog/audit'
+import { resetCcBookCache } from '@/lib/requests/cc-recipients'
 
 type ActionResult<T = undefined> = { error?: string; data?: T }
 type OemUpdate = Database['public']['Tables']['oems']['Update']
@@ -66,6 +68,10 @@ export async function createOem(fields: OemInput): Promise<ActionResult<{ id: st
     .single()
 
   if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/oems.ts' }) }
+  if (cleanEmails(fields.emails).length > 0) {
+    await recordAudit({ category: 'security', action: 'oem.contacts_changed', entityType: 'oem', entityLabel: fields.name, after: { emails: cleanEmails(fields.emails) }, actorId: guard.profile!.id, orgId: guard.profile!.org_id ?? undefined })
+    resetCcBookCache()
+  }
   // D-12: '/admin/oems' isn't a real route — the OEM admin UI lives on the
   // OEM tab of '/admin/org' (OrgStructureClient.tsx). deleteOem() below
   // already revalidated the right path; create/update didn't, so an edit
@@ -86,8 +92,13 @@ export async function updateOem(id: string, fields: Partial<OemInput>): Promise<
   if ('email_body_template' in fields) update.email_body_template = cleanBodyTemplate(fields.email_body_template)
   if (fields.is_active !== undefined) update.is_active = fields.is_active
 
+  const before = update.emails !== undefined ? (await admin.from('oems').select('emails').eq('id', id).eq('org_id', guard.profile!.org_id!).maybeSingle()).data?.emails ?? null : null
   const { error } = await admin.from('oems').update(update).eq('id', id).eq('org_id', guard.profile!.org_id!)
   if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/oems.ts' }) }
+  if (update.emails !== undefined) {
+    await recordAudit({ category: 'security', action: 'oem.contacts_changed', entityType: 'oem', entityId: id, before: { emails: before }, after: { emails: update.emails }, actorId: guard.profile!.id, orgId: guard.profile!.org_id ?? undefined })
+    resetCcBookCache()
+  }
   revalidatePath('/admin/org')
   return {}
 }

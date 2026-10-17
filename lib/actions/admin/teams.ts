@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { assertRefsInOrg } from './orgScopeGuard'
 
 type ActionResult<T = undefined> = { error?: string; data?: T }
 
@@ -155,6 +156,8 @@ export async function addTeamMember(teamId: string, userId: string): Promise<Act
     .maybeSingle()
 
   if (!team?.org_id) return { error: 'Technician group not found or has no organization context.' }
+  const refError = await assertRefsInOrg(admin as never, team.org_id, [{ table: 'profiles', id: userId, label: 'user' }])
+  if (refError) return { error: refError }
 
   const { error } = await admin
     .from('team_members')

@@ -5,6 +5,7 @@ import { fetchReportData, getReportFieldsForEntity } from '@/lib/queries/reporti
 import { authorizeReportAccess } from '@/lib/reporting/access'
 import { computePivot, toFlatTable, type PivotConfig, type PivotRow } from '@/lib/reporting/pivot-engine'
 import { REPORT_ENTITIES, RECORD_COUNT_FIELD, labelForFieldValue, type EntityKey, type ReportField } from '@/lib/reporting/field-registry'
+import { exportAllowed, auditExportEvent, checkReportConfigShape, EXPORT_LIMIT_MESSAGE } from '@/lib/security/export-guard'
 
 const HEADER_FILL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } }
 const SUBTOTAL_FILL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } }
@@ -48,12 +49,16 @@ export async function exportReportXlsx(
   const auth = await authorizeReportAccess(entity)
   if ('error' in auth) return { error: auth.error }
   const { profile, scope } = auth
+  const shapeError = checkReportConfigShape(config)
+  if (shapeError) return { error: shapeError }
+  if (!(await exportAllowed(profile.id, 'report_builder'))) return { error: EXPORT_LIMIT_MESSAGE }
 
   const [allRows, fields] = await Promise.all([
     fetchReportData(entity, profile.org_id!, scope, { fresh: true }),
     getReportFieldsForEntity(entity, profile.org_id!),
   ])
   const fieldsWithCount = [...fields, RECORD_COUNT_FIELD]
+  await auditExportEvent(profile, 'report_builder', allRows.rows.length, { entity, mode: config.mode, columns: config.columns })
 
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'CityKart Desk'

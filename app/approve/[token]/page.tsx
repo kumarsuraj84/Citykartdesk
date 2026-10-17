@@ -53,23 +53,32 @@ export default async function ApprovePage({
     return <Shell><Notice icon={<Link2Off className="h-6 w-6 text-muted-foreground" />} title="This link is not valid">The approval could not be found.</Notice></Shell>
   }
 
+  // Who is looking? Until the visitor is signed in as the approver or has the e-mailed code, the page shows only the request number: no title, no names, no
+  // outcome details (VAPT-044: the link alone is not proof of identity).
+  const viewerEarly = await getCurrentProfile()
+  const proofEarly = (await cookies()).get(verifiedCookieName(v.approvalId))?.value
+  const proven = viewerEarly?.id === v.approverId || isVerified(proofEarly, v.approvalId, v.approverId)
+  const titleOf = (t: string) => (proven ? t : 'Approval request')
+
   const heading = <p className="text-center font-mono text-xs text-muted-foreground">{state.requestNo}</p>
-  const sentLine = <p>This request was sent for approval to <strong className="text-foreground">{list(state.sentTo)}</strong>.</p>
+  const sentLine = proven ? <p>This request was sent for approval to <strong className="text-foreground">{list(state.sentTo)}</strong>.</p> : null
 
   if (state.kind === 'decided') {
     const approved = state.outcome === 'approved'
     return (
       <Shell>
         {heading}
-        <Notice icon={approved ? <CheckCircle2 className="h-6 w-6 text-emerald-600" /> : <XCircle className="h-6 w-6 text-red-600" />} title={`${state.title}`}>
+        <Notice icon={approved ? <CheckCircle2 className="h-6 w-6 text-emerald-600" /> : <XCircle className="h-6 w-6 text-red-600" />} title={titleOf(state.title)}>
           {sentLine}
-          <p>This request was <strong className="text-foreground">{approved ? 'approved' : 'rejected'}</strong> by <strong className="text-foreground">{state.by}</strong> on {state.at}. Nothing more is needed from anyone.</p>
+          {proven
+            ? <p>This request was <strong className="text-foreground">{approved ? 'approved' : 'rejected'}</strong> by <strong className="text-foreground">{state.by}</strong> on {state.at}. Nothing more is needed from anyone.</p>
+            : <p>This request has already been decided. Nothing more is needed from anyone.</p>}
         </Notice>
       </Shell>
     )
   }
   if (state.kind === 'closed') {
-    return <Shell>{heading}<Notice icon={<Clock className="h-6 w-6 text-muted-foreground" />} title={state.title}>{sentLine}<p>This request is no longer waiting for approval.</p></Notice></Shell>
+    return <Shell>{heading}<Notice icon={<Clock className="h-6 w-6 text-muted-foreground" />} title={titleOf(state.title)}>{sentLine}<p>This request is no longer waiting for approval.</p></Notice></Shell>
   }
   if (state.kind === 'expired') {
     return (
@@ -93,7 +102,7 @@ export default async function ApprovePage({
     )
   }
   if (state.kind === 'already_by_you') {
-    return <Shell>{heading}<Notice icon={<CheckCircle2 className="h-6 w-6 text-emerald-600" />} title={state.title}>{sentLine}<p>{state.approverName} already responded on {state.at}. The request is moving along.</p></Notice></Shell>
+    return <Shell>{heading}<Notice icon={<CheckCircle2 className="h-6 w-6 text-emerald-600" />} title={titleOf(state.title)}>{sentLine}<p>{proven ? `${state.approverName} already responded on ${state.at}. ` : 'A response was already given. '}The request is moving along.</p></Notice></Shell>
   }
   if (state.kind === 'not_current') {
     return (
@@ -101,7 +110,7 @@ export default async function ApprovePage({
         {heading}
         <Notice icon={<Clock className="h-6 w-6 text-muted-foreground" />} title="No decision needed from you right now">
           {sentLine}
-          <p>It is currently waiting on <strong className="text-foreground">{list(state.waitingOn)}</strong>.</p>
+          {proven ? <p>It is currently waiting on <strong className="text-foreground">{list(state.waitingOn)}</strong>.</p> : <p>It is currently waiting on someone else.</p>}
         </Notice>
       </Shell>
     )

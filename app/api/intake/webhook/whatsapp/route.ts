@@ -3,6 +3,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyWebhookChallenge } from '@/lib/whatsapp/config'
 import { processWhatsAppWebhookPayload } from '@/lib/whatsapp/webhook-handler'
 import { getClientIp, rateLimit } from '@/lib/rate-limit'
+import { sharedRateLimited } from '@/lib/security/shared-limits'
+
+// Meta's challenge is a short number. Only a short plain value is echoed back, as text (VAPT-042).
+const CHALLENGE_SHAPE = /^[A-Za-z0-9_-]{1,200}$/
 import { MAX_REQUESTS_PER_MINUTE_PER_CALLER } from '@/lib/whatsapp/webhook-limits'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -16,16 +20,22 @@ type AnyClient = { from: (t: string) => any; rpc: (fn: string, args: Record<stri
  * the challenge back; anything else is rejected outright.
  */
 export async function GET(req: NextRequest) {
+  // Checking the verify token costs a database and Vault read per channel, so the page is limited before it does any of that: per caller address when the
+  // address is trustworthy, and always for the whole server (VAPT-042; the counters are shared and survive a restart).
+  const ip = await getClientIp()
+  if (ip && (await rateLimit(`wa-verify:${ip}`, 20, 60_000)).limited) return new NextResponse('Too Many Requests', { status: 429 })
+  if (await sharedRateLimited('wa-verify', 120, 60)) return new NextResponse('Too Many Requests', { status: 429 })
+
   const mode = req.nextUrl.searchParams.get('hub.mode')
   const token = req.nextUrl.searchParams.get('hub.verify_token')
   const challenge = req.nextUrl.searchParams.get('hub.challenge')
 
   const admin = createAdminClient() as unknown as AnyClient
   const verified = await verifyWebhookChallenge(admin, mode, token)
-  if (!verified || !challenge) {
+  if (!verified || !challenge || !CHALLENGE_SHAPE.test(challenge)) {
     return new NextResponse('Forbidden', { status: 403 })
   }
-  return new NextResponse(challenge, { status: 200, headers: { 'content-type': 'text/plain' } })
+  return new NextResponse(challenge, { status: 200, headers: { 'content-type': 'text/plain', 'x-content-type-options': 'nosniff', 'cache-control': 'no-store' } })
 }
 
 /**

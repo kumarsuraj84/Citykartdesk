@@ -32,12 +32,12 @@ if [ "$SKIP_RESET" != "1" ]; then
   sleep 5
 fi
 state $R/state_0163_baseline.txt
-for n in 164 165 166 167 168 169; do echo "== forward $n"; apply "supabase/migrations/$(mig $n)"; state $R/state_0$n.txt; done
-cp $R/state_0169.txt $R/state_final_first.txt
+for n in 164 165 166 167 168 169 170; do echo "== forward $n"; apply "supabase/migrations/$(mig $n)"; state $R/state_0$n.txt; done
+cp $R/state_0170.txt $R/state_final_first.txt
 
 echo "== 3. rollback in reverse order"
-prev=(168 167 166 165 164 163); i=0
-for n in 169 168 167 166 165 164; do
+prev=(169 168 167 166 165 164 163); i=0
+for n in 170 169 168 167 166 165 164; do
   echo "-- rollback $n"; apply "supabase/rollback/$(rbk $n)"; p=${prev[$i]}; i=$((i+1))
   state $R/rb_after_$n.txt; [ "$p" = "163" ] && exp=$R/state_0163_baseline.txt || exp=$R/state_0$p.txt
   echo "   expected = state before migration $n:"; compare $exp $R/rb_after_$n.txt
@@ -48,6 +48,6 @@ docker exec $C pg_dump -U postgres -d postgres -s > $R/schema_after_full_rollbac
 node security-assessment-2026-10/07-FINAL-REMEDIATION/tools/schema-diff.cjs $R/schema_0163_baseline.sql $R/schema_after_full_rollback.sql | grep -vE "^(EXPECTED|ACTUAL)> +(GRANT|REVOKE|ALTER DEFAULT)" | tee $R/schema_diff_normalised.txt | cut -c1-200
 node security-assessment-2026-10/07-FINAL-REMEDIATION/tools/acl-diff.cjs $R/schema_0163_baseline.sql $R/schema_after_full_rollback.sql > $R/acl_diff_rollback_vs_baseline.txt; tail -1 $R/acl_diff_rollback_vs_baseline.txt; grep -cE "^(TABLE|SEQUENCE)" $R/acl_diff_rollback_vs_baseline.txt | sed "s/^/   table or sequence ACL differences: /"
 echo "== 4. re-apply 164-169"
-for n in 164 165 166 167 168 169; do apply "supabase/migrations/$(mig $n)"; done
+for n in 164 165 166 167 168 169 170; do apply "supabase/migrations/$(mig $n)"; done
 state $R/state_reapplied.txt
 echo "   re-applied final = first final:"; compare $R/state_final_first.txt $R/state_reapplied.txt

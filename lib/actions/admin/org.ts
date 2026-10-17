@@ -38,6 +38,11 @@ export async function createDepartment(fields: {
   if (!fields.name.trim()) return { error: 'Department name is required.' }
 
   const admin = createAdminClient()
+  const refError = await assertRefsInOrg(admin as never, guard.profile!.org_id!, [
+    ...(fields.parent_id ? [{ table: 'departments', id: fields.parent_id, label: 'parent department' }] : []),
+    ...(fields.head_user_id ? [{ table: 'profiles', id: fields.head_user_id, label: 'department head' }] : []),
+  ])
+  if (refError) return { error: refError }
   const { data, error } = await admin
     .from('departments')
     .insert({
@@ -70,6 +75,11 @@ export async function updateDepartment(
   if (guard.error) return { error: guard.error }
 
   const admin = createAdminClient()
+  const refError = await assertRefsInOrg(admin as never, guard.profile!.org_id!, [
+    ...(fields.parent_id ? [{ table: 'departments', id: fields.parent_id, label: 'parent department' }] : []),
+    ...(fields.head_user_id ? [{ table: 'profiles', id: fields.head_user_id, label: 'department head' }] : []),
+  ])
+  if (refError) return { error: refError }
   const update: DepartmentUpdate = {}
   if (fields.name !== undefined) update.name = fields.name.trim()
   if ('code' in fields) update.code = fields.code?.trim() || null

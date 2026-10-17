@@ -7,12 +7,13 @@ import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
-import { rateLimit, getClientIp } from '@/lib/rate-limit'
+import { getClientIp } from '@/lib/rate-limit'
+import { sharedRateLimited } from '@/lib/security/shared-limits'
 import { sendEmail } from '@/lib/email/send'
 import { layout } from '@/lib/email/templates'
 import { escapeHtml } from '@/lib/email/escape'
 import { decideApproval, OWN_REQUEST_MESSAGE, type ApprovalDb } from '@/lib/approvals/decision'
-import { consumeApprovalCode, issueApprovalCode } from '@/lib/approvals/email-code'
+import { consumeApprovalCode, hasUsableApprovalCode, issueApprovalCode } from '@/lib/approvals/email-code'
 import { describeApprovalLink } from '@/lib/approvals/email-state'
 import {
   CODE_MINUTES, LINK_EXPIRED_MESSAGE, VERIFIED_MINUTES, notAuthorisedMessage, isVerified, signVerified, verifiedCookieName, verifyApprovalToken,
@@ -56,8 +57,18 @@ export async function requestApprovalCode(token: string): Promise<Result & { sen
   if (state.kind === 'own_request') return { error: OWN_REQUEST_MESSAGE }
   if (state.kind !== 'pending') return { error: 'This approval is no longer waiting for your decision.' }
 
-  const { limited } = await rateLimit(`approval-code:${v.approvalId}:${v.approverId}`, 3, 10 * 60_000)
+  // Counters are kept in the database (shared by every process, they survive a restart): 3 requests per 10 minutes and 10 per day for this approval and
+  // approver, and, when the caller's address is trustworthy, 20 per 10 minutes for the address (VAPT-044).
+  const ip = await getClientIp()
+  const limited = (await sharedRateLimited(`approval-code:${v.approvalId}:${v.approverId}`, 3, 10 * 60))
+    || (await sharedRateLimited(`approval-code-day:${v.approvalId}:${v.approverId}`, 10, 24 * 3600))
+    || (ip ? await sharedRateLimited(`approval-code-ip:${ip}`, 20, 10 * 60) : false)
   if (limited) return { error: 'A code was sent a moment ago. Please check the e-mail inbox, or wait a few minutes and try again.' }
+
+  // A code that is still valid is not replaced: the approver already has one in their inbox.
+  if (await hasUsableApprovalCode(admin as never, v.approvalId, v.approverId)) {
+    return { error: 'A code was already sent to the approver\'s e-mail address and is still valid. Please check the inbox (and the spam folder); a new one can be requested after it expires.' }
+  }
 
   const { data } = await admin.auth.admin.getUserById(v.approverId)
   const email: string | undefined = data?.user?.email
@@ -79,18 +90,36 @@ export async function requestApprovalCode(token: string): Promise<Result & { sen
   return { sentTo: mask(email) }
 }
 
+/** Tells the approver, at their own address, that wrong codes were typed on their approval link (at most once an hour). */
+async function notifyApproverOfLockout(admin: AnyClient, approvalId: string, approverId: string): Promise<void> {
+  try {
+    if (await sharedRateLimited(`approval-lockout-notice:${approvalId}:${approverId}`, 1, 3600)) return
+    const { data } = await admin.auth.admin.getUserById(approverId)
+    const email: string | undefined = data?.user?.email
+    if (!email) return
+    const html = layout(`
+      <p>Someone typed a wrong verification code several times on your approval link in Citykart Desk, so that code has been locked.</p>
+      <p>If this was not you, you can ignore this e-mail: nobody can approve or reject in your name without the code that is sent only to this address. To decide, open the request in Citykart Desk and sign in.</p>
+    `)
+    await sendEmail({ to: email, subject: 'Citykart Desk: wrong codes were entered on your approval link', html, text: 'Someone typed a wrong verification code several times on your approval link in Citykart Desk, so that code has been locked. If this was not you, you can ignore this e-mail. To decide, open the request in Citykart Desk and sign in.' })
+  } catch { /* the notice is a courtesy; the lock-out itself has already happened */ }
+}
+
 export async function verifyApprovalCode(token: string, code: string): Promise<Result> {
   const v = verifyApprovalToken(token)
   if (!v) return { error: 'This link is not valid.' }
   const ip = await getClientIp()
   const [a, b] = await Promise.all([
-    rateLimit(`approval-verify:${v.approvalId}:${v.approverId}`, 8, 10 * 60_000),
-    ip ? rateLimit(`approval-verify-ip:${ip}`, 30, 10 * 60_000) : Promise.resolve({ limited: false, remaining: 1 }),
+    sharedRateLimited(`approval-verify:${v.approvalId}:${v.approverId}`, 8, 10 * 60),
+    ip ? sharedRateLimited(`approval-verify-ip:${ip}`, 30, 10 * 60) : Promise.resolve(false),
   ])
-  if (a.limited || b.limited) return { error: 'Too many wrong tries. Please wait a few minutes and request a new code.' }
+  if (a || b) return { error: 'Too many wrong tries. Please wait a few minutes and request a new code.' }
   const admin = createAdminClient() as unknown as AnyClient
   const check = await consumeApprovalCode(admin, v.approvalId, v.approverId, code)
-  if (check === 'locked') return { error: 'Too many wrong tries for this code. Please request a new code.' }
+  if (check === 'locked') {
+    await notifyApproverOfLockout(admin, v.approvalId, v.approverId)
+    return { error: 'Too many wrong tries for this code. Please request a new code.' }
+  }
   if (check !== 'ok') return { error: 'That code is not right or has expired.' }
 
   const value = signVerified(v.approvalId, v.approverId)

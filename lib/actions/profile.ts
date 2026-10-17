@@ -8,6 +8,9 @@ import { emailPasswordResetLink } from '@/lib/email/auth-mail'
 import type { TablesUpdate } from '@/types/database'
 import { validateAttachment } from '@/lib/attachments/validate'
 import { buildPublicStorageUrl } from '@/lib/storage/publicUrl'
+import { checkDisplayName, nameKey } from '@/lib/users/display-name'
+import { recordAudit } from '@/lib/syslog/audit'
+import { validateAttachmentServer } from '@/lib/attachments/validate-server'
 
 export async function updateProfile(data: {
   full_name?: string
@@ -24,14 +27,22 @@ export async function updateProfile(data: {
     return { error: 'Not authenticated.' }
   }
 
-  const trimmedName = data.full_name?.trim()
-
-  if (!trimmedName) {
+  if (!data.full_name?.trim()) {
     return {}
   }
 
-  if (trimmedName.length < 2) {
-    return { error: 'Full name must be at least 2 characters.' }
+  const checked = checkDisplayName(data.full_name)
+  if (!checked.ok) return { error: checked.error }
+  const trimmedName = checked.name
+
+  // The name appears next to approvals and comments. A requester may not take the name of a technician, manager or administrator of the organisation
+  // (it would let them pose as that person); staff changing their own name is allowed and audited.
+  const admin = createAdminClient()
+  const { data: me } = await admin.from('profiles').select('role, org_id, full_name').eq('id', user.id).maybeSingle()
+  if (me && me.full_name !== trimmedName && me.role === 'user') {
+    const { data: staff } = await admin.from('profiles').select('full_name').eq('org_id', me.org_id ?? '').neq('role', 'user').eq('is_active', true)
+    const key = nameKey(trimmedName)
+    if ((staff ?? []).some((p) => nameKey(p.full_name ?? '') === key)) return { error: 'That name is already used by a member of staff. Please use your own name.' }
   }
 
   const updateData: Pick<TablesUpdate<'profiles'>, 'full_name' | 'avatar_url'> = {}
@@ -40,13 +51,17 @@ export async function updateProfile(data: {
 
   if (Object.keys(updateData).length === 0) return {}
 
-  const { error } = await supabase
+  // Written by the server after the checks above (migration 170 takes the direct right to change these two columns away from the signed-in user).
+  const { error } = await admin
     .from('profiles')
     .update(updateData)
     .eq('id', user.id)
 
   if (error) {
     return { error: sanitizeError(error, { route: 'profile.ts', fallback: 'Something went wrong. Please try again.' }) }
+  }
+  if (me && me.full_name !== trimmedName) {
+    await recordAudit({ category: 'security', action: 'profile.name_changed', entityType: 'user', entityId: user.id, before: { full_name: me.full_name }, after: { full_name: trimmedName }, actorId: user.id, orgId: me.org_id ?? undefined })
   }
 
   revalidatePath('/profile')
@@ -70,7 +85,7 @@ export async function uploadAvatar(formData: FormData): Promise<{ avatarUrl?: st
   // Buffer-level check: this bucket is public and reachable by any
   // authenticated user, not just admins — confirm the bytes actually match
   // the declared/extension-implied image type before publishing them.
-  const magicByteCheck = await validateAttachment(file)
+  const magicByteCheck = await validateAttachmentServer(file)
   if (!magicByteCheck.valid) return { error: magicByteCheck.error ?? 'File content does not match its declared type.' }
 
   const admin = createAdminClient()
@@ -85,7 +100,7 @@ export async function uploadAvatar(formData: FormData): Promise<{ avatarUrl?: st
 
   const avatarUrl = buildPublicStorageUrl('avatars', storagePath)
 
-  const { error: updateError } = await supabase
+  const { error: updateError } = await admin
     .from('profiles')
     .update({ avatar_url: avatarUrl })
     .eq('id', user.id)

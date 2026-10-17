@@ -22,6 +22,7 @@ import { logger } from '@/lib/observability/logger'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus } from '@/types'
 import type { Database, Json } from '@/types/database'
 import { inBatches } from '@/lib/queries/in-batches'
+import { exportAllowed, auditExportEvent, checkReportConfigShape, EXPORT_LIMIT_MESSAGE } from '@/lib/security/export-guard'
 
 type RequestUpdate = Database['public']['Tables']['requests']['Update']
 
@@ -382,6 +383,7 @@ export async function bulkExportRequests(requestIds: string[]): Promise<{ csv?: 
   if (!profile) return { error: 'Not authenticated.' }
   const picked = cleanBulkIds(requestIds)
   if ('error' in picked) return { error: picked.error }
+  if (!(await exportAllowed(profile.id, 'bulk_requests'))) return { error: EXPORT_LIMIT_MESSAGE }
 
   const supabase = await createClient()
   const { data, error } = await inBatches(picked.ids, (batch) => supabase
@@ -440,6 +442,7 @@ export async function bulkExportRequests(requestIds: string[]): Promise<{ csv?: 
     { key: 'resolution_due_at', label: 'Resolution Due' },
   ])
 
+  await auditExportEvent(profile, 'bulk_requests', rows.length, { requested: picked.ids.length })
   return { csv }
 }
 
@@ -912,11 +915,17 @@ async function staffAmong(supabase: Awaited<ReturnType<typeof createClient>>, id
 
 export async function updateRequestCategory(
   requestId: string,
-  subCategoryId: string
+  subCategoryId: string,
+  reason: string
 ): Promise<ActionResult> {
   const supabase = await createClient()
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
+
+  // Moving a ticket to another sub-category moves its priority and deadlines, so the reason is mandatory and is kept in the history (VAPT-056 / VA-TKT-12).
+  const why = typeof reason === 'string' ? reason.trim() : ''
+  if (why.length < 10) return { error: 'Please say why the sub-category is being changed (at least 10 characters).' }
+  if (why.length > 500) return { error: 'The reason is too long (500 characters at most).' }
 
   const isAgentOrManager =
     profile.role === 'agent' ||
@@ -1011,6 +1020,8 @@ export async function updateRequestCategory(
     metadata:
       {
         sub_category_to: subCat.name,
+        sub_category_from: request.sub_category_id,
+        reason: why,
         ...(newPriority !== oldPriority ? { priority_from: oldPriority, priority_to: newPriority } : {}),
         // the deadlines before and after, so a change of deadline through re-classification can always be seen (VAPT-056)
         response_due_from: request.response_due_at, response_due_to: newResponseDue,

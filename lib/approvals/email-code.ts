@@ -8,7 +8,20 @@ type AnyClient = { from: (t: string) => any }
 
 export type CodeCheck = 'ok' | 'wrong' | 'locked' | 'none'
 
-/** Makes a new code for this approver and approval, cancelling any earlier unused one. Returns the code to e-mail, or null if it could not be stored. */
+/**
+ * Is there a code for this approver that is still usable (not used, not expired, not locked)? Anyone holding the approval link can ask for a new code; if a
+ * usable one exists a new one is NOT made, so a stranger cannot keep cancelling the real approver's code (VAPT-044 / VA-API-13).
+ */
+export async function hasUsableApprovalCode(admin: AnyClient, approvalId: string, approverId: string): Promise<boolean> {
+  const { data } = await admin.from('approval_email_codes')
+    .select('id, attempts')
+    .eq('approval_id', approvalId).eq('approver_id', approverId)
+    .is('used_at', null).gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false }).limit(1).maybeSingle()
+  return !!data && data.attempts < CODE_MAX_ATTEMPTS
+}
+
+/** Makes a new code for this approver and approval (the caller has already checked that no usable code exists; a locked or expired one is cancelled). Returns the code to e-mail, or null if it could not be stored. */
 export async function issueApprovalCode(admin: AnyClient, approvalId: string, approverId: string): Promise<string | null> {
   const now = new Date().toISOString()
   await admin.from('approval_email_codes').update({ used_at: now }).eq('approval_id', approvalId).eq('approver_id', approverId).is('used_at', null)

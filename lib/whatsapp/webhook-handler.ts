@@ -223,6 +223,21 @@ export async function handleWhatsAppInboundMessage(params: {
     }
   }
 
+  // A repeat of a message already handled (a replay, or Meta's retry) does not send the prompt a second time (VAPT-042, observation INT 5) - unless the first
+  // attempt to send it is recorded as failed, in which case the repeat is the recovery.
+  if (result.duplicate) {
+    const { data: failedBefore } = await admin
+      .from('intake_audit_log')
+      .select('id')
+      .eq('org_id', channel.orgId)
+      .eq('action', 'whatsapp_send_failed')
+      .filter('metadata->>externalMessageId', 'eq', message.id)
+      .limit(1)
+    if (!failedBefore || failedBefore.length === 0) {
+      return { kind: 'processed', conversationId: result.conversationId, state: result.state, deliveryFailed: false }
+    }
+  }
+
   const { allDelivered } = await sendAll(client, message.from, result)
   if (!allDelivered) {
     // Step 20 / Part 4 — the requester's state HAS already advanced

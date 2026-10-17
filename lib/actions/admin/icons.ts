@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { validateAttachment } from '@/lib/attachments/validate'
 import { buildPublicStorageUrl } from '@/lib/storage/publicUrl'
+import { validateAttachmentServer } from '@/lib/attachments/validate-server'
 
 // ── Guard: admin-only ─────────────────────────────────────────────────────────
 // Same guard as lib/actions/admin/services.ts's requireAdmin() — deliberately
@@ -40,7 +41,7 @@ export async function uploadIconImage(formData: FormData): Promise<{ url?: strin
 
   // Buffer-level check: this bucket is public — confirm the bytes actually
   // match the declared/extension-implied image type before publishing them.
-  const magicByteCheck = await validateAttachment(file)
+  const magicByteCheck = await validateAttachmentServer(file)
   if (!magicByteCheck.valid) return { error: magicByteCheck.error ?? 'File content does not match its declared type.' }
 
   const admin = createAdminClient()

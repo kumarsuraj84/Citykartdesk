@@ -4,6 +4,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { toCSV } from '@/lib/export/csv'
 import { EVENT_KINDS } from '@/lib/events/record'
+import { exportAllowed, auditExportEvent, checkReportConfigShape, EXPORT_LIMIT_MESSAGE } from '@/lib/security/export-guard'
 
 export interface EventFilters {
   days: number
@@ -80,7 +81,9 @@ export async function listEvents(filters: EventFilters): Promise<{ rows: EventRo
 /** CSV for sharing with support/dev: newest first, up to 50,000 rows. */
 export async function exportEventsCsv(filters: EventFilters): Promise<string> {
   const profile = await requireAdmin()
+  if (!(await exportAllowed(profile.id, 'event_log'))) throw new Error(EXPORT_LIMIT_MESSAGE)
   const rows = await fetchEvents(profile.org_id!, filters, EXPORT_LIMIT)
+  await auditExportEvent(profile, 'event_log', rows.length, filters)
   return toCSV(
     rows.map((r) => ({ ...r, detail: r.detail == null ? '' : JSON.stringify(r.detail) })),
     [

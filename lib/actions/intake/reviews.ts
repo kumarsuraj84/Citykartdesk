@@ -57,6 +57,9 @@ export async function assignReviewer(reviewId: string, userId: string): Promise<
   if (moduleError) return { error: moduleError }
 
   const supabase = (await createClient()) as unknown as AnyClient
+  // the person must be a reviewer (technician or above) of the caller's own organisation (VAPT-048)
+  const { data: target } = await (createAdminClient() as unknown as AnyClient).from('profiles').select('role').eq('id', userId).eq('org_id', profile.org_id).eq('is_active', true).maybeSingle()
+  if (!target || !canReview(target.role)) return { error: 'That person cannot review e-mails in your organisation.' }
   const { error } = await supabase
     .from('intake_reviews')
     .update({ assigned_reviewer_id: userId, state: 'in_review' })

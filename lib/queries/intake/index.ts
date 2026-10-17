@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { prepareMailHtml } from '@/lib/intake/mail-html'
 
 // Intake Intelligence — Phase A read queries.
 // All RLS-respecting (user-session client); org isolation enforced by RLS.
@@ -274,6 +275,11 @@ export async function getIntakeReview(id: string): Promise<{
   // classification join may return an array — normalise to the final one.
   const rawClass = (review as unknown as { classification: unknown }).classification
   const classification = Array.isArray(rawClass) ? rawClass[0] ?? null : rawClass ?? null
+
+  // the mail's HTML is cleaned here, on the server (VAPT-046): the browser never receives remote-content markup
+  const rawMessage = (review as unknown as { message: unknown }).message
+  const msgObj = (Array.isArray(rawMessage) ? rawMessage[0] : rawMessage) as { body_html?: string | null } | null
+  if (msgObj && msgObj.body_html) msgObj.body_html = prepareMailHtml(msgObj.body_html)
 
   return {
     review: { ...(review as unknown as IntakeReviewDetail), classification },
@@ -607,6 +613,8 @@ export async function getInboxMessage(messageId: string): Promise<{
       : Promise.resolve({ data: [] }),
   ])
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((msg as any).body_html) (msg as any).body_html = prepareMailHtml((msg as any).body_html)   // cleaned on the server (VAPT-046)
   return {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     message: { ...(msg as any), review, channel: Array.isArray((msg as any).channel) ? (msg as any).channel[0] ?? null : (msg as any).channel } as InboxMessageDetail,

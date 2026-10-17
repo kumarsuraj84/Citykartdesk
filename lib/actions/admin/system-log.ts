@@ -8,6 +8,7 @@ import { recordAudit } from '@/lib/syslog/audit'
 import { buildClaudeBundle, groupErrors, type ErrorGroup, type LogRowLite } from '@/lib/syslog/bundle'
 import { CATEGORIES, SEVERITIES, SOURCES, OUTCOMES, SYSTEM_LOG_PAGE_SIZE } from '@/lib/syslog/shape'
 import { istStamp } from '@/lib/reporting/ist'
+import { exportAllowed, EXPORT_LIMIT_MESSAGE } from '@/lib/security/export-guard'
 
 // The System Log screen. Reads go through the signed-in administrator's OWN session, so row security (administrators and platform owners of
 // the same organization only) is what limits them, not just the checks here.
@@ -176,6 +177,7 @@ export async function buildErrorBundle(filters: SystemLogFilters): Promise<{ tex
 
 export async function exportSystemLog(filters: SystemLogFilters, format: 'csv' | 'json'): Promise<string> {
   const profile = await requireAdmin()
+  if (!(await exportAllowed(profile.id, 'system_log'))) throw new Error(EXPORT_LIMIT_MESSAGE)
   const supabase = await userClient()
   const { data, error } = await applyFilters(supabase.from('system_log').select(COLUMNS), filters, profile.org_id!)
     .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(EXPORT_LIMIT)

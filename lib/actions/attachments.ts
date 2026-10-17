@@ -6,6 +6,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logActivity } from '@/lib/activity'
 import { validateAttachment, ALLOWED_MIME_SET as ALLOWED_MIME_TYPES, ALLOWED_EXTENSIONS, MAX_FILE_SIZE_BYTES as MAX_FILE_SIZE } from '@/lib/attachments/validate'
+import { uploadAllowed, UPLOAD_LIMIT_MESSAGE } from '@/lib/attachments/quota'
+import { validateAttachmentServer } from '@/lib/attachments/validate-server'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -54,6 +56,7 @@ export async function uploadAttachment(
   const supabase = await createClient()
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'You must be signed in to upload files.' }
+  if (!(await uploadAllowed(profile.id))) return { error: UPLOAD_LIMIT_MESSAGE }
 
   // ── File extraction ───────────────────────────────────────────────────────
   const file = formData.get('file')
@@ -90,7 +93,7 @@ export async function uploadAttachment(
   // this runs server-side, so it can't be bypassed the way the identical
   // client-side check in CommentForm/PendingFileField can (a direct call to
   // this action skips the browser entirely).
-  const magicByteCheck = await validateAttachment(file)
+  const magicByteCheck = await validateAttachmentServer(file)
   if (!magicByteCheck.valid) {
     return { error: magicByteCheck.error ?? 'File content does not match its declared type.' }
   }

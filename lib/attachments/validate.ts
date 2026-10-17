@@ -80,7 +80,7 @@ export interface ValidationResult {
   /** Lets a caller react specifically to "too large" (e.g. a dedicated popup
    *  telling the user to reattach within the limit) without string-matching
    *  the error message. */
-  code?: 'too_large' | 'invalid_type' | 'content_mismatch'
+  code?: 'too_large' | 'invalid_type' | 'content_mismatch' | 'macro' | 'infected' | 'scan_unavailable'
 }
 
 function signaturesMatch(bytes: Uint8Array, signatures: number[][], offset = 0): boolean {

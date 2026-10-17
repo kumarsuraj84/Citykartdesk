@@ -9,6 +9,7 @@ import { getCurrentProfile, getCurrentProfileForPasswordReset } from '@/lib/quer
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { emailPasswordResetLink } from '@/lib/email/auth-mail'
 import { recordAudit } from '@/lib/syslog/audit'
+import { startedByRecentLink } from '@/lib/auth/session-methods'
 
 export async function signInWithPassword(formData: FormData) {
   const supabase = await createClient()
@@ -104,6 +105,18 @@ export async function resetPassword(formData: FormData) {
   }
 
   const supabase = await createClient()
+
+  // This action sets a password WITHOUT asking for the current one, so it is only for the two cases where the person cannot be asked: an account that must
+  // choose its own password (a new account or an administrator's reset), and a session that was just started from a recovery or invitation link. An ordinary
+  // signed-in session has to use "Change password", which checks the current password (VAPT-061 / VA-TKT-18 a).
+  const flagged = await getCurrentProfileForPasswordReset()
+  if (!flagged?.must_reset_password) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!startedByRecentLink(session?.access_token)) {
+      return { error: 'To change your password, use "Change password" in your profile, which asks for your current password.' }
+    }
+  }
+
   const { error } = await supabase.auth.updateUser({ password })
 
   if (error) {

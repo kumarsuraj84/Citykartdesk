@@ -2,6 +2,7 @@
 
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { isAcceptablePushEndpoint } from '@/lib/push/endpoint'
 
@@ -17,11 +18,13 @@ export async function subscribeToPush(sub: PushSubscriptionInput): Promise<{ err
   if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) return { error: 'Invalid subscription.' }
   if (!isAcceptablePushEndpoint(sub.endpoint)) return { error: 'Invalid subscription.' } // D-025: public https push services only
 
-  const supabase = await createClient()
-  // Upsert on endpoint: the same browser/device re-subscribing (e.g. after
-  // clearing site data) should replace its old row, not accumulate one per
-  // permission grant.
-  const { error } = await supabase.from('push_subscriptions').upsert(
+  // Written by the server (migration 170: a signed-in user cannot write this table through the data API, which would skip the address check above).
+  // Upsert on endpoint: the same browser/device re-subscribing (e.g. after clearing site data) should replace its old row, not accumulate one per permission grant.
+  // An endpoint already stored for ANOTHER person is refused (it would take that person's notifications over).
+  const admin = createAdminClient()
+  const { data: existing } = await admin.from('push_subscriptions').select('user_id').eq('endpoint', sub.endpoint).maybeSingle()
+  if (existing && existing.user_id !== profile.id) return { error: 'Invalid subscription.' }
+  const { error } = await admin.from('push_subscriptions').upsert(
     {
       user_id: profile.id,
       org_id: profile.org_id,
@@ -41,8 +44,7 @@ export async function unsubscribeFromPush(endpoint: string): Promise<{ error?: s
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
 
-  const supabase = await createClient()
-  const { error } = await supabase
+  const { error } = await createAdminClient()
     .from('push_subscriptions')
     .delete()
     .eq('endpoint', endpoint)

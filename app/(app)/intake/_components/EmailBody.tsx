@@ -14,7 +14,9 @@ export function EmailBody({ html, text }: { html: string | null; text: string | 
   const [showImages, setShowImages] = useState(false)
 
   const hasHtml = !!html && html.trim().length > 0
-  const hasImages = hasHtml && /<img\b/i.test(html!)
+  // The server has already cleaned the HTML (lib/intake/mail-html.ts): a remote image address arrives as data-remote-src and becomes a real src only below,
+  // after the reader chooses to load images.
+  const hasImages = hasHtml && /data-remote-src=/i.test(html!)
 
   function measure() {
     try {
@@ -24,13 +26,13 @@ export function EmailBody({ html, text }: { html: string | null; text: string | 
   }
 
   if (hasHtml) {
-    const rendered = showImages
-      ? html!
-      : html!
-          .replace(/(<img\b[^>]*?)\ssrc=/gi, '$1 data-blocked-src=')
-          .replace(/(<img\b[^>]*?)\ssrcset=/gi, '$1 data-blocked-srcset=')
+    const rendered = showImages ? html!.replace(/\sdata-remote-src=/gi, ' referrerpolicy="no-referrer" src=') : html!
+    // A second barrier inside the frame (VAPT-046): nothing can load or navigate except what is listed. Web images only after "Load images".
+    const csp = "default-src 'none'; style-src 'unsafe-inline'; img-src data: cid:" + (showImages ? ' https: http:' : '') +
+      "; font-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'"
 
     const srcDoc = `<!doctype html><html><head>
+      <meta http-equiv="Content-Security-Policy" content="${csp}">
       <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
       <base target="_blank">
       <style>
