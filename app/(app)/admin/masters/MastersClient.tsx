@@ -184,7 +184,7 @@ export function MastersClient({ googleResult, connection, sources, issues, templ
               {!connected && <p className="mt-1 text-xs text-red-600">{connection.last_error ?? 'Google no longer accepts the saved connection.'} Connect again.</p>}
             </div>
             <div className="flex gap-2">
-              <a href="/api/masters/oauth/start" className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground"><Link2 className="h-3.5 w-3.5" />{connected ? 'Connect again' : 'Connect Google Sheets'}</a>
+              <a href="/api/masters/oauth/start" className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground"><Link2 className="h-3.5 w-3.5" />{connected ? 'Use another Google account' : 'Connect again'}</a>
               <button type="button" disabled={pending} onClick={() => start(async () => { await disconnectGoogleSheets(); window.location.reload() })} className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm text-foreground"><Unplug className="h-3.5 w-3.5" />Disconnect</button>
             </div>
           </div>
