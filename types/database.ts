@@ -2540,6 +2540,7 @@ export type Database = {
           id: string
           org_id: string
           name: string
+          kind: string
           emails: string[]
           email_subject_template: string | null
           email_body_template: string | null
@@ -2551,6 +2552,7 @@ export type Database = {
           id?: string
           org_id: string
           name: string
+          kind?: string
           emails?: string[]
           email_subject_template?: string | null
           email_body_template?: string | null
@@ -2562,6 +2564,7 @@ export type Database = {
           id?: string
           org_id?: string
           name?: string
+          kind?: string
           emails?: string[]
           email_subject_template?: string | null
           email_body_template?: string | null
@@ -2600,6 +2603,8 @@ export type Database = {
           priority_list: string | null
           festival: string | null
           oem_id: string | null
+          genset_oem_id: string | null
+          cvm_id: string | null
           is_active: boolean
           created_at: string
           updated_at: string
@@ -2624,6 +2629,8 @@ export type Database = {
           priority_list?: string | null
           festival?: string | null
           oem_id?: string | null
+          genset_oem_id?: string | null
+          cvm_id?: string | null
           is_active?: boolean
           created_at?: string
           updated_at?: string
@@ -2648,6 +2655,8 @@ export type Database = {
           priority_list?: string | null
           festival?: string | null
           oem_id?: string | null
+          genset_oem_id?: string | null
+          cvm_id?: string | null
           is_active?: boolean
           created_at?: string
           updated_at?: string
@@ -4419,6 +4428,8 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          auto_oem_kind: string | null
+          auto_cvm_approval: boolean
           org_id: string | null
           slug: string
           sort_order: number
@@ -4432,6 +4443,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          auto_oem_kind?: string | null
+          auto_cvm_approval?: boolean
           org_id?: string | null
           slug: string
           sort_order?: number
@@ -4445,6 +4458,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          auto_oem_kind?: string | null
+          auto_cvm_approval?: boolean
           org_id?: string | null
           slug?: string
           sort_order?: number

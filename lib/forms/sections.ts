@@ -77,6 +77,19 @@ export function requesterCanSet(field: FormField): boolean {
   return field.requester_can_set !== false
 }
 
+/** Whether the field applies to a ticket of this category. A field with no category list applies to every category; one with a list applies only when the category is in it
+ *  (no category chosen yet = not applicable). */
+export function fieldAppliesToCategory(field: FormField, categoryId: string | null | undefined): boolean {
+  const only = field.show_for_categories
+  if (!Array.isArray(only) || only.length === 0) return true
+  return !!categoryId && only.includes(categoryId)
+}
+
+/** The sections with the fields that do not apply to this category removed. */
+export function filterSectionsForCategory(sections: FormSection[], categoryId: string | null | undefined): FormSection[] {
+  return sections.map((s) => ({ ...s, fields: s.fields.filter((f) => fieldAppliesToCategory(f, categoryId)) }))
+}
+
 /** required && the requester can actually see and fill it in themselves. */
 export function isRequesterMandatory(field: FormField): boolean {
   return field.required && requesterCanView(field) && requesterCanSet(field)

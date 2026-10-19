@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# LOCAL ONLY - rehearsal of migrations 164-169 on the DISPOSABLE audit database (container supabase_db_ckdesk_audit).
+# LOCAL ONLY - rehearsal of migrations 164-172 on the DISPOSABLE audit database (container supabase_db_ckdesk_audit).
 #   1. rebuild the database from migrations 0-163 (= what production has today), record the baseline
 #   2. apply 164..169 one by one, record the privilege + policy state after each
 #   3. roll back 169..164 in reverse order; after each rollback the state must equal the state recorded before that migration
@@ -17,7 +17,7 @@ SKIP_RESET="${SKIP_RESET:-0}"
 # LIVE_START=1: before migration 164 the table / function rights of the rehearsal database are set to what the LIVE database holds (read-only snapshot, align-to-live.sql),
 # so the whole proof is repeated from production's real starting point. Results go to rehearsal/live-start/.
 ALIGN=""
-if [ "${LIVE_START:-0}" = "1" ]; then ALIGN=$R/align-to-live.sql; R=$R/live-start; mkdir -p $R; cp $ALIGN $R/ 2>/dev/null; fi
+if [ "${LIVE_START:-0}" = "1" ]; then ALIGN=$R/align-to-live-full.sql; [ -f "$ALIGN" ] || ALIGN=$R/align-to-live.sql; R=$R/live-start; mkdir -p $R; cp $ALIGN $R/ 2>/dev/null; fi
 
 state() {
   docker cp $PRIVS $C:/var/tmp/privs.sql >/dev/null
@@ -39,15 +39,21 @@ if [ "$SKIP_RESET" != "1" ]; then
   npx supabase db reset --workdir audit-2026-10/env 2>&1 | tail -2
   sleep 5
 fi
-if [ -n "$ALIGN" ]; then echo "== aligning rights to the live database"; apply "$ALIGN"; fi
+if [ -n "$ALIGN" ]; then
+  echo "== aligning rights to the live database (tables, columns, sequences, functions, default privileges)"
+  # tolerant: a statement for an object that exists only on the live system (for example an extension function) is counted, not fatal
+  ERRS=$(docker exec -i $C psql -U postgres -d postgres -q < "$ALIGN" 2>&1 | grep -c "^ERROR")
+  echo "   statements that did not apply (objects only on live): $ERRS"
+  docker restart supabase_rest_ckdesk_audit >/dev/null
+fi
 docker exec $C pg_dump -U postgres -d postgres -s > $R/schema_0163_baseline.sql
 state $R/state_0163_baseline.txt
-for n in 164 165 166 167 168 169 170 171; do echo "== forward $n"; apply "supabase/migrations/$(mig $n)"; state $R/state_0$n.txt; done
-cp $R/state_0171.txt $R/state_final_first.txt
+for n in 164 165 166 167 168 169 170 171 172 173; do echo "== forward $n"; apply "supabase/migrations/$(mig $n)"; state $R/state_0$n.txt; done
+cp $R/state_0173.txt $R/state_final_first.txt
 
 echo "== 3. rollback in reverse order"
-prev=(170 169 168 167 166 165 164 163); i=0
-for n in 171 170 169 168 167 166 165 164; do
+prev=(172 171 170 169 168 167 166 165 164 163); i=0
+for n in 173 172 171 170 169 168 167 166 165 164; do
   echo "-- rollback $n"; apply "supabase/rollback/$(rbk $n)"; p=${prev[$i]}; i=$((i+1))
   state $R/rb_after_$n.txt; [ "$p" = "163" ] && exp=$R/state_0163_baseline.txt || exp=$R/state_0$p.txt
   echo "   expected = state before migration $n:"; compare $exp $R/rb_after_$n.txt
@@ -57,7 +63,7 @@ echo "-- full schema + ACL comparison after the complete rollback (baseline vs r
 docker exec $C pg_dump -U postgres -d postgres -s > $R/schema_after_full_rollback.sql
 node security-assessment-2026-10/07-FINAL-REMEDIATION/tools/schema-diff.cjs $R/schema_0163_baseline.sql $R/schema_after_full_rollback.sql | grep -vE "^(EXPECTED|ACTUAL)> +(GRANT|REVOKE|ALTER DEFAULT)" | tee $R/schema_diff_normalised.txt | cut -c1-200
 node security-assessment-2026-10/07-FINAL-REMEDIATION/tools/acl-diff.cjs $R/schema_0163_baseline.sql $R/schema_after_full_rollback.sql > $R/acl_diff_rollback_vs_baseline.txt; tail -1 $R/acl_diff_rollback_vs_baseline.txt; grep -cE "^(TABLE|SEQUENCE)" $R/acl_diff_rollback_vs_baseline.txt | sed "s/^/   table or sequence ACL differences: /"
-echo "== 4. re-apply 164-171"
-for n in 164 165 166 167 168 169 170 171; do apply "supabase/migrations/$(mig $n)"; done
+echo "== 4. re-apply 164-173"
+for n in 164 165 166 167 168 169 170 171 172 173; do apply "supabase/migrations/$(mig $n)"; done
 state $R/state_reapplied.txt
 echo "   re-applied final = first final:"; compare $R/state_final_first.txt $R/state_reapplied.txt

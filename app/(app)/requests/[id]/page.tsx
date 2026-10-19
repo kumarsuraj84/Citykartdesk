@@ -10,6 +10,7 @@ import {
 import { redirect } from 'next/navigation'
 import { AGENT_QUEUE_PATH, REQUESTS_PATH, safeOrigin, defaultTicketOrigin, ticketHref } from '@/lib/requests/origin'
 import { getCurrentProfile, getTeamMembers } from '@/lib/queries/profiles'
+import { suggestedCvmForRequest } from '@/lib/cvm/suggest'
 import { getRequestById, getRequestActivity, getRequestComments, getRequestCollaborators, getRelatedRequests, getCsatSurveyForRequest } from '@/lib/queries/requests'
 import { getRequestAttachments } from '@/lib/queries/attachments'
 import { getApprovalsForRequest } from '@/lib/queries/approvals'
@@ -36,7 +37,7 @@ import { ResolvedReopenBanner } from '@/components/requests/ResolvedReopenBanner
 import { getResolvedReopenWindowHours } from '@/lib/settings/reopenWindow'
 import { MarkRequestNotificationsRead } from '@/components/requests/MarkRequestNotificationsRead'
 import { getActiveTimer } from '@/lib/actions/requests'
-import { filterFieldsForRequester, filterFlatFieldsForRequester } from '@/lib/forms/sections'
+import { filterFieldsForRequester, filterFlatFieldsForRequester, filterSectionsForCategory, fieldAppliesToCategory } from '@/lib/forms/sections'
 import { formatRelativeTime, formatDateTime } from '@/lib/utils'
 import { STATUS_LABELS, TERMINAL_STATUSES } from '@/lib/constants/requests'
 import type {
@@ -388,6 +389,8 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
     profile.role === 'platform_owner' ||
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
   const isRequester = request.requester_id === profile.id
+  // the CVM of the requester's store, offered as the approver when a technician sends this ticket for approval (technicians and managers only)
+  const suggestedApprover = isAgent ? await suggestedCvmForRequest({ requesterId: request.requester_id, orgId: profile.org_id, viewerId: profile.id }) : null
 
   // Opened without saying which list it came from (an email or notification link, search,
   // approvals)? A ticket the viewer works on belongs to Agent Requests, one they raised to
@@ -436,8 +439,10 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
   // A requester never sees a technician-only (requester_can_view === false)
   // field, on the create form or here when revisiting their own request —
   // an agent viewer sees everything, including the fields the requester can't.
-  const formSchema   = isAgent ? formSchemaRaw   : filterFlatFieldsForRequester(formSchemaRaw)
-  const formSections = isAgent ? formSectionsRaw : filterFieldsForRequester(formSectionsRaw)
+  // a field limited to certain categories (for example Qty for fixtures) is not shown on a ticket of another category
+  const ticketCategoryId = (request as { category_id?: string | null }).category_id ?? null
+  const formSchema   = (isAgent ? formSchemaRaw   : filterFlatFieldsForRequester(formSchemaRaw)).filter((f) => fieldAppliesToCategory(f, ticketCategoryId))
+  const formSections = filterSectionsForCategory(isAgent ? formSectionsRaw : filterFieldsForRequester(formSectionsRaw), ticketCategoryId)
   const formData = (request.form_data ?? {}) as Record<string, unknown>
   // The Description a requester actually fills in lives in form_data as a
   // template textarea field, not requests.description (that column is only
@@ -1006,6 +1011,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
             respondedAt={request.responded_at}
             resolvedAt={request.resolved_at}
             waitingSince={request.waiting_since}
+            suggestedApprover={suggestedApprover}
           />
           </div>
         </div>

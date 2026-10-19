@@ -9,7 +9,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select'
 import { createRequest, searchOrgMembers } from '@/lib/actions/requests'
 import { uploadAttachment } from '@/lib/actions/attachments'
 import { validateFields } from '@/lib/validation/formFields'
-import { resolveServiceFormSections, filterFieldsForRequester } from '@/lib/forms/sections'
+import { resolveServiceFormSections, filterFieldsForRequester, filterSectionsForCategory } from '@/lib/forms/sections'
 import type { AllowedSubCategory, FormField, FormSection, ServiceWithRelations } from '@/types'
 
 interface DynamicFormProps {
@@ -284,11 +284,14 @@ export const DynamicForm = forwardRef<DynamicFormHandle, DynamicFormProps>(funct
   // Technician-only fields (requester_can_view === false) never reach the
   // requester's create-request form at all — filtered here so they're absent
   // from values/validation/rendering all at once.
-  const sections = filterFieldsForRequester(resolveServiceFormSections(service))
+  const sectionsForAnyCategory = filterFieldsForRequester(resolveServiceFormSections(service))
+  // A field limited to certain categories (for example Qty for fixtures) appears only after one of them is chosen, and is then checked like any other field.
+  const sections = filterSectionsForCategory(sectionsForAnyCategory, categoryId)
   const allFields: FormField[] = flattenSections(sections)
+  const everyField: FormField[] = flattenSections(sectionsForAnyCategory)
 
   const [values, setValues] = useState<Record<string, FieldValue>>(() =>
-    Object.fromEntries(allFields.map((f) =>
+    Object.fromEntries(everyField.map((f) =>
       [f.id, f.type === 'store_address' ? (currentUserStoreAddress ?? '') : getDefaultValue(f)]
     ))
   )
@@ -321,6 +324,9 @@ export const DynamicForm = forwardRef<DynamicFormHandle, DynamicFormProps>(funct
     const fileFields = allFields.filter((f) => f.type === 'file')
     const submittableValues: Record<string, FieldValue> = { ...values }
     for (const f of fileFields) delete submittableValues[f.id]
+    // answers of fields that do not apply to the chosen category (it may have been changed after typing them) are not sent
+    const shown = new Set(allFields.map((f) => f.id))
+    for (const f of everyField) if (!shown.has(f.id)) delete submittableValues[f.id]
 
     const formData = new FormData()
     formData.set('service_id', service.id)

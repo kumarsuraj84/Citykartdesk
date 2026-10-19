@@ -1,4 +1,4 @@
-statements only in expected: 191; only in actual: 194
+statements only in expected: 192; only in actual: 193
 EXPECTED> CREATE TABLE public.approval_workflow_steps ( id uuid DEFAULT gen_random_uuid() NOT NULL, workflow_id uuid NOT NULL, step_order integer NOT NULL, approver_type public.approver_type NOT NULL, approver_user_id uuid, CONSTRAINT approver_ref_check CHECK ((((approv
 ACTUAL>   CREATE TABLE public.approval_workflow_steps ( id uuid DEFAULT gen_random_uuid() NOT NULL, workflow_id uuid NOT NULL, step_order integer NOT NULL, approver_type public.approver_type NOT NULL, approver_user_id uuid, added_by uuid, CONSTRAINT approver_ref_check C
 ACTUAL>   ALTER TABLE ONLY public.approval_workflow_steps ADD CONSTRAINT approval_workflow_steps_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id) ON DELETE SET NULL

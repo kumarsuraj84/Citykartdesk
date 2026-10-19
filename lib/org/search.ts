@@ -11,10 +11,10 @@ const join = (parts: (string | number | null | undefined)[]): string => parts.fi
 /** A store by its code, name, address, city, state, pincode, cluster, region, priority list, AMC brand or vendor, or its OEM. */
 export function matchesStoreSearch(
   s: { code: string; name: string; address?: string | null; city?: string | null; state?: string | null; pincode?: string | null; cluster?: string | null; region?: string | null
-    priority_list?: string | null; ac_amc_brand?: string | null; ac_amc_vendor?: string | null; oem_name?: string | null },
+    priority_list?: string | null; ac_amc_brand?: string | null; ac_amc_vendor?: string | null; oem_name?: string | null; genset_oem_name?: string | null; cvm_name?: string | null },
   query: string,
 ): boolean {
-  return hasAll(join([s.code, s.name, s.address, s.city, s.state, s.pincode, s.cluster, s.region, s.priority_list, s.ac_amc_brand, s.ac_amc_vendor, s.oem_name]), query)
+  return hasAll(join([s.code, s.name, s.address, s.city, s.state, s.pincode, s.cluster, s.region, s.priority_list, s.ac_amc_brand, s.ac_amc_vendor, s.oem_name, s.genset_oem_name, s.cvm_name]), query)
 }
 
 /** An OEM by its name or one of its e-mail addresses. */

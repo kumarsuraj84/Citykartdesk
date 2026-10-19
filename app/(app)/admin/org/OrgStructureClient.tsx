@@ -12,8 +12,10 @@ import {
   createStore, updateStore, deleteStore,
 } from '@/lib/actions/admin/org'
 import { createOem, updateOem, deleteOem, setOemStores } from '@/lib/actions/admin/oems'
+import { setCvmStores } from '@/lib/actions/admin/cvm'
 import { exportStores } from '@/lib/actions/export'
 import { planStoreAssignment } from '@/lib/oems/store-assignment'
+import { OEM_KINDS, OEM_KIND_LABEL, isOemKind, type OemKind } from '@/lib/oems/kinds'
 import { ImportModal } from '@/components/ui/ImportModal'
 import { StoreMasterUploadModal } from '@/components/admin/StoreMasterUploadModal'
 import { ExportButton } from '@/components/requests/ExportButton'
@@ -821,9 +823,9 @@ function FormTextarea({ label, value, onChange, placeholder, rows = 3, hint }: {
 }
 
 const OEM_TEMPLATE_PLACEHOLDERS =
-  '{{ticket_no}}, {{subject}}, {{description}}, {{requester_name}}, {{requester_email}}, {{requester_phone}}, {{store_address}}'
+  '{{ticket_no}}, {{subject}}, {{description}}, {{requester_name}}, {{requester_email}}, {{requester_phone}}, {{store_address}}, {{category}}'
 
-interface OemFormValues { name: string; emails: string; email_subject_template: string; email_body_template: string; is_active: boolean }
+interface OemFormValues { name: string; kind: OemKind; emails: string; email_subject_template: string; email_body_template: string; is_active: boolean }
 
 function OemForm({ f, setF, onSubmit, onCancel, submitLabel, pending }: {
   f: OemFormValues; setF: (v: OemFormValues) => void; onSubmit: (e: React.FormEvent) => void; onCancel: () => void; submitLabel: string
@@ -831,7 +833,18 @@ function OemForm({ f, setF, onSubmit, onCancel, submitLabel, pending }: {
 }) {
   return (
     <form onSubmit={onSubmit} className="space-y-3">
-      <FormInput label="OEM Name" value={f.name} onChange={v => setF({ ...f, name: v })} required placeholder="e.g. Voltas AC Service" />
+      <FormInput label="OEM Name" value={f.name} onChange={v => setF({ ...f, name: v })} required placeholder="e.g. AC - Voltas   or   Genset - Cummins" />
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium text-muted-foreground">OEM type</span>
+        <select
+          value={f.kind}
+          onChange={e => setF({ ...f, kind: isOemKind(e.target.value) ? e.target.value : 'ac' })}
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          {OEM_KINDS.map(k => <option key={k} value={k}>{OEM_KIND_LABEL[k]} OEM</option>)}
+        </select>
+        <span className="text-[11px] text-muted-foreground">A store has one AC OEM and one Genset OEM. The type decides which of the two this OEM is. It cannot be changed while stores are mapped to it.</span>
+      </label>
       <FormTextarea
         label="Notification Emails"
         value={f.emails}
@@ -839,7 +852,7 @@ function OemForm({ f, setF, onSubmit, onCancel, submitLabel, pending }: {
         placeholder={'one address per line, e.g.\nservice@voltas.com\nescalation@voltas.com'}
         hint="One email per line (or comma-separated). Every time a ticket routes to this OEM, one email goes to all of these addresses together."
       />
-      <FormInput label="Email Subject Template" value={f.email_subject_template} onChange={v => setF({ ...f, email_subject_template: v })} placeholder={`New AC Issue — {{ticket_no}}`} />
+      <FormInput label="Email Subject Template" value={f.email_subject_template} onChange={v => setF({ ...f, email_subject_template: v })} placeholder={f.kind === 'genset' ? `New Genset Issue — {{ticket_no}}` : `New AC Issue — {{ticket_no}}`} />
       <RichEmailEditor
         label="Email Body Template"
         value={f.email_body_template}
@@ -871,34 +884,46 @@ function OemStoresPanel({ oem, stores, oems, onClose }: { oem: OemRow; stores: S
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(stores.filter(s => s.oem_id === oem.id).map(s => s.id)))
+  // A store has one slot per OEM type: this panel works on the slot of THIS OEM's type only (AC OEM → the store's AC OEM, Genset OEM → its Genset OEM).
+  const slotOf = (s: StoreRow) => (oem.kind === 'genset' ? s.genset_oem_id : s.oem_id)
+  const kindLabel = OEM_KIND_LABEL[oem.kind]
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(stores.filter(s => slotOf(s) === oem.id).map(s => s.id)))
+  const [confirmed, setConfirmed] = useState(false)
 
   const oemName = (id: string | null) => oems.find(o => o.id === id)?.name ?? null
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return stores
-    return stores.filter(s => [s.code, s.name, s.city, s.state, s.pincode, oemName(s.oem_id)].filter(Boolean).join(' ').toLowerCase().includes(q))
+    return stores.filter(s => [s.code, s.name, s.city, s.state, s.pincode, oemName(slotOf(s))].filter(Boolean).join(' ').toLowerCase().includes(q))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stores, search, oems])
 
-  const plan = useMemo(() => planStoreAssignment(stores, selected, oem.id), [stores, selected, oem.id])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const plan = useMemo(() => planStoreAssignment(stores.map(s => ({ id: s.id, oem_id: slotOf(s) })), selected, oem.id), [stores, selected, oem.id])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const replaced = useMemo(() => plan.moved.map(m => ({ store: stores.find(s => s.id === m.storeId)?.code ?? m.storeId, from: oemName(m.fromOemId) ?? 'another OEM' })), [plan, stores, oems])
   const changes = plan.toAssign.length + plan.toUnassign.length
 
   function toggle(id: string) {
+    setConfirmed(false)
     setSelected(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
   }
   function setShown(on: boolean) {
+    setConfirmed(false)
     setSelected(prev => { const next = new Set(prev); for (const s of visible) { if (on) next.add(s.id); else next.delete(s.id) } return next })
   }
 
   function handleSave() {
     setError(null); setDone(null)
+    // Replacing the OEM a store already has (of this type) needs a second, deliberate click that names the stores.
+    if (plan.moved.length > 0 && !confirmed) { setConfirmed(true); return }
     startTransition(async () => {
       const res = await setOemStores(oem.id, [...selected])
       if (res.error) { setError(res.error); return }
       const d = res.data!
-      setDone(`Saved: ${d.assigned} added${d.moved ? ` (${d.moved} moved from another OEM)` : ''}, ${d.removed} removed.`)
+      setConfirmed(false)
+      setDone(`Saved: ${d.assigned} added${d.moved ? ` (${d.moved} replaced another ${kindLabel} OEM)` : ''}, ${d.removed} removed.`)
     })
   }
 
@@ -907,7 +932,7 @@ function OemStoresPanel({ oem, stores, oems, onClose }: { oem: OemRow; stores: S
   return (
     <div className="px-4 py-3 border-b border-border/50 bg-muted/20 space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <p className="text-sm font-semibold text-foreground">Stores for {oem.name}</p>
+        <p className="text-sm font-semibold text-foreground">Stores for {oem.name} <span className="font-normal text-muted-foreground">({kindLabel} OEM: sets each store&apos;s {kindLabel} OEM)</span></p>
         <span className="text-xs text-muted-foreground">{selected.size} selected of {stores.length}</span>
         <input
           type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search code, name, city, state, OEM…"
@@ -922,7 +947,7 @@ function OemStoresPanel({ oem, stores, oems, onClose }: { oem: OemRow; stores: S
         {visible.length === 0 ? (
           <p className="px-4 py-6 text-center text-xs text-muted-foreground">No stores match.</p>
         ) : visible.map(s => {
-          const other = s.oem_id && s.oem_id !== oem.id ? oemName(s.oem_id) : null
+          const other = slotOf(s) && slotOf(s) !== oem.id ? oemName(slotOf(s)) : null
           return (
             <label key={s.id} className="flex cursor-pointer items-center gap-3 border-b border-border/40 last:border-0 px-3 py-1.5 text-xs hover:bg-muted/30">
               <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggle(s.id)} />
@@ -930,7 +955,7 @@ function OemStoresPanel({ oem, stores, oems, onClose }: { oem: OemRow; stores: S
               <span className="min-w-0 flex-1 truncate">{s.name}{s.city ? ` · ${s.city}` : ''}</span>
               {other && (
                 <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${selected.has(s.id) ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-muted text-muted-foreground'}`}>
-                  {selected.has(s.id) ? `moves from ${other}` : `with ${other}`}
+                  {selected.has(s.id) ? `replaces ${other}` : `${kindLabel} OEM: ${other}`}
                 </span>
               )}
               {!s.is_active && <span className="shrink-0 text-[10px] text-muted-foreground">inactive</span>}
@@ -939,16 +964,22 @@ function OemStoresPanel({ oem, stores, oems, onClose }: { oem: OemRow; stores: S
         })}
       </div>
 
+      {plan.moved.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <p className="font-semibold">{plan.moved.length} store{plan.moved.length === 1 ? '' : 's'} already {plan.moved.length === 1 ? 'has' : 'have'} a {kindLabel} OEM. Saving will REPLACE it with {oem.name}:</p>
+          <p className="mt-0.5">{replaced.slice(0, 12).map(r => `${r.store} (now ${r.from})`).join(', ')}{replaced.length > 12 ? `, and ${replaced.length - 12} more` : ''}</p>
+        </div>
+      )}
       {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
       {done && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">{done}</p>}
 
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={handleSave} disabled={pending || changes === 0} className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50">
-          {pending ? 'Saving…' : 'Save stores'}
+          {pending ? 'Saving…' : plan.moved.length > 0 && confirmed ? `Confirm: replace ${plan.moved.length} OEM${plan.moved.length === 1 ? '' : 's'} and save` : 'Save stores'}
         </button>
         <button type="button" onClick={onClose} className="rounded border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/40">Close</button>
         <span className="text-xs text-muted-foreground">
-          {changes === 0 ? 'No changes yet.' : `${plan.toAssign.length} to add${plan.moved.length ? ` (${plan.moved.length} moving from another OEM)` : ''}, ${plan.toUnassign.length} to remove.`}
+          {changes === 0 ? 'No changes yet.' : `${plan.toAssign.length} to add${plan.moved.length ? ` (${plan.moved.length} replacing another ${kindLabel} OEM)` : ''}, ${plan.toUnassign.length} to remove.`}
         </span>
       </div>
     </div>
@@ -968,7 +999,7 @@ function OemsTab({ oems, stores }: { oems: OemRow[]; stores: StoreRow[] }) {
   // (an OEM being edited stays in the list even when the search no longer matches it)
   const shown = oems.filter(o => o.id === editId || matchesOemSearch(o, search))
 
-  const blank: OemFormValues = { name: '', emails: '', email_subject_template: '', email_body_template: '', is_active: true }
+  const blank: OemFormValues = { name: '', kind: 'ac', emails: '', email_subject_template: '', email_body_template: '', is_active: true }
   const [addF, setAddF] = useState(blank)
   const [editF, setEditF] = useState(blank)
 
@@ -976,6 +1007,7 @@ function OemsTab({ oems, stores }: { oems: OemRow[]; stores: StoreRow[] }) {
     setEditId(o.id)
     setEditF({
       name: o.name,
+      kind: o.kind,
       emails: o.emails.join('\n'),
       email_subject_template: o.email_subject_template ?? '',
       email_body_template: o.email_body_template ?? '',
@@ -991,6 +1023,7 @@ function OemsTab({ oems, stores }: { oems: OemRow[]; stores: StoreRow[] }) {
     setDuplicateOf(o.name)
     setAddF({
       name: `${o.name} (Copy)`,
+      kind: o.kind,
       emails: o.emails.join('\n'),
       email_subject_template: o.email_subject_template ?? '',
       email_body_template: o.email_body_template ?? '',
@@ -1006,6 +1039,7 @@ function OemsTab({ oems, stores }: { oems: OemRow[]; stores: StoreRow[] }) {
     startTransition(async () => {
       const res = await createOem({
         name: addF.name,
+        kind: addF.kind,
         emails: parseEmails(addF.emails),
         email_subject_template: addF.email_subject_template || null,
         email_body_template: addF.email_body_template || null,
@@ -1023,6 +1057,7 @@ function OemsTab({ oems, stores }: { oems: OemRow[]; stores: StoreRow[] }) {
     startTransition(async () => {
       const res = await updateOem(editId, {
         name: editF.name,
+        kind: editF.kind,
         emails: parseEmails(editF.emails),
         email_subject_template: editF.email_subject_template || null,
         email_body_template: editF.email_body_template || null,
@@ -1085,9 +1120,12 @@ function OemsTab({ oems, stores }: { oems: OemRow[]; stores: StoreRow[] }) {
               </div>
             ) : (
               <div className="grid grid-cols-[1fr_1.4fr_80px_80px_290px] items-center gap-x-4 border-b border-border/50 last:border-0 px-4 py-3">
-                <TableCell>{o.name}</TableCell>
+                <div className="min-w-0">
+                  <TableCell>{o.name}</TableCell>
+                  <span className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${o.kind === 'genset' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-sky-50 text-sky-700 border border-sky-200'}`}>{OEM_KIND_LABEL[o.kind]} OEM</span>
+                </div>
                 <TableCell className="text-muted-foreground text-xs truncate">{o.emails.length > 0 ? o.emails.join(', ') : '—'}</TableCell>
-                <TableCell className="text-muted-foreground text-xs">{stores.filter(st => st.oem_id === o.id).length}</TableCell>
+                <TableCell className="text-muted-foreground text-xs">{stores.filter(st => (o.kind === 'genset' ? st.genset_oem_id : st.oem_id) === o.id).length}</TableCell>
                 <div><ActiveBadge active={o.is_active} /></div>
                 <div className="flex gap-1.5">
                   <button onClick={() => setStoresFor(storesFor === o.id ? null : o.id)} className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100">Assign stores</button>
@@ -1114,6 +1152,88 @@ function OemsTab({ oems, stores }: { oems: OemRow[]; stores: StoreRow[] }) {
   )
 }
 
+// Assign stores to a CVM: tick the stores this CVM looks after. One CVM can have many stores, a store has only ONE CVM, so ticking a store that already
+// has another CVM replaces it: the screen names those stores first and the button needs a second, deliberate click.
+function CvmStoresPanel({ cvmOptions, stores, onClose }: { cvmOptions: UserOption[]; stores: StoreRow[]; onClose: () => void }) {
+  const [pending, startTransition] = useTransition()
+  const [cvmId, setCvmId] = useState('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [confirmed, setConfirmed] = useState(false)
+  const [search, setSearch] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+
+  function pick(id: string) {
+    setCvmId(id); setConfirmed(false); setDone(null); setError(null)
+    setSelected(new Set(stores.filter(s => id && s.cvm_id === id).map(s => s.id)))
+  }
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return q ? stores.filter(s => [s.code, s.name, s.city, s.state, s.cvm_name].filter(Boolean).join(' ').toLowerCase().includes(q)) : stores
+  }, [stores, search])
+  const plan = useMemo(() => planStoreAssignment(stores.map(s => ({ id: s.id, oem_id: s.cvm_id })), selected, cvmId), [stores, selected, cvmId])
+  const replaced = plan.moved.map(m => { const st = stores.find(s => s.id === m.storeId); return { store: st?.code ?? m.storeId, from: st?.cvm_name ?? 'another CVM' } })
+  const changes = plan.toAssign.length + plan.toUnassign.length
+  const cvmName = cvmOptions.find(c => c.id === cvmId)?.full_name ?? ''
+
+  function toggle(id: string) { setConfirmed(false); setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n }) }
+  function handleSave() {
+    setError(null); setDone(null)
+    if (plan.moved.length > 0 && !confirmed) { setConfirmed(true); return }
+    startTransition(async () => {
+      const res = await setCvmStores(cvmId, [...selected])
+      if (res.error) { setError(res.error); return }
+      const d = res.data!
+      setConfirmed(false)
+      setDone(`Saved: ${d.assigned} added${d.moved ? ` (${d.moved} replaced another CVM)` : ''}, ${d.removed} removed.`)
+    })
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-sm font-semibold text-foreground">Assign stores to a CVM</p>
+        <select value={cvmId} onChange={e => pick(e.target.value)} className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs">
+          <option value="">Choose the CVM…</option>
+          {cvmOptions.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+        </select>
+        {cvmId && <span className="text-xs text-muted-foreground">{selected.size} store{selected.size === 1 ? '' : 's'} selected</span>}
+        {cvmId && <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search code, name, city, CVM…" className="min-w-[200px] flex-1 max-w-sm rounded-lg border border-border bg-background px-3 py-1.5 text-xs" />}
+      </div>
+      {cvmId && (
+        <div className="max-h-72 overflow-y-auto rounded-lg border border-border bg-card">
+          {visible.map(s => {
+            const other = s.cvm_id && s.cvm_id !== cvmId ? s.cvm_name : null
+            return (
+              <label key={s.id} className="flex cursor-pointer items-center gap-3 border-b border-border/40 last:border-0 px-3 py-1.5 text-xs hover:bg-muted/30">
+                <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggle(s.id)} />
+                <span className="w-24 shrink-0 font-mono">{s.code}</span>
+                <span className="min-w-0 flex-1 truncate">{s.name}{s.city ? ` · ${s.city}` : ''}</span>
+                {other && <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${selected.has(s.id) ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-muted text-muted-foreground'}`}>{selected.has(s.id) ? `replaces ${other}` : `CVM: ${other}`}</span>}
+              </label>
+            )
+          })}
+        </div>
+      )}
+      {plan.moved.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <p className="font-semibold">{plan.moved.length} store{plan.moved.length === 1 ? '' : 's'} already {plan.moved.length === 1 ? 'has' : 'have'} a CVM. Saving will REPLACE it with {cvmName}:</p>
+          <p className="mt-0.5">{replaced.slice(0, 12).map(r => `${r.store} (now ${r.from})`).join(', ')}{replaced.length > 12 ? `, and ${replaced.length - 12} more` : ''}</p>
+        </div>
+      )}
+      {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+      {done && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">{done}</p>}
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" onClick={handleSave} disabled={pending || !cvmId || changes === 0} className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50">
+          {pending ? 'Saving…' : plan.moved.length > 0 && confirmed ? `Confirm: replace ${plan.moved.length} CVM${plan.moved.length === 1 ? '' : 's'} and save` : 'Save stores'}
+        </button>
+        <button type="button" onClick={onClose} className="rounded border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/40">Close</button>
+        <span className="text-xs text-muted-foreground">{!cvmId ? 'Choose a CVM first.' : changes === 0 ? 'No changes yet.' : `${plan.toAssign.length} to add${plan.moved.length ? ` (${plan.moved.length} replacing another CVM)` : ''}, ${plan.toUnassign.length} to remove.`}</span>
+      </div>
+    </div>
+  )
+}
+
 // ─── Stores Tab (Store Master) ────────────────────────────────────────────────
 // One row per physical store — its address is what auto-fills the
 // `store_address` field on AC Issues-style tickets, and its OEM assignment is
@@ -1121,7 +1241,7 @@ function OemsTab({ oems, stores }: { oems: OemRow[]; stores: StoreRow[] }) {
 // Locations tab above (HO/Stores/Warehouse — a coarse visibility category).
 
 interface StoreFormValues {
-  code: string; name: string; address: string; city: string; state: string; pincode: string; oem_id: string; is_active: boolean
+  code: string; name: string; address: string; city: string; state: string; pincode: string; oem_id: string; genset_oem_id: string; cvm_id: string; is_active: boolean
   ac_total: string; ac_brand: string; ac_amc_brand: string; ac_amc_vendor: string; zenatix: '' | 'yes' | 'no'; open_date: string
   cluster: string; region: string; priority_list: string; festival: string
 }
@@ -1140,16 +1260,20 @@ function masterOf(f: StoreFormValues) {
 /** The values already in use for each drop-down field of a store (so spelling stays the same everywhere). */
 type StoreChoices = Record<'cluster' | 'region' | 'priority_list' | 'ac_brand' | 'ac_amc_brand' | 'ac_amc_vendor', string[]>
 
-function StoreForm({ f, setF, onSubmit, onCancel, submitLabel, pending, oemOptions, choices }: {
+function StoreForm({ f, setF, onSubmit, onCancel, submitLabel, pending, oemOptions, gensetOemOptions, cvmOptions, choices }: {
   f: StoreFormValues; setF: (v: StoreFormValues) => void; onSubmit: (e: React.FormEvent) => void; onCancel: () => void; submitLabel: string
-  pending: boolean; oemOptions: { value: string; label: string }[]; choices: StoreChoices
+  pending: boolean; oemOptions: { value: string; label: string }[]; gensetOemOptions: { value: string; label: string }[]; cvmOptions: { value: string; label: string }[]; choices: StoreChoices
 }) {
   return (
     <form onSubmit={onSubmit} className="space-y-3">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <FormInput label="Store Code" value={f.code} onChange={v => setF({ ...f, code: v })} required placeholder="e.g. ALC" />
         <FormInput label="Store Name" value={f.name} onChange={v => setF({ ...f, name: v })} required placeholder="e.g. Alwar City" />
-        <FormSelect label="OEM (for AC issue routing)" value={f.oem_id} onChange={v => setF({ ...f, oem_id: v })} options={oemOptions} placeholder="Not mapped" />
+        <FormSelect label="AC OEM (AC issue routing)" value={f.oem_id} onChange={v => setF({ ...f, oem_id: v })} options={oemOptions} placeholder="Not mapped" />
+        <FormSelect label="Genset OEM (Genset issue routing)" value={f.genset_oem_id} onChange={v => setF({ ...f, genset_oem_id: v })} options={gensetOemOptions} placeholder="Not mapped" />
+      </div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <FormSelect label="CVM (approver for this store; one CVM per store)" value={f.cvm_id} onChange={v => setF({ ...f, cvm_id: v })} options={cvmOptions} placeholder="Not assigned" />
       </div>
       <FormInput label="Address" value={f.address} onChange={v => setF({ ...f, address: v })} placeholder="Full store address — auto-fills requester tickets" />
       <div className="grid grid-cols-3 gap-3">
@@ -1188,25 +1312,29 @@ function StoreForm({ f, setF, onSubmit, onCancel, submitLabel, pending, oemOptio
   )
 }
 
-function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
+function StoresTab({ stores, oems, cvmOptions }: { stores: StoreRow[]; oems: OemRow[]; cvmOptions: UserOption[] }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [editId, setEditId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showCvm, setShowCvm] = useState(false)
   const [search, setSearch] = useState('')
   // (a store being edited stays in the list even when the search no longer matches it)
   const shown = stores.filter(s => s.id === editId || matchesStoreSearch(s, search))
 
   const blank: StoreFormValues = {
-    code: '', name: '', address: '', city: '', state: '', pincode: '', oem_id: '', is_active: true,
+    code: '', name: '', address: '', city: '', state: '', pincode: '', oem_id: '', genset_oem_id: '', cvm_id: '', is_active: true,
     ac_total: '', ac_brand: '', ac_amc_brand: '', ac_amc_vendor: '', zenatix: '', open_date: '', cluster: '', region: '', priority_list: '', festival: '',
   }
   const [addF, setAddF] = useState(blank)
   const [editF, setEditF] = useState(blank)
 
-  const oemOptions = oems.map(o => ({ value: o.id, label: o.name }))
+  // each slot lists only the OEMs of its own type, so an AC OEM can never be picked as a store's Genset OEM or the other way round
+  const oemOptions = oems.filter(o => o.kind === 'ac').map(o => ({ value: o.id, label: o.name }))
+  const gensetOemOptions = oems.filter(o => o.kind === 'genset').map(o => ({ value: o.id, label: o.name }))
+  const cvmChoices = cvmOptions.map(u => ({ value: u.id, label: u.full_name }))
   // the clusters and regions already used by stores, A to Z (numbers inside names sort naturally: UP2 before UP10)
   const distinct = (pick: (s: StoreRow) => string | null) =>
     [...new Set(stores.map(pick).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
@@ -1219,7 +1347,7 @@ function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
     setEditId(s.id)
     setEditF({
       code: s.code, name: s.name, address: s.address ?? '', city: s.city ?? '',
-      state: s.state ?? '', pincode: s.pincode ?? '', oem_id: s.oem_id ?? '', is_active: s.is_active,
+      state: s.state ?? '', pincode: s.pincode ?? '', oem_id: s.oem_id ?? '', genset_oem_id: s.genset_oem_id ?? '', cvm_id: s.cvm_id ?? '', is_active: s.is_active,
       ac_total: s.ac_total == null ? '' : String(s.ac_total), ac_brand: s.ac_brand ?? '', ac_amc_brand: s.ac_amc_brand ?? '', ac_amc_vendor: s.ac_amc_vendor ?? '',
       zenatix: s.zenatix == null ? '' : s.zenatix ? 'yes' : 'no', open_date: s.open_date ?? '',
       cluster: s.cluster ?? '', region: s.region ?? '', priority_list: s.priority_list ?? '', festival: s.festival ?? '',
@@ -1232,7 +1360,7 @@ function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
     startTransition(async () => {
       const res = await createStore({
         code: addF.code, name: addF.name, address: addF.address, city: addF.city,
-        state: addF.state, pincode: addF.pincode, oem_id: addF.oem_id || null, is_active: addF.is_active, ...masterOf(addF),
+        state: addF.state, pincode: addF.pincode, oem_id: addF.oem_id || null, genset_oem_id: addF.genset_oem_id || null, cvm_id: addF.cvm_id || null, is_active: addF.is_active, ...masterOf(addF),
       })
       if (res.error) { setError(res.error); return }
       setAddF(blank); setShowAdd(false)
@@ -1246,7 +1374,7 @@ function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
     startTransition(async () => {
       const res = await updateStore(editId, {
         code: editF.code, name: editF.name, address: editF.address, city: editF.city,
-        state: editF.state, pincode: editF.pincode, oem_id: editF.oem_id || null, is_active: editF.is_active, ...masterOf(editF),
+        state: editF.state, pincode: editF.pincode, oem_id: editF.oem_id || null, genset_oem_id: editF.genset_oem_id || null, cvm_id: editF.cvm_id || null, is_active: editF.is_active, ...masterOf(editF),
       })
       if (res.error) { setError(res.error); return }
       setEditId(null)
@@ -1274,6 +1402,9 @@ function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
         </div>
         <div className="flex gap-2">
         <ExportButton action={exportStores} filename="stores.csv" label="Export" />
+        <button onClick={() => setShowCvm(v => !v)} className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted/40 transition-colors">
+          Assign stores to a CVM
+        </button>
         <button onClick={() => setShowImport(true)} className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted/40 transition-colors">
           Upload Store Master
         </button>
@@ -1286,18 +1417,33 @@ function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
       {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
 
       {showImport && <StoreMasterUploadModal onClose={() => setShowImport(false)} />}
+      {showCvm && <CvmStoresPanel cvmOptions={cvmOptions} stores={stores} onClose={() => setShowCvm(false)} />}
 
       {showAdd && (
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
           <p className="text-sm font-semibold text-foreground">New Store</p>
-          <StoreForm f={addF} setF={setAddF} onSubmit={handleAdd} onCancel={() => setShowAdd(false)} submitLabel="Create" pending={pending} oemOptions={oemOptions} choices={choices} />
+          <StoreForm f={addF} setF={setAddF} onSubmit={handleAdd} onCancel={() => setShowAdd(false)} submitLabel="Create" pending={pending} oemOptions={oemOptions} gensetOemOptions={gensetOemOptions} cvmOptions={cvmChoices} choices={choices} />
         </div>
       )}
 
+      {(() => {
+        const active = stores.filter(s => s.is_active)
+        const noAc = active.filter(s => !s.oem_id).length
+        const noGenset = active.filter(s => !s.genset_oem_id).length
+        const noCvm = active.filter(s => !s.cvm_id).length
+        return (
+          <p className="text-xs text-muted-foreground">
+            Active stores without an AC OEM: <span className={noAc ? 'font-semibold text-amber-700' : 'font-semibold text-emerald-700'}>{noAc}</span>
+            {' · '}without a Genset OEM: <span className={noGenset ? 'font-semibold text-amber-700' : 'font-semibold text-emerald-700'}>{noGenset}</span>
+            {' · '}without a CVM: <span className={noCvm ? 'font-semibold text-amber-700' : 'font-semibold text-emerald-700'}>{noCvm}</span>
+            {' — a ticket that needs an OEM the store does not have stays open with a note for the technician.'}
+          </p>
+        )
+      })()}
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
         <div className="min-w-[860px]">
-        <div className="grid grid-cols-[70px_minmax(150px,1.3fr)_70px_60px_50px_minmax(110px,1fr)_minmax(130px,1fr)_70px_110px] gap-x-3 border-b border-border bg-muted/30 px-4 py-2.5">
-          {['Code', 'Name', 'Cluster', 'Region', 'ACs', 'AC-AMC vendor', 'OEM', 'Active', 'Actions'].map(h => (
+        <div className="grid grid-cols-[70px_minmax(150px,1.3fr)_70px_60px_50px_minmax(110px,1fr)_minmax(170px,1.2fr)_70px_110px] gap-x-3 border-b border-border bg-muted/30 px-4 py-2.5">
+          {['Code', 'Name', 'Cluster', 'Region', 'ACs', 'AC-AMC vendor', 'OEMs (AC / Genset)', 'Active', 'Actions'].map(h => (
             <span key={h} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
           ))}
         </div>
@@ -1310,10 +1456,10 @@ function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
           <div key={s.id}>
             {editId === s.id ? (
               <div className="px-4 py-3 border-b border-border/50 bg-muted/20 space-y-3">
-                <StoreForm f={editF} setF={setEditF} onSubmit={handleEdit} onCancel={() => setEditId(null)} submitLabel="Save" pending={pending} oemOptions={oemOptions} choices={choices} />
+                <StoreForm f={editF} setF={setEditF} onSubmit={handleEdit} onCancel={() => setEditId(null)} submitLabel="Save" pending={pending} oemOptions={oemOptions} gensetOemOptions={gensetOemOptions} cvmOptions={cvmChoices} choices={choices} />
               </div>
             ) : (
-              <div className="grid grid-cols-[70px_minmax(150px,1.3fr)_70px_60px_50px_minmax(110px,1fr)_minmax(130px,1fr)_70px_110px] items-center gap-x-3 border-b border-border/50 last:border-0 px-4 py-3">
+              <div className="grid grid-cols-[70px_minmax(150px,1.3fr)_70px_60px_50px_minmax(110px,1fr)_minmax(170px,1.2fr)_70px_110px] items-center gap-x-3 border-b border-border/50 last:border-0 px-4 py-3">
                 <TableCell className="font-mono text-xs">{s.code}</TableCell>
                 <div className="min-w-0">
                   <TableCell>{s.name}</TableCell>
@@ -1323,7 +1469,11 @@ function StoresTab({ stores, oems }: { stores: StoreRow[]; oems: OemRow[] }) {
                 <TableCell className="text-muted-foreground text-xs">{s.region ?? '—'}</TableCell>
                 <TableCell className="text-muted-foreground text-xs">{s.ac_total ?? '—'}</TableCell>
                 <TableCell className="text-muted-foreground text-xs truncate">{s.ac_amc_vendor ?? '—'}</TableCell>
-                <TableCell className="text-muted-foreground text-xs">{s.oem_name ?? <span className="italic">Unmapped</span>}</TableCell>
+                <div className="text-muted-foreground text-xs leading-snug">
+                  <div>AC: {s.oem_name ?? <span className="italic">Unmapped</span>}</div>
+                  <div>Genset: {s.genset_oem_name ?? <span className="italic">Unmapped</span>}</div>
+                  <div>CVM: {s.cvm_name ?? <span className="italic">Not assigned</span>}</div>
+                </div>
                 <div><ActiveBadge active={s.is_active} /></div>
                 <div className="flex gap-1.5">
                   <button onClick={() => startEdit(s)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40">Edit</button>
@@ -1357,9 +1507,10 @@ interface Props {
   allUsers: UserOption[]
   oems: OemRow[]
   stores: StoreRow[]
+  cvmOptions?: UserOption[]
 }
 
-export function OrgStructureClient({ departments, locations, costCenters, jobFunctions, designations, allUsers, oems, stores }: Props) {
+export function OrgStructureClient({ departments, locations, costCenters, jobFunctions, designations, allUsers, oems, stores, cvmOptions = [] }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('departments')
 
   const tabs: { id: Tab; label: string; count: number }[] = [
@@ -1414,7 +1565,7 @@ export function OrgStructureClient({ departments, locations, costCenters, jobFun
           actions={{ create: createDesignation, update: updateDesignation, remove: deleteDesignation }}
         />
       )}
-      {activeTab === 'stores' && <StoresTab stores={stores} oems={oems} />}
+      {activeTab === 'stores' && <StoresTab stores={stores} oems={oems} cvmOptions={cvmOptions} />}
       {activeTab === 'oems' && <OemsTab oems={oems} stores={stores} />}
     </div>
   )

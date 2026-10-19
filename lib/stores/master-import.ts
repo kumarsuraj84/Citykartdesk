@@ -9,7 +9,7 @@
 //    merged into the spelling used most, so the reports do not split one brand into two.
 
 export type StoreMasterField =
-  | 'name' | 'address' | 'city' | 'state' | 'pincode' | 'oem' | 'active'
+  | 'name' | 'address' | 'city' | 'state' | 'pincode' | 'oem' | 'genset_oem' | 'cvm' | 'active'
   | 'ac_total' | 'ac_brand' | 'ac_amc_brand' | 'ac_amc_vendor' | 'zenatix' | 'open_date'
   | 'cluster' | 'region' | 'priority_list' | 'festival'
 
@@ -18,7 +18,7 @@ export const AC_ONLY_FIELDS: StoreMasterField[] = ['ac_total', 'ac_brand', 'ac_a
 
 /** The heading used for each field (the same wording as the facilities sheet). */
 export const STORE_MASTER_HEADINGS: Record<StoreMasterField | 'code', string> = {
-  code: 'STORE', name: 'NAME', address: 'ADDRESS', city: 'CITY', state: 'STATE', pincode: 'PIN CODE', oem: 'OEM', active: 'ACTIVE',
+  code: 'STORE', name: 'NAME', address: 'ADDRESS', city: 'CITY', state: 'STATE', pincode: 'PIN CODE', oem: 'OEM', genset_oem: 'GENSET OEM', cvm: 'CVM', active: 'ACTIVE',
   ac_total: 'AC TOTAL', ac_brand: 'AC BRAND', ac_amc_brand: 'AC-AMC BRAND', ac_amc_vendor: 'AC-AMC VENDOR', zenatix: 'ZENATIX', open_date: 'OPEN DATE',
   cluster: 'CLUSTER', region: 'REGION', priority_list: 'STORE PRIORITY LIST AS PER OPS', festival: 'FESTIVAL',
 }
@@ -30,7 +30,11 @@ const ALIASES: Record<string, StoreMasterField | 'code'> = {
   'city': 'city',
   'state': 'state',
   'pincode': 'pincode', 'pin code': 'pincode', 'pin': 'pincode', 'postal code': 'pincode',
-  'oem': 'oem', 'oem name': 'oem',
+  // the OEM column is the store's AC OEM (only OEMs of type AC are accepted there); the Genset OEM has its own column
+  'oem': 'oem', 'oem name': 'oem', 'ac oem': 'oem', 'ac oem name': 'oem',
+  'genset oem': 'genset_oem', 'genset oem name': 'genset_oem', 'genset': 'genset_oem',
+  // the CVM of the store: the e-mail address or the full name of an existing staff member
+  'cvm': 'cvm', 'cvm email': 'cvm', 'cvm e mail': 'cvm', 'cvm name': 'cvm',
   'active': 'active', 'is active': 'active', 'status': 'active',
   'ac total': 'ac_total', 'total ac': 'ac_total', 'acs': 'ac_total',
   'ac brand': 'ac_brand',
@@ -54,6 +58,10 @@ export interface StoreMasterValues {
   name?: string; address?: string; city?: string; state?: string; pincode?: string
   /** an OEM's name — resolved to the OEM by the caller */
   oem?: string
+  /** the name of the store's Genset OEM — resolved to the OEM by the caller */
+  genset_oem?: string
+  /** the e-mail or full name of the store's CVM — resolved to a user by the caller */
+  cvm?: string
   active?: boolean
   ac_total?: number; ac_brand?: string; ac_amc_brand?: string; ac_amc_vendor?: string; zenatix?: boolean
   /** yyyy-mm-dd */

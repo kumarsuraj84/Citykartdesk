@@ -28,6 +28,8 @@ interface SectionBuilderProps {
    *  present, an "Add from library" panel is shown and library-linked fields
    *  are locked to the library's definition. */
   libraryFields?: LibraryFieldDef[]
+  /** The categories of the service desk, so a field can be limited to some of them ("Show only for these categories"). */
+  categories?: { id: string; name: string }[]
 }
 
 type Selected = { s: string; f: string } | null
@@ -529,6 +531,7 @@ export function SectionBuilder({
   onSave,
   fieldIdsWithSla = [],
   libraryFields,
+  categories = [],
 }: SectionBuilderProps) {
   const slaFieldIds = useMemo(() => new Set(fieldIdsWithSla), [fieldIdsWithSla])
   const [libraryQuery, setLibraryQuery] = useState('')
@@ -1178,6 +1181,34 @@ export function SectionBuilder({
                 </p>
               )}
                 </>
+              )}
+
+              {categories.length > 0 && selectedField.type !== 'store_address' && (
+                <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="text-sm font-medium text-foreground">Show only for these categories</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Leave all unticked to show this field for every category. When some are ticked, the requester sees the field (and, if it is required, must fill it) only after choosing one of them. For other categories it is not shown and not stored.
+                  </p>
+                  <div className="mt-2 grid max-h-40 grid-cols-1 gap-1 overflow-y-auto">
+                    {categories.map((c) => {
+                      const on = (selectedField.show_for_categories ?? []).includes(c.id)
+                      return (
+                        <label key={c.id} className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={() => {
+                              const cur = selectedField.show_for_categories ?? []
+                              const next = on ? cur.filter((x) => x !== c.id) : [...cur, c.id]
+                              updateField(selectedSection.id, selectedField.id, { show_for_categories: next.length > 0 ? next : undefined })
+                            }}
+                          />
+                          {c.name}
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
               )}
 
               {(selectedField.type === 'select' || selectedField.type === 'multiselect') && (
