@@ -160,3 +160,18 @@ describe('the sample file', () => {
     expect(wb.worksheets.map((w) => w.name)).toEqual(['Store Master', 'How to fill'])
   })
 })
+
+describe('Store Master sheet: AC OEM and Genset OEM columns', () => {
+  it('reads OEM / AC OEM as the AC OEM and GENSET OEM as the Genset OEM', () => {
+    const p = prepareStoreMaster(['STORE', 'AC OEM', 'GENSET OEM'], [['ALC', 'Bluestar UP', 'Cummins'], ['XYZ', '', 'Kirloskar']])
+    expect(p.recognised).toEqual(['oem', 'genset_oem'])
+    expect(p.entries[0].values).toMatchObject({ oem: 'Bluestar UP', genset_oem: 'Cummins' })
+    expect(p.entries[1].values.oem).toBeUndefined()           // an empty cell never overwrites what is saved
+    expect(p.entries[1].values.genset_oem).toBe('Kirloskar')
+  })
+  it('keeps reading the old single OEM column as the AC OEM', () => {
+    const p = prepareStoreMaster(['STORE', 'OEM'], [['ALC', 'Bluestar UP']])
+    expect(p.entries[0].values).toMatchObject({ oem: 'Bluestar UP' })
+    expect(p.entries[0].values.genset_oem).toBeUndefined()
+  })
+})

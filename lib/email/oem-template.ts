@@ -4,7 +4,7 @@ import { escapeHtml } from './escape'
 // the email sender on the server.
 
 export const OEM_PLACEHOLDERS = [
-  'ticket_no', 'subject', 'description', 'requester_name', 'requester_email', 'requester_phone', 'store_address',
+  'ticket_no', 'subject', 'description', 'requester_name', 'requester_email', 'requester_phone', 'store_address', 'category',
 ] as const
 
 export const OEM_SAMPLE_VALUES: Record<string, string> = {
@@ -15,6 +15,7 @@ export const OEM_SAMPLE_VALUES: Record<string, string> = {
   requester_email: 'store.manager@citykartstores.com',
   requester_phone: '98XXXXXX10',
   store_address: 'Main Road, Civil Lines, Allahabad - 211001',
+  category: 'Genset',
 }
 
 /** Templates saved from the rich editor are HTML; older ones are plain text. */

@@ -8,7 +8,9 @@ import {
   updateCategory,
   toggleCategoryActive,
   deleteCategory,
+  setCategoryOemKind,
 } from '@/lib/actions/admin/categories'
+import { OEM_KINDS, OEM_KIND_LABEL, isOemKind, type OemKind } from '@/lib/oems/kinds'
 import { IconPicker } from '@/components/admin/IconPicker'
 import { CategoryIcon } from '@/components/admin/CategoryIcon'
 import { BulkImportCategoriesDialog } from '@/components/admin/BulkImportCategoriesDialog'
@@ -62,6 +64,8 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
   const [description, setDescription] = useState(cat.description ?? '')
   const [icon, setIcon] = useState(cat.icon ?? '')
   const [iconImageUrl, setIconImageUrl] = useState<string | null>(cat.icon_image_url ?? null)
+  const savedOemKind: OemKind | '' = isOemKind(cat.auto_oem_kind) ? cat.auto_oem_kind : ''
+  const [oemKind, setOemKind] = useState<OemKind | ''>(savedOemKind)
   const [error, setError] = useState('')
   const [pending, startTransition] = useTransition()
   const [togglePending, startToggle] = useTransition()
@@ -75,9 +79,13 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
       const result = await updateCategory(cat.id, { name, description, icon, icon_image_url: iconImageUrl })
       if (result.error) {
         setError(result.error)
-      } else {
-        setEditing(false)
+        return
       }
+      if (oemKind !== savedOemKind) {
+        const oemResult = await setCategoryOemKind(cat.id, oemKind === '' ? null : oemKind)
+        if (oemResult.error) { setError(oemResult.error); return }
+      }
+      setEditing(false)
     })
   }
 
@@ -86,6 +94,7 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
     setDescription(cat.description ?? '')
     setIcon(cat.icon ?? '')
     setIconImageUrl(cat.icon_image_url ?? null)
+    setOemKind(savedOemKind)
     setError('')
     setEditing(false)
   }
@@ -138,6 +147,17 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
                   if (e.key === 'Escape') handleCancel()
                 }}
               />
+              <label className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                Auto-send tickets of this category to the store&apos;s OEM:
+                <select
+                  value={oemKind}
+                  onChange={(e) => setOemKind(isOemKind(e.target.value) ? e.target.value : '')}
+                  className="rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                >
+                  <option value="">No (normal ticket)</option>
+                  {OEM_KINDS.map((k) => <option key={k} value={k}>{OEM_KIND_LABEL[k]} OEM</option>)}
+                </select>
+              </label>
               {error && <p className="text-xs text-destructive">{error}</p>}
             </div>
             <div className="flex shrink-0 items-center gap-1">
@@ -171,6 +191,11 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {cat.sub_categories.length} sub-categor{cat.sub_categories.length !== 1 ? 'ies' : 'y'}
               </p>
+              {savedOemKind && (
+                <p className="mt-1 inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                  Auto-sent to the store&apos;s {OEM_KIND_LABEL[savedOemKind]} OEM
+                </p>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {!cat.is_active && (

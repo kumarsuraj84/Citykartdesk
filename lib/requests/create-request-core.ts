@@ -12,6 +12,8 @@ import { escapeHtml } from '@/lib/email/escape'
 import { isHtmlTemplate, renderHtmlEmail } from '@/lib/email/oem-template'
 import { sanitizeTemplateHtml } from '@/lib/email/sanitize-template'
 import { oemSentComment } from '@/lib/requests/oem-message'
+import { OEM_DEFAULT_TEXT, isOemKind, type OemKind } from '@/lib/oems/kinds'
+import { resolveOemRoute } from '@/lib/oems/route'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import type { FormField, RequestPriority } from '@/types'
 import type { Json } from '@/types/database'
@@ -54,6 +56,10 @@ export async function runOemAutoRouting(params: {
   request: { id: string; request_no: string }
   autoOemRouting: boolean | null | undefined
   storeOemId: string | null
+  /** The type of OEM this ticket goes to (default 'ac', as before). A Genset ticket must only ever reach a Genset OEM. */
+  kind?: OemKind
+  /** Name of the ticket's category, offered to the OEM template as {{category}}. */
+  categoryName?: string | null
   title: string
   description: string
   requesterName: string
@@ -62,6 +68,7 @@ export async function runOemAutoRouting(params: {
   storeAddress: string | null
 }): Promise<void> {
   const { admin, actorId, orgId, request, autoOemRouting, storeOemId } = params
+  const kind: OemKind = params.kind ?? 'ac'
   if (!autoOemRouting || !storeOemId) return
 
   // org_id filter: storeOemId already came from an org-scoped stores lookup
@@ -69,11 +76,13 @@ export async function runOemAutoRouting(params: {
   // id, rather than relying on every future caller to have pre-scoped it.
   const { data: oem } = await admin
     .from('oems')
-    .select('name, emails, email_subject_template, email_body_template, is_active')
+    .select('name, kind, emails, email_subject_template, email_body_template, is_active')
     .eq('id', storeOemId)
     .eq('org_id', orgId)
     .maybeSingle()
   if (!oem || !oem.is_active || !oem.emails || oem.emails.length === 0) return
+  // Defence in depth (the database also refuses it): never send a ticket of one type to an OEM of another type.
+  if (oem.kind && oem.kind !== kind) return
 
   const vars: Record<string, string> = {
     ticket_no: request.request_no,
@@ -83,10 +92,11 @@ export async function runOemAutoRouting(params: {
     requester_email: params.requesterEmail,
     requester_phone: params.requesterPhone || '(not provided)',
     store_address: params.storeAddress || '(no address on file)',
+    category: params.categoryName || '(no category)',
   }
   const render = (tpl: string) => tpl.replace(/\{\{(\w+)\}\}/g, (_m, key: string) => vars[key] ?? '')
 
-  const subject = render(oem.email_subject_template || 'New AC Issue Ticket — {{ticket_no}}')
+  const subject = render(oem.email_subject_template || OEM_DEFAULT_TEXT[kind].subject)
   let bodyText: string
   let bodyHtml: string
   if (isHtmlTemplate(oem.email_body_template)) {
@@ -98,7 +108,7 @@ export async function runOemAutoRouting(params: {
   } else {
     bodyText = render(
       oem.email_body_template ||
-        'A new AC issue ticket has been raised.\n\nTicket: {{ticket_no}}\nSubject: {{subject}}\nDescription: {{description}}\n\nRequester: {{requester_name}} ({{requester_email}}, {{requester_phone}})\nStore Address: {{store_address}}'
+        OEM_DEFAULT_TEXT[kind].body
     )
     // D-05: bodyText is built from a {{var}}-substituted template — ticket
     // subject/description/requester fields are all user-controlled — so the
@@ -356,16 +366,16 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   if (!requesterProfile) return { error: 'Requester not found.' }
 
   let requesterStoreAddress: string | null = null
-  let requesterStoreOemId: string | null = null
+  let requesterStoreSlots: { oem_id: string | null; genset_oem_id: string | null } | null = null
   if (requesterProfile?.store_id) {
     const { data: store } = await admin
       .from('stores')
-      .select('address, oem_id')
+      .select('address, oem_id, genset_oem_id')
       .eq('id', requesterProfile.store_id)
       .eq('org_id', orgId)
       .maybeSingle()
     requesterStoreAddress = store?.address ?? null
-    requesterStoreOemId = store?.oem_id ?? null
+    requesterStoreSlots = store ? { oem_id: store.oem_id ?? null, genset_oem_id: store.genset_oem_id ?? null } : null
   }
 
   // A plain requester answers only the questions a requester may answer. Anything else they send (a technician-only box, an id that is not on the form)
@@ -540,8 +550,17 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     console.error('[createRequestCore] Activity log failed for request', request.id)
   }
 
-  // AC Issues-style OEM auto-routing.
-  if (service.auto_oem_routing && requesterStoreOemId) {
+  // OEM auto-routing: a category set to "auto-send to OEM type X" sends the ticket to the store's OEM of type X (AC or Genset); otherwise the AC Issues service
+  // (auto_oem_routing) sends it to the store's AC OEM exactly as before. The store has one slot per type, so a ticket can only reach an OEM of the right type.
+  let categoryOemKind: OemKind | null = null
+  let categoryName: string | null = null
+  if (categoryId) {
+    const { data: cat } = await admin.from('service_categories').select('name, auto_oem_kind').eq('id', categoryId).eq('org_id', orgId).maybeSingle()
+    categoryName = cat?.name ?? null
+    categoryOemKind = isOemKind(cat?.auto_oem_kind) ? cat.auto_oem_kind : null
+  }
+  const oemRoute = resolveOemRoute({ serviceAutoOemRouting: service.auto_oem_routing, categoryOemKind, store: requesterStoreSlots })
+  if (oemRoute.action === 'send') {
     try {
       const { data: authUser } = await admin.auth.admin.getUserById(requesterId)
       await runOemAutoRouting({
@@ -549,8 +568,10 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
         actorId: actingUserId,
         orgId,
         request,
-        autoOemRouting: service.auto_oem_routing,
-        storeOemId: requesterStoreOemId,
+        autoOemRouting: true,
+        storeOemId: oemRoute.oemId,
+        kind: oemRoute.kind,
+        categoryName,
         title,
         description: oemDescription,
         requesterName: requesterProfile?.full_name ?? '',
@@ -560,6 +581,21 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
       })
     } catch (e) {
       console.error('[createRequestCore] OEM auto-routing failed', e)
+    }
+  } else if (oemRoute.action === 'unmapped') {
+    // The category asks for an OEM but this store has none of that type: leave the ticket open for a technician and say why, so the gap is not missed.
+    const label = oemRoute.kind === 'genset' ? 'Genset' : 'AC'
+    try {
+      await admin.from('request_comments').insert({
+        request_id: request.id,
+        author_id: actingUserId,
+        body: requesterProfile?.store_id
+          ? `No ${label} OEM is mapped to this store, so the ticket was not sent to an OEM automatically. Please send it to the OEM yourself.`
+          : `This requester is not linked to a store, so the ticket was not sent to a ${label} OEM automatically. Please send it to the OEM yourself.`,
+        is_internal: true,
+      })
+    } catch (e) {
+      console.error('[createRequestCore] OEM unmapped note failed', e)
     }
   }
 

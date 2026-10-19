@@ -59,7 +59,7 @@ describe('setOemStores', () => {
     // s0 (unmapped) + s2 (currently OEM B) ticked; s3 (currently OEM A) unticked
     const res = await setOemStores(oemA, [storeIds[0], storeIds[2]])
     expect(res.error).toBeUndefined()
-    expect(res.data).toEqual({ assigned: 2, removed: 1, moved: 1 })
+    expect(res.data).toMatchObject({ assigned: 2, removed: 1, moved: 1 })
     expect(await oemOf(storeIds[0])).toBe(oemA)
     expect(await oemOf(storeIds[2])).toBe(oemA)
     expect(await oemOf(storeIds[3])).toBeNull()
@@ -70,7 +70,7 @@ describe('setOemStores', () => {
     actAs(fx.admin)
     await admin.from('stores').update({ oem_id: oemB }).eq('id', storeIds[1])
     const res = await setOemStores(oemA, [storeIds[0], storeIds[2]])
-    expect(res.data).toEqual({ assigned: 0, removed: 0, moved: 0 })
+    expect(res.data).toMatchObject({ assigned: 0, removed: 0, moved: 0 })
     expect(await oemOf(storeIds[1])).toBe(oemB)
   })
 

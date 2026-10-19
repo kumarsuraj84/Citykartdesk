@@ -66,6 +66,8 @@ export interface UserOption {
 export interface OemRow {
   id: string
   name: string
+  /** 'ac' or 'genset': a store has one OEM slot per type */
+  kind: 'ac' | 'genset'
   emails: string[]
   email_subject_template: string | null
   email_body_template: string | null
@@ -83,6 +85,8 @@ export interface StoreRow {
   pincode: string | null
   oem_id: string | null
   oem_name?: string | null
+  genset_oem_id: string | null
+  genset_oem_name?: string | null
   is_active: boolean
   created_at: string
   ac_total: number | null
@@ -142,11 +146,11 @@ export default async function OrgStructurePage() {
       .eq('org_id', profile.org_id ?? ''),
     supabase
       .from('oems')
-      .select('id, name, emails, email_subject_template, email_body_template, is_active, created_at')
+      .select('id, name, kind, emails, email_subject_template, email_body_template, is_active, created_at')
       .order('name'),
     supabase
       .from('stores')
-      .select('id, code, name, address, city, state, pincode, oem_id, is_active, created_at, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, zenatix, open_date, cluster, region, priority_list, festival, oem:oems!stores_oem_id_fkey(name)')
+      .select('id, code, name, address, city, state, pincode, oem_id, genset_oem_id, is_active, created_at, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, zenatix, open_date, cluster, region, priority_list, festival, oem:oems!stores_oem_id_fkey(name), genset_oem:oems!stores_genset_oem_id_fkey(name)')
       .order('code'),
   ])
 
@@ -229,8 +233,8 @@ export default async function OrgStructurePage() {
 
   type StoreQueryRow = {
     id: string; code: string; name: string; address: string | null; city: string | null
-    state: string | null; pincode: string | null; oem_id: string | null
-    is_active: boolean; created_at: string; oem: { name: string } | null
+    state: string | null; pincode: string | null; oem_id: string | null; genset_oem_id: string | null
+    is_active: boolean; created_at: string; oem: { name: string } | null; genset_oem: { name: string } | null
     ac_total: number | null; ac_brand: string | null; ac_amc_brand: string | null; ac_amc_vendor: string | null; zenatix: boolean | null
     open_date: string | null; cluster: string | null; region: string | null; priority_list: string | null; festival: string | null
   }
@@ -244,6 +248,8 @@ export default async function OrgStructurePage() {
     pincode: s.pincode,
     oem_id: s.oem_id,
     oem_name: s.oem?.name ?? null,
+    genset_oem_id: s.genset_oem_id,
+    genset_oem_name: s.genset_oem?.name ?? null,
     is_active: s.is_active,
     created_at: s.created_at,
     ac_total: s.ac_total, ac_brand: s.ac_brand, ac_amc_brand: s.ac_amc_brand, ac_amc_vendor: s.ac_amc_vendor, zenatix: s.zenatix,

@@ -30,7 +30,7 @@ const HOW_TO: string[] = [
   '6. ZENATIX: Yes or No.  AC TOTAL: a whole number.',
   '7. The AC columns (AC TOTAL, AC BRAND, AC-AMC BRAND, AC-AMC VENDOR, ZENATIX) are used for the AC service only. The other columns are for every store.',
   '8. Spelling that differs only by capital letters (Blue Star / BLUE STAR) is treated as one value. Use one spelling for one brand, cluster or vendor.',
-  '9. You can also include NAME, ADDRESS, PIN CODE, OEM (the OEM name set up in CK Desk) and ACTIVE (Yes / No).',
+  '9. You can also include NAME, ADDRESS, PIN CODE, OEM (the name of the AC OEM as set up in CK Desk), GENSET OEM (the name of its Genset OEM) and ACTIVE (Yes / No). An OEM of the wrong type in a column is refused.',
   '',
   'Tip: the Export button on the Stores tab gives a file in this same format with the current values, ready to edit and upload again.',
 ]
