@@ -357,9 +357,11 @@ describe('the CVM is offered as the approver, and a failing OEM mail is reported
     expect(await suggestedCvmForRequest({ requesterId: fx.requesterA.id, orgId: fx.orgId, viewerId: fx.manager.id })).toBeNull()
   })
   it('when the OEM mail cannot be sent the ticket is not told it was sent: it stays Open with an internal note', async () => {
-    vi.mocked(sendEmail).mockResolvedValueOnce({ error: 'smtp down' })
+    // only the OEM mail fails (the other mails of a new ticket, for example to the requester, go through)
+    vi.mocked(sendEmail).mockImplementation(async (p: { subject: string }) => (/AC Issue/.test(p.subject) ? { error: 'smtp down' } : {}))
     await setStore(ids.storeA)
     const r = await raise(ids.subAc, 'ac mail fails', '1')
+    vi.mocked(sendEmail).mockImplementation(async () => ({}))
     expect(r.error, JSON.stringify(r)).toBeUndefined()
     const t = await ticket(r.requestId!)
     expect(t.status).toBe('open')

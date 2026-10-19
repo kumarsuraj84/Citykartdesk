@@ -10,6 +10,11 @@ try {
   // Fall back to whatever is already in process.env (e.g. CI-provided secrets).
 }
 
+// Switches that only exist for trying the app by hand on a development PC (mail saved to files instead of sent, sheets read from files) must never change how
+// the tests run: a test that wants one sets it itself.
+delete process.env.MAIL_SINK_DIR
+delete process.env.MASTERS_DEMO_DIR
+
 // Node 20 (unlike Next's own runtime, and unlike Node 22+) has no global
 // WebSocket — @supabase/supabase-js's RealtimeClient requires one just to
 // construct the client, even though these tests never subscribe to realtime.
