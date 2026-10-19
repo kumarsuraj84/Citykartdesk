@@ -4,9 +4,22 @@
     {
       "name": "citykart-desk-dev",
       "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev", "--port", "3210"],
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev",
+        "--port",
+        "3210"
+      ],
       "port": 3210,
       "autoPort": true
+    },
+    {
+      "name": "citykart-desk-demo",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": [
+        "audit-2026-10/demo/start-demo.cjs"
+      ],
+      "port": 3310
     }
   ]
 }

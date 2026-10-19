@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { getSecret, auditSecrets, MIN_SECRET_LENGTH } from '@/lib/secrets'
 
-const KEYS = ['APPROVAL_LINK_SECRET', 'CSAT_LINK_SECRET', 'OAUTH_STATE_SECRET', 'INTAKE_WEBHOOK_TOKEN', 'INTAKE_WORKER_SECRET', 'SYSTEM_LOG_INGEST_SECRET', 'CRON_SECRET', 'ALLOW_SHARED_SECRET_FALLBACK']
+const KEYS = ['APPROVAL_LINK_SECRET', 'CSAT_LINK_SECRET', 'OAUTH_STATE_SECRET', 'INTAKE_WEBHOOK_TOKEN', 'INTAKE_WORKER_SECRET', 'SYSTEM_LOG_INGEST_SECRET', 'CRON_SECRET', 'VISIT_CODE_SECRET', 'ALLOW_SHARED_SECRET_FALLBACK']
 const saved: Record<string, string | undefined> = {}
 beforeEach(() => { for (const k of KEYS) { saved[k] = process.env[k]; delete process.env[k] } })
 afterEach(() => { for (const k of KEYS) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k] } })

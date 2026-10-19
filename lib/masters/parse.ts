@@ -61,13 +61,39 @@ function addEmailIssues(
   issues: MasterIssue[], kind: MasterKind, storeCode: string, sheetRow: number, raw: string, e: ReturnType<typeof parseEmails>, wantAny: boolean,
 ) {
   const at = (code: string, message: string, severity: 'error' | 'warning' = 'warning') => issues.push({ kind, severity, code, storeCode, sheetRow, message })
-  for (const bad of e.invalid) at('bad_email', `Row ${sheetRow} (${storeCode}): "${bad}" in the Mail ID is not an e-mail address and is skipped. The other addresses are still used.`)
-  for (const t of e.typoDomains) at('probable_typo_domain', `Row ${sheetRow} (${storeCode}): ${t} looks like a misspelt company address. It is still used, but the mail to it will bounce.`)
+  for (const bad of e.invalid) { at('bad_email', `Row ${sheetRow} (${storeCode}): "${bad}" in the Mail ID is not an e-mail address and is skipped. The other addresses are still used.`); issues[issues.length - 1].token = bad }
+  for (const t of e.typoDomains) { at('probable_typo_domain', `Row ${sheetRow} (${storeCode}): ${t} looks like a misspelt company address. It is still used, but the mail to it will bounce.`); issues[issues.length - 1].token = t }
   if (wantAny && e.valid.length === 0 && raw !== '') at('no_valid_email', `Row ${sheetRow} (${storeCode}): the Mail ID has no usable address.`, 'error')
   if (wantAny && raw === '') at('no_email', `Row ${sheetRow} (${storeCode}): the Mail ID is empty, so a ticket for it cannot be mailed to the OEM.`)
 }
 
 const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+/** The same wrong address on many rows is ONE line on the health page (with the rows and stores), not one line per row. */
+export function groupEmailIssues(issues: MasterIssue[]): MasterIssue[] {
+  const groups = new Map<string, MasterIssue[]>()
+  const out: MasterIssue[] = []
+  for (const i of issues) {
+    if ((i.code === 'bad_email' || i.code === 'probable_typo_domain') && i.token && i.kind !== 'cvm') {
+      const k = `${i.kind}|${i.code}|${i.token}`
+      groups.set(k, [...(groups.get(k) ?? []), i])
+    } else out.push(i)
+  }
+  for (const list of groups.values()) {
+    const first = list[0]
+    if (list.length === 1) { out.push(first); continue }
+    const rows = list.map((i) => i.sheetRow).filter((r): r is number => r !== null)
+    const stores = [...new Set(list.map((i) => i.storeCode).filter((s): s is string => !!s))]
+    const more = (n: number, shown: number) => (n > shown ? ` and ${n - shown} more` : '')
+    out.push({
+      ...first,
+      message: first.code === 'bad_email'
+        ? `"${first.token}" in the Mail ID is not an e-mail address and is skipped, on ${list.length} rows (rows ${rows.slice(0, 8).join(', ')}${more(rows.length, 8)}; stores ${stores.slice(0, 6).join(', ')}${more(stores.length, 6)}). The other addresses are still used.`
+        : `${first.token} looks like a misspelt company address, on ${list.length} rows (rows ${rows.slice(0, 8).join(', ')}${more(rows.length, 8)}; stores ${stores.slice(0, 6).join(', ')}${more(stores.length, 6)}). It is still used, but the mail to it will bounce.`,
+    })
+  }
+  return out
+}
 
 export function parseAcSheet(values: unknown[][]): ParseResult<AcRow> {
   const grid = toGrid(values)
@@ -139,7 +165,7 @@ export function parseAcSheet(values: unknown[][]): ParseResult<AcRow> {
       isActive, emails: emails.valid,
     })
   }
-  return { rows, issues }
+  return { rows, issues: groupEmailIssues(issues) }
 }
 
 export function parseGensetSheet(values: unknown[][]): ParseResult<GensetRow> {
@@ -170,7 +196,7 @@ export function parseGensetSheet(values: unknown[][]): ParseResult<GensetRow> {
   for (const [store, rowNos] of perStore) {
     if (rowNos.length > 1) issues.push({ kind: 'genset', severity: 'warning', code: 'store_has_several_gensets', storeCode: store, sheetRow: rowNos[1], message: `${store} has ${rowNos.length} genset rows (rows ${rowNos.join(', ')}). One mail goes to all their addresses and lists every genset. If that is a mistake, please correct the sheet.` })
   }
-  return { rows, issues }
+  return { rows, issues: groupEmailIssues(issues) }
 }
 
 export function parseCvmSheet(values: unknown[][]): ParseResult<CvmRow> {

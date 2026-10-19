@@ -2,6 +2,19 @@ import { fetchWithTimeout } from '@/lib/http/fetch-timeout'
 import nodemailer, { type Transporter } from 'nodemailer'
 import { getEmailFrom, getEmailSetup, RESEND_API_KEY, type EmailSetup, type SmtpConfig } from './config'
 import { withSubjectTag, isGmailHost, taggedReplyAddress } from './thread-tag'
+import { mkdir, writeFile } from 'fs/promises'
+import path from 'path'
+
+// LOCAL TESTING ONLY. With MAIL_SINK_DIR set, nothing is ever sent: every message is written to a file in that folder (to, cc, subject, html) and counts as sent,
+// so a whole workflow can be tried on a development machine without a single e-mail leaving it. Ignored in a production build (NODE_ENV=production).
+let sinkCounter = 0
+async function writeToSink(dir: string, p: EmailPayload): Promise<void> {
+  await mkdir(dir, { recursive: true })
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const file = path.join(dir, `${stamp}-${String(++sinkCounter).padStart(3, '0')}.json`)
+  await writeFile(file, JSON.stringify({ to: p.to, cc: p.cc ?? [], subject: p.subject, text: p.text ?? '', html: p.html, attachments: (p.attachments ?? []).map((a) => a.filename) }, null, 2), 'utf8')
+  console.log('[MAIL SINK] not sent, saved to', file, '| to:', recipientsLabel(p.to), '| subject:', p.subject)
+}
 
 export interface EmailPayload {
   /** One address, or several to send ONE message to all of them (they see each other, reply-all works). */
@@ -113,6 +126,8 @@ async function sendViaResend(p: EmailPayload, setup: EmailSetup): Promise<{ erro
 
 export async function sendEmail(p: EmailPayload): Promise<{ error?: string }> {
   try {
+    const sinkDir = process.env.NODE_ENV !== 'production' ? (process.env.MAIL_SINK_DIR ?? '').trim() : ''
+    if (sinkDir) { await writeToSink(path.resolve(sinkDir), p); return {} }
     const setup = await getEmailSetup()
     if (!setup.provider) {
       console.log('[EMAIL DISABLED] To:', recipientsLabel(p.to), ' Subject:', p.subject)

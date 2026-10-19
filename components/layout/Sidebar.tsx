@@ -9,7 +9,7 @@ import {
   BarChart3, ScrollText, Settings, Monitor, BookOpenText,
   Users, Tag, GitBranch, Building2, Database, Workflow,
   LogOut, BookOpen, KeyRound, ChevronDown, Sparkles, Filter,
-  PanelLeftClose, PanelLeftOpen, Table2, Zap, Headset, FileText, Clock, Library, FileBarChart, LayoutDashboard,
+  PanelLeftClose, PanelLeftOpen, Table2, Zap, Headset, FileText, Clock, Library, FileBarChart, LayoutDashboard, Wrench, ClipboardCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/actions/auth'
@@ -109,6 +109,9 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
           ? [{ label: 'Approvals', href: '/approvals', icon: ShieldCheck, countKey: 'approvals' as keyof NavCounts }] : []),
         ...(has('projects') && isAdmin
           ? [{ label: 'Projects',      href: '/projects',      icon: FolderKanban, countKey: 'projects'      as keyof NavCounts }] : []),
+        // The AC visits of a store (the OEM engineer's report and the store's answer), and the technicians' list of visit reports and parts to order.
+        ...(has('requests') && profile.store_id ? [{ label: 'AC visits', href: '/ac-visits', icon: Wrench } as NavItem] : []),
+        ...(has('requests') && (isAgent || isManager || isAdmin) ? [{ label: 'AC visit reports', href: '/visits', icon: ClipboardCheck } as NavItem] : []),
         { label: 'Notifications', href: '/notifications', icon: Bell, countKey: 'notifications' as keyof NavCounts },
       ],
     },

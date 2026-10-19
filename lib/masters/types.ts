@@ -7,6 +7,8 @@ export type MasterIssue = {
   storeCode: string | null
   sheetRow: number | null
   message: string
+  /** the address / text the problem is about (used to group the same problem found on many rows) */
+  token?: string
 }
 
 export type AcRow = {

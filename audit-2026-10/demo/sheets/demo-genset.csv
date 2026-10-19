@@ -1,0 +1,5 @@
+Store Code,Genset Brand,Genset KVA,Genset Serial No,CPCB Group,Mail ID
+ALC,CUMMINS,125,DEMO-GS-ALC-1,CPCB-II,"powerservice@cummins-demo.test, engineer.one@cummins-demo.test, krishan.patel@citykartstores.com"
+MAR,MAHINDRA,58.5,DEMO-GS-MAR-1,CPCB-IV,"powerol@mahindra-demo.test,kuld,ep.singh1@mahindra-demo.test,raushan.kumar@citylartstores.com"
+COB,CUMMINS,40,DEMO-GS-COB-1,CPCB-II,"care@jakson-demo.test,krishan.patel@citykartstores.com"
+COB,MAHINDRA,125,DEMO-GS-COB-2,CPCB-II,"care@jakson-demo.test,krishan.patel@citykartstores.com"

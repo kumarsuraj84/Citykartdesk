@@ -30,6 +30,9 @@ $shipTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInt
 Register-ScheduledTask -TaskName 'CitykartDesk-LogShipper' -Action $shipAction -Trigger $shipTrigger -Principal $principal -Settings $settings -Force | Out-Null
 Write-Output 'Installed CitykartDesk-LogShipper (every 2 min)'
 
+# engineer visit reports: auto-resolve after the deadline and the store reminder, every 15 minutes
+Install-Job 'CitykartDesk-Cron-Visits' 'visit-automation' 15
+
 # the AC / Genset / CVM Google Sheets are copied into the database three times a day (same times as lib/masters/schedule.ts)
 $mastersAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$runner`" -Job masters-sync"
 $mastersTriggers = @('11:00', '15:00', '19:00') | ForEach-Object { New-ScheduledTaskTrigger -Daily -At $_ }

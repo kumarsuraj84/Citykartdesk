@@ -16,7 +16,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn(), 
 
 import { createClient } from '@/lib/supabase/server'
 import { sendEmail } from '@/lib/email/send'
-import { createRequest } from '@/lib/actions/requests'
+import { createRequest, updateRequestStatus } from '@/lib/actions/requests'
 import { approveApproval } from '@/lib/actions/approvals'
 import { syncMasters } from '@/lib/masters/sync'
 import { loadAcOptionsForStoreCode } from '@/lib/masters/resolve'
@@ -227,6 +227,35 @@ describe('an AC ticket goes to the OEM of the AC the requester chose', () => {
     expect(snap.kind).toBe('ac')
     expect(snap.snapshot[0]).toMatchObject({ ckdesk_no: '3', serial: 'SER-A3', brand: 'BLUESTAR' })
     expect(snap.mailed_to).toEqual(['oem-one@oem.test', 'oem-two@oem.test'])
+  })
+  it('when the store reopens the resolved ticket the OEM is e-mailed again, for the same AC, marked REOPENED with the reason of the store', async () => {
+    await setStore(ids.storeA)
+    const r = await raise(ids.subAc, 'ac stopped again', '3')
+    expect(r.error, JSON.stringify(r)).toBeUndefined()
+    // resolved earlier (set directly: this test is about the reopen)
+    await db().from('requests').update({ status: 'resolved', resolved_at: new Date().toISOString(), reopen_deadline_at: new Date(Date.now() + 3_600_000).toISOString() }).eq('id', r.requestId!)
+    vi.mocked(sendEmail).mockClear()
+    actAs(fx.requesterA)
+    const res = await updateRequestStatus(r.requestId!, 'open', 'The AC is not cooling again after two days')
+    expect(res.error, JSON.stringify(res)).toBeUndefined()
+    const sent = mails().filter((c) => /REOPENED/.test(String(c[0].subject)))
+    expect(sent).toHaveLength(1)
+    expect(sent[0][0].to).toEqual(['oem-one@oem.test', 'oem-two@oem.test'])
+    expect(sent[0][0].cc).toEqual(['desk.lead@citykartstores.com'])
+    expect(String(sent[0][0].html)).toContain('SER-A3')
+    expect(String(sent[0][0].html)).toContain('not cooling again after two days')
+    expect((await ticket(r.requestId!)).status).toBe('in_progress')
+    // the first mailing's record (which unit, who was mailed) is kept as it was
+    expect((await db().from('request_master_snapshots').select('snapshot').eq('request_id', r.requestId!).single()).data.snapshot[0]).toMatchObject({ ckdesk_no: '3' })
+  })
+  it('a reopened ticket that was never sent to an OEM sends nothing', async () => {
+    await setStore(ids.storeA)
+    const r = await raise(ids.subFixture, 'plain ticket')
+    await db().from('requests').update({ status: 'resolved', resolved_at: new Date().toISOString(), reopen_deadline_at: new Date(Date.now() + 3_600_000).toISOString() }).eq('id', r.requestId!)
+    vi.mocked(sendEmail).mockClear()
+    actAs(fx.requesterA)
+    await updateRequestStatus(r.requestId!, 'open', 'not fixed')
+    expect(mails().filter((c) => /REOPENED/.test(String(c[0].subject)))).toHaveLength(0)
   })
   it('an AC that is not active for the store is refused', async () => {
     await setStore(ids.storeA)

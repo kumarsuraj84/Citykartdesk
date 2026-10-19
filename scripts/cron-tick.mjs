@@ -33,6 +33,7 @@ const JOB_PATHS = {
   'system-log-archive': '/api/system-log/archive',
   'approval-reminders': '/api/approvals/reminders',
   'masters-sync': '/api/masters/sync',
+  'visit-automation': '/api/visits/run',
 }
 
 const secret = process.env.CRON_SECRET

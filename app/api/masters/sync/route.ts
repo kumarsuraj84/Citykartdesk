@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyCronSecret } from '@/lib/cron-auth'
 import { runMastersSyncForOrg } from '@/lib/masters/run'
+import { demoSheetsDir } from '@/lib/masters/demo'
 
 // Scheduled job (every minute): copies the AC, Genset and CVM Google Sheets into CK Desk. Read only towards Google.
 // GET /api/masters/sync            normal check
@@ -13,9 +14,11 @@ export async function GET(req: NextRequest) {
 
   const force = req.nextUrl.searchParams.get('force') === '1'
   const admin = createAdminClient() as unknown as { from: (t: string) => any } // eslint-disable-line @typescript-eslint/no-explicit-any
-  const { data: conns } = await admin.from('master_google_connection').select('org_id').eq('status', 'connected')
+  const { data: conns } = demoSheetsDir()
+    ? await admin.from('master_sources').select('org_id')
+    : await admin.from('master_google_connection').select('org_id').eq('status', 'connected')
   const out: Record<string, unknown> = {}
-  for (const c of (conns ?? []) as { org_id: string }[]) {
+  for (const c of [...new Map(((conns ?? []) as { org_id: string }[]).map((x) => [x.org_id, x])).values()]) {
     try {
       out[c.org_id] = await runMastersSyncForOrg(c.org_id, { force })
     } catch (e) {

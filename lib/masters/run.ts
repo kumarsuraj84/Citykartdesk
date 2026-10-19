@@ -3,7 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { loadCvmCandidates } from '@/lib/cvm/load'
 import { sendEmail } from '@/lib/email/send'
 import { escapeHtml } from '@/lib/email/escape'
-import { googleSheetsSource } from './google'
+import { googleSheetsSource, type SheetsSource } from './google'
+import { csvDirSource, demoSheetsDir } from './demo'
 import { syncMasters, type SyncReport } from './sync'
 import { resetCcBookCache } from '@/lib/requests/cc-recipients'
 import type { MasterKind } from './types'
@@ -37,12 +38,21 @@ async function tellAdmins(db: Db, orgId: string, subject: string, message: strin
 /** One check of the three sheets for an organisation: reads the saved Google connection, syncs, and tells the admins when something stops working. */
 export async function runMastersSyncForOrg(orgId: string, opts: { force?: boolean } = {}): Promise<SyncReport | { error: string }> {
   const db = createAdminClient() as unknown as Db
-  const { data: conn } = await db.from('master_google_connection').select('secret_ref, status').eq('org_id', orgId).maybeSingle()
-  if (!conn?.secret_ref) return { error: 'not connected' }
-  const { data: secret } = await db.rpc('masters_read_credential', { p_ref: conn.secret_ref })
-  if (!secret) return { error: 'saved Google connection not found' }
-  let refreshToken: string
-  try { refreshToken = (JSON.parse(String(secret)) as { refresh_token: string }).refresh_token } catch { return { error: 'saved Google connection is unreadable' } }
+  // (local demo only: with MASTERS_DEMO_DIR set the sheets are CSV files and no Google connection is needed; never active in a production build)
+  const demoDir = demoSheetsDir()
+  let source: SheetsSource
+  let conn: { status?: string } | null = null
+  if (demoDir) source = csvDirSource(demoDir)
+  else {
+    const { data } = await db.from('master_google_connection').select('secret_ref, status').eq('org_id', orgId).maybeSingle()
+    conn = data
+    if (!data?.secret_ref) return { error: 'not connected' }
+    const { data: secret } = await db.rpc('masters_read_credential', { p_ref: data.secret_ref })
+    if (!secret) return { error: 'saved Google connection not found' }
+    let refreshToken: string
+    try { refreshToken = (JSON.parse(String(secret)) as { refresh_token: string }).refresh_token } catch { return { error: 'saved Google connection is unreadable' } }
+    source = googleSheetsSource(refreshToken)
+  }
 
   const before = new Map<string, string | null>()
   const { data: srcs } = await db.from('master_sources').select('kind, last_status').eq('org_id', orgId)
@@ -50,7 +60,7 @@ export async function runMastersSyncForOrg(orgId: string, opts: { force?: boolea
 
   const candidates = await loadCvmCandidates(orgId)
   const report = await syncMasters({
-    db, orgId, source: googleSheetsSource(refreshToken), force: opts.force,
+    db, orgId, source, force: opts.force,
     cvmEmailKnown: async (email) => (candidates.byEmail.has(email.toLowerCase()) ? 'ok' : 'unknown'),
   })
 
@@ -63,7 +73,7 @@ export async function runMastersSyncForOrg(orgId: string, opts: { force?: boolea
   }
   // a refused connection is reported once, and the connection is marked so the page can ask for a new one
   const authFailure = (['ac', 'genset', 'cvm'] as MasterKind[]).map((k) => report[k]).find((r) => r.status === 'error' && /connect Google Sheets again|no longer accepts/i.test(r.message ?? ''))
-  if (authFailure && conn.status === 'connected') {
+  if (authFailure && conn?.status === 'connected') {
     await db.from('master_google_connection').update({ status: 'broken', last_error: authFailure.message ?? null }).eq('org_id', orgId)
     await tellAdmins(db, orgId, 'CK Desk lost its Google Sheets connection', authFailure.message ?? 'Connect Google Sheets again.')
   }

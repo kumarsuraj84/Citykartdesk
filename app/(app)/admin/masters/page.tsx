@@ -3,6 +3,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { resolveTemplate } from '@/lib/masters/mail'
+import { demoSheetsDir } from '@/lib/masters/demo'
 import { MastersClient, type SourceView, type IssueView, type TemplateView, type CountsView } from './MastersClient'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -34,7 +35,7 @@ export default async function SheetMastersPage({ searchParams }: { searchParams:
     admin.from('master_ac_units').select('id', { count: 'exact', head: true }).eq('org_id', orgId).is('removed_at', null).eq('is_active', false),
   ])
 
-  const tpl = (kind: 'ac' | 'genset'): TemplateView => {
+  const tpl = (kind: 'ac' | 'genset' | 'revisit'): TemplateView => {
     const saved = (templates.data ?? []).find((t: { kind: string }) => t.kind === kind) ?? null
     const t = resolveTemplate(saved, kind)
     return { kind, subject: t.subject, body: t.body, custom: !!saved }
@@ -51,10 +52,10 @@ export default async function SheetMastersPage({ searchParams }: { searchParams:
       />
       <MastersClient
         googleResult={google ?? null}
-        connection={conn.data ?? null}
+        connection={conn.data ?? (demoSheetsDir() ? { account_email: 'demo files on this computer (local test only)', status: 'connected', last_error: null, connected_at: new Date().toISOString() } : null)}
         sources={(sources.data ?? []) as SourceView[]}
         issues={(issues.data ?? []) as IssueView[]}
-        templates={[tpl('ac'), tpl('genset')]}
+        templates={[tpl('ac'), tpl('genset'), tpl('revisit')]}
         counts={counts}
       />
     </div>

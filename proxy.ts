@@ -78,6 +78,7 @@ export async function proxy(request: NextRequest) {
     '/api/system-log/archive',
     '/api/approvals/reminders',   // the daily approval reminder (cron runner, shared secret)
     '/api/masters/sync',          // copies the AC / Genset / CVM Google Sheets into the database (cron runner, shared secret)
+    '/api/visits/run',            // resolves unanswered engineer reports and reminds the store (cron runner, shared secret)
     '/api/csp-report',            // browsers post policy-violation reports here with no session
   ])
   if (PUBLIC_API_ROUTES.has(pathname)) return passThrough(request)
@@ -85,6 +86,10 @@ export async function proxy(request: NextRequest) {
   // The rating / reopen page opened from the CSAT e-mail: the signed link in the URL is the proof of who the requester is,
   // so it works without a login (store users often share a mailbox and are not signed in when they click).
   if (pathname.startsWith('/csat/')) return passThrough(request)
+
+  // The OEM engineer's visit page: engineers have no account. They prove they are at a store with the store code and the store's daily visit code (checked by the
+  // page's own endpoints), so the page and those two endpoints are reachable without a session.
+  if (pathname === '/engineer' || pathname === '/api/engineer/lookup' || pathname === '/api/engineer/submit') return passThrough(request)
 
   // The approve / reject page opened from the approval e-mail. The page itself decides who the visitor is (signed in as the
   // approver, or holding the code e-mailed to the approver) and shows a visitor who is neither nothing but the approver's name.

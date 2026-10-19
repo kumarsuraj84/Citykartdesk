@@ -17,6 +17,7 @@ import { resolveServiceFormSections, isTechnicianMandatory, fieldAppliesToCatego
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { buildFirstResponseMessage } from '@/lib/requests/first-response'
 import { issueCsat } from '@/lib/csat/issue'
+import { resendOemOnReopen } from '@/lib/requests/master-routing'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus, ProfileWithTeams } from '@/types'
 import type { Database } from '@/types/database'
 import { checkResolutionNote } from '@/lib/requests/resolution-note'
@@ -482,6 +483,9 @@ export async function applyStatusChange(
       },
     })
   }
+
+  // A resolved ticket that is reopened is not fixed, so the OEM is e-mailed again like for a new ticket (only tickets the sheets sent to an OEM in the first place).
+  if (isResolvedReopen) await resendOemOnReopen({ requestId, actorId: profile.id, reason: comment?.trim() ?? '' })
 
   // D-06: when the requester and assignee are the same person, the two
   // notify() blocks below would otherwise both target them for the same

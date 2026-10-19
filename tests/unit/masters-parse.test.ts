@@ -89,6 +89,17 @@ describe('parseAcSheet', () => {
   })
 })
 
+describe('the same wrong address on many rows is one line on the health page', () => {
+  it('groups a misspelt address found on several rows, with the rows and stores', () => {
+    const r = parseAcSheet([AC_HEAD, ac('A', 1, 'a', 'Active', 'x@oem.test, boss@citylartstores.com'), ac('B', 1, 'b', 'Active', 'x@oem.test, boss@citylartstores.com'), ac('C', 1, 'c', 'Active', 'x@oem.test, other@citylartstores.com')])
+    const typo = r.issues.filter((i) => i.code === 'probable_typo_domain')
+    expect(typo).toHaveLength(2)                                       // boss@ on two rows (one line) and other@ on one row
+    const grouped = typo.find((i) => /boss@citylartstores.com/.test(i.message))!
+    expect(grouped.message).toMatch(/on 2 rows/)
+    expect(grouped.message).toMatch(/stores A, B/)
+  })
+})
+
 describe('parseGensetSheet', () => {
   const HEAD = ['Store Code', 'Genset Brand', 'Genset KVA', 'Genset Serial No', 'CPCB Group', 'Mail ID']
   it('reads rows and reports the broken and misspelt addresses', () => {
