@@ -29,6 +29,9 @@ interface DynamicFormProps {
    *  selection — the server's own value (based on whoever the final
    *  requester is) is always what actually gets saved. */
   currentUserStoreAddress?: string | null
+  /** The Active AC numbers of the signed-in user's store (from the AC master sheet), for a dropdown whose options come from the sheet.
+   *  undefined = the user has no store, so the typed list of the field is used as it always was. */
+  acUnitOptions?: { value: string; label: string }[]
 }
 
 /** Imperative handle so an external "Recently Used"/"Frequent Issues"
@@ -148,6 +151,17 @@ export function getDefaultValue(field: FormField): FieldValue {
   }
 }
 
+/** A dropdown marked "options from the AC sheet" lists the store's Active AC numbers; with no store it keeps its typed list. */
+function withAcUnitOptions(sections: FormSection[], opts: { value: string; label: string }[] | undefined): FormSection[] {
+  if (!opts) return sections
+  return sections.map((s) => ({
+    ...s,
+    fields: s.fields.map((f) => f.options_source === 'ac_units'
+      ? { ...f, options: opts, help_text: opts.length === 0 ? 'No active AC is listed for your store in the AC sheet. Please contact the admin team.' : f.help_text }
+      : f),
+  }))
+}
+
 function flattenSections(sections: FormSection[]): FormField[] {
   return [...sections]
     .sort((a, b) => a.order - b.order)
@@ -243,7 +257,7 @@ export function SectionBlock({ section, values, errors, onChange, requesterConte
 // ── DynamicForm ───────────────────────────────────────────────────────────────
 
 export const DynamicForm = forwardRef<DynamicFormHandle, DynamicFormProps>(function DynamicForm(
-  { service, canBookOnBehalf, allowedSubCategories, currentUserStoreAddress },
+  { service, canBookOnBehalf, allowedSubCategories, currentUserStoreAddress, acUnitOptions },
   ref
 ) {
   const router = useRouter()
@@ -286,7 +300,7 @@ export const DynamicForm = forwardRef<DynamicFormHandle, DynamicFormProps>(funct
   // from values/validation/rendering all at once.
   const sectionsForAnyCategory = filterFieldsForRequester(resolveServiceFormSections(service))
   // A field limited to certain categories (for example Qty for fixtures) appears only after one of them is chosen, and is then checked like any other field.
-  const sections = filterSectionsForCategory(sectionsForAnyCategory, categoryId)
+  const sections = withAcUnitOptions(filterSectionsForCategory(sectionsForAnyCategory, categoryId), acUnitOptions)
   const allFields: FormField[] = flattenSections(sections)
   const everyField: FormField[] = flattenSections(sectionsForAnyCategory)
 

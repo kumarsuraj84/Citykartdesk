@@ -23,6 +23,8 @@ export async function runAutoCvmApproval(p: {
   actorId: string
   hasStore: boolean
   storeCvmId: string | null
+  /** The address the CVM sheet lists for the store (null = the store is not in the sheet). Only used to word the note when no CVM could be found. */
+  cvmEmailInSheet?: string | null
 }): Promise<void> {
   const { admin } = p
   const note = async (body: string, internal = true) => {
@@ -31,7 +33,11 @@ export async function runAutoCvmApproval(p: {
   try {
     const stop = async (why: string) => note(why)
     if (!p.hasStore) return await stop('This requester is not linked to a store, so the ticket was not sent to a CVM for approval automatically. Please send it for approval yourself.')
-    if (!p.storeCvmId) return await stop('No CVM is tagged to this store, so the ticket was not sent for approval automatically. Please send it for approval yourself.')
+    if (!p.storeCvmId) {
+      return await stop(p.cvmEmailInSheet
+        ? `The CVM listed for this store (${p.cvmEmailInSheet}) is not an active staff member in CK Desk, so the ticket was not sent for approval automatically. Please send it for approval yourself.`
+        : 'No CVM is listed for this store in the CVM sheet, so the ticket was not sent for approval automatically. Please send it for approval yourself.')
+    }
     const barred = firstBarredApprover([p.storeCvmId], { requesterId: p.requesterId, senderId: p.actorId })
     if (barred) return await stop('The CVM of this store is the requester, who cannot approve their own request, so the ticket was not sent for approval automatically. Please send it for approval yourself.')
 

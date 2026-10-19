@@ -77,6 +77,7 @@ export async function proxy(request: NextRequest) {
     '/api/system-log/ingest',     // shared-secret endpoints (cron runner, log shipper)
     '/api/system-log/archive',
     '/api/approvals/reminders',   // the daily approval reminder (cron runner, shared secret)
+    '/api/masters/sync',          // copies the AC / Genset / CVM Google Sheets into the database (cron runner, shared secret)
     '/api/csp-report',            // browsers post policy-violation reports here with no session
   ])
   if (PUBLIC_API_ROUTES.has(pathname)) return passThrough(request)

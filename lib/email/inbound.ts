@@ -2,6 +2,7 @@ import { senderMayReply } from '@/lib/email/inbound-participant'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadDbSmtpConfig } from './mailbox'
 import { isGmailHost } from './thread-tag'
+import { loadSheetOemContacts } from '@/lib/masters/contacts'
 import { findTaggedRequestNo, isPlausibleSender, oemNameByDomain, resolveKnownSender, resolveOemByDomain } from './inbound-match'
 import { htmlToPlainText } from './oem-template'
 import { stripQuotedReply } from './quote-strip'
@@ -32,9 +33,10 @@ export type InboundSyncResult = {
 }
 
 async function orgIdentityMaps(admin: AnyClient, orgId: string) {
-  const [{ data: profiles }, { data: oems }] = await Promise.all([
+  const [{ data: profiles }, { data: oems }, sheetOems] = await Promise.all([
     admin.from('profiles').select('id, full_name').eq('org_id', orgId).eq('is_active', true),
     admin.from('oems').select('name, emails').eq('org_id', orgId),
+    loadSheetOemContacts(admin as never, orgId),
   ])
   const profileIds = new Set((profiles ?? []).map((p: { id: string }) => p.id))
   const nameById = new Map<string, string>(
@@ -57,6 +59,10 @@ async function orgIdentityMaps(admin: AnyClient, orgId: string) {
   const oemNameByEmail = new Map<string, string>()
   for (const oem of (oems ?? []) as { name: string; emails: string[] }[]) {
     for (const email of oem.emails ?? []) oemNameByEmail.set(email.toLowerCase(), oem.name)
+  }
+  // the addresses of the AC / Genset sheets are OEM contacts too (an older OEM list entry keeps its name)
+  for (const oem of sheetOems) {
+    for (const email of oem.emails) if (!oemNameByEmail.has(email.toLowerCase())) oemNameByEmail.set(email.toLowerCase(), oem.name)
   }
 
   return { profilesByEmail, oemNameByEmail, oemNameByDomain: oemNameByDomain(oemNameByEmail) }

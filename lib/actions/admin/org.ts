@@ -319,25 +319,6 @@ function masterColumns(f: StoreMasterFields): { error: string } | { columns: Sto
   return { columns: out }
 }
 
-// A store has one OEM slot per type: oem_id is its AC OEM and must be an OEM of type AC, genset_oem_id its Genset OEM and must be of type Genset. Both must belong to
-// the caller's organisation (the admin client bypasses row security, so this is checked here; the database refuses a wrong type as well).
-async function checkStoreOems(admin: ReturnType<typeof createAdminClient>, orgId: string, f: { oem_id?: string | null; genset_oem_id?: string | null; cvm_id?: string | null }): Promise<string | null> {
-  const checks: [string | null | undefined, 'ac' | 'genset', string][] = [[f.oem_id, 'ac', 'AC'], [f.genset_oem_id, 'genset', 'Genset']]
-  for (const [id, kind, label] of checks) {
-    if (!id) continue
-    const { data: oem } = await admin.from('oems').select('id, kind').eq('id', id).eq('org_id', orgId).maybeSingle()
-    if (!oem) return 'Selected OEM not found in your organisation.'
-    if (oem.kind !== kind) return `The ${label} OEM of a store must be an OEM of type ${label}.`
-  }
-  // the store's CVM: one existing, active staff member of this organisation (the database refuses anything else as well)
-  if (f.cvm_id) {
-    const { data: cvm } = await admin.from('profiles').select('id, role, is_active').eq('id', f.cvm_id).eq('org_id', orgId).maybeSingle()
-    if (!cvm) return 'Selected CVM not found in your organisation.'
-    if (!cvm.is_active || !['agent', 'manager', 'admin', 'platform_owner'].includes(cvm.role)) return 'The CVM must be an active staff member (technician, manager or admin).'
-  }
-  return null
-}
-
 export async function createStore(fields: {
   code: string
   name: string
@@ -345,9 +326,6 @@ export async function createStore(fields: {
   city?: string
   state?: string
   pincode?: string
-  oem_id?: string | null
-  genset_oem_id?: string | null
-  cvm_id?: string | null
   is_active?: boolean
 } & StoreMasterFields): Promise<ActionResult<{ id: string }>> {
   const guard = await requireAdminOrManager()
@@ -359,13 +337,6 @@ export async function createStore(fields: {
 
   const admin = createAdminClient()
 
-  // requireAdminOrManager() only proves the caller's ROLE — the admin client
-  // bypasses RLS entirely, so without this check a caller could wire a store
-  // to another org's OEM by id, and every ticket from that store would then
-  // email that OTHER org's OEM with this org's ticket contents.
-  const oemProblem = await checkStoreOems(admin, guard.profile!.org_id!, fields)
-  if (oemProblem) return { error: oemProblem }
-
   const { data, error } = await admin
     .from('stores')
     .insert({
@@ -376,9 +347,6 @@ export async function createStore(fields: {
       city: fields.city?.trim() || null,
       state: fields.state?.trim() || null,
       pincode: fields.pincode?.trim() || null,
-      oem_id: fields.oem_id || null,
-      genset_oem_id: fields.genset_oem_id || null,
-      cvm_id: fields.cvm_id || null,
       is_active: fields.is_active ?? true,
       ...master.columns,
     })
@@ -401,9 +369,6 @@ export async function updateStore(
     city?: string | null
     state?: string | null
     pincode?: string | null
-    oem_id?: string | null
-    genset_oem_id?: string | null
-    cvm_id?: string | null
     is_active?: boolean
   } & StoreMasterFields
 ): Promise<ActionResult> {
@@ -414,10 +379,6 @@ export async function updateStore(
 
   const admin = createAdminClient()
 
-  // Same cross-tenant guard as createStore() — see its comment.
-  const oemProblem = await checkStoreOems(admin, guard.profile!.org_id!, fields)
-  if (oemProblem) return { error: oemProblem }
-
   const update: StoreUpdate = {}
   if (fields.code !== undefined) update.code = fields.code.trim().toUpperCase()
   if (fields.name !== undefined) update.name = fields.name.trim()
@@ -425,9 +386,6 @@ export async function updateStore(
   if ('city' in fields) update.city = fields.city?.trim() || null
   if ('state' in fields) update.state = fields.state?.trim() || null
   if ('pincode' in fields) update.pincode = fields.pincode?.trim() || null
-  if ('oem_id' in fields) update.oem_id = fields.oem_id || null
-  if ('genset_oem_id' in fields) update.genset_oem_id = fields.genset_oem_id || null
-  if ('cvm_id' in fields) update.cvm_id = fields.cvm_id || null
   if (fields.is_active !== undefined) update.is_active = fields.is_active
   Object.assign(update, master.columns)
 

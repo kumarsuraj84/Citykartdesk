@@ -133,7 +133,7 @@ describe('AC Not Working % and Red Flag match the Excel', () => {
       store: {
         id: t.store, code: t.store, city: null, state: null, cluster: null, region: null, priority_list: null, festival: null,
         ac_total: t.acTotal ?? masterByStore.get(t.store)?.acTotal ?? null, ac_brand: null, ac_amc_brand: null, ac_amc_vendor: null, zenatix: null,
-        open_date: masterByStore.get(t.store)?.openDate ?? null, oem: null,
+        open_date: masterByStore.get(t.store)?.openDate ?? null,
       },
     },
   })

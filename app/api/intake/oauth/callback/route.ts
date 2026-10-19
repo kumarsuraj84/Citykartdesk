@@ -32,6 +32,27 @@ export async function GET(req: NextRequest) {
   // D-059: the state belongs to the administrator who started the flow; another signed-in user cannot complete it (login-CSRF / pasted callback link)
   if (verified.userId !== profile.id) return back('oauth=badstate')
 
+  // "Connect Google Sheets" (master data) uses this same registered return address; its state carries channelId "masters" instead of a mailbox channel.
+  if (channelId === 'masters') {
+    const mastersBack = (q: string) => NextResponse.redirect(new URL(`/admin/masters?${q}`, origin))
+    const redirect = `${process.env.OAUTH_REDIRECT_BASE_URL ?? origin}/api/intake/oauth/callback`
+    const exchanged = await exchangeCode({ provider: 'google', code, redirectUri: redirect })
+    if ('error' in exchanged) return mastersBack('google=exchangefailed')
+    const store = createAdminClient() as unknown as {
+      rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      from: (t: string) => any
+    }
+    const saved = await store.rpc('masters_store_credential', { p_org: profile.org_id, p_secret: JSON.stringify({ provider: 'google', refresh_token: exchanged.refreshToken, account: exchanged.email }) })
+    if (saved.error || !saved.data) return mastersBack('google=vaultfailed')
+    const up = await store.from('master_google_connection').upsert(
+      { org_id: profile.org_id, account_email: exchanged.email, secret_ref: saved.data, status: 'connected', last_error: null, connected_at: new Date().toISOString(), connected_by: profile.id },
+      { onConflict: 'org_id' },
+    )
+    if (up.error) return mastersBack('google=savefailed')
+    return mastersBack('google=connected')
+  }
+
   // Re-check ownership — state is signed but the session must still own the channel.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rls = (await createClient()) as unknown as { from: (t: string) => any }

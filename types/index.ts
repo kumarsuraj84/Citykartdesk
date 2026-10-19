@@ -199,6 +199,9 @@ export type FormField = {
   id: string
   type: FormFieldType
   label: string
+  /** When 'ac_units', a dropdown's choices are not the typed list below but the Active AC units of the requester's own store, read from the AC master sheet
+   *  (the CKDESK serial numbers). The typed list is only the fallback for a requester who has no store. */
+  options_source?: 'ac_units'
   placeholder?: string
   help_text?: string
   required: boolean

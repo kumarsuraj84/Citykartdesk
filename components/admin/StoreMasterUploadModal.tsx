@@ -71,7 +71,7 @@ export function StoreMasterUploadModal({ onClose }: { onClose: () => void }) {
           <p className="font-mono text-[11px] text-foreground">CITY · STATE · CLUSTER · REGION · STORE PRIORITY LIST AS PER OPS · OPEN DATE · FESTIVAL</p>
           <p>and the AC details, used for the AC service only:</p>
           <p className="font-mono text-[11px] text-foreground">AC TOTAL · AC BRAND · AC-AMC BRAND · AC-AMC VENDOR · ZENATIX</p>
-          <p>(and optionally NAME, ADDRESS, PIN CODE, OEM, ACTIVE). Only the columns in the file are updated, and an empty cell never wipes what is saved. Stores are matched by their code.</p>
+          <p>(and optionally NAME, ADDRESS, PIN CODE, ACTIVE). Only the columns in the file are updated, and an empty cell never wipes what is saved. Stores are matched by their code.</p>
           <button type="button" onClick={sample} disabled={pending} className="mt-1 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted/40 disabled:opacity-50">
             Download sample file (.xlsx)
           </button>

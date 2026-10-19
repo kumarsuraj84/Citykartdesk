@@ -5,6 +5,8 @@ import { getServiceBySlug, getAllowedSubCategoriesForService } from '@/lib/queri
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { getRequesterServiceShortcuts } from '@/lib/queries/requests'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { loadAcOptionsForStoreCode } from '@/lib/masters/resolve'
 import { ServiceRequestWorkspace } from '@/components/requests/ServiceRequestWorkspace'
 import { CategoryIcon } from '@/components/admin/CategoryIcon'
 
@@ -24,10 +26,16 @@ export default async function ServiceDetailPage({ params }: PageProps) {
   // read-only, re-derived and enforced independently server-side in
   // createRequest() regardless of what (if anything) reaches the client.
   let currentUserStoreAddress: string | null = null
+  // The AC numbers this user's store may pick (Active ACs of the AC master sheet); stays undefined for a user with no store, so the old typed list is used.
+  let acUnitOptions: { value: string; label: string }[] | undefined
   if (profile?.store_id) {
     const supabase = await createClient()
-    const { data: store } = await supabase.from('stores').select('address').eq('id', profile.store_id).maybeSingle()
+    const { data: store } = await supabase.from('stores').select('address, code').eq('id', profile.store_id).maybeSingle()
     currentUserStoreAddress = store?.address ?? null
+    if (store?.code && profile.org_id) {
+      const options = await loadAcOptionsForStoreCode(createAdminClient() as never, profile.org_id, store.code)
+      acUnitOptions = options.map((o) => ({ value: o.value, label: o.label }))
+    }
   }
 
   // "Book on behalf of" — only agents/managers can raise a request for someone
@@ -100,6 +108,7 @@ export default async function ServiceDetailPage({ params }: PageProps) {
         canBookOnBehalf={canBookOnBehalf}
         allowedSubCategories={allowedSubCategories}
         currentUserStoreAddress={currentUserStoreAddress}
+        acUnitOptions={acUnitOptions}
         description={service.description}
         slaConfig={service.sla_policy?.config ?? null}
         recent={shortcuts.recent}

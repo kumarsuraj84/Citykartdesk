@@ -202,7 +202,6 @@ export interface RawTicket {
       id: string; code: string; city: string | null; state: string | null; cluster: string | null; region: string | null
       priority_list: string | null; festival: string | null; ac_total: number | null; ac_brand: string | null
       ac_amc_brand: string | null; ac_amc_vendor: string | null; zenatix: boolean | null; open_date: string | null
-      oem: { name: string } | null
     } | null
   } | null
 }
@@ -275,7 +274,7 @@ export function makeFact(r: RawTicket, ctx: FactContext): TicketFact {
     openDate: store?.open_date ?? null,
     storeType: store ? (isNsoStore(store.open_date, ctx.asOf, ctx.nsoMonths) ? 'NSO' : 'Regular') : '',
     // an OEM only has to do with tickets of services that go to an OEM; an IT or HR ticket from the same store has none
-    oem: isAc ? (store?.oem?.name ?? NO_OEM) : '',
+    oem: isAc ? (store?.ac_amc_vendor || NO_OEM) : '',
 
     acNo,
     oemTicketNo: f?.oemTicketNo ? answerText(data[f.oemTicketNo.id]) : '',

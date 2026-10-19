@@ -166,6 +166,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
           items: [
             { label: 'Settings',       href: '/admin/settings',       icon: Settings },
             ...(isAdmin ? [{ label: 'Master Data', href: '/admin/master-data', icon: Database }] : []),
+            ...(isAdmin ? [{ label: 'Sheet Masters', href: '/admin/masters', icon: Database }] : []),
             { label: 'Knowledge Base', href: '/admin/knowledge-base', icon: BookOpen  },
           ],
         },

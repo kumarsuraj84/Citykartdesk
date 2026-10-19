@@ -156,7 +156,7 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
                 }}
               />
               <label className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                Auto-send tickets of this category to the store&apos;s OEM:
+                Auto-send tickets of this category by e-mail to the OEM addresses the AC / Genset sheet lists for the store:
                 <select
                   value={oemKind}
                   onChange={(e) => setOemKind(isOemKind(e.target.value) ? e.target.value : '')}
@@ -168,7 +168,7 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
               </label>
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <input type="checkbox" checked={cvmApproval} onChange={(e) => setCvmApproval(e.target.checked)} />
-                Put the ticket In Process and send it for approval to the CVM of the store automatically
+                Put the ticket In Process and send it for approval to the CVM the CVM sheet lists for the store, automatically
               </label>
               {error && <p className="text-xs text-destructive">{error}</p>}
             </div>

@@ -65,7 +65,7 @@ interface Raw {
     department: { name: string } | null
     location: { name: string } | null
     store: {
-      code: string; name: string; state: string | null; oem: { name: string } | null
+      code: string; name: string; state: string | null
       cluster: string | null; region: string | null; priority_list: string | null; ac_total: number | null
       ac_brand: string | null; ac_amc_brand: string | null; ac_amc_vendor: string | null; open_date: string | null
     } | null
@@ -82,7 +82,7 @@ const SELECT = [
   'id, request_no, title, status, priority, created_at, updated_at, resolved_at, closed_at, responded_at, resolution_due_at, reopen_count, source_metadata',
   'team:teams(name)',
   'assignee:profiles!requests_assigned_to_fkey(full_name)',
-  'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), location:locations(name), store:stores!profiles_store_id_fkey(code, name, state, cluster, region, priority_list, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, open_date, oem:oems!stores_oem_id_fkey(name)))',
+  'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), location:locations(name), store:stores!profiles_store_id_fkey(code, name, state, cluster, region, priority_list, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, open_date))',
   'service:services(name, auto_oem_routing)',
   'category:service_categories(name)',
   'sub_category:service_sub_categories(name)',
@@ -116,7 +116,8 @@ export function toExecTicket(r: Raw, now: number, openAcByStore: ReadonlyMap<str
   const rating = (Array.isArray(r.csat) ? r.csat : r.csat ? [r.csat] : []).map((c) => c.rating).filter((x): x is number => typeof x === 'number')
   // The store's OEM only matters for equipment requests (a service with OEM routing switched on, such as an AC repair). An IT or HR
   // ticket from the same store has nothing to do with the store's AC vendor, so it carries no OEM and stays out of every OEM view.
-  const oem = r.service?.auto_oem_routing ? (r.requester?.store?.oem?.name ?? '') : ''
+  // (named after the AMC vendor the AC sheet gives the store)
+  const oem = r.service?.auto_oem_routing ? (r.requester?.store?.ac_amc_vendor ?? '') : ''
   const via = r.source_metadata?.created_via
   // the store's details from the Store Master; a requester who is not a store (head office staff) has none
   const st = r.requester?.store ?? null

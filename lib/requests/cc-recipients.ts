@@ -2,6 +2,7 @@
 // (technician, manager, admin, requester ...) or an OEM contact listed under Master Data. No outsider address is ever accepted.
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { loadSheetOemContacts } from '@/lib/masters/contacts'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: { admin: { listUsers: (opts: { page: number; perPage: number }) => any } } }
@@ -54,7 +55,8 @@ export async function loadCcBook(orgId: string, admin: AnyClient = createAdminCl
     }
     if (users.length < 1000) break
   }
-  for (const oem of (oems ?? []) as { name: string; emails: string[] | null }[]) {
+  const sheetOems = await loadSheetOemContacts(admin as never, orgId)
+  for (const oem of [...((oems ?? []) as { name: string; emails: string[] | null }[]), ...sheetOems]) {
     for (const email of oem.emails ?? []) {
       const key = email.trim().toLowerCase()
       if (key && !book.has(key)) book.set(key, { email: key, name: oem.name, kind: 'oem', detail: 'OEM contact' })

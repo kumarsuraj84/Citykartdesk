@@ -5,16 +5,13 @@ import { resolveSlaDeadlines } from '@/lib/sla/resolve'
 import { resolveServiceFormSections, requesterCanSet, fieldAppliesToCategory } from '@/lib/forms/sections'
 import { validateRequesterFormCompletion } from '@/lib/requests/validate-requester-form-completion'
 import { resolveSubCategoryForService } from '@/lib/requests/resolve-sub-category'
-import { sendEmail } from '@/lib/email/send'
 import { pickTitleField, subjectToTitle } from '@/lib/requests/title-field'
 import { notifyRequesterTicketLogged } from '@/lib/requests/notify-requester'
-import { escapeHtml } from '@/lib/email/escape'
-import { isHtmlTemplate, renderHtmlEmail } from '@/lib/email/oem-template'
-import { sanitizeTemplateHtml } from '@/lib/email/sanitize-template'
-import { oemSentComment } from '@/lib/requests/oem-message'
-import { OEM_DEFAULT_TEXT, isOemKind, type OemKind } from '@/lib/oems/kinds'
-import { resolveOemRoute } from '@/lib/oems/route'
+import { isOemKind, type OemKind } from '@/lib/oems/kinds'
 import { runAutoCvmApproval } from '@/lib/cvm/auto-approval'
+import { runMasterOemRouting, saveMasterSnapshot } from '@/lib/requests/master-routing'
+import { findSelectedUnit, loadActiveAcUnits, loadCvmEmail } from '@/lib/masters/resolve'
+import { loadCvmCandidates } from '@/lib/cvm/load'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import type { FormField, RequestPriority } from '@/types'
 import type { Json } from '@/types/database'
@@ -39,129 +36,6 @@ function sanitizeTrustedTitle(raw: string | undefined): string | null {
   const trimmed = raw.trim()
   if (!trimmed) return null
   return trimmed.length > MAX_TRUSTED_TITLE_LENGTH ? trimmed.slice(0, MAX_TRUSTED_TITLE_LENGTH).trimEnd() : trimmed
-}
-
-// ── AC Issues-style OEM auto-routing ──────────────────────────────────────────
-// Fires once, right after a request is created, only when the service is
-// flagged auto_oem_routing AND the requester's store (stores.oem_id) is
-// actually mapped to an OEM — an unmapped store's ticket stays a normal
-// manual ticket, per the confirmed product decision. Uses the admin client
-// throughout since this is a system-triggered action with no interactive
-// human actor at ticket-creation time. Channel-agnostic already — moved here
-// unchanged from lib/actions/requests.ts as part of the createRequestCore()
-// extraction (Stage 1).
-export async function runOemAutoRouting(params: {
-  admin: ReturnType<typeof createAdminClient>
-  actorId: string
-  orgId: string
-  request: { id: string; request_no: string }
-  autoOemRouting: boolean | null | undefined
-  storeOemId: string | null
-  /** The type of OEM this ticket goes to (default 'ac', as before). A Genset ticket must only ever reach a Genset OEM. */
-  kind?: OemKind
-  /** Name of the ticket's category, offered to the OEM template as {{category}}. */
-  categoryName?: string | null
-  title: string
-  description: string
-  requesterName: string
-  requesterEmail: string
-  requesterPhone: string
-  storeAddress: string | null
-}): Promise<void> {
-  const { admin, actorId, orgId, request, autoOemRouting, storeOemId } = params
-  const kind: OemKind = params.kind ?? 'ac'
-  if (!autoOemRouting || !storeOemId) return
-
-  // org_id filter: storeOemId already came from an org-scoped stores lookup
-  // upstream, but re-checking here keeps this function safe to call with any
-  // id, rather than relying on every future caller to have pre-scoped it.
-  const { data: oem } = await admin
-    .from('oems')
-    .select('name, kind, emails, email_subject_template, email_body_template, is_active')
-    .eq('id', storeOemId)
-    .eq('org_id', orgId)
-    .maybeSingle()
-  if (!oem || !oem.is_active || !oem.emails || oem.emails.length === 0) return
-  // Defence in depth (the database also refuses it): never send a ticket of one type to an OEM of another type.
-  if (oem.kind && oem.kind !== kind) return
-
-  const vars: Record<string, string> = {
-    ticket_no: request.request_no,
-    subject: params.title,
-    description: params.description || '(no description provided)',
-    requester_name: params.requesterName,
-    requester_email: params.requesterEmail,
-    requester_phone: params.requesterPhone || '(not provided)',
-    store_address: params.storeAddress || '(no address on file)',
-    category: params.categoryName || '(no category)',
-  }
-  const render = (tpl: string) => tpl.replace(/\{\{(\w+)\}\}/g, (_m, key: string) => vars[key] ?? '')
-
-  const subject = render(oem.email_subject_template || OEM_DEFAULT_TEXT[kind].subject)
-  let bodyText: string
-  let bodyHtml: string
-  if (isHtmlTemplate(oem.email_body_template)) {
-    // Rich template from the editor: re-sanitized here too (it was also cleaned on save), then
-    // every placeholder value is escaped as it is filled in.
-    const rendered = renderHtmlEmail(sanitizeTemplateHtml(oem.email_body_template as string), vars)
-    bodyText = rendered.text
-    bodyHtml = rendered.html
-  } else {
-    bodyText = render(
-      oem.email_body_template ||
-        OEM_DEFAULT_TEXT[kind].body
-    )
-    // D-05: bodyText is built from a {{var}}-substituted template — ticket
-    // subject/description/requester fields are all user-controlled — so the
-    // HTML rendering (not the parallel plain-text `text` field below) must
-    // escape each line before wrapping it in a tag.
-    bodyHtml = bodyText.split('\n').map((line) => `<p>${line ? escapeHtml(line) : '&nbsp;'}</p>`).join('')
-  }
-
-  // ONE email addressed to every OEM contact — not one email per address — so the OEM's
-  // team gets a single message they can all see and reply-all to.
-  const sent = await sendEmail({ to: oem.emails as string[], subject, html: bodyHtml, text: bodyText, threadRequestNo: request.request_no })
-  if (sent.error) {
-    // The e-mail did not go (D-045): do not tell the requester it was sent, and do not move the ticket on as if it had been. Leave it open for a
-    // technician, with an internal note saying what to do.
-    await admin.from('request_comments').insert({
-      request_id: request.id,
-      author_id: actorId,
-      body: `The automatic e-mail to ${oem.name} could not be sent. Please send this ticket to them yourself.`,
-      is_internal: true,
-    })
-    return
-  }
-
-  await admin.from('request_comments').insert({
-    request_id: request.id,
-    author_id: actorId,
-    body: oemSentComment({ oemName: oem.name, emails: oem.emails as string[], subject, requestNo: request.request_no, body: bodyText }),
-    is_internal: false,
-  })
-
-  // Conditioned on .eq('status','open') because a Business Rule's "created"
-  // trigger runs earlier in createRequestCore() and may have already moved
-  // the ticket off 'open' (e.g. auto-set to a different status) — checking
-  // the returned row before logging keeps the activity trail honest instead
-  // of recording a status change that silently didn't happen.
-  const nowIso = new Date().toISOString()
-  const { data: statusUpdated } = await admin
-    .from('requests')
-    .update({ status: 'in_progress', responded_at: nowIso })
-    .eq('id', request.id)
-    .eq('status', 'open')
-    .select('id')
-    .maybeSingle()
-
-  if (statusUpdated) {
-    await logActivity({
-      requestId: request.id,
-      actorId,
-      action: 'status_changed',
-      metadata: { from: 'open', to: 'in_progress', automated: true, oem: oem.name },
-    })
-  }
 }
 
 // ── createRequestCore ─────────────────────────────────────────────────────────
@@ -367,18 +241,17 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   if (!requesterProfile) return { error: 'Requester not found.' }
 
   let requesterStoreAddress: string | null = null
-  let requesterStoreSlots: { oem_id: string | null; genset_oem_id: string | null } | null = null
-  let requesterStoreCvmId: string | null = null
+  // The store code ties the requester to the master sheets (AC units, Genset, CVM).
+  let requesterStoreCode: string | null = null
   if (requesterProfile?.store_id) {
     const { data: store } = await admin
       .from('stores')
-      .select('address, oem_id, genset_oem_id, cvm_id')
+      .select('address, code')
       .eq('id', requesterProfile.store_id)
       .eq('org_id', orgId)
       .maybeSingle()
     requesterStoreAddress = store?.address ?? null
-    requesterStoreSlots = store ? { oem_id: store.oem_id ?? null, genset_oem_id: store.genset_oem_id ?? null } : null
-    requesterStoreCvmId = store?.cvm_id ?? null
+    requesterStoreCode = store?.code ? String(store.code).toUpperCase() : null
   }
 
   // A field limited to certain categories (for example Qty for fixtures) belongs only to those categories: for any other category its answer is dropped, so it is
@@ -398,6 +271,17 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   for (const field of allFields) {
     if (field.type === 'store_address') {
       parsedFormData[field.id] = requesterStoreAddress ?? ''
+    }
+  }
+
+  // A dropdown whose choices come from the AC sheet: the AC chosen must be one of the Active ACs of the requester's own store (checked here, not only in the
+  // browser). Other channels (e-mail intake, WhatsApp) have no such list to choose from, so their value is kept as given.
+  const acField = allFields.find((f) => f.options_source === 'ac_units')
+  const chosenAcValue = acField ? String(parsedFormData[acField.id] ?? '').trim() : ''
+  if (acField && chosenAcValue && requesterStoreCode && source === 'web') {
+    const activeUnits = await loadActiveAcUnits(admin, orgId, requesterStoreCode)
+    if (activeUnits.length > 0 && !findSelectedUnit(activeUnits, chosenAcValue)) {
+      return { error: `The AC "${chosenAcValue}" is not an active AC of your store. Please choose one from the list.` }
     }
   }
 
@@ -557,8 +441,8 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     console.error('[createRequestCore] Activity log failed for request', request.id)
   }
 
-  // OEM auto-routing: a category set to "auto-send to OEM type X" sends the ticket to the store's OEM of type X (AC or Genset); otherwise the AC Issues service
-  // (auto_oem_routing) sends it to the store's AC OEM exactly as before. The store has one slot per type, so a ticket can only reach an OEM of the right type.
+  // OEM auto-routing from the master sheets: a category set to "auto-send to the AC / Genset OEM" mails the ticket to the addresses of the store's rows in that
+  // sheet; otherwise the AC Issues service (auto_oem_routing) does the same for AC, quietly when the store has nothing in the AC sheet.
   let categoryOemKind: OemKind | null = null
   let categoryName: string | null = null
   let categoryCvmApproval = false
@@ -568,18 +452,30 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     categoryOemKind = isOemKind(cat?.auto_oem_kind) ? cat.auto_oem_kind : null
     categoryCvmApproval = cat?.auto_cvm_approval === true
   }
-  const oemRoute = resolveOemRoute({ serviceAutoOemRouting: service.auto_oem_routing, categoryOemKind, store: requesterStoreSlots })
-  if (oemRoute.action === 'send') {
+  // The AC the requester chose (if the form has the AC-number field) is saved with the ticket as it was at this moment.
+  if (acField && chosenAcValue && requesterStoreCode) {
+    try {
+      const activeUnits = await loadActiveAcUnits(admin, orgId, requesterStoreCode)
+      const chosen = findSelectedUnit(activeUnits, chosenAcValue)
+      if (chosen) await saveMasterSnapshot(admin, { requestId: request.id, kind: 'ac', units: [chosen] })
+    } catch (e) {
+      console.error('[createRequestCore] AC snapshot failed', e)
+    }
+  }
+
+  const oemKind: OemKind | null = categoryOemKind ?? (service.auto_oem_routing ? 'ac' : null)
+  if (oemKind) {
     try {
       const { data: authUser } = await admin.auth.admin.getUserById(requesterId)
-      await runOemAutoRouting({
+      await runMasterOemRouting({
         admin,
         actorId: actingUserId,
         orgId,
         request,
-        autoOemRouting: true,
-        storeOemId: oemRoute.oemId,
-        kind: oemRoute.kind,
+        kind: oemKind,
+        storeCode: requesterStoreCode,
+        chosenAcValue,
+        quiet: !categoryOemKind,
         categoryName,
         title,
         description: oemDescription,
@@ -591,25 +487,17 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     } catch (e) {
       console.error('[createRequestCore] OEM auto-routing failed', e)
     }
-  } else if (oemRoute.action === 'unmapped') {
-    // The category asks for an OEM but this store has none of that type: leave the ticket open for a technician and say why, so the gap is not missed.
-    const label = oemRoute.kind === 'genset' ? 'Genset' : 'AC'
-    try {
-      await admin.from('request_comments').insert({
-        request_id: request.id,
-        author_id: actingUserId,
-        body: requesterProfile?.store_id
-          ? `No ${label} OEM is mapped to this store, so the ticket was not sent to an OEM automatically. Please send it to the OEM yourself.`
-          : `This requester is not linked to a store, so the ticket was not sent to a ${label} OEM automatically. Please send it to the OEM yourself.`,
-        is_internal: true,
-      })
-    } catch (e) {
-      console.error('[createRequestCore] OEM unmapped note failed', e)
-    }
   }
 
   // Automatic approval by the store's CVM (a category set to it, for example Fixture / Hangers / Fixture Attachments): In Process, sent to the CVM, on hold until the CVM decides.
   if (categoryCvmApproval) {
+    // The CVM of the store comes from the CVM sheet (by e-mail) and must be an active staff member of CK Desk.
+    let cvmId: string | null = null
+    let cvmEmail: string | null = null
+    if (requesterStoreCode) {
+      cvmEmail = await loadCvmEmail(admin, orgId, requesterStoreCode)
+      if (cvmEmail) cvmId = (await loadCvmCandidates(orgId)).byEmail.get(cvmEmail) ?? null
+    }
     await runAutoCvmApproval({
       admin,
       orgId,
@@ -617,7 +505,8 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
       requesterId,
       actorId: actingUserId,
       hasStore: !!requesterProfile?.store_id,
-      storeCvmId: requesterStoreCvmId,
+      storeCvmId: cvmId,
+      cvmEmailInSheet: cvmEmail,
     })
   }
 

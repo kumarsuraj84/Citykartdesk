@@ -32,6 +32,7 @@ const JOB_PATHS = {
   csat: '/api/csat/run',
   'system-log-archive': '/api/system-log/archive',
   'approval-reminders': '/api/approvals/reminders',
+  'masters-sync': '/api/masters/sync',
 }
 
 const secret = process.env.CRON_SECRET

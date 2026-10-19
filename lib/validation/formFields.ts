@@ -109,7 +109,7 @@ export function validateFieldValue(field: FormField, value: unknown, audience: F
   // missing that metadata isn't newly broken. `checkbox`/`toggle` are
   // deliberately excluded — confirmed via FieldRenderer.tsx that both are
   // rendered with plain boolean semantics, never option lists.
-  if ((field.type === 'select' || field.type === 'radio') && field.options?.length) {
+  if ((field.type === 'select' || field.type === 'radio') && field.options?.length && field.options_source !== 'ac_units') {
     const validValues = new Set(flattenAllLeafOptions(field.options).map((o) => o.value))
     if (!validValues.has(String(value))) {
       return `"${value}" is not a valid option for "${field.label}".`

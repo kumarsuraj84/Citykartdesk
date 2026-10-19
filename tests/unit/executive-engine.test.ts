@@ -217,11 +217,11 @@ describe('levels and the data rows', () => {
       created_at: new Date(ago(5)).toISOString(), resolved_at: new Date(ago(4)).toISOString(), closed_at: null, updated_at: new Date(ago(4)).toISOString(),
       responded_at: new Date(ago(5, -2)).toISOString(), resolution_due_at: new Date(ago(4, 5)).toISOString(), reopen_count: 0,
       source_metadata: { created_via: 'whatsapp' }, team: { name: 'ADMIN GROUP' }, assignee: null,
-      requester: { full_name: 'Store A', department: null, location: { name: 'STORES' }, store: { code: 'STA', name: 'Store A', state: 'Delhi', cluster: 'UP2', region: 'R4', priority_list: 'ROS', ac_total: 10, ac_brand: 'DAIKIN', ac_amc_brand: 'DAIKIN', ac_amc_vendor: 'VENDOR', open_date: '2020-01-01', oem: { name: 'BLUE STAR OEM - DL' } } },
+      requester: { full_name: 'Store A', department: null, location: { name: 'STORES' }, store: { code: 'STA', name: 'Store A', state: 'Delhi', cluster: 'UP2', region: 'R4', priority_list: 'ROS', ac_total: 10, ac_brand: 'DAIKIN', ac_amc_brand: 'DAIKIN', ac_amc_vendor: 'BLUE STAR', open_date: '2020-01-01' } },
       service: { name: 'S', auto_oem_routing: true }, category: { name: 'AC' }, sub_category: null, reopens: [{ created_at: new Date(ago(3)).toISOString() }],
     }
     const a = toExecTicket({ ...base, csat: { rating: 4 } }, NOW)
-    expect(a).toMatchObject({ oem: 'BLUE STAR OEM - DL', brand: 'BLUE STAR', store: 'Store A', tech: UNASSIGNED, src: 'WhatsApp', csat: 4, breached: true })
+    expect(a).toMatchObject({ oem: 'BLUE STAR', brand: 'BLUE STAR', store: 'Store A', tech: UNASSIGNED, src: 'WhatsApp', csat: 4, breached: true })
     expect(a.reo).toHaveLength(1)
     expect(a.frH).toBeCloseTo(2, 1)
     expect(toExecTicket({ ...base, csat: [{ rating: 2 }, { rating: 5 }] }, NOW).csat).toBe(5)

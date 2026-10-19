@@ -102,11 +102,17 @@ function Toolbar({ editor }: { editor: Editor }) {
   )
 }
 
-export default function RichEmailEditor({ label, value, onChange, hint }: {
+export default function RichEmailEditor({ label, value, onChange, hint, placeholders = OEM_PLACEHOLDERS, sampleValues = OEM_SAMPLE_VALUES, starterHtml = STARTER_TEMPLATE_HTML }: {
   label: string
   value: string
   onChange: (html: string) => void
   hint?: string
+  /** The {{details}} offered to insert (default: the ticket details). */
+  placeholders?: readonly string[]
+  /** Example values used by the preview. */
+  sampleValues?: Record<string, string>
+  /** The layout the "starter table" button puts in. */
+  starterHtml?: string
 }) {
   const [mode, setMode] = useState<'edit' | 'preview'>('edit')
 
@@ -140,7 +146,7 @@ export default function RichEmailEditor({ label, value, onChange, hint }: {
   // The preview is built from what the editor itself holds (its own schema drops scripts, event handlers and unknown tags), never from the raw stored text:
   // a template written straight into the database could otherwise run in the administrator's browser (VAPT VA-INT-05 / VA-ADM-07).
   const cleanHtml = editor && !editor.isEmpty ? editor.getHTML() : ''
-  const previewHtml = renderHtmlEmail(cleanHtml || '<p></p>', OEM_SAMPLE_VALUES).html
+  const previewHtml = renderHtmlEmail(cleanHtml || '<p></p>', sampleValues).html
 
   return (
     <div>
@@ -194,7 +200,7 @@ export default function RichEmailEditor({ label, value, onChange, hint }: {
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <span className="text-[11px] text-muted-foreground">Insert detail:</span>
-        {OEM_PLACEHOLDERS.map((p) => (
+        {placeholders.map((p) => (
           <button
             key={p}
             type="button"
@@ -211,7 +217,7 @@ export default function RichEmailEditor({ label, value, onChange, hint }: {
           disabled={!editor || mode !== 'edit'}
           onClick={() => {
             if (value.trim() && !window.confirm('Replace the current body with the starter table layout?')) return
-            editor?.commands.setContent(STARTER_TEMPLATE_HTML, { emitUpdate: true })
+            editor?.commands.setContent(starterHtml, { emitUpdate: true })
           }}
           className="ml-auto rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-40"
         >

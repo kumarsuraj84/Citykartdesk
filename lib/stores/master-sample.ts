@@ -30,7 +30,7 @@ const HOW_TO: string[] = [
   '6. ZENATIX: Yes or No.  AC TOTAL: a whole number.',
   '7. The AC columns (AC TOTAL, AC BRAND, AC-AMC BRAND, AC-AMC VENDOR, ZENATIX) are used for the AC service only. The other columns are for every store.',
   '8. Spelling that differs only by capital letters (Blue Star / BLUE STAR) is treated as one value. Use one spelling for one brand, cluster or vendor.',
-  '9. You can also include NAME, ADDRESS, PIN CODE, OEM (the name of the AC OEM as set up in CK Desk), GENSET OEM (the name of its Genset OEM), CVM (the e-mail or full name of the CVM of the store, one CVM per store) and ACTIVE (Yes / No). An OEM of the wrong type in a column is refused.',
+  '9. You can also include NAME, ADDRESS, PIN CODE and ACTIVE (Yes / No). The OEM e-mail addresses and the CVM of a store are not set here: they come from the AC, Genset and CVM Google Sheets (Admin > Sheet Masters). The AC details, address and opening date are also kept up to date from the AC sheet.',
   '',
   'Tip: the Export button on the Stores tab gives a file in this same format with the current values, ready to edit and upload again.',
 ]

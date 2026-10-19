@@ -6,6 +6,8 @@ import { withSubjectTag, isGmailHost, taggedReplyAddress } from './thread-tag'
 export interface EmailPayload {
   /** One address, or several to send ONE message to all of them (they see each other, reply-all works). */
   to: string | string[]
+  /** Copied people (company staff on an OEM mail). They get the same single message. */
+  cc?: string | string[]
   subject: string
   html: string
   text?: string
@@ -71,6 +73,7 @@ async function sendViaSmtp(p: EmailPayload, setup: EmailSetup): Promise<{ error?
   await getTransporter(setup.smtp!).sendMail({
     from,
     to: p.to,
+    ...(p.cc && p.cc.length ? { cc: p.cc } : {}),
     subject,
     html: p.html,
     text: p.text,
@@ -94,6 +97,7 @@ async function sendViaResend(p: EmailPayload, setup: EmailSetup): Promise<{ erro
     body: JSON.stringify({
       from,
       to: p.to,
+      ...(p.cc && p.cc.length ? { cc: p.cc } : {}),
       subject,
       html: p.html,
       text: p.text,

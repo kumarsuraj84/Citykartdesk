@@ -1,0 +1,27 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { verifyCronSecret } from '@/lib/cron-auth'
+import { runMastersSyncForOrg } from '@/lib/masters/run'
+
+// Scheduled job (every minute): copies the AC, Genset and CVM Google Sheets into CK Desk. Read only towards Google.
+// GET /api/masters/sync            normal check
+// GET /api/masters/sync?force=1    read and apply every sheet even when nothing changed
+export async function GET(req: NextRequest) {
+  const verified = verifyCronSecret(req)
+  if (verified === null) return NextResponse.json({ error: 'CRON_SECRET is not configured.' }, { status: 503 })
+  if (!verified) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const force = req.nextUrl.searchParams.get('force') === '1'
+  const admin = createAdminClient() as unknown as { from: (t: string) => any } // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: conns } = await admin.from('master_google_connection').select('org_id').eq('status', 'connected')
+  const out: Record<string, unknown> = {}
+  for (const c of (conns ?? []) as { org_id: string }[]) {
+    try {
+      out[c.org_id] = await runMastersSyncForOrg(c.org_id, { force })
+    } catch (e) {
+      console.error('[masters/sync] failed for org', c.org_id, e)
+      out[c.org_id] = { error: 'failed' }
+    }
+  }
+  return NextResponse.json({ orgs: out })
+}

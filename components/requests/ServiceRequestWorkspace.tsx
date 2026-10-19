@@ -24,6 +24,7 @@ export function ServiceRequestWorkspace({
   canBookOnBehalf,
   allowedSubCategories,
   currentUserStoreAddress,
+  acUnitOptions,
   description,
   slaConfig,
   recent,
@@ -33,6 +34,7 @@ export function ServiceRequestWorkspace({
   canBookOnBehalf?: boolean
   allowedSubCategories: AllowedSubCategory[]
   currentUserStoreAddress: string | null
+  acUnitOptions?: { value: string; label: string }[]
   description: string | null
   slaConfig: SLAConfig | null | undefined
   recent: RequesterServiceShortcut[]
@@ -97,6 +99,7 @@ export function ServiceRequestWorkspace({
             canBookOnBehalf={canBookOnBehalf}
             allowedSubCategories={allowedSubCategories}
             currentUserStoreAddress={currentUserStoreAddress}
+            acUnitOptions={acUnitOptions}
           />
         </div>
       </div>

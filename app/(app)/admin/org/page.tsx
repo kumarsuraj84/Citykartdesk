@@ -63,18 +63,6 @@ export interface UserOption {
   full_name: string
 }
 
-export interface OemRow {
-  id: string
-  name: string
-  /** 'ac' or 'genset': a store has one OEM slot per type */
-  kind: 'ac' | 'genset'
-  emails: string[]
-  email_subject_template: string | null
-  email_body_template: string | null
-  is_active: boolean
-  created_at: string
-}
-
 export interface StoreRow {
   id: string
   code: string
@@ -83,13 +71,6 @@ export interface StoreRow {
   city: string | null
   state: string | null
   pincode: string | null
-  oem_id: string | null
-  oem_name?: string | null
-  genset_oem_id: string | null
-  genset_oem_name?: string | null
-  /** the store's CVM (one per store); one CVM can have many stores */
-  cvm_id: string | null
-  cvm_name?: string | null
   is_active: boolean
   created_at: string
   ac_total: number | null
@@ -112,7 +93,7 @@ export default async function OrgStructurePage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = (await createClient()) as any
 
-  const [deptResult, locResult, ccResult, funcResult, desigResult, usersResult, allProfilesResult, requestsResult, oemResult, storeResult] = await Promise.all([
+  const [deptResult, locResult, ccResult, funcResult, desigResult, usersResult, allProfilesResult, requestsResult, storeResult] = await Promise.all([
     supabase
       .from('departments')
       .select('id, name, code, parent_id, head_user_id, is_active, created_at, head:profiles!departments_head_user_id_fkey(full_name)')
@@ -148,12 +129,8 @@ export default async function OrgStructurePage() {
       .select('id, requester_id, status, created_at, resolved_at')
       .eq('org_id', profile.org_id ?? ''),
     supabase
-      .from('oems')
-      .select('id, name, kind, emails, email_subject_template, email_body_template, is_active, created_at')
-      .order('name'),
-    supabase
       .from('stores')
-      .select('id, code, name, address, city, state, pincode, oem_id, genset_oem_id, cvm_id, is_active, created_at, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, zenatix, open_date, cluster, region, priority_list, festival, oem:oems!stores_oem_id_fkey(name), genset_oem:oems!stores_genset_oem_id_fkey(name), cvm:profiles!stores_cvm_id_fkey(full_name)')
+      .select('id, code, name, address, city, state, pincode, is_active, created_at, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, zenatix, open_date, cluster, region, priority_list, festival')
       .order('code'),
   ])
 
@@ -232,16 +209,10 @@ export default async function OrgStructurePage() {
   const jobFunctions: JobFunctionRow[] = funcResult.data ?? []
   const designations: DesignationRow[] = desigResult.data ?? []
 
-  const oems: OemRow[] = oemResult.data ?? []
-
-  // the people who can be a store's CVM: active staff (technician, manager, admin, owner) of this organisation
-  const { data: cvmRows } = await supabase.from('profiles').select('id, full_name').eq('org_id', profile.org_id ?? '').eq('is_active', true).in('role', ['agent', 'manager', 'admin', 'platform_owner']).order('full_name')
-  const cvmOptions: UserOption[] = (cvmRows ?? []).map((p: { id: string; full_name: string }) => ({ id: p.id, full_name: p.full_name }))
-
   type StoreQueryRow = {
     id: string; code: string; name: string; address: string | null; city: string | null
-    state: string | null; pincode: string | null; oem_id: string | null; genset_oem_id: string | null; cvm_id: string | null
-    is_active: boolean; created_at: string; oem: { name: string } | null; genset_oem: { name: string } | null; cvm: { full_name: string } | null
+    state: string | null; pincode: string | null
+    is_active: boolean; created_at: string
     ac_total: number | null; ac_brand: string | null; ac_amc_brand: string | null; ac_amc_vendor: string | null; zenatix: boolean | null
     open_date: string | null; cluster: string | null; region: string | null; priority_list: string | null; festival: string | null
   }
@@ -253,12 +224,6 @@ export default async function OrgStructurePage() {
     city: s.city,
     state: s.state,
     pincode: s.pincode,
-    oem_id: s.oem_id,
-    oem_name: s.oem?.name ?? null,
-    genset_oem_id: s.genset_oem_id,
-    genset_oem_name: s.genset_oem?.name ?? null,
-    cvm_id: s.cvm_id,
-    cvm_name: s.cvm?.full_name ?? null,
     is_active: s.is_active,
     created_at: s.created_at,
     ac_total: s.ac_total, ac_brand: s.ac_brand, ac_amc_brand: s.ac_amc_brand, ac_amc_vendor: s.ac_amc_vendor, zenatix: s.zenatix,
@@ -278,8 +243,6 @@ export default async function OrgStructurePage() {
         jobFunctions={jobFunctions}
         designations={designations}
         allUsers={allUsers}
-        cvmOptions={cvmOptions}
-        oems={oems}
         stores={stores}
       />
     </div>

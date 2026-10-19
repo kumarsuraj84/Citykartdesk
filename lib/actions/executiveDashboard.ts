@@ -90,7 +90,7 @@ export async function getExecutiveTicketDetail(id: string): Promise<{ error: str
     'id, request_no, title, description, status, priority, created_at, resolved_at, closed_at, responded_at, resolution_due_at, response_due_at, reopen_count',
     'team:teams(name)',
     'assignee:profiles!requests_assigned_to_fkey(full_name)',
-    'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), store:stores!profiles_store_id_fkey(name, state, oem:oems!stores_oem_id_fkey(name)))',
+    'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), store:stores!profiles_store_id_fkey(name, state, ac_amc_vendor))',
     'source_metadata',
     'service:services(name, auto_oem_routing)',
     'category:service_categories(name)',
@@ -120,7 +120,7 @@ export async function getExecutiveTicketDetail(id: string): Promise<{ error: str
   const firstAssigned = activity.find((a) => a.action === 'assigned' && a.metadata?.assigned_to)
   const via = (data.source_metadata as { created_via?: string } | null)?.created_via
   // same rule as the dashboard: the store's OEM belongs only to equipment (OEM-routed) services
-  const oem: string = data.service?.auto_oem_routing ? (data.requester?.store?.oem?.name ?? '') : ''
+  const oem: string = data.service?.auto_oem_routing ? (data.requester?.store?.ac_amc_vendor ?? '') : ''
   const surveyRaw = data.csat as { rating: number | null; comment: string | null } | { rating: number | null; comment: string | null }[] | null
   const survey = Array.isArray(surveyRaw) ? surveyRaw[0] : surveyRaw ?? undefined
   const detail: ExecTicketDetail = {

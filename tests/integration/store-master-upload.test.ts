@@ -96,22 +96,6 @@ describe('Store Master upload', () => {
     expect(await store('ZT9')).toMatchObject({ code: 'ZT9', name: 'ZT9', ac_total: 3, cluster: 'CH1', is_active: true })
   })
 
-  it('an OEM column is matched to the OEMs that are set up; an unknown one is reported and leaves the OEM alone', async () => {
-    const { data: oem } = await admin.from('oems').insert({ org_id: ORG, name: 'ZT OEM' }).select('id').single()
-    try {
-      const head = ['STORE', 'OEM']
-      const bad = await applyStoreMaster(await sheet([['ZT3', 'No Such OEM']], head))
-      expect(bad.data!.problems.join(' ')).toMatch(/OEM "No Such OEM" is not set up/)
-      expect((await store('ZT3'))!.oem_id).toBeNull()
-      const good = await applyStoreMaster(await sheet([['ZT3', 'zt oem']], head))
-      expect(good.data).toMatchObject({ updated: 1 })
-      expect((await store('ZT3'))!.oem_id).toBe(oem!.id)
-    } finally {
-      await admin.from('stores').update({ oem_id: null }).eq('org_id', ORG).eq('code', 'ZT3')
-      await admin.from('oems').delete().eq('id', oem!.id)
-    }
-  })
-
   it('refuses people who are not admins or managers, and files it cannot read', async () => {
     role.current = 'agent'
     expect((await previewStoreMaster(await sheet([['ZT1', 1, '', '', '', '', '']]))).error).toMatch(/Admin or manager/)

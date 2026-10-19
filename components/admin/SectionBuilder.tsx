@@ -228,7 +228,7 @@ function getValidationErrors(sections: FormSection[]): string[] {
     if (!s.title.trim()) errors.push('A section is missing a title')
     s.fields.forEach((f) => {
       if (!f.label.trim()) errors.push('A field is missing a label')
-      if (f.type === 'select' || f.type === 'multiselect') {
+      if ((f.type === 'select' || f.type === 'multiselect') && f.options_source !== 'ac_units') {
         const activeLeaves = countActiveLeaves(f.options ?? [])
         if (activeLeaves < 2)
           errors.push(`"${f.label || 'Field'}" needs at least 2 active (non-archived) selectable options`)
@@ -1208,6 +1208,25 @@ export function SectionBuilder({
                       )
                     })}
                   </div>
+                </div>
+              )}
+
+              {selectedField.type === 'select' && (
+                <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={selectedField.options_source === 'ac_units'}
+                      onChange={(e) => updateField(selectedSection.id, selectedField.id, { options_source: e.target.checked ? 'ac_units' : undefined })}
+                    />
+                    <span>
+                      <span className="font-medium">Choices come from the AC sheet</span>
+                      <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                        The requester sees only the Active AC numbers (AC CKDESK SERIAL NO) of their own store, read from the AC master sheet. The typed list below is used only for a requester who has no store.
+                      </span>
+                    </span>
+                  </label>
                 </div>
               )}
 

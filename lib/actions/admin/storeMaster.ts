@@ -9,8 +9,6 @@ import { readStoreMasterFile } from '@/lib/stores/master-file'
 import { buildStoreMasterSampleWorkbook } from '@/lib/stores/master-sample'
 import { prepareStoreMaster, fieldHeading, type StoreMasterEntry, type StoreMasterField, type StoreMasterValues } from '@/lib/stores/master-import'
 import type { Database } from '@/types/database'
-import { loadCvmCandidates } from '@/lib/cvm/load'
-import { resolveCvm } from '@/lib/cvm/resolve'
 
 type ActionResult<T = undefined> = { error?: string; data?: T }
 type StoreRow = Database['public']['Tables']['stores']['Row']
@@ -44,17 +42,14 @@ async function requireAdminOrManager() {
 
 const MAX_LISTED = 40
 
-/** Store values to save, in the database's column names (oem resolved to its id by the caller). */
-function toColumns(v: StoreMasterValues, oems: { ac?: string | null; genset?: string | null; cvm?: string | null } | undefined): StoreUpdate {
+/** Store values to save, in the database's column names. */
+function toColumns(v: StoreMasterValues): StoreUpdate {
   const out: StoreUpdate = {}
   if (v.name !== undefined) out.name = v.name
   if (v.address !== undefined) out.address = v.address
   if (v.city !== undefined) out.city = v.city
   if (v.state !== undefined) out.state = v.state
   if (v.pincode !== undefined) out.pincode = v.pincode
-  if (oems?.ac) out.oem_id = oems.ac
-  if (oems?.genset) out.genset_oem_id = oems.genset
-  if (oems?.cvm) out.cvm_id = oems.cvm
   if (v.active !== undefined) out.is_active = v.active
   if (v.ac_total !== undefined) out.ac_total = v.ac_total
   if (v.ac_brand !== undefined) out.ac_brand = v.ac_brand
@@ -100,7 +95,6 @@ interface Plan {
   /** entries whose store is not in CK Desk yet */
   missing: StoreMasterEntry[]
   problems: string[]
-  oemIdByEntry: Map<string, { ac?: string | null; genset?: string | null; cvm?: string | null }>
 }
 
 async function plan(formData: FormData, orgId: string): Promise<{ error: string } | (Plan & { fileName: string })> {
@@ -115,38 +109,6 @@ async function plan(formData: FormData, orgId: string): Promise<{ error: string 
   }
 
   const problems = [...prepared.problems]
-  const admin = createAdminClient()
-
-  // an OEM column is matched to the OEMs set up in this organisation
-  // The OEM column takes only OEMs of type AC, the GENSET OEM column only OEMs of type Genset: a name of the wrong type is refused with the row number.
-  const oemIdByEntry = new Map<string, { ac?: string | null; genset?: string | null; cvm?: string | null }>()
-  if (prepared.recognised.includes('oem') || prepared.recognised.includes('genset_oem')) {
-    const { data: oems } = await admin.from('oems').select('id, name, kind').eq('org_id', orgId)
-    const byName = new Map((oems ?? []).map((o: { id: string; name: string; kind: string }) => [o.name.trim().toLowerCase(), o]))
-    const resolve = (e: StoreMasterEntry, name: string | undefined, kind: 'ac' | 'genset', heading: string): string | null | undefined => {
-      if (!name) return undefined
-      const o = byName.get(name.toLowerCase())
-      if (!o) { problems.push(`Row ${e.row} (${e.code}): OEM "${name}" is not set up, so the ${heading} was not changed.`); return null }
-      if (o.kind !== kind) { problems.push(`Row ${e.row} (${e.code}): "${name}" is a ${o.kind === 'genset' ? 'Genset' : 'AC'} OEM, so it cannot go in the ${heading} column; the ${heading} was not changed.`); return null }
-      return o.id
-    }
-    for (const e of prepared.entries) {
-      const ac = resolve(e, e.values.oem, 'ac', 'OEM (AC)')
-      const genset = resolve(e, e.values.genset_oem, 'genset', 'GENSET OEM')
-      if (ac !== undefined || genset !== undefined) oemIdByEntry.set(e.code, { ac, genset })
-    }
-  }
-
-  // The CVM column names an existing active staff member (e-mail, or full name when only one person has it). One CVM per store; one CVM may have many stores.
-  if (prepared.recognised.includes('cvm')) {
-    const candidates = await loadCvmCandidates(orgId)
-    for (const e of prepared.entries) {
-      if (!e.values.cvm) continue
-      const r = resolveCvm(e.values.cvm, candidates)
-      if ('error' in r) { problems.push(`Row ${e.row} (${e.code}): CVM ${r.error}, so the CVM was not changed.`); continue }
-      oemIdByEntry.set(e.code, { ...(oemIdByEntry.get(e.code) ?? {}), cvm: r.id })
-    }
-  }
 
   const stores = await loadAllStores(orgId)
   const existing = new Map(stores.map((s) => [s.code.toUpperCase(), s]))
@@ -156,11 +118,11 @@ async function plan(formData: FormData, orgId: string): Promise<{ error: string 
   for (const e of prepared.entries) {
     const store = existing.get(e.code)
     if (!store) { missing.push(e); continue }
-    const set = changedColumns(store, toColumns(e.values, oemIdByEntry.get(e.code)))
+    const set = changedColumns(store, toColumns(e.values))
     if (Object.keys(set).length === 0) unchanged++
     else changes.push({ store, set })
   }
-  return { prepared, existing, changes, unchanged, missing, problems, oemIdByEntry, fileName: file.name }
+  return { prepared, existing, changes, unchanged, missing, problems, fileName: file.name }
 }
 
 /** The sample .xlsx for the upload: the right headings, two example rows and a how-to sheet. */
@@ -219,7 +181,7 @@ export async function applyStoreMaster(formData: FormData): Promise<ActionResult
   let created = 0
   if (addMissing && p.missing.length > 0) {
     const rows = p.missing.map((e) => ({
-      org_id: orgId, code: e.code, name: e.values.name ?? e.code, ...toColumns(e.values, p.oemIdByEntry.get(e.code)),
+      org_id: orgId, code: e.code, name: e.values.name ?? e.code, ...toColumns(e.values),
     }))
     for (let i = 0; i < rows.length; i += 100) {
       const { error } = await admin.from('stores').insert(rows.slice(i, i + 100))
