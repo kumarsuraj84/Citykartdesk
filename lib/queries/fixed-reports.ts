@@ -22,7 +22,7 @@ type AnyClient = { from: (t: string) => any }
 /** Safety cap: the open tickets of the whole company never get near this; it only stops a runaway query. */
 const MAX_TICKETS = 50_000
 
-const FACT_SELECT = 'id, request_no, title, status, priority, created_at, resolved_at, closed_at, form_data, service:services(id, name, auto_oem_routing), category:service_categories(name), sub_category:service_sub_categories(name), assignee:profiles!requests_assigned_to_fkey(full_name), requester:profiles!requests_requester_id_fkey(full_name, store:stores(id, code, city, state, cluster, region, priority_list, festival, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, zenatix, open_date, oem:oems!stores_oem_id_fkey(name)))'
+const FACT_SELECT = 'id, request_no, title, status, priority, created_at, resolved_at, closed_at, form_data, service:services(id, name, auto_oem_routing), category:service_categories(name), sub_category:service_sub_categories(name), assignee:profiles!requests_assigned_to_fkey(full_name), requester:profiles!requests_requester_id_fkey(full_name, store:stores!profiles_store_id_fkey(id, code, city, state, cluster, region, priority_list, festival, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, zenatix, open_date, oem:oems!stores_oem_id_fkey(name)))'
 
 const statusLabel = (s: string) => (STATUS_LABELS as Record<string, string>)[s] ?? s
 
@@ -168,7 +168,7 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
     type Light = { status: string; team_id: string; service_id: string; assignee: { full_name: string | null } | null; requester?: { store: { open_date: string | null } | null } | null }
     const light = await fetchAll<Light>((from, to) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q: any = admin.from('requests').select(`status, team_id, service_id, assignee:profiles!requests_assigned_to_fkey(full_name)${def.nso ? ', requester:profiles!requests_requester_id_fkey(store:stores(open_date))' : ''}`).eq('org_id', orgId)
+      let q: any = admin.from('requests').select(`status, team_id, service_id, assignee:profiles!requests_assigned_to_fkey(full_name)${def.nso ? ', requester:profiles!requests_requester_id_fkey(store:stores!profiles_store_id_fkey(open_date))' : ''}`).eq('org_id', orgId)
       if (!seesAll) q = q.in('team_id', visibleIds)
       if (def.acOnly) q = q.in('service_id', acServiceIds)
       return q.order('id', { ascending: true }).range(from, to)

@@ -133,7 +133,7 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
         assigned_to, team_id, resolution_due_at, response_due_at, responded_at,
         assignee:profiles!requests_assigned_to_fkey(full_name),
         team:teams(name),
-        service:services(name)${storeActive ? ', requester:profiles!requests_requester_id_fkey!inner(store:stores!inner(code))' : ''}
+        service:services(name)${storeActive ? ', requester:profiles!requests_requester_id_fkey!inner(store:stores!profiles_store_id_fkey!inner(code))' : ''}
       `)
       .eq('org_id', profile.org_id!)
     if (storeActive) q = q.in('requester.store.code', storeCodes)

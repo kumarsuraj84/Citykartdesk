@@ -36,7 +36,7 @@ export async function loadAcContext(admin: AnyClient, orgId: string): Promise<Ac
     type Row = { service_id: string; form_data: Record<string, unknown> | null; requester: { store: { code: string } | null } | null }
     // D-019: every page is read; an error on any page throws instead of quietly giving smaller counts
     const { rows } = await fetchAllPages<Row>((from, to) => admin.from('requests')
-      .select('service_id, form_data, requester:profiles!requests_requester_id_fkey(store:stores(code))')
+      .select('service_id, form_data, requester:profiles!requests_requester_id_fkey(store:stores!profiles_store_id_fkey(code))')
       .eq('org_id', orgId).in('service_id', acServiceIds).in('status', DEFAULT_REPORT_STATUSES)
       .order('id', { ascending: true }).range(from, to), { maxRows: MAX_ROWS })
     for (const r of rows) {

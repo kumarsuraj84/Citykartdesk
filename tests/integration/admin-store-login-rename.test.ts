@@ -71,7 +71,7 @@ describe('a store login renamed from NLD to NEG, with its e-mail', () => {
   const store = async () => (await admin.from('stores').select('code, name').eq('id', made.stores[0]).single()).data!
   // the requester and store of the tickets, as every report reads them (through the requester's profile)
   const tickets = async () => {
-    const { data } = await admin.from('requests').select('requester:profiles!requests_requester_id_fkey(full_name, store:stores(name))').eq('team_id', fx.teamA.id).in('status', ['open', 'assigned', 'in_progress', 'waiting_user'])
+    const { data } = await admin.from('requests').select('requester:profiles!requests_requester_id_fkey(full_name, store:stores!profiles_store_id_fkey(name))').eq('team_id', fx.teamA.id).in('status', ['open', 'assigned', 'in_progress', 'waiting_user'])
     return ((data ?? []) as unknown as { requester: { full_name: string; store: { name: string } | null } | null }[]).map((r) => [r.requester?.full_name, r.requester?.store?.name])
   }
 

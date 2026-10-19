@@ -82,7 +82,7 @@ const SELECT = [
   'id, request_no, title, status, priority, created_at, updated_at, resolved_at, closed_at, responded_at, resolution_due_at, reopen_count, source_metadata',
   'team:teams(name)',
   'assignee:profiles!requests_assigned_to_fkey(full_name)',
-  'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), location:locations(name), store:stores(code, name, state, cluster, region, priority_list, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, open_date, oem:oems!stores_oem_id_fkey(name)))',
+  'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), location:locations(name), store:stores!profiles_store_id_fkey(code, name, state, cluster, region, priority_list, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, open_date, oem:oems!stores_oem_id_fkey(name)))',
   'service:services(name, auto_oem_routing)',
   'category:service_categories(name)',
   'sub_category:service_sub_categories(name)',

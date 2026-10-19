@@ -50,7 +50,7 @@ export async function loadStoreDims(admin: AnyClient, orgId: string, asOf: Date 
   const byCode = new Map<string, StoreDims>()
   // D-019: every page is read; an error on any page throws (an empty store list used to make every store filter match nothing)
   const { rows } = await fetchAllPages<{ id: string; store: RawStore | null }>((from, to) => admin.from('profiles')
-    .select('id, store:stores(code, name, state, cluster, region, priority_list, ac_total, open_date)')
+    .select('id, store:stores!profiles_store_id_fkey(code, name, state, cluster, region, priority_list, ac_total, open_date)')
     .eq('org_id', orgId).not('store_id', 'is', null)
     .order('id', { ascending: true }).range(from, to), { maxRows: MAX_ROWS })
   for (const p of rows) {
