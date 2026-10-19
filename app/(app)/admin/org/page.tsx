@@ -146,7 +146,7 @@ export default async function OrgStructurePage() {
       .order('name'),
     supabase
       .from('stores')
-      .select('id, code, name, address, city, state, pincode, oem_id, is_active, created_at, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, zenatix, open_date, cluster, region, priority_list, festival, oem:oems(name)')
+      .select('id, code, name, address, city, state, pincode, oem_id, is_active, created_at, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, zenatix, open_date, cluster, region, priority_list, festival, oem:oems!stores_oem_id_fkey(name)')
       .order('code'),
   ])
 

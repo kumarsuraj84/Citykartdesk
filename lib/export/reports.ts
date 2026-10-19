@@ -280,7 +280,7 @@ export async function exportStoresCSV(orgId: string): Promise<string> {
 
   const { data, error } = await admin
     .from('stores')
-    .select('code,name,address,city,state,pincode,is_active,ac_total,ac_brand,ac_amc_brand,ac_amc_vendor,zenatix,open_date,cluster,region,priority_list,festival,oem:oems(name)')
+    .select('code,name,address,city,state,pincode,is_active,ac_total,ac_brand,ac_amc_brand,ac_amc_vendor,zenatix,open_date,cluster,region,priority_list,festival,oem:oems!stores_oem_id_fkey(name)')
     .eq('org_id', orgId)
     .order('code', { ascending: true })
     .limit(MAX_EXPORT_ROWS + 1)

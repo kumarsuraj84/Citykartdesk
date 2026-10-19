@@ -90,7 +90,7 @@ export async function getExecutiveTicketDetail(id: string): Promise<{ error: str
     'id, request_no, title, description, status, priority, created_at, resolved_at, closed_at, responded_at, resolution_due_at, response_due_at, reopen_count',
     'team:teams(name)',
     'assignee:profiles!requests_assigned_to_fkey(full_name)',
-    'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), store:stores(name, state, oem:oems(name)))',
+    'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), store:stores(name, state, oem:oems!stores_oem_id_fkey(name)))',
     'source_metadata',
     'service:services(name, auto_oem_routing)',
     'category:service_categories(name)',
