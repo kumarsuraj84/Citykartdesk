@@ -1,5 +1,5 @@
-T|_grant_snapshots|auth:0000|anon:0000|svc:00|rls:1
-T|_m169_function_grants|auth:0000|anon:0000|svc:00|rls:1
+T|_grant_snapshots|auth:0000|anon:0000|svc:11|rls:1
+T|_m169_function_grants|auth:0000|anon:0000|svc:11|rls:1
 T|admin_audit_log|auth:1000|anon:0000|svc:11|rls:1
 T|ai_applications|auth:1000|anon:0000|svc:11|rls:1
 T|alert_rules|auth:1000|anon:0000|svc:11|rls:1

@@ -1,5 +1,5 @@
-T|_grant_snapshots|auth:0000|anon:0000|svc:00|rls:1
-T|_m169_function_grants|auth:0000|anon:0000|svc:00|rls:1
+T|_grant_snapshots|auth:0000|anon:0000|svc:11|rls:1
+T|_m169_function_grants|auth:0000|anon:0000|svc:11|rls:1
 T|admin_audit_log|auth:1000|anon:0000|svc:11|rls:1
 T|ai_applications|auth:1000|anon:0000|svc:11|rls:1
 T|alert_rules|auth:1000|anon:0000|svc:11|rls:1
@@ -67,7 +67,7 @@ T|project_members|auth:1101|anon:0000|svc:11|rls:1
 T|project_updates|auth:1101|anon:0000|svc:11|rls:1
 T|projects|auth:1110|anon:0000|svc:11|rls:1
 T|push_subscriptions|auth:1000|anon:0000|svc:11|rls:1
-T|rate_limit_counters|auth:0000|anon:0000|svc:00|rls:1
+T|rate_limit_counters|auth:0000|anon:0000|svc:11|rls:1
 T|related_requests|auth:1101|anon:0000|svc:11|rls:1
 T|request_activity|auth:1000|anon:0000|svc:11|rls:1
 T|request_attachments|auth:1100|anon:0000|svc:11|rls:1
@@ -107,7 +107,7 @@ T|task_templates|auth:1000|anon:0000|svc:11|rls:1
 T|tasks|auth:1111|anon:0000|svc:11|rls:1
 T|team_members|auth:1000|anon:0000|svc:11|rls:1
 T|teams|auth:1000|anon:0000|svc:11|rls:1
-T|webhook_seen|auth:0000|anon:0000|svc:00|rls:1
+T|webhook_seen|auth:0000|anon:0000|svc:11|rls:1
 F|can_manage_collaborators(uuid)|auth:1|anon:0|svc:1
 F|can_view_project(uuid)|auth:1|anon:0|svc:1
 F|commit_conversation_transition(uuid,integer,conversation_state,uuid,text,uuid[],uuid,uuid,text,text,jsonb,text,uuid,text,timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone,uuid,jsonb)|auth:0|anon:0|svc:1
