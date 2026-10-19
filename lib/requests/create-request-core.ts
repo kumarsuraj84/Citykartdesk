@@ -14,6 +14,7 @@ import { sanitizeTemplateHtml } from '@/lib/email/sanitize-template'
 import { oemSentComment } from '@/lib/requests/oem-message'
 import { OEM_DEFAULT_TEXT, isOemKind, type OemKind } from '@/lib/oems/kinds'
 import { resolveOemRoute } from '@/lib/oems/route'
+import { runAutoCvmApproval } from '@/lib/cvm/auto-approval'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import type { FormField, RequestPriority } from '@/types'
 import type { Json } from '@/types/database'
@@ -367,15 +368,17 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
 
   let requesterStoreAddress: string | null = null
   let requesterStoreSlots: { oem_id: string | null; genset_oem_id: string | null } | null = null
+  let requesterStoreCvmId: string | null = null
   if (requesterProfile?.store_id) {
     const { data: store } = await admin
       .from('stores')
-      .select('address, oem_id, genset_oem_id')
+      .select('address, oem_id, genset_oem_id, cvm_id')
       .eq('id', requesterProfile.store_id)
       .eq('org_id', orgId)
       .maybeSingle()
     requesterStoreAddress = store?.address ?? null
     requesterStoreSlots = store ? { oem_id: store.oem_id ?? null, genset_oem_id: store.genset_oem_id ?? null } : null
+    requesterStoreCvmId = store?.cvm_id ?? null
   }
 
   // A field limited to certain categories (for example Qty for fixtures) belongs only to those categories: for any other category its answer is dropped, so it is
@@ -558,10 +561,12 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   // (auto_oem_routing) sends it to the store's AC OEM exactly as before. The store has one slot per type, so a ticket can only reach an OEM of the right type.
   let categoryOemKind: OemKind | null = null
   let categoryName: string | null = null
+  let categoryCvmApproval = false
   if (categoryId) {
-    const { data: cat } = await admin.from('service_categories').select('name, auto_oem_kind').eq('id', categoryId).eq('org_id', orgId).maybeSingle()
+    const { data: cat } = await admin.from('service_categories').select('name, auto_oem_kind, auto_cvm_approval').eq('id', categoryId).eq('org_id', orgId).maybeSingle()
     categoryName = cat?.name ?? null
     categoryOemKind = isOemKind(cat?.auto_oem_kind) ? cat.auto_oem_kind : null
+    categoryCvmApproval = cat?.auto_cvm_approval === true
   }
   const oemRoute = resolveOemRoute({ serviceAutoOemRouting: service.auto_oem_routing, categoryOemKind, store: requesterStoreSlots })
   if (oemRoute.action === 'send') {
@@ -601,6 +606,19 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     } catch (e) {
       console.error('[createRequestCore] OEM unmapped note failed', e)
     }
+  }
+
+  // Automatic approval by the store's CVM (a category set to it, for example Fixture / Hangers / Fixture Attachments): In Process, sent to the CVM, on hold until the CVM decides.
+  if (categoryCvmApproval) {
+    await runAutoCvmApproval({
+      admin,
+      orgId,
+      request: { id: request.id, request_no: request.request_no ?? null, title },
+      requesterId,
+      actorId: actingUserId,
+      hasStore: !!requesterProfile?.store_id,
+      storeCvmId: requesterStoreCvmId,
+    })
   }
 
   // The requester always gets a confirmation with the ticket number (unless an agent booked it

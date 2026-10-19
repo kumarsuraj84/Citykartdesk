@@ -9,6 +9,7 @@ import {
   toggleCategoryActive,
   deleteCategory,
   setCategoryOemKind,
+  setCategoryCvmApproval,
 } from '@/lib/actions/admin/categories'
 import { OEM_KINDS, OEM_KIND_LABEL, isOemKind, type OemKind } from '@/lib/oems/kinds'
 import { IconPicker } from '@/components/admin/IconPicker'
@@ -66,6 +67,8 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
   const [iconImageUrl, setIconImageUrl] = useState<string | null>(cat.icon_image_url ?? null)
   const savedOemKind: OemKind | '' = isOemKind(cat.auto_oem_kind) ? cat.auto_oem_kind : ''
   const [oemKind, setOemKind] = useState<OemKind | ''>(savedOemKind)
+  const savedCvmApproval = cat.auto_cvm_approval === true
+  const [cvmApproval, setCvmApproval] = useState(savedCvmApproval)
   const [error, setError] = useState('')
   const [pending, startTransition] = useTransition()
   const [togglePending, startToggle] = useTransition()
@@ -85,6 +88,10 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
         const oemResult = await setCategoryOemKind(cat.id, oemKind === '' ? null : oemKind)
         if (oemResult.error) { setError(oemResult.error); return }
       }
+      if (cvmApproval !== savedCvmApproval) {
+        const r = await setCategoryCvmApproval(cat.id, cvmApproval)
+        if (r.error) { setError(r.error); return }
+      }
       setEditing(false)
     })
   }
@@ -95,6 +102,7 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
     setIcon(cat.icon ?? '')
     setIconImageUrl(cat.icon_image_url ?? null)
     setOemKind(savedOemKind)
+    setCvmApproval(savedCvmApproval)
     setError('')
     setEditing(false)
   }
@@ -158,6 +166,10 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
                   {OEM_KINDS.map((k) => <option key={k} value={k}>{OEM_KIND_LABEL[k]} OEM</option>)}
                 </select>
               </label>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input type="checkbox" checked={cvmApproval} onChange={(e) => setCvmApproval(e.target.checked)} />
+                Put the ticket In Process and send it for approval to the CVM of the store automatically
+              </label>
               {error && <p className="text-xs text-destructive">{error}</p>}
             </div>
             <div className="flex shrink-0 items-center gap-1">
@@ -191,6 +203,11 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {cat.sub_categories.length} sub-categor{cat.sub_categories.length !== 1 ? 'ies' : 'y'}
               </p>
+              {savedCvmApproval && (
+                <p className="mt-1 inline-flex rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">
+                  Auto: In Process, then approval by the store&apos;s CVM
+                </p>
+              )}
               {savedOemKind && (
                 <p className="mt-1 inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
                   Auto-sent to the store&apos;s {OEM_KIND_LABEL[savedOemKind]} OEM

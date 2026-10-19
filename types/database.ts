@@ -4429,6 +4429,7 @@ export type Database = {
           is_active: boolean
           name: string
           auto_oem_kind: string | null
+          auto_cvm_approval: boolean
           org_id: string | null
           slug: string
           sort_order: number
@@ -4443,6 +4444,7 @@ export type Database = {
           is_active?: boolean
           name: string
           auto_oem_kind?: string | null
+          auto_cvm_approval?: boolean
           org_id?: string | null
           slug: string
           sort_order?: number
@@ -4457,6 +4459,7 @@ export type Database = {
           is_active?: boolean
           name?: string
           auto_oem_kind?: string | null
+          auto_cvm_approval?: boolean
           org_id?: string | null
           slug?: string
           sort_order?: number

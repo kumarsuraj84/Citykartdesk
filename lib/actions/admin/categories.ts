@@ -599,3 +599,26 @@ export async function setCategoryOemKind(id: string, kind: OemKind | null): Prom
   revalidatePath('/admin/categories')
   return {}
 }
+
+// ── Automatic approval by the store's CVM (per category) ──────────────────────────────────────────────────────────────────────────────
+// A category can say "put the ticket In Process and send it for approval to the CVM of the requester's store automatically". Written by the server after the admin
+// check and recorded in the audit log. See lib/cvm/auto-approval.ts for what happens when a ticket is raised.
+export async function setCategoryCvmApproval(id: string, on: boolean): Promise<ActionResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return guard
+  const orgId = guard.profile!.org_id
+  if (!orgId) return { error: 'Your account is not linked to an organisation.' }
+  const admin = createAdminClient()
+  const { data: before } = await admin.from('service_categories').select('name, auto_cvm_approval').eq('id', id).eq('org_id', orgId).maybeSingle()
+  if (!before) return { error: 'Category not found.' }
+  if (before.auto_cvm_approval === on) return {}
+  const { error } = await admin.from('service_categories').update({ auto_cvm_approval: on }).eq('id', id).eq('org_id', orgId)
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/categories.ts#setCategoryCvmApproval' }) }
+  await logAdminAudit({
+    orgId, actorId: guard.profile!.id,
+    entityType: 'service_category', entityId: id, action: 'category_cvm_approval_changed',
+    metadata: { name: before.name, from: before.auto_cvm_approval ? 'on' : 'off', to: on ? 'on' : 'off' },
+  })
+  revalidatePath('/admin/categories')
+  return {}
+}
