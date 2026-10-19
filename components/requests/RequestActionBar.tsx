@@ -22,6 +22,8 @@ interface Props {
   respondedAt:        string | null
   resolvedAt:         string | null
   waitingSince:       string | null
+  /** the CVM of the requester's store: pre-filled as the approver (the technician can remove or change it) */
+  suggestedApprover?: { id: string; full_name: string } | null
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -40,6 +42,7 @@ export function RequestActionBar({
   respondedAt,
   resolvedAt,
   waitingSince,
+  suggestedApprover = null,
 }: Props) {
   const [isPending, startTransition]           = useTransition()
   const [isStartingWork, startWorkTransition]  = useTransition()
@@ -48,7 +51,7 @@ export function RequestActionBar({
   const [showApprovalPicker, setShowApprovalPicker] = useState(false)
   const [approvalSearch, setApprovalSearch]    = useState('')
   const [approvalResults, setApprovalResults]  = useState<{ id: string; full_name: string; role: string }[]>([])
-  const [selectedApprovers, setSelectedApprovers] = useState<{ id: string; full_name: string }[]>([])
+  const [selectedApprovers, setSelectedApprovers] = useState<{ id: string; full_name: string }[]>(() => (suggestedApprover ? [suggestedApprover] : []))
   const [pickUpError, setPickUpError]          = useState<string | null>(null)
   const [startWorkError, setStartWorkError]    = useState<string | null>(null)
   const [localStatus, setLocalStatus]          = useState(status)
@@ -278,6 +281,9 @@ export function RequestActionBar({
                             </span>
                           ))}
                         </div>
+                      )}
+                      {suggestedApprover && selectedApprovers.some((x) => x.id === suggestedApprover.id) && (
+                        <p className="text-[11px] text-muted-foreground">Pre-filled: the CVM of this store. You can remove or change it.</p>
                       )}
 
                       <div className="relative">

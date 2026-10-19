@@ -249,6 +249,9 @@ export type FormField = {
    *  template is saved (lib/forms/library.ts); required/visibility/order stay
    *  per-template. Reports group by this id to show one column across templates. */
   library_field_id?: string
+  /** When set (a list of category ids), the field exists only for tickets of those categories: the requester sees it, and a required one must be filled, only after
+   *  choosing one of them (for example Qty for fixtures and hangers). Absent or empty = every category, which is what every field saved before this behaves like. */
+  show_for_categories?: string[]
 }
 
 // ============================================================

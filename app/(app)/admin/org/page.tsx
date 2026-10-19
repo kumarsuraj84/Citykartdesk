@@ -87,6 +87,9 @@ export interface StoreRow {
   oem_name?: string | null
   genset_oem_id: string | null
   genset_oem_name?: string | null
+  /** the store's CVM (one per store); one CVM can have many stores */
+  cvm_id: string | null
+  cvm_name?: string | null
   is_active: boolean
   created_at: string
   ac_total: number | null
@@ -150,7 +153,7 @@ export default async function OrgStructurePage() {
       .order('name'),
     supabase
       .from('stores')
-      .select('id, code, name, address, city, state, pincode, oem_id, genset_oem_id, is_active, created_at, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, zenatix, open_date, cluster, region, priority_list, festival, oem:oems!stores_oem_id_fkey(name), genset_oem:oems!stores_genset_oem_id_fkey(name)')
+      .select('id, code, name, address, city, state, pincode, oem_id, genset_oem_id, cvm_id, is_active, created_at, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, zenatix, open_date, cluster, region, priority_list, festival, oem:oems!stores_oem_id_fkey(name), genset_oem:oems!stores_genset_oem_id_fkey(name), cvm:profiles!stores_cvm_id_fkey(full_name)')
       .order('code'),
   ])
 
@@ -231,10 +234,14 @@ export default async function OrgStructurePage() {
 
   const oems: OemRow[] = oemResult.data ?? []
 
+  // the people who can be a store's CVM: active staff (technician, manager, admin, owner) of this organisation
+  const { data: cvmRows } = await supabase.from('profiles').select('id, full_name').eq('org_id', profile.org_id ?? '').eq('is_active', true).in('role', ['agent', 'manager', 'admin', 'platform_owner']).order('full_name')
+  const cvmOptions: UserOption[] = (cvmRows ?? []).map((p: { id: string; full_name: string }) => ({ id: p.id, full_name: p.full_name }))
+
   type StoreQueryRow = {
     id: string; code: string; name: string; address: string | null; city: string | null
-    state: string | null; pincode: string | null; oem_id: string | null; genset_oem_id: string | null
-    is_active: boolean; created_at: string; oem: { name: string } | null; genset_oem: { name: string } | null
+    state: string | null; pincode: string | null; oem_id: string | null; genset_oem_id: string | null; cvm_id: string | null
+    is_active: boolean; created_at: string; oem: { name: string } | null; genset_oem: { name: string } | null; cvm: { full_name: string } | null
     ac_total: number | null; ac_brand: string | null; ac_amc_brand: string | null; ac_amc_vendor: string | null; zenatix: boolean | null
     open_date: string | null; cluster: string | null; region: string | null; priority_list: string | null; festival: string | null
   }
@@ -250,6 +257,8 @@ export default async function OrgStructurePage() {
     oem_name: s.oem?.name ?? null,
     genset_oem_id: s.genset_oem_id,
     genset_oem_name: s.genset_oem?.name ?? null,
+    cvm_id: s.cvm_id,
+    cvm_name: s.cvm?.full_name ?? null,
     is_active: s.is_active,
     created_at: s.created_at,
     ac_total: s.ac_total, ac_brand: s.ac_brand, ac_amc_brand: s.ac_amc_brand, ac_amc_vendor: s.ac_amc_vendor, zenatix: s.zenatix,
@@ -269,6 +278,7 @@ export default async function OrgStructurePage() {
         jobFunctions={jobFunctions}
         designations={designations}
         allUsers={allUsers}
+        cvmOptions={cvmOptions}
         oems={oems}
         stores={stores}
       />

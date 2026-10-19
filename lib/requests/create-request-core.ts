@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { logActivity } from '@/lib/activity'
 import { notify } from '@/lib/notifications'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
-import { resolveServiceFormSections, requesterCanSet } from '@/lib/forms/sections'
+import { resolveServiceFormSections, requesterCanSet, fieldAppliesToCategory } from '@/lib/forms/sections'
 import { validateRequesterFormCompletion } from '@/lib/requests/validate-requester-form-completion'
 import { resolveSubCategoryForService } from '@/lib/requests/resolve-sub-category'
 import { sendEmail } from '@/lib/email/send'
@@ -378,6 +378,10 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     requesterStoreSlots = store ? { oem_id: store.oem_id ?? null, genset_oem_id: store.genset_oem_id ?? null } : null
   }
 
+  // A field limited to certain categories (for example Qty for fixtures) belongs only to those categories: for any other category its answer is dropped, so it is
+  // neither required nor stored.
+  for (const f of allFields) if (!fieldAppliesToCategory(f, categoryId)) delete parsedFormData[f.id]
+
   // A plain requester answers only the questions a requester may answer. Anything else they send (a technician-only box, an id that is not on the form)
   // is dropped: otherwise a pre-filled technician field would pass the technician's "must fill before moving on" gate, and a hidden field could pick
   // a field-level SLA tier (VAPT VA-TKT-08).
@@ -399,7 +403,7 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   // stays client-side-only for now (see validateRequesterFormCompletion's
   // own doc comment) — request_attachments.request_id is a NOT NULL FK, so
   // no channel can have a real file value in formData at this point anyway.
-  const completion = validateRequesterFormCompletion({ service, formData: parsedFormData })
+  const completion = validateRequesterFormCompletion({ service, formData: parsedFormData, categoryId })
   if (!completion.valid) {
     const firstIssue = completion.missingFields[0] ?? completion.invalidFields[0]
     const message = completion.missingFields[0]

@@ -2604,6 +2604,7 @@ export type Database = {
           festival: string | null
           oem_id: string | null
           genset_oem_id: string | null
+          cvm_id: string | null
           is_active: boolean
           created_at: string
           updated_at: string
@@ -2629,6 +2630,7 @@ export type Database = {
           festival?: string | null
           oem_id?: string | null
           genset_oem_id?: string | null
+          cvm_id?: string | null
           is_active?: boolean
           created_at?: string
           updated_at?: string
@@ -2654,6 +2656,7 @@ export type Database = {
           festival?: string | null
           oem_id?: string | null
           genset_oem_id?: string | null
+          cvm_id?: string | null
           is_active?: boolean
           created_at?: string
           updated_at?: string

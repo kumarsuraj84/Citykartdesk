@@ -280,7 +280,7 @@ export async function exportStoresCSV(orgId: string): Promise<string> {
 
   const { data, error } = await admin
     .from('stores')
-    .select('code,name,address,city,state,pincode,is_active,ac_total,ac_brand,ac_amc_brand,ac_amc_vendor,zenatix,open_date,cluster,region,priority_list,festival,oem:oems!stores_oem_id_fkey(name),genset_oem:oems!stores_genset_oem_id_fkey(name)')
+    .select('code,name,address,city,state,pincode,is_active,ac_total,ac_brand,ac_amc_brand,ac_amc_vendor,zenatix,open_date,cluster,region,priority_list,festival,oem:oems!stores_oem_id_fkey(name),genset_oem:oems!stores_genset_oem_id_fkey(name),cvm:profiles!stores_cvm_id_fkey(full_name)')
     .eq('org_id', orgId)
     .order('code', { ascending: true })
     .limit(MAX_EXPORT_ROWS + 1)
@@ -300,6 +300,7 @@ export async function exportStoresCSV(orgId: string): Promise<string> {
     open_date: string | null; cluster: string | null; region: string | null; priority_list: string | null; festival: string | null
     oem: { name: string } | null
     genset_oem: { name: string } | null
+    cvm: { full_name: string } | null
   }
 
   const rows = ((data ?? []) as StoreExportRow[]).map((s) => ({
@@ -311,6 +312,7 @@ export async function exportStoresCSV(orgId: string): Promise<string> {
     pincode: s.pincode ?? '',
     oem: s.oem?.name ?? '',
     genset_oem: s.genset_oem?.name ?? '',
+    cvm: s.cvm?.full_name ?? '',
     active: s.is_active ? 'Yes' : 'No',
     ac_total: s.ac_total ?? '',
     ac_brand: s.ac_brand ?? '',
@@ -333,6 +335,7 @@ export async function exportStoresCSV(orgId: string): Promise<string> {
     { key: 'pincode', label: 'Pincode' },
     { key: 'oem',     label: 'OEM' },
     { key: 'genset_oem', label: 'Genset OEM' },
+    { key: 'cvm', label: 'CVM' },
     { key: 'active',  label: 'Active' },
     { key: 'ac_total', label: 'AC Total' },
     { key: 'ac_brand', label: 'AC Brand' },

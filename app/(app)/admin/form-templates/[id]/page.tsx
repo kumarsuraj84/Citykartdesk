@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft, FileText } from 'lucide-react'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { createClient } from '@/lib/supabase/server'
 import { getFormTemplateById } from '@/lib/queries/services'
 import { getActiveLibraryFields } from '@/lib/queries/field-library'
 import { saveTemplateSections } from '@/lib/actions/admin/form-templates'
@@ -20,6 +21,10 @@ export default async function AdminFormTemplateEditorPage({ params }: PageProps)
   if (profile.role !== 'admin' && profile.role !== 'platform_owner') redirect('/home')
 
   const [template, libraryFields] = await Promise.all([getFormTemplateById(id), getActiveLibraryFields()])
+  // the categories a field can be limited to ("Show only for these categories")
+  const supabase = await createClient()
+  const { data: categoryRows } = await supabase.from('service_categories').select('id, name').eq('is_active', true).order('name')
+  const categoryOptions = (categoryRows ?? []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))
   if (!template) notFound()
 
   const initialSections = Array.isArray(template.form_sections)
@@ -68,6 +73,7 @@ export default async function AdminFormTemplateEditorPage({ params }: PageProps)
         entityName={template.name}
         initialSections={initialSections}
         libraryFields={libraryFields}
+        categories={categoryOptions}
         onSave={saveTemplateSections.bind(null, template.id)}
       />
     </div>
