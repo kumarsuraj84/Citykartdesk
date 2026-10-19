@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Citykart Desk — Universal Request Form Redesign (Sample Only, Not Wired In)</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --card: #ffffff;
+    --border: #e5e7eb;
+    --border-soft: #eef0f3;
+    --muted: #6b7280;
+    --muted-soft: #9aa1ac;
+    --fg: #111827;
+    --primary: #1B2559;
+    --primary-soft: #eef0f7;
+    --accent: #4f46e5;
+    --success: #059669;
+    --warning: #d97706;
+    --danger: #dc2626;
+    --radius: 14px;
+    --radius-sm: 10px;
+    --shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.04);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px; line-height: 1.45;
+  }
+  .banner {
+    background: #111827; color: #fff; text-align: center; font-size: 12px;
+    padding: 6px 12px; letter-spacing: .02em;
+  }
+  .banner b { color: #fde68a; }
+
+  /* ---- fake existing DESK chrome, for context only, NOT part of this redesign ---- */
+  .topbar {
+    height: 52px; background: var(--primary); color: #fff; display: flex; align-items: center;
+    padding: 0 16px; gap: 12px; font-weight: 700;
+  }
+  .topbar .tag { font-size: 11px; font-weight: 500; opacity: .7; border: 1px solid rgba(255,255,255,.3); border-radius: 999px; padding: 2px 8px; }
+  .shell { display: flex; min-height: calc(100vh - 52px - 26px); }
+  .app-sidebar {
+    width: 56px; background: #14183a; flex-shrink: 0; display: flex; flex-direction: column;
+    align-items: center; padding-top: 16px; gap: 18px; color: rgba(255,255,255,.45); font-size: 10px;
+  }
+  .app-sidebar .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.25); }
+  .app-sidebar .note { writing-mode: vertical-rl; margin-top: auto; margin-bottom: 16px; opacity: .5; font-size: 9px; }
+
+  /* ---- the actual redesign workspace ---- */
+  .workspace { flex: 1; min-width: 0; padding: 20px 24px 60px; }
+  .crumb { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+
+  .switcher { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .switcher span.lbl { font-size: 11px; color: var(--muted-soft); margin-right: 4px; text-transform: uppercase; letter-spacing: .05em; }
+  .switcher button {
+    border: 1px solid var(--border); background: #fff; padding: 6px 12px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; cursor: pointer; color: var(--muted);
+  }
+  .switcher button.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .switcher .spacer { flex: 1; }
+  .switcher label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+
+  /* compact service header */
+  .svc-header {
+    display: flex; align-items: center; gap: 14px; background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 18px; margin-bottom: 18px; box-shadow: var(--shadow);
+  }
+  .svc-icon {
+    width: 42px; height: 42px; border-radius: 12px; background: var(--primary-soft); color: var(--primary);
+    display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0;
+  }
+  .svc-header h1 { font-size: 16px; margin: 0; }
+  .svc-header .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .svc-header .meta { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .chip {
+    font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 999px; white-space: nowrap;
+    background: var(--border-soft); color: var(--muted);
+  }
+  .chip.sla { background: #ecfdf5; color: var(--success); }
+
+  /* 3-panel grid */
+  .grid { display: grid; grid-template-columns: 22% 1fr 23%; gap: 18px; align-items: start; }
+  @media (max-width: 1500px) { .grid { grid-template-columns: 24% 1fr 25%; } }
+  @media (max-width: 1180px) {
+    .grid { grid-template-columns: 1fr; }
+    .panel-left, .panel-right { order: 2; }
+    .form-card { order: 1; }
+    .panel-right { order: 3; }
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .card + .card { margin-top: 14px; }
+  .card-h {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted-soft);
+    padding: 12px 14px 8px;
+  }
+  .card-body { padding: 0 14px 14px; }
+
+  .about-text { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+
+  .sla-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; font-size: 12px; border-top: 1px solid var(--border-soft); }
+  .sla-row:first-child { border-top: none; }
+  .sla-priority { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .pdot { width: 7px; height: 7px; border-radius: 50%; }
+  .pdot.urgent { background: var(--danger); }
+  .pdot.high { background: var(--warning); }
+  .pdot.medium { background: #ca8a04; }
+  .pdot.low { background: #94a3b8; }
+  .sla-val { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .shortcut-item {
+    display: flex; align-items: center; justify-content: space-between; padding: 8px 10px;
+    border-radius: var(--radius-sm); cursor: pointer; font-size: 12.5px; font-weight: 500;
+    transition: background .12s;
+  }
+  .shortcut-item:hover { background: var(--primary-soft); }
+  .shortcut-item .count { color: var(--muted-soft); font-size: 11px; font-weight: 700; background: var(--border-soft); padding: 1px 7px; border-radius: 999px; }
+  .shortcut-item .arrow { color: var(--muted-soft); margin-left: 8px; }
+  .shortcut-empty { font-size: 12px; color: var(--muted-soft); padding: 10px; text-align: center; font-style: italic; }
+
+  /* center form */
+  .form-card .card-h-main {
+    padding: 16px 20px 4px; font-size: 15px; font-weight: 700;
+  }
+  .form-card .card-sub { padding: 0 20px 14px; font-size: 12px; color: var(--muted); }
+  .form-body { padding: 4px 20px 20px; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .field-row.single { grid-template-columns: 1fr; }
+  @media (max-width: 560px) { .field-row { grid-template-columns: 1fr; } }
+  .field label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 5px; color: var(--fg); }
+  .field label .req { color: var(--danger); margin-left: 2px; }
+  .field input, .field select, .field textarea {
+    width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px;
+    font-size: 13px; font-family: inherit; background: #fff; color: var(--fg);
+  }
+  .field textarea { min-height: 72px; resize: vertical; }
+  .field input.flash, .field select.flash { animation: flash 900ms ease; }
+  @keyframes flash { 0% { box-shadow: 0 0 0 3px rgba(79,70,229,.35); } 100% { box-shadow: none; } }
+  .section-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted-soft);
+    margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--border-soft);
+  }
+  .section-title:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+  .dropzone {
+    border: 1.5px dashed var(--border); border-radius: var(--radius-sm); padding: 16px; text-align: center;
+    color: var(--muted-soft); font-size: 12px;
+  }
+  .form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+  .btn { border-radius: var(--radius-sm); padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: #fff; color: var(--fg); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+  .note-inline { font-size: 11px; color: var(--muted-soft); margin-top: 4px; }
+
+  /* empty state panel collapse illustration */
+  .panel-right.collapsed { display: none; }
+  .grid.right-collapsed { grid-template-columns: 22% 1fr; }
+  @media (max-width: 1180px) { .grid.right-collapsed { grid-template-columns: 1fr; } }
+
+  .viewport-hint {
+    position: fixed; right: 10px; bottom: 10px; font-size: 11px; color: var(--muted-soft);
+    background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="banner">SAMPLE / PROTOTYPE ONLY — NOT WIRED INTO CITYKART DESK — DATA IS ILLUSTRATIVE, NOT REAL <b>· PHASE 1 DESIGN REVIEW ·</b></div>
+
+<div class="topbar">
+  CityKart <span style="font-weight:400;opacity:.8">DESK</span>
+  <span class="tag">existing top bar — unchanged by this proposal</span>
+</div>
+
+<div class="shell">
+  <div class="app-sidebar">
+    <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    <div class="note">existing DESK nav sidebar — unchanged</div>
+  </div>
+
+  <main class="workspace">
+    <div class="crumb">Services / <span id="crumbService">IT</span></div>
+
+    <div class="switcher">
+      <span class="lbl">Sample service</span>
+      <button data-svc="it" class="active" onclick="selectService('it')">IT</button>
+      <button data-svc="adminRepair" onclick="selectService('adminRepair')">Admin Repair</button>
+      <button data-svc="finance" onclick="selectService('finance')">Finance — Vendor Creation</button>
+      <div class="spacer"></div>
+      <label><input type="checkbox" id="emptyToggle" onchange="render()"> Simulate new user (no history)</label>
+    </div>
+
+    <div class="svc-header">
+      <div class="svc-icon" id="svcIcon">💻</div>
+      <div>
+        <h1 id="svcName">IT</h1>
+        <div class="sub" id="svcTeam">Information Technology · IT Group</div>
+      </div>
+      <div class="meta">
+        <span class="chip sla" id="svcSlaChip">48h resolution target</span>
+        <span class="chip" id="svcActiveChip">Published</span>
+      </div>
+    </div>
+
+    <div class="grid" id="mainGrid">
+
+      <!-- LEFT: service context -->
+      <section class="panel-left">
+        <div class="card">
+          <div class="card-h">About <span id="aboutSvcName">IT</span></div>
+          <div class="card-body">
+            <p class="about-text" id="aboutText">Get support for IT hardware, software, network, Ginesys, email and other technology related issues.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h">SLA Targets</div>
+          <div class="card-body" id="slaTable"></div>
+        </div>
+
+        <div class="card" id="recentlyUsedCard">
+          <div class="card-h">Recently Used</div>
+          <div class="card-body" id="recentlyUsedBody"></div>
+        </div>
+      </section>
+
+      <!-- CENTER: dynamic form -->
+      <section class="form-card card">
+        <div class="card-h-main">Ticket Description</div>
+        <div class="card-sub">Fields below are the service's actual configured Form Template — different per service.</div>
+        <div class="form-body">
+
+          <div class="field-row single">
+            <div class="field">
+              <label>Requesting on behalf of <span style="font-weight:400;color:var(--muted-soft)">(agents/managers only)</span></label>
+              <select><option>Myself (Chirag Mehta)</option></select>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label>Category<span class="req">*</span></label>
+              <select id="catSelect"></select>
+            </div>
+            <div class="field">
+              <label>Sub Category<span class="req">*</span></label>
+              <select id="subCatSelect"></select>
+            </div>
+          </div>
+
+          <div id="dynamicSections"></div>
+
+          <div class="field-row single">
+            <div class="field">
+              <label>Description<span class="req">*</span></label>
+              <textarea placeholder="Describe the issue in detail…"></textarea>
+            </div>
+          </div>
+
+          <div class="field-row single">
+            <div class="field">
+              <label>Attachments</label>
+              <div class="dropzone">Drop files here or click to browse (image/pdf, max 25MB each)</div>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn">Cancel</button>
+            <button class="btn primary">Submit Request</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT: personalized shortcuts -->
+      <section class="panel-right" id="rightPanel">
+        <div class="card">
+          <div class="card-h">Your Frequent Issues</div>
+          <div class="card-body" id="frequentBody"></div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<div class="viewport-hint" id="viewportHint"></div>
+
+<script>
+const ICONS = { it: '💻', adminRepair: '🔧', finance: '💰' };
+
+const SERVICES = {
+  it: {
+    name: 'IT', team: 'Information Technology · IT Group', slaChip: '48h resolution target',
+    about: 'Get support for IT hardware, software, network, Ginesys, email and other technology related issues.',
+    sla: [ ['Urgent','30 min / 2 hours'], ['High','2 hours / 8 hours'], ['Medium','4 hours / 24 hours'], ['Low','6 hours / 48 hours'] ],
+    categories: {
+      'Hardware': ['Mouse Issue', 'Laptop Issue', 'Desktop Issue', 'Keyboard Issue', 'POS Printer Issue'],
+      'Network': ['Network Issue', 'WiFi Issue'],
+      'Software': ['Ginesys Issue', 'Email Issue'],
+    },
+    recentlyUsed: [ ['Hardware','Network Issue'], ['Hardware','Mouse Issue'], ['Hardware','Laptop Issue'] ],
+    frequent: [ ['Hardware','Mouse Issue',8], ['Hardware','Laptop Issue',5], ['Hardware','POS Printer Issue',3], ['Network','Network Issue',2] ],
+    sections: [
+      { title: 'Requester Detail', fields: [
+        { label: 'Contact Number', type: 'tel', required: true, placeholder: '10-digit mobile number' },
+      ]},
+      { title: 'Ticket Detail', fields: [
+        { label: 'Serial Number', type: 'text', required: false, placeholder: 'Asset tag / serial no.' },
+        { label: 'Subject', type: 'text', required: true, placeholder: 'Short summary' },
+      ]},
+    ],
+  },
+  adminRepair: {
+    name: 'Admin Repair', team: 'Administration · Admin Group', slaChip: '24h resolution target',
+    about: 'Raise a repair or maintenance request for store fixtures, furniture, plumbing, electrical or civil work.',
+    sla: [ ['Urgent','1 hour / 4 hours'], ['High','2 hours / 12 hours'], ['Medium','4 hours / 24 hours'], ['Low','8 hours / 72 hours'] ],
+    categories: {
+      'Electrical': ['Lighting Issue', 'Wiring Issue'],
+      'Civil': ['Wall/Ceiling Damage', 'Flooring Issue'],
+      'Furniture': ['Chair/Table Repair', 'Shelving Issue'],
+    },
+    recentlyUsed: [ ['Electrical','Lighting Issue'], ['Furniture','Shelving Issue'] ],
+    frequent: [ ['Electrical','Lighting Issue',4], ['Furniture','Chair/Table Repair',2] ],
+    sections: [
+      { title: 'Location Detail', fields: [
+        { label: 'Store / Location', type: 'text', required: true, placeholder: 'Auto-filled from your store' },
+        { label: 'Floor / Area', type: 'text', required: false, placeholder: 'e.g. Ground floor, Billing area' },
+      ]},
+      { title: 'Repair Detail', fields: [
+        { label: 'Urgency Reason', type: 'select', required: false, placeholder: 'Select reason' },
+        { label: 'Vendor Visit Needed?', type: 'select', required: false, placeholder: 'Yes / No' },
+      ]},
+    ],
+  },
+  finance: {
+    name: 'Finance — Vendor Creation', team: 'Finance · Finance Group', slaChip: '72h resolution target',
+    about: 'Request creation or update of a vendor master record for procurement and payments.',
+    sla: [ ['Urgent','4 hours / 24 hours'], ['High','8 hours / 48 hours'], ['Medium','24 hours / 72 hours'], ['Low','48 hours / 120 hours'] ],
+    categories: {
+      'Vendor Master': ['New Vendor Creation', 'Vendor Detail Update'],
+      'Payments': ['Payment Status Query', 'Advance Request'],
+    },
+    recentlyUsed: [ ['Vendor Master','New Vendor Creation'] ],
+    frequent: [],
+    sections: [
+      { title: 'Vendor Detail', fields: [
+        { label: 'Vendor Name', type: 'text', required: true, placeholder: 'Legal entity name' },
+        { label: 'GSTIN', type: 'text', required: true, placeholder: '15-character GSTIN' },
+        { label: 'PAN', type: 'text', required: true, placeholder: '10-character PAN' },
+        { label: 'Bank Account Number', type: 'text', required: true, placeholder: '' },
+        { label: 'IFSC Code', type: 'text', required: true, placeholder: '' },
+      ]},
+      { title: 'Approval Detail', fields: [
+        { label: 'Cost Center', type: 'select', required: true, placeholder: 'Select cost center' },
+        { label: 'Approving Manager', type: 'text', required: true, placeholder: 'Search by name' },
+      ]},
+    ],
+  },
+};
+
+let currentSvc = 'it';
+
+function selectService(key) {
+  currentSvc = key;
+  document.querySelectorAll('.switcher button[data-svc]').forEach(b => b.classList.toggle('active', b.dataset.svc === key));
+  render();
+}
+
+function render() {
+  const s = SERVICES[currentSvc];
+  const isEmpty = document.getElementById('emptyToggle').checked;
+
+  document.getElementById('crumbService').textContent = s.name;
+  document.getElementById('svcIcon').textContent = ICONS[currentSvc];
+  document.getElementById('svcName').textContent = s.name;
+  document.getElementById('svcTeam').textContent = s.team;
+  document.getElementById('svcSlaChip').textContent = s.slaChip;
+  document.getElementById('aboutSvcName').textContent = s.name;
+  document.getElementById('aboutText').textContent = s.about;
+
+  // SLA table
+  const priClass = { Urgent: 'urgent', High: 'high', Medium: 'medium', Low: 'low' };
+  document.getElementById('slaTable').innerHTML = s.sla.map(([p, v]) =>
+    `<div class="sla-row"><span class="sla-priority"><span class="pdot ${priClass[p]}"></span>${p}</span><span class="sla-val">${v}</span></div>`
+  ).join('');
+
+  // Recently Used
+  const ru = isEmpty ? [] : s.recentlyUsed;
+  document.getElementById('recentlyUsedBody').innerHTML = ru.length
+    ? ru.map(([cat, sub]) => `<div class="shortcut-item" onclick="applyShortcut('${cat}','${sub}')"><span>${sub}</span><span class="arrow">›</span></div>`).join('')
+    : `<div class="shortcut-empty">No recent requests yet for this service.</div>`;
+
+  // Frequent Issues + right panel collapse
+  const freq = isEmpty ? [] : s.frequent;
+  const rightPanel = document.getElementById('rightPanel');
+  const grid = document.getElementById('mainGrid');
+  if (freq.length === 0) {
+    document.getElementById('frequentBody').innerHTML = `<div class="shortcut-empty">Nothing here yet — your frequently used issues will appear once you've raised a few requests.</div>`;
+  } else {
+    document.getElementById('frequentBody').innerHTML = freq.map(([cat, sub, count]) =>
+      `<div class="shortcut-item" onclick="applyShortcut('${cat}','${sub}')"><span>${sub}</span><span style="display:flex;align-items:center;gap:6px"><span class="count">${count}</span><span class="arrow">›</span></span></div>`
+    ).join('');
+  }
+  // If BOTH recently-used and frequent are empty, collapse the whole right panel (per spec §18)
+  const bothEmpty = ru.length === 0 && freq.length === 0;
+  rightPanel.classList.toggle('collapsed', bothEmpty);
+  grid.classList.toggle('right-collapsed', bothEmpty);
+
+  // Category / Sub Category selects
+  const catSelect = document.getElementById('catSelect');
+  const subCatSelect = document.getElementById('subCatSelect');
+  catSelect.innerHTML = '<option value="">Select…</option>' + Object.keys(s.categories).map(c => `<option value="${c}">${c}</option>`).join('');
+  catSelect.onchange = () => populateSubCats(catSelect.value);
+  subCatSelect.innerHTML = '<option value="">Select category first…</option>';
+
+  // Dynamic form sections
+  document.getElementById('dynamicSections').innerHTML = s.sections.map(sec => `
+    <div class="section-title">${sec.title}</div>
+    <div class="field-row">
+      ${sec.fields.map(f => `
+        <div class="field">
+          <label>${f.label}${f.required ? '<span class="req">*</span>' : ''}</label>
+          ${f.type === 'select'
+            ? `<select><option>${f.placeholder}</option></select>`
+            : `<input type="${f.type === 'tel' ? 'tel' : 'text'}" placeholder="${f.placeholder}">`}
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+
+  updateViewportHint();
+}
+
+function populateSubCats(cat, preselect) {
+  const s = SERVICES[currentSvc];
+  const subCatSelect = document.getElementById('subCatSelect');
+  const subs = s.categories[cat] || [];
+  subCatSelect.innerHTML = subs.length
+    ? '<option value="">Select…</option>' + subs.map(sc => `<option value="${sc}">${sc}</option>`).join('')
+    : '<option value="">Select category first…</option>';
+  if (preselect) subCatSelect.value = preselect;
+}
+
+function applyShortcut(cat, sub) {
+  const catSelect = document.getElementById('catSelect');
+  const subCatSelect = document.getElementById('subCatSelect');
+  catSelect.value = cat;
+  populateSubCats(cat, sub);
+  [catSelect, subCatSelect].forEach(el => {
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+  });
+  document.querySelector('.form-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function updateViewportHint() {
+  document.getElementById('viewportHint').textContent = window.innerWidth + ' × ' + window.innerHeight;
+}
+window.addEventListener('resize', updateViewportHint);
+
+render();
+</script>
+</body>
+</html>
