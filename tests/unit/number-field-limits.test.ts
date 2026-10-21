@@ -60,3 +60,45 @@ describe('numberLimitProblem (checked before a form is saved)', () => {
     expect(numberLimitProblem({ type: 'text', label: 'Subject', validation: { min: 9, max: 1 } })).toBeNull()
   })
 })
+
+// ── text and long-text fields: shortest / longest length ────────────────────────────────────────────────────────────────────────────
+import { textLimitProblem, fieldLimitProblem } from '@/lib/validation/formFields'
+
+const text = (validation?: FormField['validation'], type: 'text' | 'textarea' = 'text'): FormField => ({ id: 't', type, label: 'Subject', required: true, order: 1, validation })
+
+describe('a text field with a shortest and a longest length', () => {
+  const f = text({ min_length: 5, max_length: 20 })
+  it('accepts a length from the shortest to the longest, ends included', () => {
+    expect(validateFieldValue(f, 'abcde', 'requester')).toBeNull()
+    expect(validateFieldValue(f, 'a'.repeat(20), 'requester')).toBeNull()
+  })
+  it('refuses a text that is too short or too long, saying which limit', () => {
+    expect(validateFieldValue(f, 'abcd', 'requester')).toMatch(/at least 5 characters/)
+    expect(validateFieldValue(f, 'a'.repeat(21), 'requester')).toMatch(/at most 20 characters/)
+  })
+  it('works the same for a long-text field, and with no limit anything is accepted', () => {
+    expect(validateFieldValue(text({ max_length: 3 }, 'textarea'), 'abcd', 'requester')).toMatch(/at most 3/)
+    expect(validateFieldValue(text(), 'a'.repeat(5000), 'requester')).toBeNull()
+  })
+})
+
+describe('textLimitProblem / fieldLimitProblem (checked before a form is saved)', () => {
+  it('is fine when the lengths make sense, or when there are none', () => {
+    expect(textLimitProblem(text())).toBeNull()
+    expect(textLimitProblem(text({ min_length: 0, max_length: 500 }))).toBeNull()
+    expect(textLimitProblem(text({ min_length: 10, max_length: 10 }))).toBeNull()
+  })
+  it('refuses a shortest length above the longest, in plain words', () => {
+    expect(textLimitProblem(text({ min_length: 50, max_length: 10 }))).toMatch(/shortest length \(50\) is above the longest length \(10\)/)
+  })
+  it('refuses lengths that are not whole numbers or are below 0', () => {
+    expect(textLimitProblem(text({ min_length: -1 }))).toMatch(/whole numbers/)
+    expect(textLimitProblem(text({ max_length: 2.5 }))).toMatch(/whole numbers/)
+    expect(textLimitProblem(text({ max_length: Number.NaN }))).toMatch(/whole numbers/)
+  })
+  it('fieldLimitProblem covers number and text fields, and ignores other types', () => {
+    expect(fieldLimitProblem(qty({ min: 9, max: 1 }))).toMatch(/smallest number/)
+    expect(fieldLimitProblem(text({ min_length: 9, max_length: 1 }))).toMatch(/shortest length/)
+    expect(fieldLimitProblem({ type: 'select', label: 'X', validation: { min: 9, max: 1, min_length: 9, max_length: 1 } })).toBeNull()
+  })
+})

@@ -5,7 +5,7 @@ import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { filterActiveOptions } from '@/lib/forms/options'
 import Link from 'next/link'
 import { requesterCanView, requesterCanSet } from '@/lib/forms/sections'
-import { numberLimitProblem } from '@/lib/validation/formFields'
+import { fieldLimitProblem } from '@/lib/validation/formFields'
 import { fieldFromLibrary, type LibraryFieldDef } from '@/lib/forms/library'
 import type { FormField, FormFieldType, FormFieldOption, FormSection } from '@/types'
 
@@ -234,7 +234,7 @@ function getValidationErrors(sections: FormSection[]): string[] {
         if (activeLeaves < 2)
           errors.push(`"${f.label || 'Field'}" needs at least 2 active (non-archived) selectable options`)
       }
-      const limitProblem = numberLimitProblem(f)
+      const limitProblem = fieldLimitProblem(f)
       if (limitProblem) errors.push(limitProblem)
       // Defense-in-depth — the inspector's toggle cascade prevents this combo
       // by construction, but guard here too in case of a future import path.
@@ -281,6 +281,36 @@ function NumberLimits({ validation, disabled, onChange }: {
         Whole numbers only (no decimals)
       </label>
       <p className="mt-1 text-[11px] text-muted-foreground">The requester or technician can only enter a number between these two values. Leave a box empty for no limit.</p>
+    </div>
+  )
+}
+
+/** The administrator's limits for a text / long-text field: shortest and longest length in characters. Empty box = no limit. */
+function TextLimits({ validation, disabled, onChange }: {
+  validation: FormField['validation']
+  disabled: boolean
+  onChange: (next: FormField['validation']) => void
+}) {
+  const set = (patch: Partial<NonNullable<FormField['validation']>>) => {
+    const merged: Record<string, unknown> = { ...(validation ?? {}), ...patch }
+    for (const k of Object.keys(merged)) if (merged[k] === undefined || (typeof merged[k] === 'number' && Number.isNaN(merged[k]))) delete merged[k]
+    onChange(Object.keys(merged).length ? (merged as FormField['validation']) : undefined)
+  }
+  const num = (raw: string) => (raw.trim() === '' ? undefined : Number(raw))
+  return (
+    <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Allowed length</div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <label className="text-[11px] text-muted-foreground">
+          Shortest (characters)
+          <input type="number" min={0} step={1} value={validation?.min_length ?? ''} disabled={disabled} onChange={(e) => set({ min_length: num(e.target.value) })} placeholder="no limit" className={`${inputCls} mt-1 disabled:opacity-60`} />
+        </label>
+        <label className="text-[11px] text-muted-foreground">
+          Longest (characters)
+          <input type="number" min={0} step={1} value={validation?.max_length ?? ''} disabled={disabled} onChange={(e) => set({ max_length: num(e.target.value) })} placeholder="no limit" className={`${inputCls} mt-1 disabled:opacity-60`} />
+        </label>
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">The text must have a length between these two values. Leave a box empty for no limit.</p>
     </div>
   )
 }
@@ -1096,6 +1126,14 @@ export function SectionBuilder({
                   className={`${inputCls} disabled:opacity-60`}
                 />
               </Labeled>
+
+              {(selectedField.type === 'text' || selectedField.type === 'textarea') && (
+                <TextLimits
+                  validation={selectedField.validation}
+                  disabled={false}   // belongs to this template (like Required), so a library field can have it too
+                  onChange={(next) => updateField(selectedSection.id, selectedField.id, { validation: next })}
+                />
+              )}
 
               {selectedField.type === 'number' && (
                 <NumberLimits

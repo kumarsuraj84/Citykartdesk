@@ -46,6 +46,7 @@ export function FieldRenderer({ field, value, onChange, error, disabled }: Field
             min={field.validation?.min}
             max={field.validation?.max}
             step={field.type === 'number' ? (field.validation?.integer ? 1 : 'any') : undefined}
+            maxLength={field.type === 'text' ? field.validation?.max_length : undefined}
             disabled={disabled}
           />
         )
@@ -90,6 +91,7 @@ export function FieldRenderer({ field, value, onChange, error, disabled }: Field
             value={value as string}
             onChange={(e) => onChange(e.target.value)}
             rows={4}
+            maxLength={field.validation?.max_length}
             className={`${inputCls} resize-none leading-relaxed`}
             disabled={disabled}
           />
