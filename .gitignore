@@ -75,3 +75,6 @@ supabase/.temp
 /security-assessment-2026-10/07-FINAL-REMEDIATION/rehearsal/live-start/schema_*.sql
 /security-assessment-2026-10/07-FINAL-REMEDIATION/rehearsal/*.dump
 /local-mail-outbox/
+
+# a copy of live data made for testing on this PC: never commit
+/local-testing/*.dump
