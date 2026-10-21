@@ -45,6 +45,7 @@ export function FieldRenderer({ field, value, onChange, error, disabled }: Field
             className={inputCls}
             min={field.validation?.min}
             max={field.validation?.max}
+            step={field.type === 'number' ? (field.validation?.integer ? 1 : 'any') : undefined}
             disabled={disabled}
           />
         )

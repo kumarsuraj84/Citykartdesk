@@ -80,6 +80,18 @@ describe('validateRequesterFormCompletion()', () => {
     expect(validateRequesterFormCompletion({ service: svc, formData: { qty: 3 } }).valid).toBe(true)
   })
 
+  it('limits set by the administrator (1 to 100, whole numbers only) are enforced when the ticket is created, whatever the browser sent', () => {
+    const svc = serviceWith([
+      field({ id: 'qty', type: 'number', label: 'Qty', required: true, validation: { min: 1, max: 100, integer: true } }),
+    ])
+    const bad = (qty: unknown) => validateRequesterFormCompletion({ service: svc, formData: { qty } }).invalidFields.map((f) => f.key)
+    expect(bad(0)).toEqual(['qty'])
+    expect(bad(101)).toEqual(['qty'])
+    expect(bad('2.5')).toEqual(['qty'])
+    expect(validateRequesterFormCompletion({ service: svc, formData: { qty: 1 } }).valid).toBe(true)
+    expect(validateRequesterFormCompletion({ service: svc, formData: { qty: '100' } }).valid).toBe(true)
+  })
+
   it('required toggle answered false is VALID (Stage 7.1 F-02 fix) — only a genuinely missing value is rejected', () => {
     const svc = serviceWith([field({ id: 'consent', type: 'toggle', label: 'Consent', required: true })])
     expect(validateRequesterFormCompletion({ service: svc, formData: { consent: false } }).valid).toBe(true)

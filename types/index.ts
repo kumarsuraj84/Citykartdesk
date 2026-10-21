@@ -207,6 +207,8 @@ export type FormField = {
   validation?: {
     min?: number
     max?: number
+    /** number fields: only whole numbers (no decimals) */
+    integer?: boolean
     min_length?: number
     max_length?: number
   }

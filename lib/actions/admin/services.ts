@@ -1,5 +1,6 @@
 'use server'
 
+import { numberLimitProblem } from '@/lib/validation/formFields'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -85,6 +86,9 @@ function validateSections(sections: FormSection[]): string | null {
       if (field.requester_can_set === true && field.requester_can_view === false) {
         return `Section "${section.title}", field "${field.label}": cannot be settable by requesters while hidden from them.`
       }
+
+      const limitProblem = numberLimitProblem(field)
+      if (limitProblem) return `Section "${section.title}", ${limitProblem}`
     }
   }
 
