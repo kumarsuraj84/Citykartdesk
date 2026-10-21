@@ -162,6 +162,21 @@ export function numberLimitProblem(field: Pick<FormField, 'type' | 'label' | 'va
   return null
 }
 
+/** The same for a text or long-text field: the shortest and the longest number of characters must be whole numbers, the shortest not above the longest. */
+export function textLimitProblem(field: Pick<FormField, 'type' | 'label' | 'validation'>): string | null {
+  if ((field.type !== 'text' && field.type !== 'textarea') || !field.validation) return null
+  const { min_length: lo, max_length: hi } = field.validation
+  const bad = (v: unknown) => v !== undefined && v !== null && (typeof v !== 'number' || !Number.isInteger(v) || v < 0)
+  if (bad(lo) || bad(hi)) return `"${field.label}": the shortest and the longest length must be whole numbers, not below 0.`
+  if (typeof lo === 'number' && typeof hi === 'number' && lo > hi) return `"${field.label}": the shortest length (${lo}) is above the longest length (${hi}).`
+  return null
+}
+
+/** Every limit an administrator can set on a field (number range, text length), checked before a form is saved. Returns a plain sentence, or null when fine. */
+export function fieldLimitProblem(field: Pick<FormField, 'type' | 'label' | 'validation'>): string | null {
+  return numberLimitProblem(field) ?? textLimitProblem(field)
+}
+
 /** Validate a set of fields against submitted values. Returns a map of fieldId → error message. */
 export function validateFields(
   fields: FormField[],

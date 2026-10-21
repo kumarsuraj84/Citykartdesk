@@ -92,6 +92,16 @@ describe('validateRequesterFormCompletion()', () => {
     expect(validateRequesterFormCompletion({ service: svc, formData: { qty: '100' } }).valid).toBe(true)
   })
 
+  it('text lengths set by the administrator are enforced when the ticket is created', () => {
+    const svc = serviceWith([
+      field({ id: 'subj', type: 'text', label: 'Subject', required: true, validation: { min_length: 5, max_length: 10 } }),
+    ])
+    const bad = (subj: unknown) => validateRequesterFormCompletion({ service: svc, formData: { subj } }).invalidFields.map((f) => f.key)
+    expect(bad('abcd')).toEqual(['subj'])
+    expect(bad('abcdefghijk')).toEqual(['subj'])
+    expect(validateRequesterFormCompletion({ service: svc, formData: { subj: 'abcdefghij' } }).valid).toBe(true)
+  })
+
   it('required toggle answered false is VALID (Stage 7.1 F-02 fix) — only a genuinely missing value is rejected', () => {
     const svc = serviceWith([field({ id: 'consent', type: 'toggle', label: 'Consent', required: true })])
     expect(validateRequesterFormCompletion({ service: svc, formData: { consent: false } }).valid).toBe(true)
