@@ -21,6 +21,8 @@ export async function GET(req: NextRequest) {
     scope: `${SHEETS_SCOPE} openid email`,
     state: signState({ channelId: 'masters', provider: 'google', userId: profile.id }),
     ...cfg.authorizeExtra,
+    // always show Google's account chooser: the sheets are read as the CK Desk account, whichever Google accounts this browser is already signed in with
+    prompt: 'select_account consent',
   })
   return NextResponse.redirect(`${cfg.authorizeUrl}?${params.toString()}`)
 }
