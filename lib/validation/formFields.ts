@@ -137,6 +137,7 @@ export function validateFieldValue(field: FormField, value: unknown, audience: F
   if (field.type === 'number') {
     const num = Number(value)
     if (Number.isNaN(num)) return `${field.label} must be a number.`
+    if (field.validation?.integer && !Number.isInteger(num)) return `${field.label} must be a whole number.`
     if (field.validation?.min != null && num < field.validation.min) {
       return `${field.label} must be at least ${field.validation.min}.`
     }
@@ -145,6 +146,19 @@ export function validateFieldValue(field: FormField, value: unknown, audience: F
     }
   }
 
+  return null
+}
+
+/**
+ * The limits an administrator set on a number field must make sense: numbers, the smallest not above the largest. Used by the form builder (before saving) and by the
+ * server (when the form is saved), so a broken limit can never reach a requester. Returns a plain sentence, or null when fine.
+ */
+export function numberLimitProblem(field: Pick<FormField, 'type' | 'label' | 'validation'>): string | null {
+  if (field.type !== 'number' || !field.validation) return null
+  const { min, max } = field.validation
+  const bad = (v: unknown) => v !== undefined && v !== null && (typeof v !== 'number' || !Number.isFinite(v))
+  if (bad(min) || bad(max)) return `"${field.label}": the smallest and the largest number must be numbers.`
+  if (typeof min === 'number' && typeof max === 'number' && min > max) return `"${field.label}": the smallest number (${min}) is above the largest number (${max}).`
   return null
 }
 

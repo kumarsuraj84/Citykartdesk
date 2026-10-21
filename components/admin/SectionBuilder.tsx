@@ -5,6 +5,7 @@ import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { filterActiveOptions } from '@/lib/forms/options'
 import Link from 'next/link'
 import { requesterCanView, requesterCanSet } from '@/lib/forms/sections'
+import { numberLimitProblem } from '@/lib/validation/formFields'
 import { fieldFromLibrary, type LibraryFieldDef } from '@/lib/forms/library'
 import type { FormField, FormFieldType, FormFieldOption, FormSection } from '@/types'
 
@@ -233,6 +234,8 @@ function getValidationErrors(sections: FormSection[]): string[] {
         if (activeLeaves < 2)
           errors.push(`"${f.label || 'Field'}" needs at least 2 active (non-archived) selectable options`)
       }
+      const limitProblem = numberLimitProblem(f)
+      if (limitProblem) errors.push(limitProblem)
       // Defense-in-depth — the inspector's toggle cascade prevents this combo
       // by construction, but guard here too in case of a future import path.
       if (f.requester_can_set === true && f.requester_can_view === false) {
@@ -247,6 +250,40 @@ function getValidationErrors(sections: FormSection[]): string[] {
 
 const inputCls =
   'w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary placeholder:text-muted-foreground'
+
+/** The administrator's limits for a number field: smallest, largest, whole numbers only. Empty box = no limit. */
+function NumberLimits({ validation, disabled, onChange }: {
+  validation: FormField['validation']
+  disabled: boolean
+  onChange: (next: FormField['validation']) => void
+}) {
+  const set = (patch: Partial<NonNullable<FormField['validation']>>) => {
+    const merged: Record<string, unknown> = { ...(validation ?? {}), ...patch }
+    for (const k of Object.keys(merged)) if (merged[k] === undefined || merged[k] === false || (typeof merged[k] === 'number' && Number.isNaN(merged[k]))) delete merged[k]
+    onChange(Object.keys(merged).length ? (merged as FormField['validation']) : undefined)
+  }
+  const num = (raw: string) => (raw.trim() === '' ? undefined : Number(raw))
+  return (
+    <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Allowed numbers</div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <label className="text-[11px] text-muted-foreground">
+          Smallest number
+          <input type="number" value={validation?.min ?? ''} disabled={disabled} onChange={(e) => set({ min: num(e.target.value) })} placeholder="no limit" className={`${inputCls} mt-1 disabled:opacity-60`} />
+        </label>
+        <label className="text-[11px] text-muted-foreground">
+          Largest number
+          <input type="number" value={validation?.max ?? ''} disabled={disabled} onChange={(e) => set({ max: num(e.target.value) })} placeholder="no limit" className={`${inputCls} mt-1 disabled:opacity-60`} />
+        </label>
+      </div>
+      <label className="mt-2 flex items-center gap-2 text-sm text-foreground">
+        <input type="checkbox" checked={!!validation?.integer} disabled={disabled} onChange={(e) => set({ integer: e.target.checked ? true : undefined })} className="h-4 w-4" />
+        Whole numbers only (no decimals)
+      </label>
+      <p className="mt-1 text-[11px] text-muted-foreground">The requester or technician can only enter a number between these two values. Leave a box empty for no limit.</p>
+    </div>
+  )
+}
 
 function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -464,7 +501,7 @@ function PreviewField({ field, audience }: { field: FormField; audience: Preview
         <input type="tel" inputMode="numeric" maxLength={10} placeholder={field.placeholder ?? '9876543210'} className={base} />
       )}
       {field.type === 'number' && (
-        <input type="number" placeholder={field.placeholder} className={base} />
+        <input type="number" placeholder={field.placeholder} min={field.validation?.min} max={field.validation?.max} step={field.validation?.integer ? 1 : 'any'} className={base} />
       )}
       {field.type === 'date' && <input type="date" className={base} />}
       {field.type === 'file' && (
@@ -1059,6 +1096,14 @@ export function SectionBuilder({
                   className={`${inputCls} disabled:opacity-60`}
                 />
               </Labeled>
+
+              {selectedField.type === 'number' && (
+                <NumberLimits
+                  validation={selectedField.validation}
+                  disabled={false}   // the limits belong to this template (like Required), not to the shared library definition, so a library field can have them too
+                  onChange={(next) => updateField(selectedSection.id, selectedField.id, { validation: next })}
+                />
+              )}
 
               {selectedField.type === 'store_address' ? (
                 <p className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
