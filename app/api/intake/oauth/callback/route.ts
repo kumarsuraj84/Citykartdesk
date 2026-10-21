@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
   // "Connect Google Sheets" (master data) uses this same registered return address; its state carries channelId "masters" instead of a mailbox channel.
   if (channelId === 'masters') {
     const mastersBack = (q: string) => NextResponse.redirect(new URL(`/admin/masters?${q}`, origin))
-    const redirect = `${process.env.OAUTH_REDIRECT_BASE_URL ?? origin}/api/intake/oauth/callback`
+    const redirect = `${process.env.OAUTH_REDIRECT_BASE_URL || origin}/api/intake/oauth/callback`
     const exchanged = await exchangeCode({ provider: 'google', code, redirectUri: redirect })
     if ('error' in exchanged) return mastersBack('google=exchangefailed')
     const store = createAdminClient() as unknown as {
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
     .maybeSingle()
   if (!channel) return back('oauth=notfound')
 
-  const redirectUri = `${process.env.OAUTH_REDIRECT_BASE_URL ?? origin}/api/intake/oauth/callback`
+  const redirectUri = `${process.env.OAUTH_REDIRECT_BASE_URL || origin}/api/intake/oauth/callback`
   const result = await exchangeCode({ provider, code, redirectUri })
   if ('error' in result) return back('oauth=exchangefailed')
   if (!result.email) return back('oauth=noemail')
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
   // ── Push registration ──────────────────────────────────────────────────────
   // Try to set up native API push notifications. If the required env vars are
   // missing the channel falls back to the existing IMAP polling path automatically.
-  const baseUrl = process.env.OAUTH_REDIRECT_BASE_URL ?? origin
+  const baseUrl = process.env.OAUTH_REDIRECT_BASE_URL || origin
   // Dedicated to this public URL/clientState — see the matching comment in
   // app/api/intake/webhook/outlook/route.ts for why this is deliberately
   // not INTAKE_WORKER_SECRET (that one grants full worker-admin access and

@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/intake/channels?oauth=unconfigured', req.nextUrl.origin))
   }
 
-  const redirectUri = `${process.env.OAUTH_REDIRECT_BASE_URL ?? req.nextUrl.origin}/api/intake/oauth/callback`
+  const redirectUri = `${process.env.OAUTH_REDIRECT_BASE_URL || req.nextUrl.origin}/api/intake/oauth/callback`
   const params = new URLSearchParams({
     client_id:     cfg.clientId,
     redirect_uri:  redirectUri,

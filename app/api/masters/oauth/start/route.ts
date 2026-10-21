@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   const params = new URLSearchParams({
     client_id: cfg.clientId,
-    redirect_uri: `${process.env.OAUTH_REDIRECT_BASE_URL ?? req.nextUrl.origin}/api/intake/oauth/callback`,
+    redirect_uri: `${process.env.OAUTH_REDIRECT_BASE_URL || req.nextUrl.origin}/api/intake/oauth/callback`,
     response_type: 'code',
     scope: `${SHEETS_SCOPE} openid email`,
     state: signState({ channelId: 'masters', provider: 'google', userId: profile.id }),
