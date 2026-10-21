@@ -78,3 +78,4 @@ supabase/.temp
 
 # a copy of live data made for testing on this PC: never commit
 /local-testing/*.dump
+/local-testing/*.csv
