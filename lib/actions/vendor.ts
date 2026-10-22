@@ -164,7 +164,7 @@ export async function vendorPartsReceived(requestId: string, remark: string): Pr
   if (text.length < 3) return { error: 'Please write a remark (for example "parts received, engineer on site").' }
   if (text.length > 1000) return { error: 'The remark is too long.' }
 
-  const res = await applyStatusChange({ supabase, profile }, requestId, 'in_progress', `Parts received. ${text}`, { vendorFlow: 'resume' })
+  const res = await applyStatusChange({ supabase, profile }, requestId, 'in_progress', /^parts received/i.test(text) ? text : `Parts received. ${text}`, { vendorFlow: 'resume' })
   if (res.error) return res
   await settleRequest(pending.id, 'received', profile.id, text)
   refresh(requestId)
