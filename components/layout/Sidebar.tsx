@@ -9,7 +9,7 @@ import {
   BarChart3, ScrollText, Settings, Monitor, BookOpenText,
   Users, Tag, GitBranch, Building2, Database, Workflow,
   LogOut, BookOpen, KeyRound, ChevronDown, Sparkles, Filter,
-  PanelLeftClose, PanelLeftOpen, Table2, Zap, Headset, FileText, Clock, Library, FileBarChart, LayoutDashboard, Wrench, ClipboardCheck,
+  PanelLeftClose, PanelLeftOpen, Table2, Zap, Headset, FileText, Clock, Library, FileBarChart, LayoutDashboard, Wrench,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/actions/auth'
@@ -63,7 +63,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
   // it enabled; Intake is a specialized upstream tool for agents/managers;
   // Administration and Queue are configuration/ops surfaces touched far less
   // often, so they anchor the bottom.
-  const sections: NavSection[] = [
+  const allSections: NavSection[] = [
     {
       key: 'home',
       items: [{ label: 'Home', href: '/home', icon: Home, exactMatch: true }],
@@ -109,9 +109,8 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
           ? [{ label: 'Approvals', href: '/approvals', icon: ShieldCheck, countKey: 'approvals' as keyof NavCounts }] : []),
         ...(has('projects') && isAdmin
           ? [{ label: 'Projects',      href: '/projects',      icon: FolderKanban, countKey: 'projects'      as keyof NavCounts }] : []),
-        // The AC visits of a store (the OEM engineer's report and the store's answer), and the technicians' list of visit reports and parts to order.
-        ...(has('requests') && profile.store_id ? [{ label: 'AC visits', href: '/ac-visits', icon: Wrench } as NavItem] : []),
-        ...(has('requests') && (isAgent || isManager || isAdmin) ? [{ label: 'AC visit reports', href: '/visits', icon: ClipboardCheck } as NavItem] : []),
+        // Every PO the OEM engineers (vendors) asked for, with its Excel download; the PO approver opens a waiting one from here too.
+        ...(has('requests') && (isAgent || isManager || isAdmin) ? [{ label: 'Purchase orders', href: '/purchase-orders', icon: FileText } as NavItem] : []),
         { label: 'Notifications', href: '/notifications', icon: Bell, countKey: 'notifications' as keyof NavCounts },
       ],
     },
@@ -170,6 +169,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
             { label: 'Settings',       href: '/admin/settings',       icon: Settings },
             ...(isAdmin ? [{ label: 'Master Data', href: '/admin/master-data', icon: Database }] : []),
             ...(isAdmin ? [{ label: 'Sheet Masters', href: '/admin/masters', icon: Database }] : []),
+            ...(isAdmin ? [{ label: 'Vendors', href: '/admin/vendors', icon: Wrench }] : []),
             ...(isAdmin ? [{ label: 'AC master', href: '/admin/masters/ac', icon: Database }, { label: 'Genset master', href: '/admin/masters/genset', icon: Database }] : []),
             { label: 'Knowledge Base', href: '/admin/knowledge-base', icon: BookOpen  },
           ],
@@ -186,6 +186,19 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
       ],
     },
   ].filter(s => s.show !== false)
+
+  // An OEM engineer (vendor login) has his own small menu; nothing of the rest of the application is offered to him.
+  const vendorSections: NavSection[] = [
+    {
+      key: 'vendor',
+      items: [
+        { label: 'My tickets', href: '/vendor', icon: Wrench, exactMatch: true },
+        { label: 'My POs', href: '/vendor/pos', icon: FileText },
+        { label: 'Notifications', href: '/notifications', icon: Bell, countKey: 'notifications' as keyof NavCounts },
+      ],
+    },
+  ]
+  const sections: NavSection[] = profile.vendor_company_id ? vendorSections : allSections
 
   // default open all sections
   const defaultOpen = Object.fromEntries(sections.map(s => [s.key, true]))

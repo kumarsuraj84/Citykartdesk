@@ -34,6 +34,8 @@ export type AcRow = {
   pincode: string
   isActive: boolean
   emails: string[]
+  /** the OEM's address(es) for purchase-order details (the sheet column "Email for PO detail") */
+  poEmails: string[]
 }
 
 export type GensetRow = {

@@ -93,6 +93,11 @@ const REQUEST_FIELD_OPTIONS: { value: RuleConditionField; label: string }[] = [
   { value: 'is_sla_breached', label: 'SLA Breached' },
   { value: 'has_attachment', label: 'Has Attachment' },
   { value: 'age_days', label: 'Age (days)' },
+  { value: 'ac_amc_vendor', label: 'AC - AMC vendor (from the AC sheet)' },
+  { value: 'ac_brand', label: 'AC - brand (from the AC sheet)' },
+  { value: 'store_region', label: 'Store region (from the AC sheet)' },
+  { value: 'store_state', label: 'Store state (from the AC sheet)' },
+  { value: 'store_cluster', label: 'Store cluster (from the AC sheet)' },
 ]
 
 const REQUESTER_FIELD_OPTIONS: { value: RuleConditionField; label: string }[] = [

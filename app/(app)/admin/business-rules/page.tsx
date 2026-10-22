@@ -62,6 +62,14 @@ export default async function BusinessRulesPage() {
   ])
   const libraryFields = ((libraryResult.data ?? []) as Parameters<typeof toLibraryDef>[0][]).map(toLibraryDef)
 
+  // Vendor technicians (OEM engineers) can be chosen in the "Assign to" action too: a ticket for an AC of that OEM goes straight to one of them.
+  const [{ data: vendorTechs }, { data: vendorCompanies }] = await Promise.all([
+    admin.from('profiles').select('id, full_name, role, vendor_company_id').eq('org_id', orgId).eq('vendor_role', 'technician').eq('is_active', true).order('full_name', { ascending: true }),
+    admin.from('vendor_companies').select('id, name').eq('org_id', orgId),
+  ])
+  const companyName = new Map(((vendorCompanies ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]))
+  const vendorAgents = ((vendorTechs ?? []) as { id: string; full_name: string; role: string; vendor_company_id: string }[]).map((v) => ({ id: v.id, role: v.role, full_name: `${v.full_name} (vendor: ${companyName.get(v.vendor_company_id) ?? '?'})` }))
+
   return (
     <div className="space-y-4 max-w-5xl">
       <PageHeader
@@ -75,7 +83,7 @@ export default async function BusinessRulesPage() {
         subCategories={subCategoriesResult.data ?? []}
         teams={teamsResult.data ?? []}
         profiles={(profilesResult.data ?? []) as Pick<Profile, 'id' | 'full_name' | 'role'>[]}
-        agents={(agentsResult.data ?? []) as Pick<Profile, 'id' | 'full_name' | 'role'>[]}
+        agents={[...((agentsResult.data ?? []) as Pick<Profile, 'id' | 'full_name' | 'role'>[]), ...(vendorAgents as Pick<Profile, 'id' | 'full_name' | 'role'>[])]}
         departments={departmentsResult.data ?? []}
         locations={locationsResult.data ?? []}
         designations={designationsResult.data ?? []}

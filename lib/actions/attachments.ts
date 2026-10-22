@@ -8,6 +8,7 @@ import { logActivity } from '@/lib/activity'
 import { ALLOWED_MIME_SET as ALLOWED_MIME_TYPES, ALLOWED_EXTENSIONS, MAX_FILE_SIZE_BYTES as MAX_FILE_SIZE } from '@/lib/attachments/validate'
 import { uploadAllowed, UPLOAD_LIMIT_MESSAGE } from '@/lib/attachments/quota'
 import { validateAttachmentServer } from '@/lib/attachments/validate-server'
+import { vendorRoleOf } from '@/lib/vendor/access'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -101,14 +102,16 @@ export async function uploadAttachment(
   // ── Request access check ──────────────────────────────────────────────────
   const { data: request } = await supabase
     .from('requests')
-    .select('id, team_id, requester_id')
+    .select('id, team_id, requester_id, assigned_to')
     .eq('id', requestId)
     .single()
 
   if (!request) return { error: 'Request not found.' }
 
   const isRequester = request.requester_id === profile.id
-  const isAgent =
+  // an OEM engineer (vendor technician) may attach files (the FSR) to a ticket assigned to him
+  const isVendorAssignee = vendorRoleOf(profile) === 'technician' && request.assigned_to === profile.id
+  const isAgent = isVendorAssignee ||
     profile.role === 'manager' ||
     profile.role === 'admin' ||
     profile.role === 'platform_owner' ||
@@ -154,7 +157,8 @@ export async function uploadAttachment(
   }
 
   // ── DB insert ─────────────────────────────────────────────────────────────
-  const { data: attachment, error: insertError } = await supabase
+  // (a vendor has no write right of his own on tickets, so his file is recorded with the server's key after the checks above)
+  const { data: attachment, error: insertError } = await (isVendorAssignee ? admin : supabase)
     .from('request_attachments')
     .insert({
       request_id: requestId,

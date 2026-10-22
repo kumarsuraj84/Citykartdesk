@@ -21,6 +21,12 @@ export type RuleConditionField =
   | 'has_attachment'
   | 'age_days'
   | 'form_field'
+  // the AC the ticket was raised for (saved with the ticket from the AC sheet) and where its store is - used to route a ticket to the right vendor technician
+  | 'ac_amc_vendor'
+  | 'ac_brand'
+  | 'store_region'
+  | 'store_state'
+  | 'store_cluster'
 
 export type RuleConditionOperator =
   | 'equals'
@@ -89,6 +95,11 @@ export type RuleEvaluationRequest = {
   is_sla_breached: boolean
   has_attachment: boolean
   age_days: number
+  ac_amc_vendor?: string
+  ac_brand?: string
+  store_region?: string
+  store_state?: string
+  store_cluster?: string
   form_data?: Record<string, unknown> | null
   /** The request's answers keyed by Field Library field id — see libraryFieldValues(). */
   library_field_values?: Record<string, unknown> | null

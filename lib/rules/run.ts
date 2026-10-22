@@ -92,8 +92,17 @@ async function hasAttachment(admin: AnyClient, requestId: string): Promise<boole
   return (data?.length ?? 0) > 0
 }
 
+/** The AC the ticket was raised for (saved with the ticket), as far as a rule needs it. Empty strings when the ticket has none. */
+async function acFacts(admin: AnyClient, requestId: string) {
+  const { data } = await admin.from('request_master_snapshots').select('snapshot').eq('request_id', requestId).eq('kind', 'ac').maybeSingle()
+  const unit = (Array.isArray(data?.snapshot) ? data.snapshot[0] : null) as Record<string, string | null> | null
+  const s = (v: string | null | undefined) => (v ?? '').trim()
+  return { ac_amc_vendor: s(unit?.amc_vendor), ac_brand: s(unit?.brand), store_region: s(unit?.region), store_state: s(unit?.state), store_cluster: s(unit?.cluster) }
+}
+
 async function toEvalRequest(admin: AnyClient, request: RawRequest): Promise<RuleEvaluationRequest> {
   return {
+    ...(await acFacts(admin, request.id)),
     priority: request.priority,
     status: request.status,
     service_id: request.service_id,

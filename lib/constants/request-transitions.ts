@@ -48,6 +48,23 @@ export const AGENT_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
   cancelled:        [],
 }
 
+/**
+ * Transitions a vendor technician may make on a ticket assigned to him. A vendor never cancels, never reassigns and never reopens.
+ * open/assigned → in_progress is the "Start working" step (it needs the OEM ticket number); in_progress → hold_purchase_ho is reachable only through the
+ * "Part required" / "PO required" windows; hold_purchase_ho → in_progress is "Parts received" (the vendor request screens check the rest).
+ */
+export const VENDOR_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
+  open:             ['in_progress'],
+  assigned:         ['in_progress'],
+  in_progress:      ['resolved', 'hold_purchase_ho'],
+  waiting_user:     [],
+  hold_purchase_ho: ['in_progress'],
+  pending_approval: [],
+  resolved:         [],
+  closed:           [],
+  cancelled:        [],
+}
+
 /** Transitions a requester may trigger. */
 export const REQUESTER_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
   open:             ['cancelled'],
@@ -73,7 +90,7 @@ export const SERVER_ALLOWED_TRANSITIONS: ReadonlyArray<readonly [RequestStatus, 
   ['assigned', 'open'], ['assigned', 'in_progress'], ['assigned', 'cancelled'],
   ['in_progress', 'waiting_user'], ['in_progress', 'hold_purchase_ho'], ['in_progress', 'resolved'], ['in_progress', 'cancelled'],
   ['waiting_user', 'in_progress'], ['waiting_user', 'resolved'], ['waiting_user', 'open'], ['waiting_user', 'cancelled'],
-  ['hold_purchase_ho', 'in_progress'],
+  ['hold_purchase_ho', 'in_progress'], ['hold_purchase_ho', 'cancelled'],   // cancelled: only when a PO is rejected
   ['resolved', 'open'],
   ['resolved', 'closed'],
 ]

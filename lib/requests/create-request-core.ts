@@ -421,6 +421,17 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     if (slaError) sanitizeError(slaError, { route: 'create-request-core.ts#setSlaDeadlines', fallback: 'Failed to set SLA deadlines.' }) // logged; the ticket itself exists
   }
 
+  // The AC the requester chose (if the form has the AC-number field) is saved with the ticket as it was at this moment (before the rules run, so a rule can route by the AC's vendor, brand and region).
+  if (acField && chosenAcValue && requesterStoreCode) {
+    try {
+      const activeUnits = await loadActiveAcUnits(admin, orgId, requesterStoreCode)
+      const chosen = findSelectedUnit(activeUnits, chosenAcValue)
+      if (chosen) await saveMasterSnapshot(admin, { requestId: request.id, kind: 'ac', units: [chosen] })
+    } catch (e) {
+      console.error('[createRequestCore] AC snapshot failed', e)
+    }
+  }
+
   // Business Rules: "created" trigger — assign/set priority/set status/notify
   // per whatever rules match this request. Channel-agnostic already; this is
   // the exact call Email Intake previously never made.
@@ -452,17 +463,6 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     categoryOemKind = isOemKind(cat?.auto_oem_kind) ? cat.auto_oem_kind : null
     categoryCvmApproval = cat?.auto_cvm_approval === true
   }
-  // The AC the requester chose (if the form has the AC-number field) is saved with the ticket as it was at this moment.
-  if (acField && chosenAcValue && requesterStoreCode) {
-    try {
-      const activeUnits = await loadActiveAcUnits(admin, orgId, requesterStoreCode)
-      const chosen = findSelectedUnit(activeUnits, chosenAcValue)
-      if (chosen) await saveMasterSnapshot(admin, { requestId: request.id, kind: 'ac', units: [chosen] })
-    } catch (e) {
-      console.error('[createRequestCore] AC snapshot failed', e)
-    }
-  }
-
   const oemKind: OemKind | null = categoryOemKind ?? (service.auto_oem_routing ? 'ac' : null)
   if (oemKind) {
     try {

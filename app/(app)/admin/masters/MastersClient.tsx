@@ -24,7 +24,7 @@ export type SourceView = {
   row_count: number | null
 }
 export type IssueView = { kind: 'ac' | 'genset' | 'cvm'; severity: 'error' | 'warning'; code: string; store_code: string | null; sheet_row: number | null; message: string }
-export type TemplateView = { kind: 'ac' | 'genset' | 'revisit'; subject: string; body: string; custom: boolean }
+export type TemplateView = { kind: 'ac' | 'genset'; subject: string; body: string; custom: boolean }
 export type CountsView = { acActive: number; acInactive: number; acRemoved: number; gensetActive: number; gensetRemoved: number; cvmStores: number }
 type Connection = { account_email: string | null; status: 'connected' | 'broken'; last_error: string | null; connected_at: string } | null
 
@@ -120,7 +120,7 @@ function TemplateCard({ t }: { t: TemplateView }) {
   const [pending, start] = useTransition()
   const label = t.kind === 'ac' ? 'AC' : t.kind === 'genset' ? 'Genset' : 'Send an engineer again'
   return (
-    <Card title={t.kind === 'revisit' ? 'E-mail asking the OEM to send an engineer again' : `${label} OEM e-mail`} right={t.custom ? <span className="text-[11px] text-muted-foreground">Your own wording</span> : <span className="text-[11px] text-muted-foreground">Standard wording</span>}>
+    <Card title={`${label} OEM e-mail`} right={t.custom ? <span className="text-[11px] text-muted-foreground">Your own wording</span> : <span className="text-[11px] text-muted-foreground">Standard wording</span>}>
       <p className="mb-3 text-xs text-muted-foreground">
         One e-mail goes to every address the sheet lists for the store. OEM addresses are in To, company addresses (@citykartstores.com, @citykart.org) are copied in CC.
         Click a detail below the box to put it into the message.
@@ -137,7 +137,7 @@ function TemplateCard({ t }: { t: TemplateView }) {
       />
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button type="button" disabled={pending} onClick={() => start(async () => { const r = await saveMasterTemplate(t.kind, subject, body); setMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'Saved.' }) })} className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
-          Save {t.kind === 'revisit' ? 'this' : label} e-mail
+          Save {label} e-mail
         </button>
         {t.custom && (
           <button type="button" disabled={pending} onClick={() => start(async () => { const r = await resetMasterTemplate(t.kind); setMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'Back to the standard wording. Reload the page to see it.' }) })} className="rounded-lg border border-border px-3 py-1.5 text-sm text-foreground">

@@ -13,7 +13,7 @@ import { spreadsheetIdFrom } from '@/lib/masters/google'
 type AnyClient = { from: (t: string) => any }
 type ActionResult = { error?: string }
 const KINDS = ['ac', 'genset', 'cvm'] as const
-const MAIL_KINDS = ['ac', 'genset', 'revisit'] as const
+const MAIL_KINDS = ['ac', 'genset'] as const
 
 async function requireAdmin() {
   const profile = await getCurrentProfile()

@@ -54,6 +54,8 @@ This document describes **what Citykart Desk is, how it is built, how every part
 | **[SUPERSEDED]** | An older design that a newer one replaces. Described only so the builder understands history; do **not** build it. |
 | **[PLAN]** | Agreed idea, not built. Build only if asked. |
 
+> **UPDATE 2026-10-22:** Release 4 (Engineer visits / FSR, §12 and every **[R4]** / **[RELEASE-4]** mark below) is **DROPPED — treat it as [SUPERSEDED] and do not build it.** It is replaced by the **vendor technician** module (OEM engineers log in; releases 8–10), fully described in `docs/VENDOR-TECHNICIAN-DESIGN.md`. That document is part of this blueprint. The public `/engineer` page, the visit-code secret and the visits cron are therefore not needed; "Hold due to Purchase from HO" is used by the vendor module for PO-required and part-required.
+
 The six releases: **1** = AC Google Sheet as master (+ reopen re-mail), **2** = Genset sheet, **3** = CVM sheet and automatic approval, **4** = Engineer visits (FSR), **5** = AC / Genset master screens, **6** = clean-up of the old OEM-bucket and CVM-tag screens.
 
 ### 0.2 Vocabulary (Citykart's own words)

@@ -35,7 +35,7 @@ export default async function SheetMastersPage({ searchParams }: { searchParams:
     admin.from('master_ac_units').select('id', { count: 'exact', head: true }).eq('org_id', orgId).is('removed_at', null).eq('is_active', false),
   ])
 
-  const tpl = (kind: 'ac' | 'genset' | 'revisit'): TemplateView => {
+  const tpl = (kind: 'ac' | 'genset'): TemplateView => {
     const saved = (templates.data ?? []).find((t: { kind: string }) => t.kind === kind) ?? null
     const t = resolveTemplate(saved, kind)
     return { kind, subject: t.subject, body: t.body, custom: !!saved }
@@ -55,7 +55,7 @@ export default async function SheetMastersPage({ searchParams }: { searchParams:
         connection={conn.data ?? (demoSheetsDir() ? { account_email: 'demo files on this computer (local test only)', status: 'connected', last_error: null, connected_at: new Date().toISOString() } : null)}
         sources={(sources.data ?? []) as SourceView[]}
         issues={(issues.data ?? []) as IssueView[]}
-        templates={[tpl('ac'), tpl('genset'), tpl('revisit')]}
+        templates={[tpl('ac'), tpl('genset')]}
         counts={counts}
       />
     </div>

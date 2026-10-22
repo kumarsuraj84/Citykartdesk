@@ -4,6 +4,7 @@ import { sendEmail } from '@/lib/email/send'
 import {
   acMailTarget, findSelectedUnit, gensetMailTarget, loadActiveAcUnits, loadGensetsForStore, type AcUnitRecord, type GensetRecord, type MailTarget,
 } from '@/lib/masters/resolve'
+import { isAssignedToVendor } from '@/lib/vendor/ticket-fields'
 import { acVars, gensetVars, masterSentComment, renderMasterMail, resolveTemplate, type MailKind } from '@/lib/masters/mail'
 
 // Sends a ticket to the OEM using the AC / Genset sheet (replaces the old "OEM bucket" routing). Fires once, right after the ticket is created.
@@ -108,6 +109,9 @@ Original issue: ${p.description || '(no description provided)'}`
     request_id: request.id, author_id: p.actorId, is_internal: false,
     body: masterSentComment({ label, to: target.to, cc: target.cc, subject: mail.subject, body: mail.text }),
   })
+
+  // A ticket a Business Rule gave to a vendor technician stays Open: the vendor starts it himself (with the OEM ticket number).
+  if (await isAssignedToVendor(request.id)) return
 
   // Conditioned on Open: a Business Rule may already have moved the ticket.
   const { data: moved } = await admin

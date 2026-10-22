@@ -39,7 +39,7 @@ const acColumns = (r: AcRow) => ({
   store_code: r.storeCode, ckdesk_no: r.ckdeskNo, serial: blank(r.serial), floor: blank(r.floor), ac_type: blank(r.acType), tonnage: blank(r.tonnage), brand: blank(r.brand),
   amc_vendor: blank(r.amcVendor), amc_brand: blank(r.amcBrand), zenatix: blank(r.zenatix), store_priority: blank(r.storePriority), festival: blank(r.festival),
   region: blank(r.region), cluster: blank(r.cluster), opening_date: r.openingDate, city: blank(r.city), state: blank(r.state), address: blank(r.address),
-  pincode: blank(r.pincode), is_active: r.isActive, emails: r.emails, sheet_row: r.sheetRow,
+  pincode: blank(r.pincode), is_active: r.isActive, emails: r.emails, po_emails: r.poEmails, sheet_row: r.sheetRow,
 })
 const gensetColumns = (r: GensetRow) => ({
   store_code: r.storeCode, brand: blank(r.brand), kva: blank(r.kva), serial: blank(r.serial), cpcb_group: blank(r.cpcbGroup), emails: r.emails, sheet_row: r.sheetRow,

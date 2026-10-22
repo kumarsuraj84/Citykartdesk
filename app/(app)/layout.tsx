@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
+import { isVendor, vendorMayOpen, vendorLandingFor } from '@/lib/vendor/access'
 import { AppShell } from '@/components/layout/AppShell'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { getCurrentProfileForPasswordReset, getEnabledModules, getTrialInfo, getNavCounts, getDirectReportIds } from '@/lib/queries/profiles'
@@ -24,6 +26,12 @@ export default async function AppLayout({
 
   if (!profile) {
     redirect('/login?retry=1')
+  }
+
+  // An OEM engineer (vendor login) sees only the vendor pages; a link to anything else (an e-mailed ticket link, a typed address) lands on his own page.
+  if (isVendor(profile)) {
+    const path = (await headers()).get('x-request-path') ?? ''
+    if (path && !vendorMayOpen(path)) redirect(vendorLandingFor(path))
   }
 
   if (trialInfo?.isExpired) {

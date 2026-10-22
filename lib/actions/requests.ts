@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { isVendor } from '@/lib/vendor/access'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
@@ -73,6 +74,8 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return { error: 'You must be signed in to submit a request.' }
+  // an OEM engineer (vendor login) works tickets; he does not raise them
+  if (isVendor(await getCurrentProfile())) return { error: 'A vendor login cannot raise requests.' }
 
   const enabledModules = await getEnabledModules()
   if (!enabledModules.includes('requests')) return { error: 'The Requests module is not enabled for your organisation.' }

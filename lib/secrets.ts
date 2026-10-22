@@ -6,7 +6,7 @@
 // For a controlled switch-over there is ONE transitional switch, ALLOW_SHARED_SECRET_FALLBACK=1, which lets the purposes below fall back to CRON_SECRET again; it
 // is off by default and is reported by auditSecrets() so it is not forgotten.
 
-export type SecretPurpose = 'approval_link' | 'csat_link' | 'oauth_state' | 'intake_webhook' | 'intake_worker' | 'system_log_ingest' | 'visit_code' | 'cron'
+export type SecretPurpose = 'approval_link' | 'csat_link' | 'oauth_state' | 'intake_webhook' | 'intake_worker' | 'system_log_ingest' | 'cron'
 
 const ENV_NAME: Record<SecretPurpose, string> = {
   approval_link: 'APPROVAL_LINK_SECRET',
@@ -15,7 +15,6 @@ const ENV_NAME: Record<SecretPurpose, string> = {
   intake_webhook: 'INTAKE_WEBHOOK_TOKEN',
   intake_worker: 'INTAKE_WORKER_SECRET',
   system_log_ingest: 'SYSTEM_LOG_INGEST_SECRET',
-  visit_code: 'VISIT_CODE_SECRET',
   cron: 'CRON_SECRET',
 }
 

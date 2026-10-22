@@ -109,6 +109,7 @@ export function parseAcSheet(values: unknown[][]): ParseResult<AcRow> {
   const issues: MasterIssue[] = []
   const hasStatus = grid.header.has('status')
   const hasMail = grid.header.has('mailid')
+  const hasPoMail = grid.header.has('emailforpodetail')
   if (!hasStatus) issues.push({ kind: 'ac', severity: 'warning', code: 'no_status_column', storeCode: null, sheetRow: null, message: 'The AC sheet has no Status column, so every AC is treated as Active.' })
   if (!hasMail) issues.push({ kind: 'ac', severity: 'warning', code: 'no_mail_column', storeCode: null, sheetRow: null, message: 'The AC sheet has no Mail ID column, so no AC ticket can be mailed to an OEM.' })
 
@@ -156,13 +157,18 @@ export function parseAcSheet(values: unknown[][]): ParseResult<AcRow> {
     const emails = parseEmails(mailRaw)
     if (hasMail && isActive) addEmailIssues(issues, 'ac', storeCode, sheetRow, mailRaw, emails, true)
 
+    // the OEM's address for PO details: bad addresses are skipped with a note; an empty cell is fine (the ticket's normal OEM address is used then)
+    const poRaw = hasPoMail ? get(cells, 'emailforpodetail') : ''
+    const poEmails = parseEmails(poRaw)
+    if (isActive) for (const bad of poEmails.invalid) issues.push({ kind: 'ac', severity: 'warning', code: 'bad_po_email', storeCode, sheetRow, token: bad, message: `Row ${sheetRow} (${storeCode}): "${bad}" in the Email for PO detail is not an e-mail address and is skipped.` })
+
     rows.push({
       sheetRow, storeCode, ckdeskNo, serial,
       floor: get(cells, 'acfloor', 'floor'), acType: get(cells, 'actype'), tonnage: get(cells, 'actonnage'), brand: get(cells, 'acbrand'),
       amcVendor: get(cells, 'acamcvendor'), amcBrand: get(cells, 'acamcbrand'), zenatix: get(cells, 'zenatixyesno', 'zenatix'),
       storePriority: get(cells, 'storeprioritylist', 'storepriority'), festival: get(cells, 'festival'), region: get(cells, 'region'), cluster: get(cells, 'cluster'),
       openingDate: toIsoDate(get(cells, 'openingdate', 'opendate')), city: get(cells, 'city'), state: get(cells, 'state'), address: get(cells, 'address'), pincode: get(cells, 'pincode'),
-      isActive, emails: emails.valid,
+      isActive, emails: emails.valid, poEmails: poEmails.valid,
     })
   }
   return { rows, issues: groupEmailIssues(issues) }

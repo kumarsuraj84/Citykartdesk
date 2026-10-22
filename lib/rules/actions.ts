@@ -91,6 +91,13 @@ async function runAssign(
   const { strategy, assigneeIds } = params
   if (!assigneeIds || assigneeIds.length === 0) return
 
+  // A ticket that is with a vendor technician (an OEM engineer) is never taken away by a rule - not by an "edited" rule that re-runs after he starts work, and not by
+  // a round-robin that would pass it to the next person. Only an administrator moves it (so a rule that always sends AC tickets to a Citykart technician cannot undo the vendor routing).
+  if (request.assigned_to) {
+    const { data: current } = await admin.from('profiles').select('vendor_company_id, vendor_role').eq('id', request.assigned_to).maybeSingle()
+    if (current?.vendor_company_id && current.vendor_role === 'technician') return
+  }
+
   let chosenId: string | null = null
 
   if (strategy === 'direct') {
@@ -142,7 +149,13 @@ async function runAssign(
     .select('user_id', { count: 'exact', head: true })
     .eq('team_id', request.team_id)
     .eq('user_id', chosenId)
+  // A vendor technician (an OEM engineer) is never on a team: he sees only the tickets assigned to him (row security), so he is the one exception to the team rule.
+  let isVendorTech = false
   if (!onTeam) {
+    const { data: vp } = await admin.from('profiles').select('vendor_company_id, vendor_role, is_active, org_id').eq('id', chosenId).maybeSingle()
+    isVendorTech = !!vp && vp.vendor_role === 'technician' && !!vp.vendor_company_id && vp.is_active !== false && vp.org_id === request.org_id
+  }
+  if (!onTeam && !isVendorTech) {
     console.error(`[business-rules] assign action for rule ${ctx.ruleId} chose user ${chosenId}, who is not on request ${request.id}'s team — skipped.`)
     return
   }

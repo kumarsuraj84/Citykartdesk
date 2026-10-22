@@ -8,7 +8,10 @@ import type { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { logActivity } from '@/lib/activity'
 import { notify } from '@/lib/notifications'
-import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
+import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS, VENDOR_TRANSITIONS } from '@/lib/constants/request-transitions'
+import { vendorRoleOf } from '@/lib/vendor/access'
+import { clearOemTicketOnReopen } from '@/lib/vendor/ticket-fields'
+import { cancelOpenRequest } from '@/lib/vendor/requests'
 import { STATUS_LABELS } from '@/lib/constants/requests'
 import { getResolvedReopenWindowHours } from '@/lib/settings/reopenWindow'
 import { isFieldValueEmpty } from '@/lib/validation/formFields'
@@ -31,17 +34,43 @@ export interface StatusActor {
   profile: ProfileWithTeams
 }
 
+/**
+ * Set only by the vendor screens (lib/actions/vendor.ts), after they checked the stage rules (OEM ticket number, resolution + FSR, hold request ...).
+ * A vendor technician can change a ticket ONLY with one of these; the ordinary status screens and actions never pass it.
+ */
+export type VendorFlow = 'start' | 'resolve' | 'hold' | 'resume'
+
+export interface StatusChangeOptions {
+  vendorFlow?: VendorFlow
+  /**
+   * Set only by the PO approval screen (lib/actions/vendor-po.ts) AFTER it proved that the person is the PO approver of this very request:
+   * 'approve' moves a held ticket back to In Progress, 'reject' cancels it exactly like a rejected approval does (the store may reopen it within 48 hours).
+   */
+  poDecision?: 'approve' | 'reject'
+}
+
+const PO_DECISION_MOVES: Record<'approve' | 'reject', RequestStatus> = { approve: 'in_progress', reject: 'cancelled' }
+
+const VENDOR_FLOW_MOVES: Record<VendorFlow, { from: RequestStatus[]; to: RequestStatus }> = {
+  start:   { from: ['open', 'assigned'], to: 'in_progress' },
+  resolve: { from: ['in_progress'], to: 'resolved' },
+  hold:    { from: ['in_progress'], to: 'hold_purchase_ho' },
+  resume:  { from: ['hold_purchase_ho'], to: 'in_progress' },
+}
+
 export async function applyStatusChange(
   actor: StatusActor,
   requestId: string,
   newStatus: RequestStatus,
-  commentInput?: string
+  commentInput?: string,
+  options: StatusChangeOptions = {}
 ): Promise<ActionResult> {
   // Reassigned below for a first "Start Working", which posts an automatic first-response message.
   let comment = commentInput
   const { supabase, profile } = actor
 
-  const { data: request } = await supabase
+  // the PO approver is not necessarily on the ticket's team, so a PO decision (already authorised by its own screen) reads the ticket with the server's key
+  const { data: request } = await (options.poDecision ? createAdminClient() : supabase)
     .from('requests')
     .select('id, request_no, status, priority, requester_id, team_id, assigned_to, responded_at, waiting_since, response_due_at, resolution_due_at, resolved_at, form_data, category_id, form_sections_snapshot, form_schema_snapshot, cancellation_reason, reopen_deadline_at, reopen_count, paused_ms_total')
     .eq('id', requestId)
@@ -49,15 +78,33 @@ export async function applyStatusChange(
 
   if (!request) return { error: 'Request not found.' }
 
+  // A vendor (OEM engineer) works only the tickets assigned to him and only through the vendor screens; a vendor manager only looks.
+  const vendorKind = vendorRoleOf(profile)
+  const isVendorTech = vendorKind === 'technician' && request.assigned_to === profile.id
+  const currentStatus = request.status as RequestStatus
+  if (vendorKind) {
+    const move = options.vendorFlow ? VENDOR_FLOW_MOVES[options.vendorFlow] : null
+    if (!isVendorTech || !move || move.to !== newStatus || !move.from.includes(currentStatus)) {
+      return { error: 'Please use the vendor screens to change this ticket.' }
+    }
+  } else if (options.vendorFlow) {
+    return { error: 'Transition is not permitted.' }
+  }
+  const isPoDecision = !!options.poDecision
+  if (isPoDecision && (vendorKind || currentStatus !== 'hold_purchase_ho' || PO_DECISION_MOVES[options.poDecision!] !== newStatus)) {
+    return { error: 'Transition is not permitted.' }
+  }
+
   const isAgent =
+    isVendorTech ||
+    isPoDecision ||
     profile.role === 'manager' ||
     profile.role === 'admin' ||
     profile.role === 'platform_owner' ||
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
   const isRequester = request.requester_id === profile.id
 
-  const currentStatus = request.status as RequestStatus
-  const allowedForAgent = AGENT_TRANSITIONS[currentStatus] ?? []
+  const allowedForAgent = (isPoDecision ? [PO_DECISION_MOVES[options.poDecision!]] : isVendorTech ? VENDOR_TRANSITIONS[currentStatus] : AGENT_TRANSITIONS[currentStatus]) ?? []
   const allowedForRequester = REQUESTER_TRANSITIONS[currentStatus] ?? []
 
   // open/assigned → in_progress is deliberately absent from AGENT_TRANSITIONS
@@ -197,7 +244,7 @@ export async function applyStatusChange(
   // requester) must be filled in before an agent can move the ticket at all —
   // only applies to the agent-initiated path; a requester reopening/cancelling
   // their own ticket is never subject to this (they can't see these fields).
-  if (agentInitiated) {
+  if (agentInitiated && !isVendorTech && !isPoDecision) {   // a vendor's stage rules (OEM number, resolution, FSR) were checked by the vendor screens; a PO decision is not technician work
     const snapshotSections = Array.isArray(request.form_sections_snapshot)
       ? (request.form_sections_snapshot as unknown as FormSection[])
       : null
@@ -242,6 +289,11 @@ export async function applyStatusChange(
   if (newStatus === 'cancelled') {
     updatePayload.cancellation_reason = 'manual'
     updatePayload.reopen_deadline_at = null
+    // a rejected PO cancels the ticket the way a rejected approval does: the store may reopen it within 48 hours (see lib/approvals/decision.ts)
+    if (options.poDecision === 'reject') {
+      updatePayload.cancellation_reason = 'approval_rejected'
+      updatePayload.reopen_deadline_at = new Date(now.getTime() + 48 * 3_600_000).toISOString()
+    }
   }
 
   // Resolving a ticket opens a "not satisfied? reopen it" window for the
@@ -330,10 +382,13 @@ export async function applyStatusChange(
     return { error: 'This request was just changed by someone else — please refresh and try again.' }
   }
 
+  // A Citykart technician ends a hold that a vendor had asked for (parts / PO): that request is closed as cancelled, so nothing stays "pending" on a ticket that moved on.
+  if (currentStatus === 'hold_purchase_ho' && !options.vendorFlow && !isPoDecision) await cancelOpenRequest(requestId, profile.id, 'The hold was ended by Citykart.')
+
   // Auto time-tracking: starts the instant work actually begins (→ in_progress) and
   // stops the instant it stops (leaving in_progress for any reason — waiting_user,
   // resolved, cancelled) — no manual Start/Stop Timer action for an agent to remember.
-  if (isAgent && newStatus === 'in_progress' && currentStatus !== 'in_progress') {
+  if (isAgent && !isVendorTech && !isPoDecision && newStatus === 'in_progress' && currentStatus !== 'in_progress') {
     await supabase
       .from('request_time_entries')
       .update({ stopped_at: nowIso })
@@ -485,7 +540,11 @@ export async function applyStatusChange(
   }
 
   // A resolved ticket that is reopened is not fixed, so the OEM is e-mailed again like for a new ticket (only tickets the sheets sent to an OEM in the first place).
-  if (isResolvedReopen) await resendOemOnReopen({ requestId, actorId: profile.id, reason: comment?.trim() ?? '' })
+  if (isResolvedReopen) {
+    // a vendor must enter the OEM's NEW ticket number (the old one is replaced), so the two boxes are emptied first; the old number stays in the conversation
+    await clearOemTicketOnReopen(requestId)
+    await resendOemOnReopen({ requestId, actorId: profile.id, reason: comment?.trim() ?? '' })
+  }
 
   // D-06: when the requester and assignee are the same person, the two
   // notify() blocks below would otherwise both target them for the same

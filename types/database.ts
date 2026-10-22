@@ -3223,6 +3223,8 @@ export type Database = {
           org_id: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
+          vendor_company_id: string | null
+          vendor_role: string | null
           whatsapp_enabled: boolean
         }
         Insert: {
@@ -3244,6 +3246,8 @@ export type Database = {
           org_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
+          vendor_company_id?: string | null
+          vendor_role?: string | null
           whatsapp_enabled?: boolean
         }
         Update: {
@@ -3265,6 +3269,8 @@ export type Database = {
           org_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
+          vendor_company_id?: string | null
+          vendor_role?: string | null
           whatsapp_enabled?: boolean
         }
         Relationships: [

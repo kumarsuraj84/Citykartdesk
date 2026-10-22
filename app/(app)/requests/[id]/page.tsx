@@ -8,6 +8,7 @@ import {
   Mail,
 } from 'lucide-react'
 import { redirect } from 'next/navigation'
+import { isVendor } from '@/lib/vendor/access'
 import { AGENT_QUEUE_PATH, REQUESTS_PATH, safeOrigin, defaultTicketOrigin, ticketHref } from '@/lib/requests/origin'
 import { getCurrentProfile, getTeamMembers } from '@/lib/queries/profiles'
 import { suggestedCvmForRequest } from '@/lib/cvm/suggest'
@@ -34,6 +35,7 @@ import { RequestDetailTabs } from '@/components/requests/RequestDetailTabs'
 import { RequestActionBar } from '@/components/requests/RequestActionBar'
 import { ApprovalRejectedReopenBanner } from '@/components/requests/ApprovalRejectedReopenBanner'
 import { ResolvedReopenBanner } from '@/components/requests/ResolvedReopenBanner'
+import { VendorNote } from '@/components/requests/VendorNote'
 import { getResolvedReopenWindowHours } from '@/lib/settings/reopenWindow'
 import { MarkRequestNotificationsRead } from '@/components/requests/MarkRequestNotificationsRead'
 import { getActiveTimer } from '@/lib/actions/requests'
@@ -355,6 +357,8 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
 
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
+  // an OEM engineer (vendor login) works the ticket on his own page
+  if (isVendor(profile)) redirect(`/vendor/tickets/${id}`)
 
   // Sends the breadcrumb back to wherever the ticket was opened from (e.g.
   // Agent Requests vs. My Requests) instead of always defaulting to My
@@ -968,6 +972,9 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
           windowHours={resolvedReopenWindowHours}
         />
       )}
+
+      {/* The ticket is with an OEM engineer (vendor): who, and what he is waiting for */}
+      <VendorNote requestId={request.id} assignedTo={request.assigned_to} />
 
       {/* Header card */}
       <div className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">

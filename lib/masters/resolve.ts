@@ -18,8 +18,14 @@ export type AcUnitRecord = {
   amc_brand: string | null
   is_active: boolean
   emails: string[]
+  /** the OEM's address(es) for purchase-order details (AC sheet column "Email for PO detail"); empty when the sheet has none */
+  po_emails?: string[]
   sheet_row: number | null
   address: string | null
+  /** where the store is (used by Business Rules to route a ticket to the right vendor technician) */
+  region?: string | null
+  cluster?: string | null
+  state?: string | null
 }
 
 export type GensetRecord = {
@@ -40,7 +46,7 @@ function numericFirst(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true })
 }
 
-const AC_COLS = 'id, store_code, ckdesk_no, serial, floor, ac_type, tonnage, brand, amc_vendor, amc_brand, is_active, emails, sheet_row, address'
+const AC_COLS = 'id, store_code, ckdesk_no, serial, floor, ac_type, tonnage, brand, amc_vendor, amc_brand, is_active, emails, po_emails, sheet_row, address, region, cluster, state'
 
 /** The AC units a store may pick when raising a ticket: Active and still in the sheet. */
 export async function loadActiveAcUnits(db: Db, orgId: string, storeCode: string): Promise<AcUnitRecord[]> {

@@ -6,6 +6,7 @@ import {
   FileText, Zap, Bell, Circle, Star, FolderKanban, Flag,
 } from 'lucide-react'
 import { redirect } from 'next/navigation'
+import { isVendor } from '@/lib/vendor/access'
 import { getCurrentProfile, getEnabledModules } from '@/lib/queries/profiles'
 import { autoCloseRequests } from '@/lib/actions/requests'
 import { createClient } from '@/lib/supabase/server'
@@ -928,6 +929,7 @@ export default async function HomePage({
   // immediately on the home page since the layout already called them.
   const [profile, enabledMods] = await Promise.all([getCurrentProfile(), getEnabledModules()])
   if (!profile) redirect('/login?retry=1')
+  if (isVendor(profile)) redirect('/vendor')   // an OEM engineer's home is his own ticket dashboard
 
   autoCloseRequests().catch(() => {})
 
