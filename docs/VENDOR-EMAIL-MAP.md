@@ -1,5 +1,7 @@
 # Vendor journey - who gets which e-mail, when, with what words, and where the address comes from
 
+> The same map as a spreadsheet, in the owner's layout, is `docs/VENDOR-EMAIL-MAP.xlsx` (it numbers the mails 1-29 in its own order; use it as the main copy).
+
 Checked on 2026-10-23. Every mail below was recorded from a real run of the journey on the isolated test stack (`tests/vapt/37-vendor-mail-journey.test.ts`, which fails if a mail goes to the wrong person) and from the real mails the local app saved while we clicked through the demo. Nothing is sent from this PC: locally every mail is saved as a file in `local-mail-outbox/`.
 
 ## 1. Where each address comes from
