@@ -168,6 +168,35 @@ describe('the AC sheet column "Email for PO detail"', () => {
   })
 })
 
+describe('the AC sheet columns OEM Ticket Mail To / OEM PO Mail To / CK PO Approver Mail To', () => {
+  const head = ['Store Code', 'AC CKDESK SERIAL NO', 'Status', 'OEM Ticket Mail To', 'OEM PO Mail To', 'CK PO Approver Mail To']
+  it('reads the three new headings, the approvers as a list', () => {
+    const r = parseAcSheet([head, ['ALC', 1, 'Active', 'oem@oem.test', 'po@oem.test', 'krishan.patel@citykartstores.com; second.approver@citykartstores.com'], ['ALC', 2, 'Active', 'oem@oem.test', '', '']])
+    expect(r.rows[0]).toMatchObject({ emails: ['oem@oem.test'], poEmails: ['po@oem.test'], approverEmails: ['krishan.patel@citykartstores.com', 'second.approver@citykartstores.com'] })
+    expect(r.rows[1].approverEmails).toEqual([])
+    expect(r.issues.some((i) => i.code === 'no_approver_column')).toBe(false)
+  })
+  it('the older headings still work (Mail ID, Email for PO detail) and the new one wins when both exist', () => {
+    const old = parseAcSheet([['Store Code', 'AC CKDESK SERIAL NO', 'Mail ID', 'Email for PO detail'], ['ALC', 1, 'old@oem.test', 'oldpo@oem.test']])
+    expect(old.rows[0]).toMatchObject({ emails: ['old@oem.test'], poEmails: ['oldpo@oem.test'], approverEmails: [] })
+    expect(old.issues.some((i) => i.code === 'no_approver_column')).toBe(true)
+    const both = parseAcSheet([['Store Code', 'AC CKDESK SERIAL NO', 'Mail ID', 'OEM Ticket Mail To'], ['ALC', 1, 'old@oem.test', 'new@oem.test']])
+    expect(both.rows[0].emails).toEqual(['new@oem.test'])
+  })
+  it('a bad approver address is skipped with a note, and an empty ticket column is named by its new heading', () => {
+    const r = parseAcSheet([head, ['ALC', 1, 'Active', '', '', 'not-an-address;good@citykartstores.com']])
+    expect(r.rows[0].approverEmails).toEqual(['good@citykartstores.com'])
+    const bad = r.issues.find((i) => i.code === 'bad_approver_email')
+    expect(bad?.message).toContain('CK PO Approver Mail To')
+    expect(r.issues.find((i) => i.code === 'no_email')?.message).toContain('OEM Ticket Mail To')
+  })
+  it('the approval mail tells several approvers that any one can decide', () => {
+    const base = { requestNo: 'CKSD-1', storeLabel: 'ALC', acLabel: '1', vendorName: 'Voltas', lines: [{ item_name: 'Fan', qty: 1, price_excl_gst: 10 }] }
+    expect(buildPoApprovalRequestMail({ ...base, link: 'https://desk.test/x', approverName: 'A and B', anyOneCanDecide: true }).text).toContain('Any one of you can decide')
+    expect(buildPoApprovalRequestMail({ ...base, link: 'https://desk.test/x', approverName: 'A' }).text).not.toContain('Any one of you')
+  })
+})
+
 describe('the PO register search', () => {
   const row = (o: Partial<PoRegisterRow>): PoRegisterRow => ({ id: 'i', po_number: 'PO-1', po_date: '2026-10-10', status: 'approved', version: 1, request_id: 'r', request_no: 'CKSD-1', store_code: 'ALC', store_name: 'Allahabad', vendor_name: 'Voltas', technician: 'Ramesh', items: 'Compressor x 1', total: 100, requested_at: '2026-10-09T10:00:00Z', decided_at: null, decision_reason: null, ...o })
   const rows = [row({}), row({ id: 'j', po_number: 'PO-2', po_date: '2026-09-01', status: 'rejected', store_code: 'MAR', store_name: 'Margao', items: 'Fan x 2' }), row({ id: 'k', po_number: null, po_date: null, status: 'pending', requested_at: '2026-10-20T10:00:00Z' })]

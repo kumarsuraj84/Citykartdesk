@@ -34,8 +34,10 @@ export type AcRow = {
   pincode: string
   isActive: boolean
   emails: string[]
-  /** the OEM's address(es) for purchase-order details (the sheet column "Email for PO detail") */
+  /** the OEM's address(es) for purchase-order details (the sheet column "OEM PO Mail To", formerly "Email for PO detail") */
   poEmails: string[]
+  /** the Citykart people who approve a vendor's quote for this AC (the sheet column "CK PO Approver Mail To"); empty = the default approver */
+  approverEmails: string[]
 }
 
 export type GensetRow = {

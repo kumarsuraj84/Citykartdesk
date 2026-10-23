@@ -52,8 +52,8 @@ for (const code of ['ALC', 'MAR']) {
   const have = await admin.from('master_ac_units').select('id').eq('org_id', ORG).eq('store_code', code).is('removed_at', null).limit(1)
   if (!have.data?.length) {
     must(await admin.from('master_ac_units').insert([
-      { org_id: ORG, store_code: code, ckdesk_no: '1', serial: `TEST-${code}-1`, floor: 'GF', ac_type: 'Split', tonnage: '1.5', brand: 'VOLTAS', amc_vendor: 'VOLTAS', amc_brand: 'VOLTAS', region: 'R1', cluster: 'C1', state: 'DL', city: 'Delhi', emails: ['oem.voltas@example.test', 'po.voltas@example.test'], sheet_row: 9000 },
-      { org_id: ORG, store_code: code, ckdesk_no: '2', serial: `TEST-${code}-2`, floor: 'FF', ac_type: 'Cassette', tonnage: '2', brand: 'VOLTAS', amc_vendor: 'VOLTAS', amc_brand: 'VOLTAS', region: 'R1', cluster: 'C1', state: 'DL', city: 'Delhi', emails: ['oem.voltas@example.test', 'po.voltas@example.test'], sheet_row: 9001 },
+      { org_id: ORG, store_code: code, ckdesk_no: '1', serial: `TEST-${code}-1`, floor: 'GF', ac_type: 'Split', tonnage: '1.5', brand: 'VOLTAS', amc_vendor: 'VOLTAS', amc_brand: 'VOLTAS', region: 'R1', cluster: 'C1', state: 'DL', city: 'Delhi', emails: ['oem.voltas@example.test', 'po.voltas@example.test'], approver_emails: ['local.po.approver@example.test'], sheet_row: 9000 },
+      { org_id: ORG, store_code: code, ckdesk_no: '2', serial: `TEST-${code}-2`, floor: 'FF', ac_type: 'Cassette', tonnage: '2', brand: 'VOLTAS', amc_vendor: 'VOLTAS', amc_brand: 'VOLTAS', region: 'R1', cluster: 'C1', state: 'DL', city: 'Delhi', emails: ['oem.voltas@example.test', 'po.voltas@example.test'], approver_emails: ['local.po.approver@example.test'], sheet_row: 9001 },
     ]), `test units ${code}`)
   }
 }

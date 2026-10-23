@@ -381,3 +381,26 @@ describe('the master tables are for the server only', () => {
     expect(write.error).not.toBeNull()
   })
 })
+
+describe('the AC sheet columns OEM Ticket Mail To / OEM PO Mail To / CK PO Approver Mail To', () => {
+  it('are stored per AC; an approver that is not an active staff login gets a health-page warning; the old headings still work', async () => {
+    const saved = sheets[SHEET.ac]
+    const head = [...AC_HEAD.slice(0, 20), 'OEM Ticket Mail To', 'OEM PO Mail To', 'CK PO Approver Mail To']
+    const row = (store: string, no: number, serial: string, approvers: string) => [...acRow(store, no, serial).slice(0, 20), 'oem-new@oem.test', 'po-new@oem.test', approvers]
+    sheets[SHEET.ac] = [head, row(A, 1, 'SER-A1', `${fx.agentA.email}; nobody.here@citykartstores.com`), row(E, 1, 'SER-E1', '')]
+    const known = async (email: string) => (email.toLowerCase() === fx.agentA.email.toLowerCase() ? 'ok' as const : 'unknown' as const)
+    await syncMasters({ db: db(), orgId: fx.orgId, source, force: true, cvmEmailKnown: known })
+    const a1 = (await unitsOf(A)).find((u) => u.ckdesk_no === '1') as unknown as { emails: string[]; po_emails: string[]; approver_emails: string[] }
+    expect(a1.emails).toEqual(['oem-new@oem.test']); expect(a1.po_emails).toEqual(['po-new@oem.test'])
+    expect(a1.approver_emails).toEqual([fx.agentA.email.toLowerCase(), 'nobody.here@citykartstores.com'])
+    const e1 = (await unitsOf(E))[0] as unknown as { approver_emails: string[] }
+    expect(e1.approver_emails).toEqual([])
+    const issues = ((await db().from('master_issues').select('kind, code, message').eq('org_id', fx.orgId)).data ?? []) as { kind: string; code: string; message: string }[]
+    const warn = issues.find((i) => i.kind === 'ac' && i.code === 'approver_no_login')
+    expect(warn?.message).toContain('nobody.here@citykartstores.com')
+    expect(issues.some((i) => i.code === 'approver_no_login' && i.message.includes(fx.agentA.email))).toBe(false)
+    sheets[SHEET.ac] = saved
+    await sync()   // back to the old-heading sheet the other tests use
+    expect(((await unitsOf(A)).find((u) => u.ckdesk_no === '1') as unknown as { emails: string[] }).emails.length).toBeGreaterThan(0)
+  })
+})

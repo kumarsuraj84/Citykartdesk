@@ -88,6 +88,7 @@ export default async function VendorDashboardPage({ searchParams }: { searchPara
                 <td className="px-3 py-2">
                   <Link href={`/vendor/tickets/${r.id}`} className="font-medium text-primary hover:underline">{r.request_no}</Link>
                   <div className="max-w-[18rem] truncate text-xs text-muted-foreground">{r.title}</div>
+                  {r.reopen_count > 0 && <span className="mt-0.5 inline-block rounded-full border border-rose-300 bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">Reopened ×{r.reopen_count}</span>}
                 </td>
                 <td className="px-3 py-2">{r.store_name ?? '—'}{r.store_code && <span className="ml-1 text-xs text-muted-foreground">({r.store_code})</span>}</td>
                 <td className="px-3 py-2">{r.ac_label ?? '—'}</td>

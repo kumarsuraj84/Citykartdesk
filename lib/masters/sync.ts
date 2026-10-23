@@ -39,7 +39,7 @@ const acColumns = (r: AcRow) => ({
   store_code: r.storeCode, ckdesk_no: r.ckdeskNo, serial: blank(r.serial), floor: blank(r.floor), ac_type: blank(r.acType), tonnage: blank(r.tonnage), brand: blank(r.brand),
   amc_vendor: blank(r.amcVendor), amc_brand: blank(r.amcBrand), zenatix: blank(r.zenatix), store_priority: blank(r.storePriority), festival: blank(r.festival),
   region: blank(r.region), cluster: blank(r.cluster), opening_date: r.openingDate, city: blank(r.city), state: blank(r.state), address: blank(r.address),
-  pincode: blank(r.pincode), is_active: r.isActive, emails: r.emails, po_emails: r.poEmails, sheet_row: r.sheetRow,
+  pincode: blank(r.pincode), is_active: r.isActive, emails: r.emails, po_emails: r.poEmails, approver_emails: r.approverEmails, sheet_row: r.sheetRow,
 })
 const gensetColumns = (r: GensetRow) => ({
   store_code: r.storeCode, brand: blank(r.brand), kva: blank(r.kva), serial: blank(r.serial), cpcb_group: blank(r.cpcbGroup), emails: r.emails, sheet_row: r.sheetRow,
@@ -228,6 +228,15 @@ async function syncOne(p: { db: Db; orgId: string; kind: MasterKind; source: She
       result = await applyUnits<AcRow>({ db, orgId, table: 'master_ac_units', rows: parsed.rows, now, match: (r, s) => matchAcUnits(r, s as never), columns: acColumns })
       await updateStoreMaster(db, orgId, parsed.rows)
       issues = [...parsed.issues, ...(await unknownStoreIssues(db, orgId, 'ac', parsed.rows.map((r) => r.storeCode)))]
+      if (p.cvmEmailKnown) {   // an approver must be an active technician, manager or admin, or a vendor's quote for that AC would never reach anyone
+        const active = parsed.rows.filter((r) => r.isActive)
+        for (const email of [...new Set(active.flatMap((r) => r.approverEmails))]) {
+          if ((await p.cvmEmailKnown(email)) === 'unknown') {
+            const stores = [...new Set(active.filter((r) => r.approverEmails.includes(email)).map((r) => r.storeCode))]
+            issues.push({ kind: 'ac', severity: 'warning', code: 'approver_no_login', storeCode: stores[0] ?? null, sheetRow: null, message: `${email} (PO approver of ${stores.slice(0, 5).join(', ')}${stores.length > 5 ? ' and more' : ''}) is not an active technician, manager or admin in CK Desk, so that address is skipped and the default PO approver is used.` })
+          }
+        }
+      }
       rowCount = parsed.rows.length
     } else if (kind === 'genset') {
       const parsed = parseGensetSheet(values)
@@ -261,7 +270,7 @@ async function syncOne(p: { db: Db; orgId: string; kind: MasterKind; source: She
 
 export async function syncMasters(p: {
   db: Db; orgId: string; source: SheetsSource; now?: Date; force?: boolean
-  /** Tells whether a CVM e-mail address belongs to an active staff member (used only to report problems). */
+  /** Tells whether an e-mail address (a CVM, or a PO approver) belongs to an active staff member (used only to report problems). */
   cvmEmailKnown?: (email: string) => Promise<'ok' | 'unknown'>
 }): Promise<SyncReport> {
   const now = p.now ?? new Date()

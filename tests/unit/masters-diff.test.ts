@@ -4,7 +4,7 @@ import type { AcRow, GensetRow } from '@/lib/masters/types'
 
 const acRow = (storeCode: string, ckdeskNo: string, serial: string, sheetRow = 2): AcRow => ({
   sheetRow, storeCode, ckdeskNo, serial, floor: '', acType: '', tonnage: '', brand: '', amcVendor: '', amcBrand: '', zenatix: '', storePriority: '', festival: '',
-  region: '', cluster: '', openingDate: null, city: '', state: '', address: '', pincode: '', isActive: true, emails: [], poEmails: [],
+  region: '', cluster: '', openingDate: null, city: '', state: '', address: '', pincode: '', isActive: true, emails: [], poEmails: [], approverEmails: [],
 })
 const unit = (id: string, storeCode: string, ckdeskNo: string, serial: string | null, removedAt: string | null = null) => ({ id, storeCode, ckdeskNo, serial, removedAt, missingSince: null })
 const gen = (storeCode: string, serial: string): GensetRow => ({ sheetRow: 2, storeCode, brand: '', kva: '', serial, cpcbGroup: '', emails: [] })

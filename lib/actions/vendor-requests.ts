@@ -9,9 +9,10 @@ import { checkLines, formatMoney, linesAsText, totalOf, type RequestLineInput } 
 import {
   createNextVersion, createVendorRequest, getOpenRequest, getRequestItems, linkFilesToComment, ownFiles, settleRequest, OPEN_STATUSES,
 } from '@/lib/vendor/requests'
-import { loadPoContext, resolvePoApprover, userEmail } from '@/lib/vendor/po'
+import { approversOf, loadPoContext, resolveApproversFor, userEmail, type PoApprover } from '@/lib/vendor/po'
 import { buildPoApprovalRequestMail, buildQuoteWithdrawnMail } from '@/lib/vendor/po-mail'
 import { postPublicComment } from '@/lib/vendor/ticket-fields'
+import { tellStorePartsUpdated } from '@/lib/vendor/ticket-notify'
 
 // What a vendor technician asks for while working a ticket: parts (a list, no PO) or a PO (a QUOTE: items, quantity, price without GST, and the quote file).
 // Both can be changed or withdrawn while the ticket is on hold. A change is a new VERSION; the earlier one is "superseded" and cannot be approved.
@@ -59,6 +60,7 @@ export async function vendorUpdateParts(input: { requestId: string; lines: Reque
   const made = await createNextVersion(open, { orgId: profile.org_id as string, requestId: input.requestId, kind: 'parts', createdBy: profile.id, lines: checked.lines })
   if (made.error || !made.id) return { error: made.error ?? 'Could not save the list.' }
   await postPublicComment(input.requestId, profile.id, `Parts list updated (version ${made.version}) by ${profile.full_name}:\n${linesAsText(checked.lines)}`)
+  await tellStorePartsUpdated(input.requestId, profile.id, made.version ?? 1, checked.lines)
   refresh(input.requestId)
   return {}
 }
@@ -84,23 +86,31 @@ export async function vendorPartsReceived(requestId: string, remark: string): Pr
 
 // ── PO required from Citykart (a quote) ──────────────────────────────────────────────────────────────────────────────────────────────
 
-/** ONE approval mail (and a bell message) to the PO approver; the page behind the link needs a sign-in. Never throws. */
-async function askApprover(vendorRequestId: string, requestNo: string, actorId: string, actorName: string, approver: { id: string; full_name: string }) {
+/** The names for the greeting of one mail that goes to several approvers ("A", "A and B", "A, B and C"). */
+const namesOf = (people: { full_name: string }[]) => {
+  const n = people.map((p) => p.full_name).filter(Boolean)
+  return n.length === 0 ? 'Approver' : n.length === 1 ? n[0] : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`
+}
+
+/** ONE approval mail (To: every approver) and a bell message for each; the page behind the link needs a sign-in. Any one of them can decide. Never throws. */
+async function askApprovers(vendorRequestId: string, requestNo: string, actorId: string, actorName: string, approvers: PoApprover[]) {
   try {
     const po = await loadPoContext(vendorRequestId)
     if (!po) return
-    const to = await userEmail(approver.id)
+    const to = (await Promise.all(approvers.map((a) => userEmail(a.id)))).filter((x): x is string => !!x)
     const link = absoluteAppUrl(`/vendor-po/${vendorRequestId}`)
     const total = totalOf(po.lines)
-    if (to) {
-      const mail = buildPoApprovalRequestMail({ ...po.mailBase, link, approverName: approver.full_name, version: po.vendorRequest.version, previousTotal: po.previousTotal })
+    if (to.length) {
+      const mail = buildPoApprovalRequestMail({ ...po.mailBase, link, approverName: namesOf(approvers), version: po.vendorRequest.version, previousTotal: po.previousTotal, anyOneCanDecide: approvers.length > 1 })
       await sendEmail({ to, subject: mail.subject, html: mail.html, text: mail.text, threadRequestNo: requestNo })
     }
-    await notify({
-      recipientId: approver.id, actorId, type: 'status_changed',
-      title: `${po.vendorRequest.version > 1 ? `Revised quote (version ${po.vendorRequest.version})` : 'PO approval needed'}: ${requestNo}`,
-      body: `${actorName} sent a quote (total without GST ${formatMoney(total)}).`, requestId: po.request.id, link: `/vendor-po/${vendorRequestId}`, skipEmail: true,
-    })
+    for (const approver of approvers) {
+      await notify({
+        recipientId: approver.id, actorId, type: 'status_changed',
+        title: `${po.vendorRequest.version > 1 ? `Revised quote (version ${po.vendorRequest.version})` : 'PO approval needed'}: ${requestNo}`,
+        body: `${actorName} sent a quote (total without GST ${formatMoney(total)}).`, requestId: po.request.id, link: `/vendor-po/${vendorRequestId}`, skipEmail: true,
+      })
+    }
   } catch (e) {
     console.error('[askApprover] approval mail failed', e)
   }
@@ -108,7 +118,7 @@ async function askApprover(vendorRequestId: string, requestNo: string, actorId: 
 
 /**
  * "PO required": the vendor lists the items (name, quantity, price WITHOUT GST) and attaches his QUOTE (compulsory). The ticket goes on hold (the clock stops) and ONE approval
- * request goes to the PO approver (Krishan unless an administrator chose somebody else). The quote shows in the conversation with its file.
+ * request goes to the PO approver(s) named for that AC in the AC sheet ("CK PO Approver Mail To"), or the default approver (Krishan unless an administrator chose somebody else). The quote shows in the conversation with its file.
  */
 export async function vendorRequestPo(input: { requestId: string; lines: RequestLineInput[]; quoteAttachmentIds: string[] }): Promise<Result> {
   const ctx = await vendorTechAndTicket(input.requestId)
@@ -121,11 +131,12 @@ export async function vendorRequestPo(input: { requestId: string; lines: Request
   const noQuote = needQuote(quoteIds.length)
   if (noQuote) return { error: noQuote }
   if (await getOpenRequest(input.requestId)) return { error: 'This ticket already has an open request.' }
-  const approver = await resolvePoApprover(profile.org_id as string)
-  if (!approver) return { error: 'No PO approver is set up yet. Please ask Citykart to set one (Admin > Vendors).' }
+  const approvers = (await resolveApproversFor(profile.org_id as string, input.requestId)).people
+  if (approvers.length === 0) return { error: 'No PO approver is set up yet. Please ask Citykart to set one (Admin > Vendors).' }
 
   const made = await createVendorRequest({
-    orgId: profile.org_id as string, requestId: input.requestId, kind: 'po', createdBy: profile.id, lines: checked.lines, quoteAttachmentIds: quoteIds, extra: { approver_id: approver.id },
+    orgId: profile.org_id as string, requestId: input.requestId, kind: 'po', createdBy: profile.id, lines: checked.lines, quoteAttachmentIds: quoteIds,
+    extra: { approver_id: approvers[0].id, approver_ids: approvers.map((a) => a.id) },
   })
   if (made.error || !made.id) return { error: made.error ?? 'Could not save the request.' }
   const text = `PO required from Citykart (quote version 1). ${profile.full_name} needs a purchase order for:\n${linesAsText(checked.lines)}\nTotal (without GST): ${formatMoney(checked.total ?? 0)}\nThe quote file is attached to this message.`
@@ -135,7 +146,7 @@ export async function vendorRequestPo(input: { requestId: string; lines: Request
     return res
   }
   await linkFilesToComment(input.requestId, res.commentId, quoteIds)
-  await askApprover(made.id, ticket.request_no, profile.id, profile.full_name, approver)
+  await askApprovers(made.id, ticket.request_no, profile.id, profile.full_name, approvers)
   refresh(input.requestId)
   return {}
 }
@@ -155,19 +166,21 @@ export async function vendorRevisePo(input: { requestId: string; lines: RequestL
   if (noQuote) return { error: noQuote }
   // a file already used as a quote of an earlier version cannot stand in for the NEW quote
   if (quoteIds.every((id) => (open.quote_attachment_ids ?? []).includes(id))) return { error: 'Please attach the revised quote (a new file).' }
-  const approver = (open.approver_id && { id: open.approver_id, full_name: '' }) || (await resolvePoApprover(profile.org_id as string))
-  if (!approver) return { error: 'No PO approver is set up yet. Please ask Citykart to set one (Admin > Vendors).' }
+  // the revised quote goes to the same approvers as the quote it replaces
+  let approvers = await approversOf(open)
+  if (approvers.length === 0) approvers = (await resolveApproversFor(profile.org_id as string, input.requestId)).people
+  if (approvers.length === 0) return { error: 'No PO approver is set up yet. Please ask Citykart to set one (Admin > Vendors).' }
 
   const before = totalOf((await getRequestItems(open.id)).map((i) => ({ qty: i.qty, price_excl_gst: i.price_excl_gst })))
   const made = await createNextVersion(open, {
-    orgId: profile.org_id as string, requestId: input.requestId, kind: 'po', createdBy: profile.id, lines: checked.lines, quoteAttachmentIds: quoteIds, extra: { approver_id: approver.id },
+    orgId: profile.org_id as string, requestId: input.requestId, kind: 'po', createdBy: profile.id, lines: checked.lines, quoteAttachmentIds: quoteIds,
+    extra: { approver_id: approvers[0].id, approver_ids: approvers.map((a) => a.id) },
   })
   if (made.error || !made.id) return { error: made.error ?? 'Could not save the quote.' }
   const text = `Revised quote (version ${made.version}) sent by ${profile.full_name}. Total was ${formatMoney(before)}, now ${formatMoney(checked.total ?? 0)}.\n${linesAsText(checked.lines)}\nThe revised quote file is attached to this message.`
   const commentId = await postPublicComment(input.requestId, profile.id, text)
   await linkFilesToComment(input.requestId, commentId, quoteIds)
-  const named = approver.full_name ? approver : (await resolvePoApprover(profile.org_id as string)) ?? { id: approver.id, full_name: 'Approver' }
-  await askApprover(made.id, ticket.request_no, profile.id, profile.full_name, named)
+  await askApprovers(made.id, ticket.request_no, profile.id, profile.full_name, approvers)
   refresh(input.requestId)
   return {}
 }
@@ -188,18 +201,17 @@ export async function vendorWithdrawRequest(input: { requestId: string; reason: 
   if (res.error) return res
   await settleRequest(open.id, 'withdrawn', profile.id, reason, undefined, OPEN_STATUSES)
 
-  // the approver was waiting on this quote: he is told it is gone (mail and bell)
-  if (open.kind === 'po' && open.approver_id) {
+  // the approvers were waiting on this quote: they are told it is gone (one mail, and a bell message each)
+  if (open.kind === 'po' && (open.approver_id || (open.approver_ids ?? []).length)) {
     try {
       const po = await loadPoContext(open.id)
-      const to = await userEmail(open.approver_id)
-      const approver = await resolvePoApprover(profile.org_id as string)
-      const approverName = approver && approver.id === open.approver_id ? approver.full_name : 'Approver'
-      if (po && to) {
-        const mail = buildQuoteWithdrawnMail({ ...po.mailBase, link: absoluteAppUrl(`/vendor-po/${open.id}`), reason, approverName, vendorPersonName: profile.full_name, version: open.version })
+      const approvers = await approversOf(open)
+      const to = (await Promise.all(approvers.map((a) => userEmail(a.id)))).filter((x): x is string => !!x)
+      if (po && to.length) {
+        const mail = buildQuoteWithdrawnMail({ ...po.mailBase, link: absoluteAppUrl(`/vendor-po/${open.id}`), reason, approverName: namesOf(approvers), vendorPersonName: profile.full_name, version: open.version })
         await sendEmail({ to, subject: mail.subject, html: mail.html, text: mail.text, threadRequestNo: ticket.request_no })
       }
-      await notify({ recipientId: open.approver_id, actorId: profile.id, type: 'status_changed', title: `Quote withdrawn: ${ticket.request_no}`, body: reason, requestId: input.requestId, link: `/vendor-po/${open.id}`, skipEmail: true })
+      for (const a of approvers) await notify({ recipientId: a.id, actorId: profile.id, type: 'status_changed', title: `Quote withdrawn: ${ticket.request_no}`, body: reason, requestId: input.requestId, link: `/vendor-po/${open.id}`, skipEmail: true })
     } catch (e) {
       console.error('[vendorWithdrawRequest] approver mail failed', e)
     }

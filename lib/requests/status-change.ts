@@ -12,6 +12,7 @@ import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS, VENDOR_TRANSITIONS } from '@/
 import { vendorRoleOf } from '@/lib/vendor/access'
 import { clearOemTicketOnReopen } from '@/lib/vendor/ticket-fields'
 import { cancelOpenRequest } from '@/lib/vendor/requests'
+import { tellVendorHoldEnded, tellVendorReopened } from '@/lib/vendor/ticket-notify'
 import { STATUS_LABELS } from '@/lib/constants/requests'
 import { getResolvedReopenWindowHours } from '@/lib/settings/reopenWindow'
 import { isFieldValueEmpty } from '@/lib/validation/formFields'
@@ -384,7 +385,11 @@ export async function applyStatusChange(
   }
 
   // A Citykart technician ends a hold that a vendor had asked for (parts / PO): that request is closed as cancelled, so nothing stays "pending" on a ticket that moved on.
-  if (currentStatus === 'hold_purchase_ho' && !options.vendorFlow && !isPoDecision) await cancelOpenRequest(requestId, profile.id, 'The hold was ended by Citykart.')
+  if (currentStatus === 'hold_purchase_ho' && !options.vendorFlow && !isPoDecision) {
+    const closed = await cancelOpenRequest(requestId, profile.id, 'The hold was ended by Citykart.')
+    // the vendor who asked is told (mail and bell); nothing is sent when the ticket is not with a vendor
+    if (closed) await tellVendorHoldEnded(requestId, profile.id, profile.full_name, comment?.trim() ?? '', closed)
+  }
 
   // Auto time-tracking: starts the instant work actually begins (→ in_progress) and
   // stops the instant it stops (leaving in_progress for any reason — waiting_user,
@@ -589,6 +594,10 @@ export async function applyStatusChange(
   // Notify assignee when request is reopened (open, or back-to-assigned via
   // the approval-rejection reopen path) — unless they were already notified
   // above as the requester (D-06).
+  // a vendor technician gets his own, clearly marked "REOPENED" mail (and bell) instead of the plain one; he must enter the new OEM ticket number after a resolved ticket is reopened
+  const reopenedForVendor = (isResolvedReopen || isApprovalRejectionReopen) && !!request.assigned_to && request.assigned_to !== profile.id && !notifiedUserIds.has(request.assigned_to)
+    && await tellVendorReopened(requestId, profile.id, profile.full_name, comment?.trim() ?? '', (request.reopen_count ?? 0) + 1, isResolvedReopen)
+  if (reopenedForVendor && request.assigned_to) notifiedUserIds.add(request.assigned_to)
   if (
     (newStatus === 'open' || isApprovalRejectionReopen) &&
     request.assigned_to &&

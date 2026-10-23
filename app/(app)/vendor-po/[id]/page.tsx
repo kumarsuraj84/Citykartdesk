@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/queries/profiles'
-import { loadPoContext } from '@/lib/vendor/po'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { approversOf, isApproverOf, loadPoContext } from '@/lib/vendor/po'
 import { formatMoney, totalOf } from '@/lib/vendor/lines'
 import { todayIstDate } from '@/lib/vendor/fields'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -24,11 +25,13 @@ export default async function VendorPoApprovalPage({ params }: { params: Promise
 
   const po = await loadPoContext(id)
   if (!po || po.vendorRequest.kind !== 'po' || po.request.org_id !== profile.org_id) notFound()
-  // Citykart's technicians, managers and administrators may read it; only the approver this was sent to (or an administrator) sees the decision form
+  // Citykart's technicians, managers and administrators may read it; only an approver this was sent to (or an administrator) sees the decision form
   if (!['agent', 'manager', 'admin', 'platform_owner'].includes(profile.role)) notFound()
-  const mayDecide = po.vendorRequest.approver_id === profile.id || ['admin', 'platform_owner'].includes(profile.role)
+  const mayDecide = isApproverOf(po.vendorRequest, profile.id) || ['admin', 'platform_owner'].includes(profile.role)
 
   const vr = po.vendorRequest
+  const sentTo = (await approversOf(vr)).map((a) => a.full_name).join(', ')
+  const decidedBy = vr.decided_by ? (await createAdminClient().from('profiles').select('full_name').eq('id', vr.decided_by).maybeSingle()).data?.full_name ?? null : null
   const total = totalOf(po.lines)
   const canDecide = po.request.status === 'hold_purchase_ho' && mayDecide && (vr.status === 'pending' || vr.status === 'revision_requested')
 
@@ -37,7 +40,7 @@ export default async function VendorPoApprovalPage({ params }: { params: Promise
       <PageHeader title="PO approval" description={`${po.vendorName} needs a purchase order for ticket ${po.request.request_no}.`} />
       <section className="rounded-xl border border-border">
         <dl className="divide-y divide-border text-sm">
-          {[['Ticket', po.request.request_no], ['Quote version', String(vr.version)], ['Store', po.storeLabel], ['AC', po.acLabel], ['Vendor', po.vendorName], ['Requested by', po.vendorPerson?.full_name ?? '—'], ['Requested on', formatDateTime(vr.created_at)], ['Status', STATUS_TEXT[vr.status] ?? vr.status]].map(([k, v]) => (
+          {[['Ticket', po.request.request_no], ['Quote version', String(vr.version)], ['Store', po.storeLabel], ['AC', po.acLabel], ['Vendor', po.vendorName], ['Requested by', po.vendorPerson?.full_name ?? '—'], ['Requested on', formatDateTime(vr.created_at)], ...(sentTo ? [['Sent to', sentTo]] : []), ['Status', STATUS_TEXT[vr.status] ?? vr.status]].map(([k, v]) => (
             <div key={k} className="flex items-start justify-between gap-4 px-4 py-2"><dt className="text-xs text-muted-foreground">{k}</dt><dd className="text-right font-medium">{v}</dd></div>
           ))}
         </dl>
@@ -68,7 +71,7 @@ export default async function VendorPoApprovalPage({ params }: { params: Promise
         ? <PoDecisionForm vendorRequestId={vr.id} today={todayIstDate()} canApprove={vr.status === 'pending'} />
         : (
           <section className="rounded-xl border border-border p-4 text-sm">
-            <p className="font-medium">{vr.status === 'pending' && !mayDecide ? 'Waiting for the approver to decide' : (STATUS_TEXT[vr.status] ?? vr.status)}{vr.decided_at ? ` on ${formatDateTime(vr.decided_at)}` : ''}</p>
+            <p className="font-medium">{vr.status === 'pending' && !mayDecide ? 'Waiting for the approver to decide' : (STATUS_TEXT[vr.status] ?? vr.status)}{decidedBy && ['approved', 'rejected'].includes(vr.status) ? ` by ${decidedBy}` : ''}{vr.decided_at ? ` on ${formatDateTime(vr.decided_at)}` : ''}</p>
             {vr.po_number && <p className="mt-1">PO number {vr.po_number}{vr.po_date ? `, dated ${vr.po_date}` : ''}</p>}
             {vr.decision_reason && <p className="mt-1 text-muted-foreground">{vr.decision_reason}</p>}
           </section>

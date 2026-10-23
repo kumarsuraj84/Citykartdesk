@@ -96,6 +96,7 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
           <h1 className="text-lg font-semibold leading-tight">{request.title}</h1>
         </div>
         <div className="flex items-center gap-2">
+          {(request.reopen_count ?? 0) > 0 && <span className="rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">Reopened ×{request.reopen_count}</span>}
           <span className="text-xs text-muted-foreground">{VENDOR_BOX_LABELS[box]}</span>
           <StatusBadge status={request.status} />
           <PriorityBadge priority={request.priority} />

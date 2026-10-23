@@ -10,7 +10,7 @@ import { sendEmail } from '@/lib/email/send'
 import { absoluteAppUrl } from '@/lib/email/notify-email'
 import { saveTicketFile } from '@/lib/attachments/save'
 import { createVendorRequest, linkFilesToComment, markRevisionRequested, OPEN_STATUSES, settleRequest, unsettleRequest, type VendorRequestStatus } from '@/lib/vendor/requests'
-import { attachmentForMail, internalNote, loadPoContext, sendPoMailToOem, userEmail, type PoContext } from '@/lib/vendor/po'
+import { attachmentForMail, internalNote, isApproverOf, loadPoContext, sendPoMailToOem, userEmail, type PoContext } from '@/lib/vendor/po'
 import { buildPoApprovedMail, buildPoRejectedMail, buildPoRevisionAskedMail, buildQuoteNotApprovedMail, buildVendorPoApprovedMail, buildVendorTicketCancelledMail } from '@/lib/vendor/po-mail'
 import { checkPoApproval, checkPoRejection, checkPoRevision } from '@/lib/vendor/po-rules'
 import { postPublicComment } from '@/lib/vendor/ticket-fields'
@@ -34,11 +34,16 @@ async function authorise(vendorRequestId: string, allowed: VendorRequestStatus[]
   const po = await loadPoContext(vendorRequestId)
   if (!po || po.vendorRequest.kind !== 'po') return { error: 'PO request not found.' }
   if (po.request.org_id !== profile.org_id) return { error: 'PO request not found.' }
-  const mayDecide = po.vendorRequest.approver_id === profile.id || ['admin', 'platform_owner'].includes(profile.role)
-  if (!mayDecide) return { error: 'This PO can be approved or rejected only by the approver it was sent to.' }
+  const mayDecide = isApproverOf(po.vendorRequest, profile.id) || ['admin', 'platform_owner'].includes(profile.role)
+  if (!mayDecide) return { error: 'This PO can be approved or rejected only by an approver it was sent to.' }
   if (po.vendorRequest.status === 'superseded') return { error: 'This quote was replaced by a newer version. Please open the newer one.' }
   if (!allowed.includes(po.vendorRequest.status)) {
-    return { error: po.vendorRequest.status === 'revision_requested' ? 'You asked the vendor for a revised price. Waiting for the vendor.' : 'This PO request has already been decided.' }
+    if (po.vendorRequest.status === 'revision_requested') return { error: 'A revised price has been asked for. Waiting for the vendor.' }
+    // several approvers can hold the same request: the first decision is final and the others are told who made it
+    const by = po.vendorRequest.decided_by && po.vendorRequest.decided_by !== profile.id
+      ? (await createAdminClient().from('profiles').select('full_name').eq('id', po.vendorRequest.decided_by).maybeSingle()).data?.full_name
+      : null
+    return { error: by ? `This PO request has already been decided by ${by}.` : 'This PO request has already been decided.' }
   }
   if (po.request.status !== 'hold_purchase_ho') return { error: 'The ticket is no longer waiting for this PO.' }
   return { profile, po }
@@ -170,7 +175,7 @@ export async function rejectVendorPo(input: { vendorRequestId: string; reason: s
   }
 
   const supabase = await createClient()
-  const res = await applyStatusChange({ supabase, profile }, po.request.id, 'cancelled', `PO request rejected by ${profile.full_name}. Reason: ${check.reason}`, { poDecision: 'reject' })
+  const res = await applyStatusChange({ supabase, profile }, po.request.id, 'cancelled', `Cancelled because the cost of the repair was not approved (${profile.full_name}). Reason: ${check.reason}\nIf the AC is still not working, you can reopen the request within 48 hours.`, { poDecision: 'reject' })
   if (res.error) return res
   await settleRequest(po.vendorRequest.id, 'rejected', profile.id, check.reason, undefined, OPEN_STATUSES)
 

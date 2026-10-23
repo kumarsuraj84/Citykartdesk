@@ -37,6 +37,8 @@ export type VendorRequestRow = {
   revision_requested_by: string | null
   revision_requested_at: string | null
   approver_id?: string | null
+  /** every approver the quote was sent to; any one of them can decide (the first decision wins) */
+  approver_ids?: string[] | null
   po_number?: string | null
   po_date?: string | null
   po_attachment_id?: string | null
@@ -130,14 +132,16 @@ export async function markRevisionRequested(vendorRequestId: string, by: string,
   return !!data
 }
 
-/** A Citykart technician takes the ticket back (or the hold ends in another way): whatever the vendor had asked for is closed as cancelled. Never throws. */
-export async function cancelOpenRequest(requestId: string, by: string | null, reason: string): Promise<void> {
+/** A Citykart technician takes the ticket back (or the hold ends in another way): whatever the vendor had asked for is closed as cancelled. Returns the kind that was closed, or null when nothing was open. Never throws. */
+export async function cancelOpenRequest(requestId: string, by: string | null, reason: string): Promise<'parts' | 'po' | null> {
   try {
-    await db().from('vendor_requests')
+    const { data } = await db().from('vendor_requests')
       .update({ status: 'cancelled', decided_by: by, decided_at: new Date().toISOString(), decision_reason: reason })
-      .eq('request_id', requestId).in('status', OPEN_STATUSES)
+      .eq('request_id', requestId).in('status', OPEN_STATUSES).select('kind')
+    return ((data ?? [])[0]?.kind as 'parts' | 'po' | undefined) ?? null
   } catch (e) {
     console.error('[cancelOpenRequest] failed', e)
+    return null
   }
 }
 

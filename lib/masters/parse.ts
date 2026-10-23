@@ -57,14 +57,20 @@ function missingColumns(grid: Grid, required: { label: string; keys: string[] }[
   return required.filter((r) => !r.keys.some((k) => grid.header.has(k))).map((r) => r.label)
 }
 
+/** The AC sheet headings, newest name first (the first one that exists in the sheet is used). Older names keep working so a sheet is never broken by the rename. */
+const AC_TICKET_MAIL = { label: 'OEM Ticket Mail To', keys: ['oemticketmailto', 'oememailticket', 'mailid'] }
+const AC_PO_MAIL = { label: 'OEM PO Mail To', keys: ['oempomailto', 'oememailpo', 'emailforpodetail'] }
+const AC_APPROVER_MAIL = { label: 'CK PO Approver Mail To', keys: ['ckpoapprovermailto', 'ckemailpoapprover', 'poapprovermailto'] }
+const present = (grid: Grid, keys: string[]) => keys.some((k) => grid.header.has(k))
+
 function addEmailIssues(
-  issues: MasterIssue[], kind: MasterKind, storeCode: string, sheetRow: number, raw: string, e: ReturnType<typeof parseEmails>, wantAny: boolean,
+  issues: MasterIssue[], kind: MasterKind, storeCode: string, sheetRow: number, raw: string, e: ReturnType<typeof parseEmails>, wantAny: boolean, column = 'Mail ID',
 ) {
   const at = (code: string, message: string, severity: 'error' | 'warning' = 'warning') => issues.push({ kind, severity, code, storeCode, sheetRow, message })
-  for (const bad of e.invalid) { at('bad_email', `Row ${sheetRow} (${storeCode}): "${bad}" in the Mail ID is not an e-mail address and is skipped. The other addresses are still used.`); issues[issues.length - 1].token = bad }
+  for (const bad of e.invalid) { at('bad_email', `Row ${sheetRow} (${storeCode}): "${bad}" in the ${column} is not an e-mail address and is skipped. The other addresses are still used.`); issues[issues.length - 1].token = bad }
   for (const t of e.typoDomains) { at('probable_typo_domain', `Row ${sheetRow} (${storeCode}): ${t} looks like a misspelt company address. It is still used, but the mail to it will bounce.`); issues[issues.length - 1].token = t }
-  if (wantAny && e.valid.length === 0 && raw !== '') at('no_valid_email', `Row ${sheetRow} (${storeCode}): the Mail ID has no usable address.`, 'error')
-  if (wantAny && raw === '') at('no_email', `Row ${sheetRow} (${storeCode}): the Mail ID is empty, so a ticket for it cannot be mailed to the OEM.`)
+  if (wantAny && e.valid.length === 0 && raw !== '') at('no_valid_email', `Row ${sheetRow} (${storeCode}): the ${column} has no usable address.`, 'error')
+  if (wantAny && raw === '') at('no_email', `Row ${sheetRow} (${storeCode}): the ${column} is empty, so a ticket for it cannot be mailed to the OEM.`)
 }
 
 const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -88,7 +94,7 @@ export function groupEmailIssues(issues: MasterIssue[]): MasterIssue[] {
     out.push({
       ...first,
       message: first.code === 'bad_email'
-        ? `"${first.token}" in the Mail ID is not an e-mail address and is skipped, on ${list.length} rows (rows ${rows.slice(0, 8).join(', ')}${more(rows.length, 8)}; stores ${stores.slice(0, 6).join(', ')}${more(stores.length, 6)}). The other addresses are still used.`
+        ? `"${first.token}" in the ${first.kind === 'ac' ? AC_TICKET_MAIL.label : 'Mail ID'} is not an e-mail address and is skipped, on ${list.length} rows (rows ${rows.slice(0, 8).join(', ')}${more(rows.length, 8)}; stores ${stores.slice(0, 6).join(', ')}${more(stores.length, 6)}). The other addresses are still used.`
         : `${first.token} looks like a misspelt company address, on ${list.length} rows (rows ${rows.slice(0, 8).join(', ')}${more(rows.length, 8)}; stores ${stores.slice(0, 6).join(', ')}${more(stores.length, 6)}). It is still used, but the mail to it will bounce.`,
     })
   }
@@ -108,10 +114,12 @@ export function parseAcSheet(values: unknown[][]): ParseResult<AcRow> {
   const rows: AcRow[] = []
   const issues: MasterIssue[] = []
   const hasStatus = grid.header.has('status')
-  const hasMail = grid.header.has('mailid')
-  const hasPoMail = grid.header.has('emailforpodetail')
+  const hasMail = present(grid, AC_TICKET_MAIL.keys)
+  const hasPoMail = present(grid, AC_PO_MAIL.keys)
+  const hasApprover = present(grid, AC_APPROVER_MAIL.keys)
   if (!hasStatus) issues.push({ kind: 'ac', severity: 'warning', code: 'no_status_column', storeCode: null, sheetRow: null, message: 'The AC sheet has no Status column, so every AC is treated as Active.' })
-  if (!hasMail) issues.push({ kind: 'ac', severity: 'warning', code: 'no_mail_column', storeCode: null, sheetRow: null, message: 'The AC sheet has no Mail ID column, so no AC ticket can be mailed to an OEM.' })
+  if (!hasMail) issues.push({ kind: 'ac', severity: 'warning', code: 'no_mail_column', storeCode: null, sheetRow: null, message: `The AC sheet has no "${AC_TICKET_MAIL.label}" column, so no AC ticket can be mailed to an OEM.` })
+  if (!hasApprover) issues.push({ kind: 'ac', severity: 'warning', code: 'no_approver_column', storeCode: null, sheetRow: null, message: `The AC sheet has no "${AC_APPROVER_MAIL.label}" column, so every vendor quote goes to the default PO approver (Admin > Vendors).` })
 
   const seenNumber = new Map<string, number>()
   const seenSerial = new Map<string, number>()
@@ -153,14 +161,19 @@ export function parseAcSheet(values: unknown[][]): ParseResult<AcRow> {
       }
     }
 
-    const mailRaw = hasMail ? get(cells, 'mailid') : ''
+    const mailRaw = hasMail ? get(cells, ...AC_TICKET_MAIL.keys) : ''
     const emails = parseEmails(mailRaw)
-    if (hasMail && isActive) addEmailIssues(issues, 'ac', storeCode, sheetRow, mailRaw, emails, true)
+    if (hasMail && isActive) addEmailIssues(issues, 'ac', storeCode, sheetRow, mailRaw, emails, true, AC_TICKET_MAIL.label)
 
     // the OEM's address for PO details: bad addresses are skipped with a note; an empty cell is fine (the ticket's normal OEM address is used then)
-    const poRaw = hasPoMail ? get(cells, 'emailforpodetail') : ''
+    const poRaw = hasPoMail ? get(cells, ...AC_PO_MAIL.keys) : ''
     const poEmails = parseEmails(poRaw)
-    if (isActive) for (const bad of poEmails.invalid) issues.push({ kind: 'ac', severity: 'warning', code: 'bad_po_email', storeCode, sheetRow, token: bad, message: `Row ${sheetRow} (${storeCode}): "${bad}" in the Email for PO detail is not an e-mail address and is skipped.` })
+    if (isActive) for (const bad of poEmails.invalid) issues.push({ kind: 'ac', severity: 'warning', code: 'bad_po_email', storeCode, sheetRow, token: bad, message: `Row ${sheetRow} (${storeCode}): "${bad}" in the ${AC_PO_MAIL.label} is not an e-mail address and is skipped.` })
+
+    // the Citykart people who approve a vendor's quote for this AC: bad addresses are skipped with a note; an empty cell is fine (the default approver is used then)
+    const apRaw = hasApprover ? get(cells, ...AC_APPROVER_MAIL.keys) : ''
+    const approverEmails = parseEmails(apRaw)
+    if (isActive) for (const bad of approverEmails.invalid) issues.push({ kind: 'ac', severity: 'warning', code: 'bad_approver_email', storeCode, sheetRow, token: bad, message: `Row ${sheetRow} (${storeCode}): "${bad}" in the ${AC_APPROVER_MAIL.label} is not an e-mail address and is skipped.` })
 
     rows.push({
       sheetRow, storeCode, ckdeskNo, serial,
@@ -168,7 +181,7 @@ export function parseAcSheet(values: unknown[][]): ParseResult<AcRow> {
       amcVendor: get(cells, 'acamcvendor'), amcBrand: get(cells, 'acamcbrand'), zenatix: get(cells, 'zenatixyesno', 'zenatix'),
       storePriority: get(cells, 'storeprioritylist', 'storepriority'), festival: get(cells, 'festival'), region: get(cells, 'region'), cluster: get(cells, 'cluster'),
       openingDate: toIsoDate(get(cells, 'openingdate', 'opendate')), city: get(cells, 'city'), state: get(cells, 'state'), address: get(cells, 'address'), pincode: get(cells, 'pincode'),
-      isActive, emails: emails.valid, poEmails: poEmails.valid,
+      isActive, emails: emails.valid, poEmails: poEmails.valid, approverEmails: approverEmails.valid,
     })
   }
   return { rows, issues: groupEmailIssues(issues) }

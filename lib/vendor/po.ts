@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { loadCvmCandidates } from '@/lib/cvm/load'
 import { sendEmail } from '@/lib/email/send'
 import { splitRecipients } from '@/lib/masters/emails'
 import type { PoMailBase } from './po-mail'
@@ -44,6 +45,47 @@ export async function resolvePoApprover(orgId: string): Promise<PoApprover | nul
   return null
 }
 
+export type PoApprovers = { people: PoApprover[]; /** true when the AC sheet named them, false when the default approver is used */ fromSheet: boolean }
+
+/**
+ * Who decides a quote for this ticket: the Citykart people named for the AC in the sheet column "CK PO Approver Mail To" (only active technicians, managers
+ * and admins count), else the default approver (Admin > Vendors). The AC row is read live; the copy saved on the ticket is the fallback if the row has left the sheet.
+ * Empty list = nobody is set up.
+ */
+export async function resolveApproversFor(orgId: string, requestId: string): Promise<PoApprovers> {
+  const d = db()
+  const { data: snap } = await d.from('request_master_snapshots').select('snapshot').eq('request_id', requestId).eq('kind', 'ac').maybeSingle()
+  const saved = (Array.isArray(snap?.snapshot) ? snap.snapshot[0] : null) as { id?: string; approver_emails?: string[] } | null
+  let emails: string[] = saved?.approver_emails ?? []
+  if (saved?.id) {
+    const { data: live } = await d.from('master_ac_units').select('approver_emails').eq('id', saved.id).is('removed_at', null).maybeSingle()
+    if (live) emails = (live.approver_emails as string[] | null) ?? []
+  }
+  if (emails.length) {
+    const candidates = await loadCvmCandidates(orgId)
+    const ids = [...new Set(emails.map((e) => candidates.byEmail.get(e.trim().toLowerCase())).filter((x): x is string => !!x))]
+    if (ids.length) {
+      const people: PoApprover[] = []
+      for (const id of ids) { const ok = await approverIfValid(orgId, id); if (ok) people.push(ok) }
+      if (people.length) return { people, fromSheet: true }
+    }
+  }
+  const fallback = await resolvePoApprover(orgId)
+  return { people: fallback ? [fallback] : [], fromSheet: false }
+}
+
+/** The approvers a stored request was sent to (the first one alone for requests made before several were possible). */
+export async function approversOf(vr: { approver_id?: string | null; approver_ids?: string[] | null }): Promise<PoApprover[]> {
+  const ids = [...new Set([...(vr.approver_ids ?? []), ...(vr.approver_id ? [vr.approver_id] : [])])]
+  if (ids.length === 0) return []
+  const { data } = await db().from('profiles').select('id, full_name').in('id', ids)
+  return ((data ?? []) as PoApprover[]).sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id))
+}
+
+/** True when this person is one of the approvers the request was sent to. */
+export const isApproverOf = (vr: { approver_id?: string | null; approver_ids?: string[] | null }, userId: string) =>
+  vr.approver_id === userId || (vr.approver_ids ?? []).includes(userId)
+
 export async function userEmail(userId: string): Promise<string | null> {
   try {
     const { data } = await db().auth.admin.getUserById(userId)
@@ -53,7 +95,7 @@ export async function userEmail(userId: string): Promise<string | null> {
   }
 }
 
-type Unit = { ckdesk_no?: string; brand?: string; tonnage?: string; emails?: string[]; po_emails?: string[] } | null
+type Unit = { ckdesk_no?: string; brand?: string; tonnage?: string; emails?: string[]; po_emails?: string[]; approver_emails?: string[] } | null
 
 export type PoContext = {
   vendorRequest: VendorRequestRow
@@ -110,7 +152,7 @@ export async function loadPoContext(vendorRequestId: string): Promise<PoContext 
   }
 }
 
-/** The OEM address(es) for PO details: the AC sheet's "Email for PO detail", else the AC's ordinary OEM addresses. Empty when the sheet has none. */
+/** The OEM address(es) for PO details: the AC sheet's "OEM PO Mail To", else the AC's ordinary OEM addresses. Empty when the sheet has none. */
 export function poRecipients(unit: Unit): { to: string[]; cc: string[] } | null {
   const pool = unit?.po_emails?.length ? unit.po_emails : unit?.emails ?? []
   if (pool.length === 0) return null

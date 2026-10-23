@@ -25,6 +25,8 @@ export type VendorTicketRow = {
   store_name: string | null
   ac_label: string | null
   oem_ticket_no: string | null
+  /** how many times the store reopened this ticket after it was resolved */
+  reopen_count: number
   box: VendorBox
   hold_kind: VendorHoldKind
 }
@@ -35,12 +37,12 @@ export async function getVendorTickets(): Promise<VendorTicketRow[]> {
   const supabase = await createClient()
   const { data } = await supabase
     .from('requests')
-    .select('id, request_no, title, status, priority, created_at, updated_at, assigned_to, requester_id, form_data, form_sections_snapshot, assignee:profiles!requests_assigned_to_fkey(full_name), requester:profiles!requests_requester_id_fkey(store_id)')
+    .select('id, request_no, title, status, priority, created_at, updated_at, assigned_to, requester_id, reopen_count, form_data, form_sections_snapshot, assignee:profiles!requests_assigned_to_fkey(full_name), requester:profiles!requests_requester_id_fkey(store_id)')
     .order('created_at', { ascending: false })
     .limit(MAX_ROWS)
   const rows = (data ?? []) as unknown as Array<{
     id: string; request_no: string; title: string; status: RequestStatus; priority: RequestPriority; created_at: string; updated_at: string
-    assigned_to: string | null; form_data: Record<string, unknown> | null; form_sections_snapshot: unknown
+    assigned_to: string | null; reopen_count: number | null; form_data: Record<string, unknown> | null; form_sections_snapshot: unknown
     assignee: { full_name: string } | null; requester: { store_id: string | null } | null
   }>
   if (rows.length === 0) return []
@@ -70,7 +72,7 @@ export async function getVendorTickets(): Promise<VendorTicketRow[]> {
       created_at: r.created_at, updated_at: r.updated_at, assigned_to: r.assigned_to, assignee_name: r.assignee?.full_name ?? null,
       store_code: store?.code ?? null, store_name: store?.name ?? null,
       ac_label: ac ? [ac.ckdesk_no, [ac.brand, ac.tonnage].filter(Boolean).join(' ')].filter(Boolean).join(' - ') : null,
-      oem_ticket_no: oem || null,
+      oem_ticket_no: oem || null, reopen_count: r.reopen_count ?? 0,
       box: vendorBoxOf(r.status, hold_kind), hold_kind,
     }
   })

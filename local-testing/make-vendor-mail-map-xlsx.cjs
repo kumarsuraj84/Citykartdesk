@@ -4,9 +4,9 @@ const path = require('path')
 
 const STORE_ADDR = 'Login e-mail of the store login that raised the ticket (set when the user was created). Ticket booked on behalf of someone: that person.'
 const VENDOR_ADDR = 'The vendor technician\'s own login e-mail, typed by the administrator in Admin > Vendors > Add a vendor login (change in Admin > Users).'
-const KRISHAN_ADDR = 'Login e-mail of the PO approver chosen in Admin > Vendors > PO approver (default: krishan.patel@citykartstores.com).'
-const OEM_MAIL_ID = 'AC sheet column "Mail ID" of the AC chosen on the ticket. Outside addresses go in To; company addresses (@citykartstores.com, @citykart.org) go in CC.'
-const OEM_PO = 'AC sheet column "Email for PO detail" of that AC; if empty, the AC\'s "Mail ID". If both are empty nothing is sent and an internal note asks the Citykart technician to inform the OEM.'
+const KRISHAN_ADDR = 'AC sheet column "CK PO Approver Mail To" of the AC on the ticket: one or several Citykart addresses (each must be an active technician, manager or admin with a CK Desk login). One mail goes To all of them; any one can decide. If the cell is empty, or an address is not a CK Desk login, the default approver chosen in Admin > Vendors > Default PO approver is used (Krishan, krishan.patel@citykartstores.com).'
+const OEM_MAIL_ID = 'AC sheet column "OEM Ticket Mail To" (formerly "Mail ID") of the AC chosen on the ticket. Outside addresses go in To; company addresses (@citykartstores.com, @citykart.org) go in CC.'
+const OEM_PO = 'AC sheet column "OEM PO Mail To" (formerly "Email for PO detail") of that AC; if empty, the AC\'s "OEM Ticket Mail To". If both are empty nothing is sent and an internal note asks the Citykart technician to inform the OEM.'
 const SENDER = 'Sent from CitykartDesk <citykartdesk@citykartstores.com> (the mailbox connected in Admin).'
 
 const groups = [
@@ -19,42 +19,43 @@ const groups = [
   { name: 'B. The vendor works the ticket', rows: [
     ['Mail 5', 'Vendor presses Start working (enters the OEM ticket number)', 'Store', '-', 'Request updated: CKSD-… — <title>', 'Status changed from Open to In Progress. + the line "<vendor> (vendor) started work on this ticket. OEM ticket number: …". Nobody else is mailed (not Krishan, not the OEM).', STORE_ADDR],
     ['Mail 6', 'Vendor presses Part required (no PO) and lists parts', 'Store', '-', 'Request updated: CKSD-… — <title>', 'Status changed from In Progress to Hold due to Purchase from HO. + "Part required (no PO). <vendor> needs these parts:" and the list. Krishan is NOT mailed (no PO).', STORE_ADDR],
-    ['(no mail)', 'Vendor changes the parts list while on hold', 'Nobody', '-', '-', 'Only the conversation message "Parts list updated (version N)" and the bell.', '-'],
+    ['Mail 30 (new)', 'Vendor changes the parts list while on hold (a new version)', 'Store', '-', 'Parts list updated (version N) - CKSD-…', '<vendor> has updated the list of parts needed for your request (version N). The request stays on hold until the parts arrive. + the new list (names and quantities, no prices) + link. The conversation message "Parts list updated (version N)" stays too.', STORE_ADDR],
     ['Mail 7', 'Vendor presses Parts received (remark compulsory)', 'Store', '-', 'Request updated: CKSD-… — <title>', 'Status changed from Hold due to Purchase from HO to In Progress. + "Parts received. <remark>".', STORE_ADDR],
     ['Mail 8', 'Vendor withdraws a parts request (reason compulsory)', 'Store', '-', 'Request updated: CKSD-… — <title>', 'Hold to In Progress + "Parts request withdrawn by <vendor>. Reason: …".', STORE_ADDR],
     ['Mail 9', 'A Citykart technician ends the hold himself', 'Store', '-', 'Request updated: CKSD-… — <title>', 'Hold to In Progress + his remark. The pending vendor request is closed as cancelled.', STORE_ADDR],
+    ['Mail 31 (new)', 'Same moment (only when the ticket is with a vendor technician)', 'Vendor technician', '-', 'Hold ended by Citykart - your parts request is closed - CKSD-… - <store>', '<Citykart person> has taken this ticket back and ended the hold. Your parts request (or quote / PO request) is closed and nothing more is needed from you for it. The ticket is In Progress again. + his remark + link. Also a bell message.', VENDOR_ADDR],
     ['Mail 10', 'The vendor writes a message on the ticket', 'Store', '-', 'New comment on: CKSD-… — <title>', '<name> commented on …: + the text + link.', STORE_ADDR],
     ['Mail 11', 'The store writes a message on the ticket', 'Vendor technician', '-', 'New comment on: CKSD-… — <title>', '<name> commented on …: + the text + link to the ticket.', VENDOR_ADDR],
   ] },
   { name: 'C. PO required: the quote, revised price, approval', rows: [
-    ['Mail 12', 'Vendor sends the quote (items, prices without GST, quote file) = PO required', 'PO approver (Krishan)', '-', 'PO approval needed - CKSD-… - <vendor>', '<vendor> needs a purchase order to repair the AC on the ticket below. Ticket, store, AC, vendor, the item lines, total without GST, and a sign-in link to the approval page. (The quote file is on the ticket under the message, not attached to the mail.)', KRISHAN_ADDR],
+    ['Mail 12', 'Vendor sends the quote (items, prices without GST, quote file) = PO required', 'PO approver(s) of that AC (Krishan by default)', '-', 'PO approval needed - CKSD-… - <vendor>', '(changed: ONE mail To all approvers of the AC; a bell message each; any one can decide, the first decision wins and the other sees "already decided by <name>") <vendor> needs a purchase order to repair the AC on the ticket below. Ticket, store, AC, vendor, the item lines, total without GST, and a sign-in link to the approval page. (The quote file is on the ticket under the message, not attached to the mail.)', KRISHAN_ADDR],
     ['Mail 13', 'Same moment', 'Store', '-', 'Request updated: CKSD-… — <title>', 'In Progress to Hold due to Purchase from HO + "PO required from Citykart (quote version 1)", the quote lines and total. Prices are visible to the store by decision.', STORE_ADDR],
     ['Mail 14', 'Krishan presses Ask for revised price (note compulsory)', 'Vendor technician', '-', 'Revised price needed - CKSD-… - <store>', '<Krishan> has asked for a revised price. + "What was asked: <his note>" + link to the ticket to send the revised quote. Nobody else is mailed. The ticket moves to the vendor\'s "Revise price required" box.', VENDOR_ADDR],
-    ['Mail 15', 'Vendor sends the revised quote (new prices + new quote file)', 'PO approver (Krishan)', '-', 'Revised quote (version 2) - PO approval needed - CKSD-… - <vendor>', '<vendor> sent a revised quote (version 2), the earlier total was X + the new lines and total + the approval link. The old link now says "replaced by a newer version".', KRISHAN_ADDR],
+    ['Mail 15', 'Vendor sends the revised quote (new prices + new quote file)', 'PO approver(s) of that AC (Krishan by default)', '-', 'Revised quote (version 2) - PO approval needed - CKSD-… - <vendor>', '<vendor> sent a revised quote (version 2), the earlier total was X + the new lines and total + the approval link. The old link now says "replaced by a newer version".', KRISHAN_ADDR],
     ['Mail 16', 'Krishan approves (PO number, PO date, PO document)', 'OEM', 'Citykart addresses of that row', 'PO <number> approved - CKSD-… - <store>', 'Citykart has approved the purchase order: ticket, store, AC, vendor, PO number, PO date, the item lines, total. The PO document is attached to the mail.', OEM_PO],
     ['Mail 17', 'Same moment', 'Vendor technician', '-', 'PO <number> approved - CKSD-… - <store>', '<Krishan> has approved your quote. The ticket is back In Progress. PO number, date, lines, total, the PO document attached, link to the ticket.', VENDOR_ADDR],
     ['Mail 18', 'Same moment', 'Store', '-', 'Request updated: CKSD-… — <title>', 'Hold to In Progress + "PO approved by <Krishan> on quote version N. PO number …, date …" with lines and total.', STORE_ADDR],
     ['Mail 19', 'Krishan rejects ONLY the quote (reason compulsory) - the ticket goes on', 'Vendor technician', '-', 'Quote not approved - arrange the parts yourself - CKSD-… - <store>', '<Krishan> has not approved your quote. The ticket is NOT cancelled. Please arrange the parts yourself (no PO) and press Parts received. + the reason + the parts list kept on the ticket (no prices). The OEM and the store are not mailed.', VENDOR_ADDR],
-    ['Mail 20', 'Krishan rejects the quote AND cancels the ticket (reason compulsory)', 'OEM', 'Citykart addresses of that row', 'PO request rejected - CKSD-… - <store>', 'Citykart has not approved the purchase order … and the ticket has been cancelled. + the reason.', OEM_PO],
-    ['Mail 21', 'Same moment', 'Store', '-', 'Request cancelled: CKSD-… — <title>', 'Request cancelled. + "PO request rejected by <Krishan>. Reason: …". The store may reopen within 48 hours.', STORE_ADDR],
-    ['Mail 22', 'Same moment', 'Vendor technician', '-', 'Quote rejected and ticket cancelled - CKSD-… - <store>', '<Krishan> has rejected your quote and cancelled the ticket. + the reason + link.', VENDOR_ADDR],
-    ['Mail 23', 'Vendor withdraws a quote that Krishan has not decided yet (reason compulsory)', 'PO approver (Krishan)', '-', 'Quote withdrawn by the vendor - CKSD-… - <vendor>', '<vendor technician> (<vendor>) has withdrawn quote version N. Nothing more is needed from you for now. + the reason + link.', KRISHAN_ADDR],
+    ['Mail 20', 'Krishan rejects the quote AND cancels the ticket (reason compulsory)', 'OEM', 'Citykart addresses of that row', 'PO request rejected - CKSD-… - <store>', '(new wording) Citykart will not issue a purchase order for the AC repair on the ticket below, so the ticket is cancelled. Please do not do any further work on it. + ticket, store, AC, vendor + the reason.', OEM_PO],
+    ['Mail 21', 'Same moment', 'Store', '-', 'Request cancelled: CKSD-… — <title>', '(new wording) Request cancelled. + "Cancelled because the cost of the repair was not approved (<Krishan>). Reason: … If the AC is still not working, you can reopen the request within 48 hours." The store is not told about POs.', STORE_ADDR],
+    ['Mail 22', 'Same moment', 'Vendor technician', '-', 'Quote rejected and ticket cancelled - CKSD-… - <store>', '(new wording) Your quote for <CKSD-…> was rejected by <Krishan> and the ticket is cancelled. Please do not do any further work on it. + the reason + link.', VENDOR_ADDR],
+    ['Mail 23', 'Vendor withdraws a quote that Krishan has not decided yet (reason compulsory)', 'PO approver(s) of that AC (Krishan by default)', '-', 'Quote withdrawn by the vendor - CKSD-… - <vendor>', '<vendor technician> (<vendor>) has withdrawn quote version N. Nothing more is needed from you for now. + the reason + link.', KRISHAN_ADDR],
     ['Mail 24', 'Same moment', 'Store', '-', 'Request updated: CKSD-… — <title>', 'Hold to In Progress + "PO request withdrawn by <vendor>. Reason: …".', STORE_ADDR],
   ] },
   { name: 'D. Resolved and reopened', rows: [
     ['Mail 25', 'Vendor resolves the ticket (AC RESOLUTION choice or Other + FSR)', 'Store', '-', 'Resolved: CKSD-… — <title>', 'Your request has been marked resolved by <vendor>. Resolution: <words>. Then five one-click rating links (1-5 stars) and a "not fixed - reopen" link. This is the only "resolved" mail.', STORE_ADDR],
     ['Mail 26', 'The store has not rated after 2 days (admin setting)', 'Store', '-', 'Rating reminder', 'One reminder with the same rating / reopen links.', STORE_ADDR],
     ['Mail 27', 'The store reopens the ticket (reason compulsory)', 'OEM', 'Citykart addresses of that row', 'REOPENED - New AC Issue Ticket - CKSD-… - <store>', 'The same table as Mail 2, with "REOPENED:" in the issue and the store\'s reason.', OEM_MAIL_ID],
-    ['Mail 28', 'Same moment', 'Vendor technician', '-', 'Request updated: CKSD-… — <title>', 'Status changed from Resolved to Open. + the store\'s reason. The OEM number and date are emptied: he must enter the OEM\'s NEW ticket number to start again.', VENDOR_ADDR],
+    ['Mail 28', 'Same moment', 'Vendor technician', '-', 'REOPENED by the store - please attend again - CKSD-… - <store>', '(changed: his own mail, no longer the plain "status changed" one) The ticket was REOPENED by <name> (reopened N times). The problem is not fixed, so please attend again. + ticket, store, AC + the reason given + "The earlier OEM ticket number and date have been cleared. Raise a new ticket with the OEM and enter the NEW OEM ticket number to start working." + link. Also a bell message, and a red "Reopened ×N" tag on his dashboard and on the ticket page.', VENDOR_ADDR],
     ['Mail 29', 'Same moment', 'Store', '-', 'Request updated: CKSD-… — <title>', 'Resolved to Open. It\'s with <vendor>. + the reason.', STORE_ADDR],
   ] },
 ]
 
 const who = [
-  ['Vendor technician', 'Mail 3 assigned to you; Mail 11 store message; Mail 14 revised price needed; Mail 17 PO approved (with PO document); Mail 19 quote not approved, arrange the parts; Mail 22 ticket cancelled; Mail 28 reopened. He is never mailed about his own actions.'],
-  ['PO approver (Krishan)', 'Mail 12 PO approval needed; Mail 15 revised quote; Mail 23 quote withdrawn. Nothing else: not for parts-only requests and not for ordinary ticket events.'],
+  ['Vendor technician', 'Mail 31 hold ended by Citykart; Mail 3 assigned to you; Mail 11 store message; Mail 14 revised price needed; Mail 17 PO approved (with PO document); Mail 19 quote not approved, arrange the parts; Mail 22 ticket cancelled; Mail 28 REOPENED (clearly marked). He is never mailed about his own actions.'],
+  ['PO approver(s) of the AC (Krishan by default)', 'Mail 12 PO approval needed; Mail 15 revised quote; Mail 23 quote withdrawn. Nothing else: not for parts-only requests and not for ordinary ticket events.'],
   ['OEM', 'Mail 2 new ticket; Mail 16 PO approved (with PO document); Mail 20 PO rejected and ticket cancelled; Mail 27 reopened. NOT mailed when only a quote is rejected, when a quote is revised, or when the vendor starts, holds or resolves.'],
-  ['Store', 'Mail 1 created; Mail 4 assigned; every status change (5, 6, 7, 8, 9, 13, 18, 24); Mail 10 vendor message; Mail 21 cancelled; Mail 25 resolved with rating links; Mail 26 reminder; Mail 29 reopened. NOT mailed for revised-price requests, revised quotes, or a quote rejected while the ticket goes on.'],
+  ['Store', 'Mail 1 created; Mail 4 assigned; every status change (5, 6, 7, 8, 9, 13, 18, 24); Mail 10 vendor message; Mail 30 parts list updated; Mail 21 cancelled; Mail 25 resolved with rating links; Mail 26 reminder; Mail 29 reopened. NOT mailed for revised-price requests, revised quotes, or a quote rejected while the ticket goes on.'],
 ]
 
 ;(async () => {
@@ -96,7 +97,18 @@ const who = [
   h2.eachCell((c) => { c.font = { bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3F6E' } } })
   for (const r of who) { const row = w2.addRow(r); row.eachCell((c) => { c.alignment = { vertical: 'top', wrapText: true }; c.border = border }); row.getCell(1).font = { bold: true } }
 
-  const out = path.resolve(__dirname, '..', 'docs', 'VENDOR-EMAIL-MAP.xlsx')
+  const w3 = wb.addWorksheet('AC sheet columns')
+  w3.columns = [{ width: 28 }, { width: 70 }, { width: 70 }]
+  const h3 = w3.addRow(['Column heading', 'What it holds', 'Older headings that still work'])
+  h3.eachCell((c) => { c.font = { bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3F6E' } } })
+  for (const r of [
+    ['OEM Ticket Mail To', 'The OEM address(es) that get the new / reopened AC ticket. Outside addresses in To, company addresses in CC.', 'Mail ID'],
+    ['OEM PO Mail To', 'The OEM address(es) that get the PO approved / PO rejected mails. Empty = the OEM Ticket Mail To addresses.', 'Email for PO detail'],
+    ['CK PO Approver Mail To', 'The Citykart people who approve a vendor quote for this AC (one or several; must be active CK Desk staff). Empty = the default approver (Admin > Vendors).', '(new column)'],
+    ['Genset sheet / CVM sheet', 'Unchanged: Genset "Mail ID", CVM "CVM EMAIL ID".', ''],
+  ]) { const row = w3.addRow(r); row.eachCell((c) => { c.alignment = { vertical: 'top', wrapText: true }; c.border = border }); row.getCell(1).font = { bold: true } }
+
+  const out = path.resolve(__dirname, '..', 'docs', 'VENDOR-EMAIL-MAP-UPDATED.xlsx')
   await wb.xlsx.writeFile(out)
   console.log('written', out)
 })()

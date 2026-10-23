@@ -37,6 +37,7 @@ const SECTIONS = [{ id: 's1', title: 'AC', order: 1, fields: [
   { id: 'acres', type: 'select', label: 'AC resolution', required: true, order: 3, options: [{ value: 'r1', label: 'COMPRESSOR CHANGED' }] },
 ] }]
 const UNIT = { id: '00000000-0000-0000-0000-0000000000bb', ckdesk_no: '1', brand: 'VOLTAS', tonnage: '1.5', amc_vendor: 'VOLTAS', region: 'R1', state: 'DL', emails: ['oem@oem.test', 'desk@citykartstores.com'], po_emails: ['po@oem.test'] }
+const UNIT2_ID = '00000000-0000-0000-0000-0000000000bc'
 const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0))
 const png = (n: string) => new File([PNG], n, { type: 'image/png' })
 
@@ -57,13 +58,13 @@ async function record(step: string) {
 }
 const mailsTo = (m: { to: string; subject: string }[], name: string) => m.filter((x) => x.to.includes(name))
 
-async function ticket(assignee: string | null, status = 'in_progress'): Promise<string> {
+async function ticket(assignee: string | null, status = 'in_progress', unit: Record<string, unknown> = UNIT): Promise<string> {
   const r = (await db().from('requests').insert({
     request_no: '', title: `${tag} journey`, requester_id: fx.requesterA.id, service_id: fx.teamA.serviceId, team_id: fx.teamA.id, assigned_to: assignee, status,
     form_sections_snapshot: SECTIONS, form_data: {},
   }).select('id').single()).data.id as string
   made.push(r)
-  await db().from('request_master_snapshots').insert({ request_id: r, kind: 'ac', unit_ids: [UNIT.id], snapshot: [UNIT] })
+  await db().from('request_master_snapshots').insert({ request_id: r, kind: 'ac', unit_ids: [unit.id], snapshot: [unit] })
   return r
 }
 const fsr = async (id: string, by: TestUser) => (await db().from('request_attachments').insert({ request_id: id, uploaded_by: by.id, file_name: 'f.png', file_size: 70, mime_type: 'image/png', storage_path: `${id}/f-${Date.now()}-${Math.random()}.png` }).select('id').single()).data.id as string
@@ -167,7 +168,10 @@ describe('who is mailed at each step of the vendor journey', () => {
     actAs(fx.requesterA)
     await updateRequestStatus(t, 'open' as never, 'still not cooling')
     m = await record('8. The store reopens the resolved ticket')
-    expect(mailsTo(m, 'VENDOR').length).toBeGreaterThanOrEqual(1)
+    expect(mailsTo(m, 'VENDOR').map((x) => x.subject)).toEqual([expect.stringMatching(/^REOPENED by the store - please attend again/)])
+    const reopened = table.find((r) => r.step.startsWith('8.') && r.to === 'VENDOR')
+    expect(reopened?.text).toContain('enter the NEW OEM ticket number')
+    expect(reopened?.text).toContain('still not cooling')
   })
 
   it('PO path: quote rejected (ticket goes on) / quote rejected and ticket cancelled', async () => {
@@ -198,6 +202,11 @@ describe('who is mailed at each step of the vendor journey', () => {
     expect(mailsTo(m, 'OEM').length).toBe(1)
     expect(mailsTo(m, 'STORE').length).toBe(1)
     expect(mailsTo(m, 'VENDOR').map((x) => x.subject)).toEqual([expect.stringMatching(/Quote rejected and ticket cancelled/)])
+    const text = (to: string) => table.find((r) => r.step.startsWith('11.') && r.to === to)?.text ?? ''
+    expect(text('OEM (PO address)')).toContain('will not issue a purchase order'); expect(text('OEM (PO address)')).toContain('do not do any further work'); expect(text('OEM (PO address)')).toContain('Job is stopped')
+    expect(text('VENDOR')).toContain('was rejected by'); expect(text('VENDOR')).toContain('do not do any further work')
+    expect(text('STORE')).toContain('cost of the repair was not approved'); expect(text('STORE')).toContain('reopen the request within 48 hours')
+    expect(text('STORE')).not.toMatch(/PO request/)
   })
 
   it('parts path and the smaller events', async () => {
@@ -209,7 +218,9 @@ describe('who is mailed at each step of the vendor journey', () => {
 
     await vendorUpdateParts({ requestId: t, lines: [{ item_name: 'Capacitor', qty: 2 }, { item_name: 'Fan motor', qty: 1 }] })
     m = await record('13. Vendor changes the parts list')
-    expect(m.length).toBe(0)
+    expect(m.map((x) => x.to)).toEqual(['STORE'])
+    expect(m[0].subject).toMatch(/Parts list updated \(version 2\)/)
+    expect(table.find((r) => r.step.startsWith('13.'))?.text).toContain('Fan motor')
 
     await vendorWithdrawRequest({ requestId: t, reason: 'Raised by mistake' })
     m = await record('14. Vendor withdraws the request')
@@ -231,7 +242,60 @@ describe('who is mailed at each step of the vendor journey', () => {
     await updateRequestStatus(t, 'in_progress' as never, 'Citykart arranged the parts, taking it back')
     m = await record('17. A Citykart technician ends the hold himself')
     expect(mailsTo(m, 'STORE').length).toBe(1)
+    expect(mailsTo(m, 'VENDOR').map((x) => x.subject)).toEqual([expect.stringMatching(/Hold ended by Citykart/)])
+    expect(table.find((r) => r.step.startsWith('17.') && r.to === 'VENDOR')?.text).toContain('Citykart arranged the parts')
     expect(vendB.id).toBeTruthy()
+  })
+})
+
+describe('PO approvers named for the AC in the sheet (CK PO Approver Mail To)', () => {
+  it('one mail to every approver of that AC; the first decision wins and the other is told; a revised quote and a withdrawal reach all of them', async () => {
+    const unit = { ...UNIT, id: UNIT2_ID, approver_emails: [fx.agentA.email, fx.agentB.email] }
+    const t = await ticket(vend.id, 'in_progress', unit)
+    actAs(vend)
+    await vendorRequestPo({ requestId: t, lines, quoteAttachmentIds: [await fsr(t, vend)] })
+    let m = await record('19. Vendor sends a quote for an AC with two approvers in the sheet')
+    const toApprovers = m.filter((x) => /PO approval needed/.test(x.subject))
+    expect(toApprovers.length).toBe(1)   // ONE mail
+    expect(toApprovers[0].to).toContain('KRISHAN'); expect(toApprovers[0].to).toContain('OTHER TECHNICIAN')
+    const v1 = (await db().from('vendor_requests').select('id, approver_ids').eq('request_id', t).eq('status', 'pending').single()).data
+    expect(v1.approver_ids).toEqual(expect.arrayContaining([fx.agentA.id, fx.agentB.id]))
+
+    // the SECOND approver asks for a revised price; the new version goes to both again
+    actAs(fx.agentB)
+    expect((await requestPoRevision({ vendorRequestId: v1.id, note: 'Too high' })).error).toBeUndefined()
+    await record('(set-up) revised price asked')
+    actAs(vend)
+    await vendorRevisePo({ requestId: t, lines: [{ item_name: 'Compressor', qty: 1, price_excl_gst: 9000 }], quoteAttachmentIds: [await fsr(t, vend)] })
+    m = await record('20. Revised quote goes to both approvers again')
+    const again = m.filter((x) => /Revised quote \(version 2\)/.test(x.subject))
+    expect(again.length).toBe(1); expect(again[0].to).toContain('KRISHAN'); expect(again[0].to).toContain('OTHER TECHNICIAN')
+    const v2 = (await db().from('vendor_requests').select('id').eq('request_id', t).eq('status', 'pending').single()).data.id as string
+
+    // the first one to decide wins
+    actAs(fx.agentA)
+    const f = new FormData(); f.set('vendor_request_id', v2); f.set('po_number', 'PO-9'); f.set('po_date', '2026-10-02'); f.set('po_document', png('PO-9.png'))
+    expect((await approveVendorPo(f)).error).toBeUndefined()
+    await record('(set-up) approved by the first approver')
+    actAs(fx.agentB)
+    const late = await rejectVendorPo({ vendorRequestId: v2, reason: 'Too late' })
+    expect(late.error).toMatch(/already been decided/)
+    // an unrelated technician may not decide at all
+    actAs(fx.manager)
+    expect((await requestPoRevision({ vendorRequestId: v2, note: 'x' })).error).toBeTruthy()
+  })
+
+  it('an address in the sheet that is not an active staff login is skipped: the default approver is used; a withdrawal then reaches him', async () => {
+    const unit = { ...UNIT, id: UNIT2_ID, approver_emails: ['nobody.here@citykartstores.com'] }
+    const t = await ticket(vend.id, 'in_progress', unit)
+    actAs(vend)
+    await vendorRequestPo({ requestId: t, lines, quoteAttachmentIds: [await fsr(t, vend)] })
+    let m = await record('21. Quote for an AC whose sheet approver is not a CK Desk login')
+    expect(mailsTo(m, 'KRISHAN').map((x) => x.subject)).toEqual([expect.stringMatching(/PO approval needed/)])
+    expect(mailsTo(m, 'OTHER TECHNICIAN').length).toBe(0)
+    await vendorWithdrawRequest({ requestId: t, reason: 'Not needed' })
+    m = await record('22. Vendor withdraws it')
+    expect(mailsTo(m, 'KRISHAN').map((x) => x.subject)).toEqual([expect.stringMatching(/Quote withdrawn by the vendor/)])
   })
 })
 
