@@ -10,7 +10,7 @@ import {
   createNextVersion, createVendorRequest, getOpenRequest, getRequestItems, linkFilesToComment, ownFiles, settleRequest, OPEN_STATUSES,
 } from '@/lib/vendor/requests'
 import { loadPoContext, resolvePoApprover, userEmail } from '@/lib/vendor/po'
-import { buildPoApprovalRequestMail } from '@/lib/vendor/po-mail'
+import { buildPoApprovalRequestMail, buildQuoteWithdrawnMail } from '@/lib/vendor/po-mail'
 import { postPublicComment } from '@/lib/vendor/ticket-fields'
 
 // What a vendor technician asks for while working a ticket: parts (a list, no PO) or a PO (a QUOTE: items, quantity, price without GST, and the quote file).
@@ -128,7 +128,7 @@ export async function vendorRequestPo(input: { requestId: string; lines: Request
     orgId: profile.org_id as string, requestId: input.requestId, kind: 'po', createdBy: profile.id, lines: checked.lines, quoteAttachmentIds: quoteIds, extra: { approver_id: approver.id },
   })
   if (made.error || !made.id) return { error: made.error ?? 'Could not save the request.' }
-  const text = `PO required from Citykart (quote version 1). ${profile.full_name} needs a purchase order for:\n${linesAsText(checked.lines)}\nTotal (without GST): ${formatMoney(checked.total ?? 0)}\nThe quote is attached.`
+  const text = `PO required from Citykart (quote version 1). ${profile.full_name} needs a purchase order for:\n${linesAsText(checked.lines)}\nTotal (without GST): ${formatMoney(checked.total ?? 0)}\nThe quote file is attached to this message.`
   const res = await applyStatusChange({ supabase, profile }, input.requestId, 'hold_purchase_ho', text, { vendorFlow: 'hold' })
   if (res.error) {
     await settleRequest(made.id, 'cancelled', profile.id, 'The ticket could not be put on hold.')
@@ -163,7 +163,7 @@ export async function vendorRevisePo(input: { requestId: string; lines: RequestL
     orgId: profile.org_id as string, requestId: input.requestId, kind: 'po', createdBy: profile.id, lines: checked.lines, quoteAttachmentIds: quoteIds, extra: { approver_id: approver.id },
   })
   if (made.error || !made.id) return { error: made.error ?? 'Could not save the quote.' }
-  const text = `Revised quote (version ${made.version}) sent by ${profile.full_name}. Total was ${formatMoney(before)}, now ${formatMoney(checked.total ?? 0)}.\n${linesAsText(checked.lines)}\nThe revised quote is attached.`
+  const text = `Revised quote (version ${made.version}) sent by ${profile.full_name}. Total was ${formatMoney(before)}, now ${formatMoney(checked.total ?? 0)}.\n${linesAsText(checked.lines)}\nThe revised quote file is attached to this message.`
   const commentId = await postPublicComment(input.requestId, profile.id, text)
   await linkFilesToComment(input.requestId, commentId, quoteIds)
   const named = approver.full_name ? approver : (await resolvePoApprover(profile.org_id as string)) ?? { id: approver.id, full_name: 'Approver' }
@@ -187,6 +187,23 @@ export async function vendorWithdrawRequest(input: { requestId: string; reason: 
   const res = await applyStatusChange({ supabase, profile }, input.requestId, 'in_progress', `${open.kind === 'po' ? 'PO request' : 'Parts request'} withdrawn by ${profile.full_name}. Reason: ${reason}`, { vendorFlow: 'resume' })
   if (res.error) return res
   await settleRequest(open.id, 'withdrawn', profile.id, reason, undefined, OPEN_STATUSES)
+
+  // the approver was waiting on this quote: he is told it is gone (mail and bell)
+  if (open.kind === 'po' && open.approver_id) {
+    try {
+      const po = await loadPoContext(open.id)
+      const to = await userEmail(open.approver_id)
+      const approver = await resolvePoApprover(profile.org_id as string)
+      const approverName = approver && approver.id === open.approver_id ? approver.full_name : 'Approver'
+      if (po && to) {
+        const mail = buildQuoteWithdrawnMail({ ...po.mailBase, link: absoluteAppUrl(`/vendor-po/${open.id}`), reason, approverName, vendorPersonName: profile.full_name, version: open.version })
+        await sendEmail({ to, subject: mail.subject, html: mail.html, text: mail.text, threadRequestNo: ticket.request_no })
+      }
+      await notify({ recipientId: open.approver_id, actorId: profile.id, type: 'status_changed', title: `Quote withdrawn: ${ticket.request_no}`, body: reason, requestId: input.requestId, link: `/vendor-po/${open.id}`, skipEmail: true })
+    } catch (e) {
+      console.error('[vendorWithdrawRequest] approver mail failed', e)
+    }
+  }
   refresh(input.requestId)
   return {}
 }

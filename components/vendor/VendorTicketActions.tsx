@@ -219,6 +219,13 @@ export function VendorTicketActions({ requestId, status, canAct, resolutionChoic
           Waiting for Citykart to decide on your quote (version {openRequest!.version}). You will be told as soon as it is decided.
         </p>
       )}
+      {partsHold && openRequest!.note && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100" role="status">
+          <div className="font-medium">{openRequest!.asker ?? 'Citykart'}: {openRequest!.note}</div>
+          <div className="mt-1 text-xs opacity-80">The ticket is not cancelled. Arrange the parts yourself (no PO) and press “Parts received” when they arrive.</div>
+        </div>
+      )}
+
       {reviseAsked && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-100" role="status">
           <div className="font-medium">{openRequest!.asker ?? 'Citykart'} asked for a revised price</div>

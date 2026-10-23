@@ -62,7 +62,7 @@ for (const code of ['ALC', 'MAR']) {
 const cat = must(await admin.from('service_categories').select('id').eq('org_id', ORG).eq('name', 'ADMIN AC ISSUE').single(), 'category').id
 async function rule(name, vendorText, ids) {
   const row = {
-    org_id: ORG, name, trigger: ['created'], is_active: true, conditions_logic: 'AND', execution_order: 900,
+    org_id: ORG, name, trigger: ['created'], is_active: true, conditions_logic: 'AND', execution_order: -20,   // lower than the old "ADMIN AC TICKET RULE_KRISHAN" (0): the vendor rule must run FIRST, so Krishan is not mailed "assigned to you" for tickets that belong to a vendor
     conditions: [
       { field: 'category_id', operator: 'equals', value: cat },
       { field: 'ac_amc_vendor', operator: 'contains', value: vendorText, logic: 'AND' },

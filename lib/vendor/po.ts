@@ -143,3 +143,18 @@ export async function sendPoMailToOem(ctx: PoContext, mail: { subject: string; h
 export async function internalNote(requestId: string, authorId: string, body: string): Promise<void> {
   await db().from('request_comments').insert({ request_id: requestId, author_id: authorId, body, is_internal: true })
 }
+
+/** A file stored on the ticket, as an e-mail attachment (base64). Null when it cannot be read. Never throws. */
+export async function attachmentForMail(attachmentId: string | null | undefined): Promise<{ filename: string; content: string } | null> {
+  if (!attachmentId) return null
+  try {
+    const d = db()
+    const { data: att } = await d.from('request_attachments').select('file_name, storage_path').eq('id', attachmentId).maybeSingle()
+    if (!att) return null
+    const file = await d.storage.from('request-attachments').download(att.storage_path)
+    return file?.data ? { filename: att.file_name as string, content: Buffer.from(await file.data.arrayBuffer()).toString('base64') } : null
+  } catch (e) {
+    console.error('[attachmentForMail] failed', e)
+    return null
+  }
+}

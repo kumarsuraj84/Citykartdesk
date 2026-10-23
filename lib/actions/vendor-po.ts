@@ -9,9 +9,9 @@ import { notify } from '@/lib/notifications'
 import { sendEmail } from '@/lib/email/send'
 import { absoluteAppUrl } from '@/lib/email/notify-email'
 import { saveTicketFile } from '@/lib/attachments/save'
-import { linkFilesToComment, markRevisionRequested, OPEN_STATUSES, settleRequest, type VendorRequestStatus } from '@/lib/vendor/requests'
-import { internalNote, loadPoContext, sendPoMailToOem, userEmail, type PoContext } from '@/lib/vendor/po'
-import { buildPoApprovedMail, buildPoRejectedMail, buildPoRevisionAskedMail } from '@/lib/vendor/po-mail'
+import { createVendorRequest, linkFilesToComment, markRevisionRequested, OPEN_STATUSES, settleRequest, unsettleRequest, type VendorRequestStatus } from '@/lib/vendor/requests'
+import { attachmentForMail, internalNote, loadPoContext, sendPoMailToOem, userEmail, type PoContext } from '@/lib/vendor/po'
+import { buildPoApprovedMail, buildPoRejectedMail, buildPoRevisionAskedMail, buildQuoteNotApprovedMail, buildVendorPoApprovedMail, buildVendorTicketCancelledMail } from '@/lib/vendor/po-mail'
 import { checkPoApproval, checkPoRejection, checkPoRevision } from '@/lib/vendor/po-rules'
 import { postPublicComment } from '@/lib/vendor/ticket-fields'
 import { formatMoney, linesAsText, totalOf } from '@/lib/vendor/lines'
@@ -22,7 +22,8 @@ import type { ProfileWithTeams } from '@/types'
 // vendor for a revised price (the vendor sends a new quote version), or rejects.
 //   Approve  - needs the PO number, the PO date and the PO document; the PO exists from this moment. The ticket goes back to In Progress.
 //   Revise   - needs a note. The ticket stays on hold; the request waits for the vendor ("Revise price required" on his dashboard).
-//   Reject   - needs a reason; cancels the ticket exactly like a rejected approval does (the store may reopen it within 48 hours).
+//   Reject   - needs a reason. Two kinds: the usual one rejects only the QUOTE (the ticket stays on hold and the vendor arranges the parts himself, no PO: it moves to his
+//              "Part required" box with the quote's items as his parts list); the other also CANCELS the ticket, exactly like a rejected approval does (48 hours to reopen).
 
 type Result = { error?: string }
 
@@ -67,7 +68,7 @@ export async function approveVendorPo(formData: FormData): Promise<Result> {
   if (saved.error || !saved.attachmentId) return { error: saved.error ?? 'The PO document could not be saved.' }
 
   const total = totalOf(po.lines)
-  const comment = `PO approved by ${profile.full_name} on quote version ${po.vendorRequest.version}. PO number: ${check.poNumber}. PO date: ${check.poDate}.\n${linesAsText(po.lines)}\nTotal (without GST): ${formatMoney(total)}\nThe PO document is attached.`
+  const comment = `PO approved by ${profile.full_name} on quote version ${po.vendorRequest.version}. PO number: ${check.poNumber}. PO date: ${check.poDate}.\n${linesAsText(po.lines)}\nTotal (without GST): ${formatMoney(total)}\nThe PO document is attached to this message.`
   const supabase = await createClient()
   const res = await applyStatusChange({ supabase, profile }, po.request.id, 'in_progress', comment, { poDecision: 'approve' })
   if (res.error) {
@@ -83,9 +84,16 @@ export async function approveVendorPo(formData: FormData): Promise<Result> {
   if (sent.error) await internalNote(po.request.id, profile.id, `${sent.error} Please send the PO ${check.poNumber} to the OEM yourself.`)
 
   if (po.vendorPerson) {
+    // the vendor gets his own mail (with the PO document), not the generic "status changed" one
+    const vTo = await userEmail(po.vendorPerson.id)
+    if (vTo) {
+      const doc = await attachmentForMail(saved.attachmentId)
+      const vm = buildVendorPoApprovedMail({ ...po.mailBase, link: absoluteAppUrl(`/vendor/tickets/${po.request.id}`), poNumber: check.poNumber, poDate: check.poDate, approverName: profile.full_name, vendorPersonName: po.vendorPerson.full_name, hasDocument: !!doc })
+      await sendEmail({ to: vTo, subject: vm.subject, html: vm.html, text: vm.text, attachments: doc ? [doc] : undefined, threadRequestNo: po.request.request_no }).catch(() => ({}))
+    }
     notify({
       recipientId: po.vendorPerson.id, actorId: profile.id, type: 'status_changed', title: `PO approved: ${po.request.request_no}`,
-      body: `PO ${check.poNumber} (${check.poDate}) is approved. The ticket is back in progress.`, requestId: po.request.id, link: `/vendor/tickets/${po.request.id}`,
+      body: `PO ${check.poNumber} (${check.poDate}) is approved. The ticket is back in progress.`, requestId: po.request.id, link: `/vendor/tickets/${po.request.id}`, skipEmail: true,
     }).catch(() => {})
   }
   refresh(po.request.id, po.vendorRequest.id)
@@ -120,13 +128,46 @@ export async function requestPoRevision(input: { vendorRequestId: string; note: 
   return {}
 }
 
-/** Reject: a reason is compulsory. The ticket is cancelled (as a rejected approval does); the OEM gets one short note; the vendor is told. Possible while the quote waits for either side. */
-export async function rejectVendorPo(input: { vendorRequestId: string; reason: string }): Promise<Result> {
+/**
+ * Reject: a reason is compulsory. Possible while the quote waits for either side.
+ *  - default: only the QUOTE is rejected. The ticket is NOT cancelled and stays on hold (the clock stays paused); the quote's items become the vendor's parts list (no prices)
+ *    and the ticket moves to his "Part required" box. He is told by mail and bell message. The OEM is not mailed (it is discussed offline and the job goes on).
+ *  - cancelTicket: the ticket is cancelled (as a rejected approval does, 48 hours to reopen); the OEM gets one short note; the vendor is told.
+ */
+export async function rejectVendorPo(input: { vendorRequestId: string; reason: string; cancelTicket?: boolean }): Promise<Result> {
   const a = await authorise(input.vendorRequestId, ['pending', 'revision_requested'])
   if ('error' in a) return a
   const { profile, po } = a
   const check = checkPoRejection(input.reason)
   if (!check.ok) return { error: check.error }
+
+  if (!input.cancelTicket) {
+    const before = po.vendorRequest.status
+    if (!(await settleRequest(po.vendorRequest.id, 'rejected', profile.id, check.reason, undefined, OPEN_STATUSES))) return { error: 'This quote was just changed by someone else. Please refresh.' }
+    const parts = await createVendorRequest({
+      orgId: po.request.org_id, requestId: po.request.id, kind: 'parts', createdBy: profile.id, lines: po.lines.map((l) => ({ item_name: l.item_name, qty: l.qty, price_excl_gst: null })),
+      extra: { revision_note: `Quote not approved: ${check.reason}`, revision_requested_by: profile.id, revision_requested_at: new Date().toISOString() },
+    })
+    if (parts.error || !parts.id) {
+      await unsettleRequest(po.vendorRequest.id, before, true)
+      return { error: parts.error ?? 'Could not move the ticket to Part required.' }
+    }
+    await postPublicComment(po.request.id, profile.id, `Quote (version ${po.vendorRequest.version}) not approved by ${profile.full_name}. Reason: ${check.reason}\nThe ticket is not cancelled. The vendor will arrange the parts himself (no PO). Parts needed:\n${linesAsText(po.lines.map((l) => ({ ...l, price_excl_gst: null })))}`)
+    if (po.vendorPerson) {
+      const link = absoluteAppUrl(`/vendor/tickets/${po.request.id}`)
+      const to = await userEmail(po.vendorPerson.id)
+      if (to) {
+        const mail = buildQuoteNotApprovedMail({ ...po.mailBase, link, reason: check.reason, approverName: profile.full_name, vendorPersonName: po.vendorPerson.full_name })
+        await sendEmail({ to, subject: mail.subject, html: mail.html, text: mail.text, threadRequestNo: po.request.request_no }).catch(() => ({}))
+      }
+      notify({
+        recipientId: po.vendorPerson.id, actorId: profile.id, type: 'status_changed', title: `Quote not approved - arrange the parts: ${po.request.request_no}`,
+        body: check.reason.length > 120 ? check.reason.slice(0, 120) + '…' : check.reason, requestId: po.request.id, link: `/vendor/tickets/${po.request.id}`, skipEmail: true,
+      }).catch(() => {})
+    }
+    refresh(po.request.id, po.vendorRequest.id)
+    return {}
+  }
 
   const supabase = await createClient()
   const res = await applyStatusChange({ supabase, profile }, po.request.id, 'cancelled', `PO request rejected by ${profile.full_name}. Reason: ${check.reason}`, { poDecision: 'reject' })
@@ -137,9 +178,14 @@ export async function rejectVendorPo(input: { vendorRequestId: string; reason: s
   if (sent.error) await internalNote(po.request.id, profile.id, `${sent.error} Please tell the OEM that the PO request was rejected.`)
 
   if (po.vendorPerson) {
+    const vTo = await userEmail(po.vendorPerson.id)
+    if (vTo) {
+      const vm = buildVendorTicketCancelledMail({ ...po.mailBase, link: absoluteAppUrl(`/vendor/tickets/${po.request.id}`), reason: check.reason, approverName: profile.full_name, vendorPersonName: po.vendorPerson.full_name })
+      await sendEmail({ to: vTo, subject: vm.subject, html: vm.html, text: vm.text, threadRequestNo: po.request.request_no }).catch(() => ({}))
+    }
     notify({
       recipientId: po.vendorPerson.id, actorId: profile.id, type: 'status_changed', title: `PO rejected: ${po.request.request_no}`,
-      body: `The PO request was rejected and the ticket is cancelled. Reason: ${check.reason}`, requestId: po.request.id, link: `/vendor/tickets/${po.request.id}`,
+      body: `The PO request was rejected and the ticket is cancelled. Reason: ${check.reason}`, requestId: po.request.id, link: `/vendor/tickets/${po.request.id}`, skipEmail: true,
     }).catch(() => {})
   }
   refresh(po.request.id, po.vendorRequest.id)

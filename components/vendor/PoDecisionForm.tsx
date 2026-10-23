@@ -51,11 +51,11 @@ export function PoDecisionForm({ vendorRequestId, today, canApprove = true }: { 
     router.refresh()
   })
 
-  const reject = () => startTransition(async () => {
+  const reject = (cancelTicket: boolean) => startTransition(async () => {
     setError(null)
-    const res = await rejectVendorPo({ vendorRequestId, reason })
+    const res = await rejectVendorPo({ vendorRequestId, reason, cancelTicket })
     if (res.error) { setError(res.error); return }
-    toast.success('PO rejected. The ticket is cancelled.')
+    toast.success(cancelTicket ? 'Rejected. The ticket is cancelled.' : 'Quote rejected. The vendor will arrange the parts; the ticket goes on.')
     router.refresh()
   })
 
@@ -109,12 +109,19 @@ export function PoDecisionForm({ vendorRequestId, today, canApprove = true }: { 
           <label className="block text-xs font-medium">Reason for rejecting *
             <textarea className={`${inputCls} mt-1`} rows={3} value={reason} maxLength={1000} onChange={(e) => setReason(e.target.value)} />
           </label>
-          <p className="text-xs text-muted-foreground">The ticket will be cancelled (the store can reopen it within 48 hours) and the OEM gets a short note.</p>
           {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
-          <button type="button" className="inline-flex items-center gap-1.5 rounded-lg bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
-            disabled={pending || reason.trim().length < 5} onClick={reject}>
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />} Reject the PO
-          </button>
+          <div className="space-y-2">
+            <button type="button" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
+              disabled={pending || reason.trim().length < 5} onClick={() => reject(false)}>
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />} Reject the quote - vendor will arrange the parts
+            </button>
+            <p className="text-xs text-muted-foreground">Only the quote is rejected. The ticket is <strong>not</strong> cancelled: it moves to the “Part required” box of the vendor, with his items as the parts list, and he arranges the parts himself (no PO).</p>
+            <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-destructive px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 disabled:opacity-60"
+              disabled={pending || reason.trim().length < 5} onClick={() => reject(true)}>
+              Reject and cancel the ticket
+            </button>
+            <p className="text-xs text-muted-foreground">The whole ticket is cancelled (the store can reopen it within 48 hours) and the OEM gets a short note.</p>
+          </div>
         </div>
       )}
     </div>

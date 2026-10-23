@@ -161,3 +161,14 @@ export async function ownFiles(requestId: string, uploadedBy: string, ids: strin
   const { data } = await db().from('request_attachments').select('id').eq('request_id', requestId).eq('uploaded_by', uploadedBy).is('deleted_at', null).in('id', ids)
   return ((data ?? []) as { id: string }[]).map((r) => r.id)
 }
+
+/** Undo a settle (used when the follow-up step failed): a request that was just rejected goes back to the state it was in. Never throws. */
+export async function unsettleRequest(vendorRequestId: string, backTo: VendorRequestStatus, wasRejected: boolean): Promise<void> {
+  try {
+    await db().from('vendor_requests')
+      .update({ status: backTo, decided_by: null, decided_at: null, decision_reason: null })
+      .eq('id', vendorRequestId).eq('status', wasRejected ? 'rejected' : backTo)
+  } catch (e) {
+    console.error('[unsettleRequest] failed', e)
+  }
+}

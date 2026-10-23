@@ -58,3 +58,36 @@ export function buildPoRevisionAskedMail(m: PoMailBase & { link: string; note: s
   const text = `Dear ${m.vendorPersonName},\n\n${m.approverName} has asked for a revised price for the ticket below.\n\n${details(m).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\nWhat was asked: ${m.note}\n\nOpen the ticket, change the prices and attach your revised quote: ${m.link}`
   return { subject, html, text }
 }
+
+/** To the vendor: the quote was not approved, but the ticket goes on - he arranges the parts himself (no PO) and reports "Parts received". */
+export function buildQuoteNotApprovedMail(m: PoMailBase & { link: string; reason: string; approverName: string; vendorPersonName: string }): Mail {
+  const subject = `Quote not approved - arrange the parts yourself - ${m.requestNo} - ${m.storeLabel}`
+  const html = `<p>Dear ${escapeHtml(m.vendorPersonName)},</p><p>${escapeHtml(m.approverName)} has <strong>not approved your quote</strong> for the ticket below. <strong>The ticket is not cancelled.</strong> Please arrange the parts yourself (no PO from Citykart) and press <em>Parts received</em> when they arrive.</p>${detailsHtml(m)}<p><strong>Reason:</strong> ${escapeHtml(m.reason)}</p><p><strong>Parts list kept on the ticket:</strong></p>${itemsTable(m.lines.map((l) => ({ ...l, price_excl_gst: null })))}<p><a href="${escapeHtml(m.link)}" style="display:inline-block;background:#1e4a8a;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;">Open the ticket</a></p>`
+  const text = `Dear ${m.vendorPersonName},\n\n${m.approverName} has not approved your quote for the ticket below. The ticket is NOT cancelled. Please arrange the parts yourself (no PO from Citykart) and press "Parts received" when they arrive.\n\n${details(m).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\nReason: ${m.reason}\n\nParts list kept on the ticket:\n${itemsText(m.lines.map((l) => ({ ...l, price_excl_gst: null })))}\n\nOpen the ticket: ${m.link}`
+  return { subject, html, text }
+}
+
+/** To the vendor: his quote was approved - the PO number, date and items; the ticket is back in progress (the PO document is attached). */
+export function buildVendorPoApprovedMail(m: PoMailBase & { link: string; poNumber: string; poDate: string; approverName: string; vendorPersonName: string; hasDocument: boolean }): Mail {
+  const total = totalOf(m.lines.map((l) => ({ qty: l.qty, price_excl_gst: l.price_excl_gst })))
+  const subject = `PO ${m.poNumber} approved - ${m.requestNo} - ${m.storeLabel}`
+  const html = `<p>Dear ${escapeHtml(m.vendorPersonName)},</p><p>${escapeHtml(m.approverName)} has <strong>approved your quote</strong>. The ticket is back In Progress; you can continue and resolve it.</p>${detailsHtml(m)}<p><strong>PO number:</strong> ${escapeHtml(m.poNumber)}<br><strong>PO date:</strong> ${escapeHtml(m.poDate)}</p>${itemsTable(m.lines)}<p><strong>Total (without GST):</strong> ${formatMoney(total)}</p>${m.hasDocument ? '<p>The PO document is attached.</p>' : ''}<p><a href="${escapeHtml(m.link)}" style="display:inline-block;background:#1e4a8a;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;">Open the ticket</a></p>`
+  const text = `Dear ${m.vendorPersonName},\n\n${m.approverName} has approved your quote. The ticket is back In Progress; you can continue and resolve it.\n\n${details(m).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\nPO number: ${m.poNumber}\nPO date: ${m.poDate}\n\n${itemsText(m.lines)}\n\nTotal (without GST): ${formatMoney(total)}\n${m.hasDocument ? '\nThe PO document is attached.\n' : ''}\nOpen the ticket: ${m.link}`
+  return { subject, html, text }
+}
+
+/** To the vendor: the quote was rejected AND the ticket cancelled. */
+export function buildVendorTicketCancelledMail(m: PoMailBase & { link: string; reason: string; approverName: string; vendorPersonName: string }): Mail {
+  const subject = `Quote rejected and ticket cancelled - ${m.requestNo} - ${m.storeLabel}`
+  const html = `<p>Dear ${escapeHtml(m.vendorPersonName)},</p><p>${escapeHtml(m.approverName)} has <strong>rejected your quote and cancelled the ticket</strong>.</p>${detailsHtml(m)}<p><strong>Reason:</strong> ${escapeHtml(m.reason)}</p><p><a href="${escapeHtml(m.link)}" style="display:inline-block;background:#1e4a8a;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;">Open the ticket</a></p>`
+  const text = `Dear ${m.vendorPersonName},\n\n${m.approverName} has rejected your quote and cancelled the ticket.\n\n${details(m).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\nReason: ${m.reason}\n\nOpen the ticket: ${m.link}`
+  return { subject, html, text }
+}
+
+/** To the approver: the vendor withdrew the quote he was asked to decide. */
+export function buildQuoteWithdrawnMail(m: PoMailBase & { link: string; reason: string; approverName: string; vendorPersonName: string; version: number }): Mail {
+  const subject = `Quote withdrawn by the vendor - ${m.requestNo} - ${m.vendorName}`
+  const html = `<p>Dear ${escapeHtml(m.approverName)},</p><p>${escapeHtml(m.vendorPersonName)} (${escapeHtml(m.vendorName)}) has <strong>withdrawn quote version ${m.version}</strong>. Nothing more is needed from you on this ticket for now.</p>${detailsHtml(m)}<p><strong>Reason:</strong> ${escapeHtml(m.reason)}</p><p><a href="${escapeHtml(m.link)}">Open the ticket</a></p>`
+  const text = `Dear ${m.approverName},\n\n${m.vendorPersonName} (${m.vendorName}) has withdrawn quote version ${m.version}. Nothing more is needed from you on this ticket for now.\n\n${details(m).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\nReason: ${m.reason}\n\nOpen the ticket: ${m.link}`
+  return { subject, html, text }
+}

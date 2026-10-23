@@ -288,7 +288,7 @@ describe('PO required from Citykart', () => {
     actAs(fx.agentA)
     expect((await rejectVendorPo({ vendorRequestId: vr, reason: 'no' })).error).toMatch(/reason/i)
     const before = mails().length
-    expect((await rejectVendorPo({ vendorRequestId: vr, reason: 'Price is too high, please send a lower quote' })).error).toBeUndefined()
+    expect((await rejectVendorPo({ vendorRequestId: vr, reason: 'Price is too high, please send a lower quote', cancelTicket: true })).error).toBeUndefined()
     const r = await row(t)
     expect(r.status).toBe('cancelled')
     expect(r.cancellation_reason).toBe('approval_rejected')
@@ -423,7 +423,7 @@ describe('quote versions, revised price, parts list changes, and files under the
     const v1 = await open(t)
     actAs(fx.agentA)
     await requestPoRevision({ vendorRequestId: v1.id, note: 'lower the price please' })
-    expect((await rejectVendorPo({ vendorRequestId: v1.id, reason: 'We will buy from somebody else' })).error).toBeUndefined()
+    expect((await rejectVendorPo({ vendorRequestId: v1.id, reason: 'We will buy from somebody else', cancelTicket: true })).error).toBeUndefined()
     expect((await row(t)).status).toBe('cancelled')
     expect((await versions(t))[0].status).toBe('rejected')
   })
@@ -447,6 +447,44 @@ describe('quote versions, revised price, parts list changes, and files under the
     // somebody else's ticket / a ticket not on hold cannot be changed
     actAs(v1b)
     expect((await vendorUpdateParts({ requestId: t, lines: [{ item_name: 'x1', qty: 1 }] })).error).toBeTruthy()
+  })
+
+  it('rejecting only the quote: the ticket is NOT cancelled, it moves to "Part required" with the quote items (no prices); the vendor is told; the OEM is not mailed; Parts received brings it back', async () => {
+    const t = await ticket(v1a.id, 'in_progress')
+    actAs(v1a)
+    await vendorRequestPo({ requestId: t, lines, quoteAttachmentIds: [await fsr(t, v1a)] })
+    const v1 = await open(t)
+    actAs(v1a)
+    expect((await rejectVendorPo({ vendorRequestId: v1.id, reason: 'not our quote anyway' })).error).toBeTruthy()           // the vendor cannot decide
+    actAs(fx.agentA)
+    expect((await rejectVendorPo({ vendorRequestId: v1.id, reason: 'no' })).error).toMatch(/reason/i)                      // a reason is compulsory
+    const before = mails().length
+    expect((await rejectVendorPo({ vendorRequestId: v1.id, reason: 'Quote is irrelevant, discussed with the vendor' })).error).toBeUndefined()
+    const r = await row(t)
+    expect(r.status).toBe('hold_purchase_ho')                                                                                 // still on hold, NOT cancelled
+    expect(r.cancellation_reason).toBeNull()
+    expect(r.waiting_since).not.toBeNull()                                                                                    // the clock stays paused
+    expect((await versions(t)).map((v) => v.status).sort()).toEqual(['pending', 'rejected'])   // the rejected quote stays in the history; the parts list is open
+    const parts = await open(t)
+    expect(parts.kind).toBe('parts')                                                                                          // the vendor's "Part required" box
+    expect((await holdKindsFor([t])).get(t)).toBe('parts')
+    expect(parts.revision_note).toMatch(/Quote not approved: Quote is irrelevant/)
+    const items = ((await db().from('vendor_request_items').select('item_name, qty, price_excl_gst').eq('vendor_request_id', parts.id).order('line_no')).data ?? []) as { item_name: string; price_excl_gst: string | null }[]
+    expect(items.map((i) => i.item_name)).toEqual(['Compressor', 'Capacitor'])
+    expect(items.every((i) => i.price_excl_gst === null)).toBe(true)                                                          // the parts list has no prices
+    expect((await comments(t)).some((c) => /not approved by .* Quote is irrelevant/.test(c.body) && /not cancelled/.test(c.body) && !c.is_internal)).toBe(true)
+    const sent = mails().slice(before)
+    expect(sent.filter((m) => /Quote not approved - arrange the parts yourself/.test(m.subject)).length).toBe(1)             // ONE mail, to the vendor
+    expect(sent.some((m) => /rejected/i.test(m.subject) && String(m.to).includes('oem'))).toBe(false)                         // nothing to the OEM
+    // a second decision on the rejected quote does nothing
+    expect((await rejectVendorPo({ vendorRequestId: v1.id, reason: 'again, a second time' })).error).toBeTruthy()
+    // the vendor changes the list, then reports the parts received, then resolves
+    actAs(v1a)
+    expect((await vendorUpdateParts({ requestId: t, lines: [{ item_name: 'Compressor', qty: 1 }, { item_name: 'Capacitor', qty: 3 }] })).error).toBeUndefined()
+    expect((await vendorPartsReceived(t, 'Parts arranged by us, engineer on site')).error).toBeUndefined()
+    expect((await row(t)).status).toBe('in_progress')
+    const f = await fsr(t, v1a)
+    expect((await vendorResolve({ requestId: t, choice: 'r1', remarks: '', attachmentIds: [f] })).error).toBeUndefined()
   })
 
   it('a quote can be withdrawn too; the FSR is tied to the resolution message', async () => {
