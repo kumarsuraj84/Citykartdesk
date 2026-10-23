@@ -44,3 +44,9 @@ $remindAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-No
 $remindTrigger = New-ScheduledTaskTrigger -Daily -At '10:00'
 Register-ScheduledTask -TaskName 'CitykartDesk-Cron-ApprovalReminders' -Action $remindAction -Trigger $remindTrigger -Principal $principal -Settings $settings -Force | Out-Null
 Write-Output 'Installed CitykartDesk-Cron-ApprovalReminders (every day at 10:00)'
+
+# the daily outside temperature of every city with an AC (for the AC Calendar), every day at 08:00
+$weatherAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$runner`" -Job weather-daily"
+$weatherTrigger = New-ScheduledTaskTrigger -Daily -At '08:00'
+Register-ScheduledTask -TaskName 'CitykartDesk-Cron-WeatherDaily' -Action $weatherAction -Trigger $weatherTrigger -Principal $principal -Settings $settings -Force | Out-Null
+Write-Output 'Installed CitykartDesk-Cron-WeatherDaily (every day at 08:00)'

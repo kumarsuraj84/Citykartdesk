@@ -19,6 +19,7 @@ import { KpiScorecard } from './KpiScorecard'
 import { MatricesSection } from './MatricesSection'
 import { PeopleApprovals } from './PeopleApprovals'
 import { StoresSection } from './StoresSection'
+import { AcCalendarSection } from './AcCalendarSection'
 import type { DashData, DrillContext, DrillDims, OpenDrill, ViewMode } from './types'
 import { VelocitySection } from './VelocitySection'
 
@@ -151,6 +152,7 @@ export function ExecutiveDashboard({ level, me, now, tickets, approvals, truncat
       {show('people') && <PeopleApprovals d={d} onOpen={open} />}
       {show('matrices') && <MatricesSection d={d} onOpen={open} />}
       {show('stores') && level !== 'requester' && <StoresSection d={d} onOpen={open} />}
+      {show('calendar') && <AcCalendarSection />}
       {show('tickets') && <ExplorerSection d={d} metric={metric} onOpen={open} onReset={reset} />}
 
       {drill && (

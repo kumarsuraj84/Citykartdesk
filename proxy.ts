@@ -78,6 +78,7 @@ export async function proxy(request: NextRequest) {
     '/api/system-log/archive',
     '/api/approvals/reminders',   // the daily approval reminder (cron runner, shared secret)
     '/api/masters/sync',          // copies the AC / Genset / CVM Google Sheets into the database (cron runner, shared secret)
+    '/api/weather/daily',         // saves the day's highest and lowest temperature of every city with an AC, for the AC Calendar (cron runner, shared secret)
     '/api/csp-report',            // browsers post policy-violation reports here with no session
   ])
   if (PUBLIC_API_ROUTES.has(pathname)) return passThrough(request)

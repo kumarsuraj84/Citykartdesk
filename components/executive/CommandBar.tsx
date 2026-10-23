@@ -18,6 +18,7 @@ const VIEW_TABS: { value: ViewMode; label: string }[] = [
   { value: 'people', label: 'Workload & Approvals' },
   { value: 'matrices', label: 'Group & OEM Matrix' },
   { value: 'stores', label: 'Stores & Regions' },
+  { value: 'calendar', label: 'AC Calendar' },
   { value: 'tickets', label: 'Heatmap & Tickets' },
 ]
 /** The filters in the bar, in order. The ones that do not apply to the tickets in view (no OEM tickets, no store details) are left out. */
