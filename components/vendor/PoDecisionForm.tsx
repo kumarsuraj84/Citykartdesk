@@ -3,8 +3,8 @@
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { CheckCircle2, Loader2, Paperclip, XCircle } from 'lucide-react'
-import { approveVendorPo, rejectVendorPo } from '@/lib/actions/vendor-po'
+import { CheckCircle2, Loader2, Paperclip, RefreshCw, XCircle } from 'lucide-react'
+import { approveVendorPo, rejectVendorPo, requestPoRevision } from '@/lib/actions/vendor-po'
 import { validateAttachment } from '@/lib/attachments/validate'
 
 // The PO approver's form: approve (PO number, PO date, PO document - all compulsory) or reject (a reason). The server repeats every check.
@@ -12,7 +12,7 @@ import { validateAttachment } from '@/lib/attachments/validate'
 const inputCls = 'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20'
 const ACCEPT = '.png,.jpg,.jpeg,.pdf,.doc,.docx,.xls,.xlsx'
 
-export function PoDecisionForm({ vendorRequestId, today }: { vendorRequestId: string; today: string }) {
+export function PoDecisionForm({ vendorRequestId, today, canApprove = true }: { vendorRequestId: string; today: string; /** false while the quote waits for the vendor's revised price: only Reject is possible then */ canApprove?: boolean }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [poNumber, setPoNumber] = useState('')
@@ -20,7 +20,8 @@ export function PoDecisionForm({ vendorRequestId, today }: { vendorRequestId: st
   const [file, setFile] = useState<File | null>(null)
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [mode, setMode] = useState<'approve' | 'reject'>('approve')
+  const [mode, setMode] = useState<'approve' | 'revise' | 'reject'>(canApprove ? 'approve' : 'reject')
+  const [revNote, setRevNote] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
   const pick = async (f: File | undefined) => {
@@ -42,6 +43,14 @@ export function PoDecisionForm({ vendorRequestId, today }: { vendorRequestId: st
     router.refresh()
   })
 
+  const revise = () => startTransition(async () => {
+    setError(null)
+    const res = await requestPoRevision({ vendorRequestId, note: revNote })
+    if (res.error) { setError(res.error); return }
+    toast.success('The vendor was asked for a revised price.')
+    router.refresh()
+  })
+
   const reject = () => startTransition(async () => {
     setError(null)
     const res = await rejectVendorPo({ vendorRequestId, reason })
@@ -53,13 +62,27 @@ export function PoDecisionForm({ vendorRequestId, today }: { vendorRequestId: st
   return (
     <div className="space-y-4 rounded-xl border border-border p-4">
       <div className="flex gap-2" role="tablist" aria-label="Decision">
-        <button type="button" role="tab" aria-selected={mode === 'approve'} onClick={() => { setMode('approve'); setError(null) }}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${mode === 'approve' ? 'bg-primary text-primary-foreground' : 'border border-border hover:bg-muted'}`}>Approve</button>
+        {canApprove && <button type="button" role="tab" aria-selected={mode === 'approve'} onClick={() => { setMode('approve'); setError(null) }}
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${mode === 'approve' ? 'bg-primary text-primary-foreground' : 'border border-border hover:bg-muted'}`}>Approve</button>}
+        {canApprove && <button type="button" role="tab" aria-selected={mode === 'revise'} onClick={() => { setMode('revise'); setError(null) }}
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${mode === 'revise' ? 'bg-amber-600 text-white' : 'border border-border hover:bg-muted'}`}>Ask for revised price</button>}
         <button type="button" role="tab" aria-selected={mode === 'reject'} onClick={() => { setMode('reject'); setError(null) }}
           className={`rounded-lg px-3 py-1.5 text-sm font-medium ${mode === 'reject' ? 'bg-destructive text-white' : 'border border-border hover:bg-muted'}`}>Reject</button>
       </div>
 
-      {mode === 'approve' ? (
+      {mode === 'revise' ? (
+        <div className="space-y-3">
+          <label className="block text-xs font-medium">What do you want changed? *
+            <textarea className={`${inputCls} mt-1`} rows={3} value={revNote} maxLength={1000} onChange={(e) => setRevNote(e.target.value)} placeholder="For example: the compressor price is too high, please send a better quote" />
+          </label>
+          <p className="text-xs text-muted-foreground">The ticket stays on hold. The vendor is told, changes the prices, attaches a revised quote and sends it back; you then get a new request for the new version. This version can no longer be approved.</p>
+          {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
+          <button type="button" className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+            disabled={pending || revNote.trim().length < 5} onClick={revise}>
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Ask the vendor for a revised price
+          </button>
+        </div>
+      ) : mode === 'approve' ? (
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-xs font-medium">PO number *

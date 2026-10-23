@@ -18,8 +18,10 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn(), 
 import { createClient } from '@/lib/supabase/server'
 import { sendEmail } from '@/lib/email/send'
 import { createRequest, updateRequestStatus } from '@/lib/actions/requests'
-import { vendorAddComment, vendorPartsReceived, vendorRequestParts, vendorRequestPo, vendorResolve, vendorStartWorking } from '@/lib/actions/vendor'
-import { approveVendorPo, rejectVendorPo } from '@/lib/actions/vendor-po'
+import { vendorAddComment, vendorResolve, vendorStartWorking } from '@/lib/actions/vendor'
+import { vendorPartsReceived, vendorRequestParts, vendorRequestPo, vendorRevisePo, vendorUpdateParts, vendorWithdrawRequest } from '@/lib/actions/vendor-requests'
+import { approveVendorPo, rejectVendorPo, requestPoRevision } from '@/lib/actions/vendor-po'
+import { holdKindsFor } from '@/lib/vendor/requests'
 import { runRulesForTrigger } from '@/lib/rules/run'
 import { PO_APPROVER_SETTING } from '@/lib/vendor/po'
 
@@ -228,9 +230,11 @@ describe('PO required from Citykart', () => {
   it('needs a price on every line and an approver; sends ONE approval mail; holds the ticket', async () => {
     const t = await ticket(v1a.id, 'in_progress')
     actAs(v1a)
-    expect((await vendorRequestPo({ requestId: t, lines: [{ item_name: 'Compressor', qty: 1 }] })).error).toMatch(/price/i)
+    expect((await vendorRequestPo({ requestId: t, lines: [{ item_name: 'Compressor', qty: 1 }], quoteAttachmentIds: [await fsr(t, v1a)] })).error).toMatch(/price/i)
+    expect((await vendorRequestPo({ requestId: t, lines, quoteAttachmentIds: [] })).error).toMatch(/quote/i)            // the quote is compulsory
+    expect((await vendorRequestPo({ requestId: t, lines, quoteAttachmentIds: [await fsr(t, v1b)] })).error).toMatch(/quote/i)   // somebody else's file is not my quote
     const before = mails().length
-    expect((await vendorRequestPo({ requestId: t, lines })).error).toBeUndefined()
+    expect((await vendorRequestPo({ requestId: t, lines, quoteAttachmentIds: [await fsr(t, v1a)] })).error).toBeUndefined()
     expect((await row(t)).status).toBe('hold_purchase_ho')
     const sent = mails().slice(before).filter((m) => /PO approval needed/.test(m.subject))
     expect(sent.length).toBe(1)
@@ -243,7 +247,7 @@ describe('PO required from Citykart', () => {
   it('only the approver decides; approving needs the PO number, date and document; it returns the ticket to In Progress and mails the OEM with the document', async () => {
     const t = await ticket(v1a.id, 'in_progress')
     actAs(v1a)
-    await vendorRequestPo({ requestId: t, lines })
+    await vendorRequestPo({ requestId: t, lines, quoteAttachmentIds: [await fsr(t, v1a)] })
     const vr = (await db().from('vendor_requests').select('id').eq('request_id', t).single()).data.id as string
     const form = (extra: Record<string, string | File>) => { const f = new FormData(); f.set('vendor_request_id', vr); for (const [k, v] of Object.entries(extra)) f.set(k, v); return f }
 
@@ -279,7 +283,7 @@ describe('PO required from Citykart', () => {
   it('rejecting needs a reason, cancels the ticket like a rejected approval (48 h to reopen) and mails the OEM once; the store can reopen it', async () => {
     const t = await ticket(v1a.id, 'in_progress')
     actAs(v1a)
-    await vendorRequestPo({ requestId: t, lines })
+    await vendorRequestPo({ requestId: t, lines, quoteAttachmentIds: [await fsr(t, v1a)] })
     const vr = (await db().from('vendor_requests').select('id').eq('request_id', t).single()).data.id as string
     actAs(fx.agentA)
     expect((await rejectVendorPo({ vendorRequestId: vr, reason: 'no' })).error).toMatch(/reason/i)
@@ -343,5 +347,117 @@ describe('Business Rules and vendors', () => {
     await db().from('request_master_snapshots').update({ snapshot: [{ ...UNIT, amc_vendor: 'BLUESTAR' }] }).eq('request_id', t2)
     await runRulesForTrigger('created', t2)
     expect((await row(t2)).assigned_to).toBe(fx.agentA.id)
+  })
+})
+
+describe('quote versions, revised price, parts list changes, and files under their messages', () => {
+  const lines = [{ item_name: 'Compressor', qty: 1, price_excl_gst: 12500 }, { item_name: 'Capacitor', qty: 2, price_excl_gst: 450.5 }]
+  const open = async (t: string) => (await db().from('vendor_requests').select('*').eq('request_id', t).in('status', ['pending', 'revision_requested']).maybeSingle()).data
+  const versions = async (t: string) => ((await db().from('vendor_requests').select('version, status').eq('request_id', t).order('version')).data ?? []) as { version: number; status: string }[]
+  const commentWithFiles = async (t: string, like: RegExp) => {
+    const cs = ((await db().from('request_comments').select('id, body').eq('request_id', t)).data ?? []) as { id: string; body: string }[]
+    const c = cs.find((x) => like.test(x.body))
+    if (!c) return null
+    const files = ((await db().from('request_attachments').select('file_name').eq('comment_id', c.id)).data ?? []) as { file_name: string }[]
+    return { body: c.body, files: files.map((f) => f.file_name) }
+  }
+
+  it('the quote file is tied to the PO-request message; asking for a revised price moves the ticket to "Revise price required" and back; only the newest version can be approved', async () => {
+    const t = await ticket(v1a.id, 'in_progress')
+    actAs(v1a)
+    const quote1 = await fsr(t, v1a)
+    expect((await vendorRequestPo({ requestId: t, lines, quoteAttachmentIds: [quote1] })).error).toBeUndefined()
+    expect((await commentWithFiles(t, /PO required from Citykart \(quote version 1\)/))?.files).toEqual(['fsr.png'])
+    expect((await holdKindsFor([t])).get(t)).toBe('po')
+    const v1 = await open(t)
+
+    // only the approver asks; a note is needed; the vendor cannot ask himself
+    actAs(v1a)
+    expect((await requestPoRevision({ vendorRequestId: v1.id, note: 'please reduce the compressor price' })).error).toBeTruthy()
+    actAs(fx.agentA)
+    expect((await requestPoRevision({ vendorRequestId: v1.id, note: 'no' })).error).toMatch(/at least/i)
+    expect((await requestPoRevision({ vendorRequestId: v1.id, note: 'Compressor is too costly, send a better quote' })).error).toBeUndefined()
+    expect((await row(t)).status).toBe('hold_purchase_ho')                 // still on hold, the clock stays paused
+    expect((await row(t)).waiting_since).not.toBeNull()
+    expect((await holdKindsFor([t])).get(t)).toBe('revise')                 // the vendor's "Revise price required" box
+    expect((await open(t)).status).toBe('revision_requested')
+    expect((await comments(t)).some((c) => /Revised price requested by .* Compressor is too costly/.test(c.body) && !c.is_internal)).toBe(true)
+    // while the vendor's price is awaited the approver cannot approve; asking twice does nothing
+    const form = (id: string) => { const f = new FormData(); f.set('vendor_request_id', id); f.set('po_number', 'PO-1'); f.set('po_date', '2026-10-01'); f.set('po_document', png('po.png')); return f }
+    expect((await approveVendorPo(form(v1.id))).error).toMatch(/revised price/i)
+    expect((await requestPoRevision({ vendorRequestId: v1.id, note: 'once more please' })).error).toBeTruthy()
+
+    // the vendor sends version 2: a NEW quote file is compulsory
+    actAs(v1a)
+    const cheaper = [{ item_name: 'Compressor', qty: 1, price_excl_gst: 11000 }, { item_name: 'Capacitor', qty: 2, price_excl_gst: 450.5 }]
+    expect((await vendorRevisePo({ requestId: t, lines: cheaper, quoteAttachmentIds: [] })).error).toMatch(/quote/i)
+    expect((await vendorRevisePo({ requestId: t, lines: cheaper, quoteAttachmentIds: [quote1] })).error).toMatch(/new file|revised quote/i)   // the old file cannot stand in
+    const before = mails().length
+    const quote2 = await fsr(t, v1a)
+    expect((await vendorRevisePo({ requestId: t, lines: cheaper, quoteAttachmentIds: [quote2] })).error).toBeUndefined()
+    expect(await versions(t)).toEqual([{ version: 1, status: 'superseded' }, { version: 2, status: 'pending' }])
+    expect((await row(t)).status).toBe('hold_purchase_ho')
+    expect((await holdKindsFor([t])).get(t)).toBe('po')                      // back in "PO required"
+    const note = await commentWithFiles(t, /Revised quote \(version 2\)/)
+    expect(note?.files).toEqual(['fsr.png'])
+    expect(note?.body).toMatch(/Total was 13,401\.00, now 11,901\.00/)
+    expect(mails().slice(before).filter((m) => /Revised quote \(version 2\)/.test(m.subject)).length).toBe(1)   // ONE new request to the approver
+
+    // the old version cannot be approved or decided any more
+    actAs(fx.agentA)
+    expect((await approveVendorPo(form(v1.id))).error).toMatch(/replaced by a newer version/i)
+    expect((await rejectVendorPo({ vendorRequestId: v1.id, reason: 'old version, should not work' })).error).toMatch(/replaced by a newer version/i)
+
+    // version 2 is approved; the PO document is tied to the approval message; the PO is based on version 2
+    const v2 = await open(t)
+    expect((await approveVendorPo(form(v2.id))).error).toBeUndefined()
+    const approved = await commentWithFiles(t, /PO approved by .* quote version 2/)
+    expect(approved?.files).toEqual(['po.png'])
+    expect((await versions(t)).map((v) => v.status)).toEqual(['superseded', 'approved'])
+  })
+
+  it('a rejected quote while the vendor is asked for a revised price also cancels the ticket', async () => {
+    const t = await ticket(v1a.id, 'in_progress')
+    actAs(v1a)
+    await vendorRequestPo({ requestId: t, lines, quoteAttachmentIds: [await fsr(t, v1a)] })
+    const v1 = await open(t)
+    actAs(fx.agentA)
+    await requestPoRevision({ vendorRequestId: v1.id, note: 'lower the price please' })
+    expect((await rejectVendorPo({ vendorRequestId: v1.id, reason: 'We will buy from somebody else' })).error).toBeUndefined()
+    expect((await row(t)).status).toBe('cancelled')
+    expect((await versions(t))[0].status).toBe('rejected')
+  })
+
+  it('the vendor changes the parts list while on hold (a new version, the old one kept) and can withdraw a request', async () => {
+    const t = await ticket(v1a.id, 'in_progress')
+    actAs(v1a)
+    await vendorRequestParts({ requestId: t, lines: [{ item_name: 'Capacitor 45uF', qty: 2 }] })
+    expect((await vendorUpdateParts({ requestId: t, lines: [] })).error).toMatch(/item/i)
+    expect((await vendorUpdateParts({ requestId: t, lines: [{ item_name: 'Capacitor 45uF', qty: 2 }, { item_name: 'Fan motor', qty: 1 }, { item_name: 'Gas R32', qty: 1 }] })).error).toBeUndefined()
+    expect(await versions(t)).toEqual([{ version: 1, status: 'superseded' }, { version: 2, status: 'pending' }])
+    expect((await row(t)).status).toBe('hold_purchase_ho')
+    expect((await comments(t)).some((c) => /Parts list updated \(version 2\)[\s\S]*Gas R32/.test(c.body))).toBe(true)
+    const items = ((await db().from('vendor_request_items').select('item_name').eq('vendor_request_id', (await open(t)).id).order('line_no')).data ?? []) as { item_name: string }[]
+    expect(items.map((i) => i.item_name)).toEqual(['Capacitor 45uF', 'Fan motor', 'Gas R32'])
+    // withdraw: a reason is needed; the ticket returns to In Progress
+    expect((await vendorWithdrawRequest({ requestId: t, reason: '' })).error).toMatch(/why/i)
+    expect((await vendorWithdrawRequest({ requestId: t, reason: 'Raised by mistake' })).error).toBeUndefined()
+    expect((await row(t)).status).toBe('in_progress')
+    expect((await versions(t)).map((v) => v.status)).toEqual(['superseded', 'withdrawn'])
+    // somebody else's ticket / a ticket not on hold cannot be changed
+    actAs(v1b)
+    expect((await vendorUpdateParts({ requestId: t, lines: [{ item_name: 'x1', qty: 1 }] })).error).toBeTruthy()
+  })
+
+  it('a quote can be withdrawn too; the FSR is tied to the resolution message', async () => {
+    const t = await ticket(v1a.id, 'in_progress')
+    actAs(v1a)
+    await vendorRequestPo({ requestId: t, lines, quoteAttachmentIds: [await fsr(t, v1a)] })
+    expect((await vendorWithdrawRequest({ requestId: t, reason: 'Customer solved it another way' })).error).toBeUndefined()
+    expect((await row(t)).status).toBe('in_progress')
+    expect((await versions(t)).map((v) => v.status)).toEqual(['withdrawn'])
+    const f = await fsr(t, v1a)
+    await vendorResolve({ requestId: t, choice: 'r1', remarks: '', attachmentIds: [f] })
+    expect((await commentWithFiles(t, /^Resolution: COMPRESSOR CHANGED/))?.files).toEqual(['fsr.png'])
   })
 })

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { countByBox, getVendorTickets, searchVendorTickets } from '@/lib/queries/vendor'
-import { isVendor, isVendorBox, vendorRoleOf, VENDOR_BOX_LABELS, VENDOR_BOX_ORDER, type VendorBox } from '@/lib/vendor/access'
+import { isVendor, isVendorBox, vendorRoleOf, VENDOR_BOX_LABELS, VENDOR_BOX_ORDER, VENDOR_BOX_TURN, type VendorBox } from '@/lib/vendor/access'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
 import { formatDateTime } from '@/lib/utils'
@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 export const dynamic = 'force-dynamic'
 
 const BOX_TONE: Record<VendorBox, string> = {
+  revise_price: 'border-rose-300 bg-rose-50/70 text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-100',
   open: 'border-sky-200 bg-sky-50/60 text-sky-800 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-200',
   in_process: 'border-indigo-200 bg-indigo-50/60 text-indigo-800 dark:border-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-200',
   po_required: 'border-amber-200 bg-amber-50/60 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200',
@@ -24,11 +25,12 @@ export default async function VendorDashboardPage({ searchParams }: { searchPara
   if (!profile) redirect('/login')
   if (!isVendor(profile)) redirect('/home')
   const { box, q } = await searchParams
-  const activeBox: VendorBox = isVendorBox(box) ? box : 'open'
   const isManager = vendorRoleOf(profile) === 'manager'
 
   const all = await getVendorTickets()
   const counts = countByBox(all)
+  // he lands on what needs him: a revised price first, otherwise the tickets to start
+  const activeBox: VendorBox = isVendorBox(box) ? box : counts.revise_price > 0 ? 'revise_price' : 'open'
   const rows = searchVendorTickets(all.filter((r) => r.box === activeBox), q ?? '')
 
   return (
@@ -38,7 +40,7 @@ export default async function VendorDashboardPage({ searchParams }: { searchPara
         description={isManager ? 'All tickets of the technicians of your company (view only).' : 'Tickets given to you by Citykart. Open a ticket to start working.'}
       />
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
         {VENDOR_BOX_ORDER.map((b) => (
           <Link
             key={b}
@@ -48,6 +50,7 @@ export default async function VendorDashboardPage({ searchParams }: { searchPara
           >
             <div className="text-2xl font-semibold tabular-nums">{counts[b]}</div>
             <div className="text-xs font-medium leading-tight">{VENDOR_BOX_LABELS[b]}</div>
+            <div className="mt-0.5 text-[10px] opacity-70">{VENDOR_BOX_TURN[b]}</div>
           </Link>
         ))}
       </div>

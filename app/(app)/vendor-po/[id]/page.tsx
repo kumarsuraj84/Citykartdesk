@@ -11,7 +11,10 @@ import { formatDateTime } from '@/lib/utils'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'PO approval' }
 
-const STATUS_TEXT: Record<string, string> = { pending: 'Waiting for your decision', approved: 'Approved', rejected: 'Rejected', received: 'Closed', cancelled: 'Withdrawn' }
+const STATUS_TEXT: Record<string, string> = {
+  pending: 'Waiting for your decision', revision_requested: 'Revised price asked - waiting for the vendor', approved: 'Approved (PO issued)', rejected: 'Rejected', received: 'Closed',
+  cancelled: 'Closed', superseded: 'Replaced by a newer version', withdrawn: 'Withdrawn by the vendor',
+}
 
 export default async function VendorPoApprovalPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -27,13 +30,14 @@ export default async function VendorPoApprovalPage({ params }: { params: Promise
 
   const vr = po.vendorRequest
   const total = totalOf(po.lines)
+  const canDecide = po.request.status === 'hold_purchase_ho' && mayDecide && (vr.status === 'pending' || vr.status === 'revision_requested')
 
   return (
     <div className="max-w-3xl space-y-4">
       <PageHeader title="PO approval" description={`${po.vendorName} needs a purchase order for ticket ${po.request.request_no}.`} />
       <section className="rounded-xl border border-border">
         <dl className="divide-y divide-border text-sm">
-          {[['Ticket', po.request.request_no], ['Store', po.storeLabel], ['AC', po.acLabel], ['Vendor', po.vendorName], ['Requested by', po.vendorPerson?.full_name ?? '—'], ['Requested on', formatDateTime(vr.created_at)], ['Status', STATUS_TEXT[vr.status] ?? vr.status]].map(([k, v]) => (
+          {[['Ticket', po.request.request_no], ['Quote version', String(vr.version)], ['Store', po.storeLabel], ['AC', po.acLabel], ['Vendor', po.vendorName], ['Requested by', po.vendorPerson?.full_name ?? '—'], ['Requested on', formatDateTime(vr.created_at)], ['Status', STATUS_TEXT[vr.status] ?? vr.status]].map(([k, v]) => (
             <div key={k} className="flex items-start justify-between gap-4 px-4 py-2"><dt className="text-xs text-muted-foreground">{k}</dt><dd className="text-right font-medium">{v}</dd></div>
           ))}
         </dl>
@@ -51,8 +55,17 @@ export default async function VendorPoApprovalPage({ params }: { params: Promise
         </table>
       </section>
 
-      {vr.status === 'pending' && po.request.status === 'hold_purchase_ho' && mayDecide
-        ? <PoDecisionForm vendorRequestId={vr.id} today={todayIstDate()} />
+      <section className="rounded-xl border border-border p-4 text-sm">
+        {po.previousTotal !== null && <p className="mb-2">Revised quote: the earlier total was <strong>{formatMoney(po.previousTotal)}</strong>, this one is <strong>{formatMoney(total)}</strong>.</p>}
+        <div className="font-medium">Quote from the vendor</div>
+        {po.quoteFiles.length === 0 ? <p className="text-muted-foreground">No quote file.</p> : (
+          <ul className="mt-1 space-y-0.5">{po.quoteFiles.map((f) => <li key={f.id}><a className="text-primary hover:underline" href={`/api/storage/attachment/request/${f.id}`} target="_blank" rel="noreferrer">{f.file_name}</a></li>)}</ul>
+        )}
+        {vr.revision_note && <p className="mt-2 text-muted-foreground">You asked: “{vr.revision_note}”</p>}
+      </section>
+
+      {canDecide
+        ? <PoDecisionForm vendorRequestId={vr.id} today={todayIstDate()} canApprove={vr.status === 'pending'} />
         : (
           <section className="rounded-xl border border-border p-4 text-sm">
             <p className="font-medium">{vr.status === 'pending' && !mayDecide ? 'Waiting for the approver to decide' : (STATUS_TEXT[vr.status] ?? vr.status)}{vr.decided_at ? ` on ${formatDateTime(vr.decided_at)}` : ''}</p>

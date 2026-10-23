@@ -1,6 +1,6 @@
 import { Wrench } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getPendingRequest } from '@/lib/vendor/requests'
+import { getOpenRequest } from '@/lib/vendor/requests'
 
 // For Citykart staff: when a ticket is with an OEM engineer (a vendor technician) say so on the ticket, with what he is waiting for.
 // The ticket keeps its ordinary status; this note only explains who has it and why it may be on hold.
@@ -15,9 +15,9 @@ export async function VendorNote({ requestId, assignedTo }: { requestId: string;
   if (!person?.vendor_company_id || person.vendor_role !== 'technician') return null
   const [{ data: company }, pending] = await Promise.all([
     admin.from('vendor_companies').select('name').eq('id', person.vendor_company_id).maybeSingle(),
-    getPendingRequest(requestId),
+    getOpenRequest(requestId),
   ])
-  const waiting = pending ? (pending.kind === 'po' ? 'PO requested - waiting for approval' : 'Part required (no PO)') : null
+  const waiting = pending ? (pending.kind === 'parts' ? 'Part required (no PO)' : pending.status === 'revision_requested' ? `Revised price asked - waiting for the vendor (quote version ${pending.version})` : `PO requested - waiting for approval (quote version ${pending.version})`) : null
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100" role="note">
       <Wrench className="h-4 w-4 shrink-0" />

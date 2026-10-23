@@ -8,7 +8,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { isVendor, vendorBoxOf, vendorRoleOf, VENDOR_BOX_LABELS } from '@/lib/vendor/access'
 import { displayAnswer, findVendorFields, resolutionChoices } from '@/lib/vendor/fields'
 import { loadLiveResolutionField } from '@/lib/vendor/live-form'
-import { VendorTicketActions } from '@/components/vendor/VendorTicketActions'
+import { VendorTicketActions, type OpenRequestView } from '@/components/vendor/VendorTicketActions'
 import { listRequestsWithItems } from '@/lib/vendor/requests'
 import { formatMoney } from '@/lib/vendor/lines'
 import { AttachmentChips } from '@/components/requests/AttachmentChips'
@@ -29,6 +29,11 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
       <dd className="text-right text-xs font-medium whitespace-pre-wrap break-words">{value || '—'}</dd>
     </div>
   )
+}
+
+const REQUEST_STATUS_TEXT: Record<string, string> = {
+  pending: 'waiting', revision_requested: 'revised price asked', approved: 'approved (PO issued)', rejected: 'rejected', received: 'parts received', cancelled: 'cancelled',
+  superseded: 'replaced by a newer version', withdrawn: 'withdrawn',
 }
 
 export default async function VendorTicketPage({ params }: { params: Promise<{ id: string }> }) {
@@ -57,7 +62,20 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
   const vf = findVendorFields(sections)
   const liveResolution = await loadLiveResolutionField(request.service_id, sections)
   const vendorRequests = await listRequestsWithItems(id)
-  const pendingKind = vendorRequests.find((r) => r.status === 'pending')?.kind ?? null
+  const openRow = vendorRequests.find((r) => r.status === 'pending' || r.status === 'revision_requested') ?? null
+  const holdKind = openRow ? (openRow.kind === 'parts' ? 'parts' : openRow.status === 'revision_requested' ? 'revise' : 'po') : null
+  const asker = openRow?.revision_requested_by ? ((await admin.from('profiles').select('full_name').eq('id', openRow.revision_requested_by).maybeSingle()).data?.full_name as string | undefined) ?? null : null
+  const openRequest: OpenRequestView | null = openRow && (openRow.status === 'pending' || openRow.status === 'revision_requested')
+    ? { kind: openRow.kind, status: openRow.status, version: openRow.version, note: openRow.revision_note, asker, lines: openRow.items.map((i) => ({ item_name: i.item_name, qty: i.qty, price_excl_gst: i.price_excl_gst ?? '' })) }
+    : null
+  // files are shown right under the conversation message they belong to (the FSR, the quote, the PO document); the rest are the store's own
+  const filesByComment = new Map<string, typeof attachments>()
+  const otherFiles: typeof attachments = []
+  for (const att of attachments) {
+    const cid = (att as { comment_id?: string | null }).comment_id
+    if (cid) filesByComment.set(cid, [...(filesByComment.get(cid) ?? []), att])
+    else otherFiles.push(att)
+  }
   const vendorFieldIds = new Set([vf.oemNumber?.id, vf.oemDate?.id, vf.resolution?.id].filter(Boolean) as string[])
   // what the store filled in (the technician-only boxes are shown separately below)
   const storeSections = filterFieldsForRequester(filterSectionsForCategory(sections, request.category_id))
@@ -65,7 +83,7 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
     .filter((s) => s.fields.length > 0)
 
   const isTech = vendorRoleOf(profile) === 'technician' && request.assigned_to === profile.id
-  const box = vendorBoxOf(request.status, pendingKind)
+  const box = vendorBoxOf(request.status, holdKind)
   const visibleComments = comments.filter((c) => !c.is_internal)
 
   return (
@@ -89,7 +107,7 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
         status={request.status}
         canAct={isTech}
         resolutionChoices={resolutionChoices(liveResolution)}
-        holdKind={pendingKind}
+        openRequest={openRequest}
       />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
@@ -115,6 +133,9 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
                     <span>{formatDateTime(c.created_at)}</span>
                   </div>
                   <p className="mt-1 whitespace-pre-wrap break-words text-sm">{c.body}</p>
+                  {(filesByComment.get(c.id) ?? []).length > 0 && (
+                    <div className="mt-2"><AttachmentChips attachments={filesByComment.get(c.id) ?? []} currentUserId={profile.id} canManageAll={false} /></div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -122,12 +143,12 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
 
           {vendorRequests.length > 0 && (
             <section className="rounded-xl border border-border">
-              <h2 className="border-b border-border px-4 py-2 text-sm font-semibold">Parts and PO requests</h2>
+              <h2 className="border-b border-border px-4 py-2 text-sm font-semibold">Parts lists and quotes (all versions)</h2>
               <ul className="divide-y divide-border">
                 {vendorRequests.map((r) => (
                   <li key={r.id} className="px-4 py-3 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">{r.kind === 'po' ? 'PO required from Citykart' : 'Part required'} - {r.status}</span>
+                      <span className="font-medium text-foreground">{r.kind === 'po' ? 'Quote' : 'Parts list'} version {r.version} - {REQUEST_STATUS_TEXT[r.status] ?? r.status}</span>
                       <span>{formatDateTime(r.created_at)}</span>
                     </div>
                     <ul className="mt-1 space-y-0.5">
@@ -142,10 +163,10 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
             </section>
           )}
 
-          {attachments.length > 0 && (
+          {otherFiles.length > 0 && (
             <section className="rounded-xl border border-border p-4">
-              <h2 className="mb-2 text-sm font-semibold">Files</h2>
-              <AttachmentChips attachments={attachments} currentUserId={profile.id} canManageAll={false} />
+              <h2 className="mb-2 text-sm font-semibold">Files from the store</h2>
+              <AttachmentChips attachments={otherFiles} currentUserId={profile.id} canManageAll={false} />
             </section>
           )}
         </div>

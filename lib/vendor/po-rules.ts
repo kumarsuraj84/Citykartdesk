@@ -31,3 +31,13 @@ export function checkPoRejection(reasonRaw: string): PoRejectionCheck {
   if (reason.length > 1000) return { ok: false, error: 'The reason is too long.' }
   return { ok: true, reason }
 }
+
+export type PoRevisionCheck = { ok: true; note: string } | { ok: false; error: string }
+
+/** Asking the vendor for a revised price needs a note that says what is wanted. */
+export function checkPoRevision(noteRaw: string): PoRevisionCheck {
+  const note = (noteRaw ?? '').replace(/\s+/g, ' ').trim()
+  if (note.length < 5) return { ok: false, error: 'Please write what you want changed (at least 5 characters).' }
+  if (note.length > 1000) return { ok: false, error: 'The note is too long.' }
+  return { ok: true, note }
+}

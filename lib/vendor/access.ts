@@ -33,21 +33,34 @@ export function vendorLandingFor(pathname: string): string {
 
 // ── The six boxes of the vendor dashboard ───────────────────────────────────────────────────────────────────────────────────────────
 
-export type VendorBox = 'open' | 'in_process' | 'po_required' | 'part_required' | 'resolved' | 'cancelled'
+export type VendorBox = 'revise_price' | 'open' | 'in_process' | 'part_required' | 'po_required' | 'resolved' | 'cancelled'
 
-export const VENDOR_BOX_ORDER: VendorBox[] = ['open', 'in_process', 'po_required', 'part_required', 'resolved', 'cancelled']
+/** In the order a vendor needs them: what waits for him first, then what waits for Citykart, then what is finished. */
+export const VENDOR_BOX_ORDER: VendorBox[] = ['revise_price', 'open', 'in_process', 'part_required', 'po_required', 'resolved', 'cancelled']
 
 export const VENDOR_BOX_LABELS: Record<VendorBox, string> = {
+  revise_price: 'Revise price required',
   open: 'Open',
   in_process: 'In process',
-  po_required: 'PO required from Citykart',
   part_required: 'Part required',
+  po_required: 'PO required from Citykart',
   resolved: 'Resolved',
   cancelled: 'Cancelled',
 }
 
-/** What a vendor is waiting for while a ticket is on hold ('po' = purchase order, 'parts' = parts only). Comes from the ticket's pending vendor request. */
-export type VendorHoldKind = 'po' | 'parts' | null
+/** Whose turn it is for the tickets of a box (shown under the box title). */
+export const VENDOR_BOX_TURN: Record<VendorBox, string> = {
+  revise_price: 'Waiting for you',
+  open: 'Waiting for you',
+  in_process: 'You are working',
+  part_required: 'Waiting for parts',
+  po_required: 'Waiting for Citykart',
+  resolved: 'Done',
+  cancelled: 'Closed',
+}
+
+/** What a ticket on hold is waiting for: 'po' = the approver's decision on a quote, 'revise' = the vendor's revised price (the approver asked), 'parts' = parts only. Comes from the ticket's open vendor request. */
+export type VendorHoldKind = 'po' | 'parts' | 'revise' | null
 
 /**
  * The box a ticket is shown in. The boxes are only a way of grouping the existing ticket statuses (no status was added for vendors).
@@ -59,7 +72,7 @@ export function vendorBoxOf(status: RequestStatus | string, holdKind: VendorHold
     case 'assigned':
       return 'open'
     case 'hold_purchase_ho':
-      return holdKind === 'po' ? 'po_required' : holdKind === 'parts' ? 'part_required' : 'in_process'
+      return holdKind === 'po' ? 'po_required' : holdKind === 'revise' ? 'revise_price' : holdKind === 'parts' ? 'part_required' : 'in_process'
     case 'resolved':
     case 'closed':
       return 'resolved'
@@ -72,6 +85,7 @@ export function vendorBoxOf(status: RequestStatus | string, holdKind: VendorHold
 
 /** The statuses a box reads from (the list page asks the database for these). */
 export const VENDOR_BOX_STATUSES: Record<VendorBox, RequestStatus[]> = {
+  revise_price: ['hold_purchase_ho'],
   open: ['open', 'assigned'],
   in_process: ['in_progress', 'waiting_user', 'pending_approval'],
   po_required: ['hold_purchase_ho'],

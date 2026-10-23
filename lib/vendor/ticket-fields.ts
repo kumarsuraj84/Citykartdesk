@@ -50,3 +50,14 @@ export async function clearOemTicketOnReopen(requestId: string): Promise<void> {
     console.error('[clearOemTicketOnReopen] failed', e)
   }
 }
+
+/** A public message in the conversation by the given person (the quote lines, a revision request ...). Returns the message id so files can be tied to it. Never throws. */
+export async function postPublicComment(requestId: string, authorId: string, body: string): Promise<string | undefined> {
+  try {
+    const { data } = await db().from('request_comments').insert({ request_id: requestId, author_id: authorId, body, is_internal: false }).select('id').single()
+    return data?.id as string | undefined
+  } catch (e) {
+    console.error('[postPublicComment] failed', e)
+    return undefined
+  }
+}

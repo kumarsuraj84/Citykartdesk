@@ -3,7 +3,7 @@ import { sendEmail } from '@/lib/email/send'
 import { splitRecipients } from '@/lib/masters/emails'
 import type { PoMailBase } from './po-mail'
 import { getRequestItems, type VendorRequestItemRow, type VendorRequestRow } from './requests'
-import type { RequestLine } from './lines'
+import { totalOf, type RequestLine } from './lines'
 
 // The PO side of the vendor module that needs the database: who approves, what a PO is about, and the e-mail to the OEM. Server only.
 
@@ -66,6 +66,10 @@ export type PoContext = {
   acLabel: string
   unit: Unit
   mailBase: PoMailBase
+  /** the quote file(s) the vendor attached to this version */
+  quoteFiles: { id: string; file_name: string }[]
+  /** the total (without GST) of the version this one replaced, when it is a revised quote */
+  previousTotal: number | null
 }
 
 /** Everything a PO screen or mail needs about one vendor request. Null when it does not exist. */
@@ -74,10 +78,14 @@ export async function loadPoContext(vendorRequestId: string): Promise<PoContext 
   const { data: vr } = await d.from('vendor_requests').select('*').eq('id', vendorRequestId).maybeSingle()
   if (!vr) return null
   const vendorRequest = vr as VendorRequestRow
-  const [{ data: req }, items, { data: snap }] = await Promise.all([
+  const [{ data: req }, items, { data: snap }, { data: quotes }, previousItems] = await Promise.all([
     d.from('requests').select('id, request_no, title, org_id, requester_id, assigned_to, status, service_id').eq('id', vendorRequest.request_id).maybeSingle(),
     getRequestItems(vendorRequestId),
     d.from('request_master_snapshots').select('snapshot').eq('request_id', vendorRequest.request_id).eq('kind', 'ac').maybeSingle(),
+    (vendorRequest.quote_attachment_ids ?? []).length
+      ? d.from('request_attachments').select('id, file_name').in('id', vendorRequest.quote_attachment_ids).is('deleted_at', null)
+      : Promise.resolve({ data: [] }),
+    vendorRequest.replaces_id ? getRequestItems(vendorRequest.replaces_id) : Promise.resolve(null),
   ])
   if (!req) return null
   const [{ data: requester }, { data: person }] = await Promise.all([
@@ -97,6 +105,8 @@ export async function loadPoContext(vendorRequestId: string): Promise<PoContext 
     vendorRequest, items, lines, request: req, vendorName, vendorPerson: person ? { id: person.id, full_name: person.full_name } : null,
     storeLabel, acLabel, unit,
     mailBase: { requestNo: req.request_no, storeLabel, acLabel, vendorName, lines },
+    quoteFiles: (quotes ?? []) as { id: string; file_name: string }[],
+    previousTotal: previousItems ? totalOf(previousItems.map((i) => ({ qty: i.qty, price_excl_gst: i.price_excl_gst }))) : null,
   }
 }
 

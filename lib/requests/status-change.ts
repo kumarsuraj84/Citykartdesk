@@ -26,7 +26,8 @@ import type { Database } from '@/types/database'
 import { checkResolutionNote } from '@/lib/requests/resolution-note'
 
 type RequestUpdate = Database['public']['Tables']['requests']['Update']
-type ActionResult = { error?: string }
+/** commentId: the conversation message written for this change (when there was one), so a caller can tie a file (FSR, quote, PO document) to it. */
+type ActionResult = { error?: string; commentId?: string }
 
 /** Who is changing the status, and the database client that is allowed to read what they may read. */
 export interface StatusActor {
@@ -641,13 +642,15 @@ export async function applyStatusChange(
   }
 
   // Optional comment attached to the transition (always public)
+  let writtenCommentId: string | undefined
   if (comment?.trim()) {
-    const { error: commentError } = await createAdminClient().from('request_comments').insert({
+    const { data: written, error: commentError } = await createAdminClient().from('request_comments').insert({
       request_id: requestId,
       author_id: profile.id,
       body: comment.trim(),
       is_internal: false,
-    })
+    }).select('id').single()
+    writtenCommentId = written?.id
     if (commentError) {
       console.error('[updateRequestStatus] Comment insert failed', commentError.message)
       // Status was updated and logged — do not roll back for a failed comment
@@ -666,6 +669,6 @@ export async function applyStatusChange(
   revalidatePath('/requests')
   revalidatePath('/home')
 
-  return {}
+  return { commentId: writtenCommentId }
 }
 

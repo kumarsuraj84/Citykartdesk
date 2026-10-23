@@ -1,11 +1,11 @@
 // The pure rules of the vendor module: who is a vendor, the dashboard boxes, the Start / Resolve rules, the item lines, the PO rules and wording,
 // the AC sheet's "Email for PO detail" column, and the PO register's search.
 import { describe, it, expect } from 'vitest'
-import { isVendor, vendorBoxOf, vendorLandingFor, vendorMayOpen, vendorRoleOf, VENDOR_BOX_ORDER } from '@/lib/vendor/access'
+import { isVendor, vendorBoxOf, vendorLandingFor, vendorMayOpen, vendorRoleOf, VENDOR_BOX_ORDER, VENDOR_BOX_TURN } from '@/lib/vendor/access'
 import { buildResolutionText, checkVendorResolve, checkVendorStart, findVendorFields, resolutionChoices, todayIstDate } from '@/lib/vendor/fields'
 import { checkLines, linesAsText, totalOf } from '@/lib/vendor/lines'
-import { checkPoApproval, checkPoRejection } from '@/lib/vendor/po-rules'
-import { buildPoApprovalRequestMail, buildPoApprovedMail, buildPoRejectedMail } from '@/lib/vendor/po-mail'
+import { checkPoApproval, checkPoRejection, checkPoRevision } from '@/lib/vendor/po-rules'
+import { buildPoApprovalRequestMail, buildPoApprovedMail, buildPoRejectedMail, buildPoRevisionAskedMail } from '@/lib/vendor/po-mail'
 import { filterPoRows, type PoRegisterRow } from '@/lib/vendor/register'
 import { parseAcSheet } from '@/lib/masters/parse'
 import type { FormSection } from '@/types'
@@ -33,10 +33,13 @@ describe('the six boxes (no status was added)', () => {
     expect(vendorBoxOf('in_progress')).toBe('in_process')
     expect(vendorBoxOf('hold_purchase_ho', 'po')).toBe('po_required')
     expect(vendorBoxOf('hold_purchase_ho', 'parts')).toBe('part_required')
+    expect(vendorBoxOf('hold_purchase_ho', 'revise')).toBe('revise_price')
     expect(vendorBoxOf('hold_purchase_ho', null)).toBe('in_process')
     expect(vendorBoxOf('resolved')).toBe('resolved'); expect(vendorBoxOf('closed')).toBe('resolved')
     expect(vendorBoxOf('cancelled')).toBe('cancelled')
-    expect(VENDOR_BOX_ORDER).toHaveLength(6)
+    expect(VENDOR_BOX_ORDER).toEqual(['revise_price', 'open', 'in_process', 'part_required', 'po_required', 'resolved', 'cancelled'])   // what waits for the vendor first
+    expect(VENDOR_BOX_TURN.po_required).toBe('Waiting for Citykart')
+    expect(VENDOR_BOX_TURN.revise_price).toBe('Waiting for you')
   })
 })
 
@@ -117,6 +120,14 @@ describe('deciding a PO', () => {
   })
 })
 
+describe('asking for a revised price', () => {
+  it('needs a note that says what is wanted', () => {
+    expect(checkPoRevision('no').ok).toBe(false)
+    expect(checkPoRevision('x'.repeat(1001)).ok).toBe(false)
+    expect(checkPoRevision('  Compressor is too costly  ')).toEqual({ ok: true, note: 'Compressor is too costly' })
+  })
+})
+
 describe('the PO e-mails', () => {
   const base = { requestNo: 'CKSD-1', storeLabel: 'ALC <Allahabad>', acLabel: '1 - VOLTAS 1.5', vendorName: 'Voltas', lines: [{ item_name: 'Compressor <b>', qty: 1, price_excl_gst: 100 }] }
   it('approved: number, date, items, total and the document note; user text is escaped', () => {
@@ -131,6 +142,15 @@ describe('the PO e-mails', () => {
     expect(buildPoRejectedMail({ ...base, reason: 'x' }).subject).toMatch(/rejected/)
     const m = buildPoApprovalRequestMail({ ...base, link: 'https://desk.test/vendor-po/1', approverName: 'Krishan' })
     expect(m.text).toContain('https://desk.test/vendor-po/1'); expect(m.text).toContain('Dear Krishan')
+    expect(m.subject).toBe('PO approval needed - CKSD-1 - Voltas')
+  })
+  it('a revised quote says so, with the earlier total; the vendor is told what was asked', () => {
+    const m = buildPoApprovalRequestMail({ ...base, link: 'https://desk.test/vendor-po/2', approverName: 'Krishan', version: 2, previousTotal: 150 })
+    expect(m.subject).toBe('Revised quote (version 2) - PO approval needed - CKSD-1 - Voltas')
+    expect(m.text).toContain('revised quote (version 2)'); expect(m.text).toContain('earlier total was 150.00')
+    const v = buildPoRevisionAskedMail({ ...base, link: 'https://desk.test/vendor/tickets/1', note: 'Too <costly>', approverName: 'Krishan', vendorPersonName: 'Ramesh' })
+    expect(v.subject).toBe('Revised price needed - CKSD-1 - ALC <Allahabad>')
+    expect(v.html).toContain('Too &lt;costly&gt;'); expect(v.text).toContain('What was asked: Too <costly>')
   })
 })
 
@@ -149,13 +169,18 @@ describe('the AC sheet column "Email for PO detail"', () => {
 })
 
 describe('the PO register search', () => {
-  const row = (o: Partial<PoRegisterRow>): PoRegisterRow => ({ id: 'i', po_number: 'PO-1', po_date: '2026-10-10', status: 'approved', request_id: 'r', request_no: 'CKSD-1', store_code: 'ALC', store_name: 'Allahabad', vendor_name: 'Voltas', technician: 'Ramesh', items: 'Compressor x 1', total: 100, requested_at: '2026-10-09T10:00:00Z', decided_at: null, decision_reason: null, ...o })
+  const row = (o: Partial<PoRegisterRow>): PoRegisterRow => ({ id: 'i', po_number: 'PO-1', po_date: '2026-10-10', status: 'approved', version: 1, request_id: 'r', request_no: 'CKSD-1', store_code: 'ALC', store_name: 'Allahabad', vendor_name: 'Voltas', technician: 'Ramesh', items: 'Compressor x 1', total: 100, requested_at: '2026-10-09T10:00:00Z', decided_at: null, decision_reason: null, ...o })
   const rows = [row({}), row({ id: 'j', po_number: 'PO-2', po_date: '2026-09-01', status: 'rejected', store_code: 'MAR', store_name: 'Margao', items: 'Fan x 2' }), row({ id: 'k', po_number: null, po_date: null, status: 'pending', requested_at: '2026-10-20T10:00:00Z' })]
-  it('searches text, status and dates (a request without a PO date uses the request date)', () => {
-    expect(filterPoRows(rows, { q: 'margao' }).map((r) => r.id)).toEqual(['j'])
-    expect(filterPoRows(rows, { status: 'pending' }).map((r) => r.id)).toEqual(['k'])
-    expect(filterPoRows(rows, { from: '2026-10-01' }).map((r) => r.id)).toEqual(['i', 'k'])
-    expect(filterPoRows(rows, { to: '2026-09-30' }).map((r) => r.id)).toEqual(['j'])
+  it('shows real POs (approved) by default; quotes that are waiting, revised, replaced or rejected only on request', () => {
+    expect(filterPoRows(rows, {}).map((r) => r.id)).toEqual(['i'])
+    expect(filterPoRows(rows, { status: '' }).map((r) => r.id)).toEqual(['i'])
     expect(filterPoRows(rows, { status: 'all' })).toHaveLength(3)
+    expect(filterPoRows([...rows, row({ id: 'm', status: 'superseded', version: 1 }), row({ id: 'n', status: 'revision_requested' })], { status: 'superseded' }).map((r) => r.id)).toEqual(['m'])
+  })
+  it('searches text, status and dates (a request without a PO date uses the request date)', () => {
+    expect(filterPoRows(rows, { q: 'margao', status: 'all' }).map((r) => r.id)).toEqual(['j'])
+    expect(filterPoRows(rows, { status: 'pending' }).map((r) => r.id)).toEqual(['k'])
+    expect(filterPoRows(rows, { from: '2026-10-01', status: 'all' }).map((r) => r.id)).toEqual(['i', 'k'])
+    expect(filterPoRows(rows, { to: '2026-09-30', status: 'all' }).map((r) => r.id)).toEqual(['j'])
   })
 })

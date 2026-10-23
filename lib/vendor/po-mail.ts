@@ -42,10 +42,19 @@ export function buildPoRejectedMail(m: PoMailBase & { reason: string }): Mail {
 }
 
 /** To the PO approver: a vendor needs a purchase order approved. */
-export function buildPoApprovalRequestMail(m: PoMailBase & { link: string; approverName: string }): Mail {
+export function buildPoApprovalRequestMail(m: PoMailBase & { link: string; approverName: string; version?: number; previousTotal?: number | null }): Mail {
   const total = totalOf(m.lines.map((l) => ({ qty: l.qty, price_excl_gst: l.price_excl_gst })))
-  const subject = `PO approval needed - ${m.requestNo} - ${m.vendorName}`
-  const html = `<p>Dear ${escapeHtml(m.approverName)},</p><p>${escapeHtml(m.vendorName)} needs a purchase order to repair the AC on the ticket below.</p>${detailsHtml(m)}${itemsTable(m.lines)}<p><strong>Total (without GST):</strong> ${formatMoney(total)}</p><p><a href="${escapeHtml(m.link)}" style="display:inline-block;background:#1e4a8a;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;">Open and approve / reject</a></p><p style="color:#6b7280;font-size:12px;">You will be asked to sign in to Citykart Desk. To approve you enter the PO number, the PO date and attach the PO document.</p>`
-  const text = `Dear ${m.approverName},\n\n${m.vendorName} needs a purchase order to repair the AC on the ticket below.\n\n${details(m).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\n${itemsText(m.lines)}\n\nTotal (without GST): ${formatMoney(total)}\n\nOpen and approve / reject (sign-in needed): ${m.link}`
+  const revised = (m.version ?? 1) > 1
+  const subject = `${revised ? `Revised quote (version ${m.version}) - PO approval needed` : 'PO approval needed'} - ${m.requestNo} - ${m.vendorName}`
+  const html = `<p>Dear ${escapeHtml(m.approverName)},</p><p>${escapeHtml(m.vendorName)} ${revised ? `sent a <strong>revised quote (version ${m.version})</strong>${m.previousTotal != null ? ` - the earlier total was ${formatMoney(m.previousTotal)}` : ''} - for` : 'needs a purchase order to repair'} the AC on the ticket below.</p>${detailsHtml(m)}${itemsTable(m.lines)}<p><strong>Total (without GST):</strong> ${formatMoney(total)}</p><p><a href="${escapeHtml(m.link)}" style="display:inline-block;background:#1e4a8a;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;">Open and approve / reject</a></p><p style="color:#6b7280;font-size:12px;">You will be asked to sign in to Citykart Desk. To approve you enter the PO number, the PO date and attach the PO document.</p>`
+  const text = `Dear ${m.approverName},\n\n${m.vendorName} ${revised ? `sent a revised quote (version ${m.version})${m.previousTotal != null ? `, the earlier total was ${formatMoney(m.previousTotal)},` : ''} for` : 'needs a purchase order to repair'} the AC on the ticket below.\n\n${details(m).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\n${itemsText(m.lines)}\n\nTotal (without GST): ${formatMoney(total)}\n\nOpen and approve / reject (sign-in needed): ${m.link}`
+  return { subject, html, text }
+}
+
+/** To the vendor: the approver asked for a revised price. */
+export function buildPoRevisionAskedMail(m: PoMailBase & { link: string; note: string; approverName: string; vendorPersonName: string }): Mail {
+  const subject = `Revised price needed - ${m.requestNo} - ${m.storeLabel}`
+  const html = `<p>Dear ${escapeHtml(m.vendorPersonName)},</p><p>${escapeHtml(m.approverName)} has asked for a <strong>revised price</strong> for the ticket below.</p>${detailsHtml(m)}<p><strong>What was asked:</strong> ${escapeHtml(m.note)}</p><p><a href="${escapeHtml(m.link)}" style="display:inline-block;background:#1e4a8a;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;">Open the ticket and send the revised quote</a></p><p style="color:#6b7280;font-size:12px;">Open the ticket, change the prices and attach your revised quote.</p>`
+  const text = `Dear ${m.vendorPersonName},\n\n${m.approverName} has asked for a revised price for the ticket below.\n\n${details(m).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\nWhat was asked: ${m.note}\n\nOpen the ticket, change the prices and attach your revised quote: ${m.link}`
   return { subject, html, text }
 }
