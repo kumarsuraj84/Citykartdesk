@@ -23,10 +23,15 @@ export type PlaceKind = 'all' | 'store' | 'cluster' | 'region' | 'state'
 export const PLACE_KINDS: PlaceKind[] = ['all', 'store', 'cluster', 'region', 'state']
 export const PLACE_LABEL: Record<PlaceKind, string> = { all: 'All Citykart', store: 'Store', cluster: 'Cluster', region: 'Region', state: 'State' }
 
+/** The machines the asset calendar counts: air conditioners (AC sheet) and gensets (Genset sheet). */
+export type AssetKind = 'ac' | 'genset'
+export const ASSET_LABEL: Record<AssetKind, { one: string; many: string }> = { ac: { one: 'AC', many: 'ACs' }, genset: { one: 'genset', many: 'gensets' } }
+
 export type DayLevel = 'none' | 'low' | 'medium' | 'high' | 'future'
 
-/** An AC of the AC sheet. */
+/** An AC of the AC sheet (or a genset of the Genset sheet). */
 export interface CalAc {
+  kind: AssetKind
   /** store code + AC number: the same on every ticket of that AC */
   key: string
   store: string
@@ -40,8 +45,9 @@ export interface CalAc {
   city: string
 }
 
-/** One AC ticket (cancelled ones are left out). Times are epoch milliseconds. */
+/** One AC or genset ticket (cancelled ones are left out). Times are epoch milliseconds. */
 export interface CalTicket {
+  kind: AssetKind
   id: string
   no: string
   /** the AC's key; '' when the ticket does not say which AC */

@@ -18,12 +18,15 @@ const VIEW_TABS: { value: ViewMode; label: string }[] = [
   { value: 'people', label: 'Workload & Approvals' },
   { value: 'matrices', label: 'Group & OEM Matrix' },
   { value: 'stores', label: 'Stores & Regions' },
-  { value: 'calendar', label: 'AC Calendar' },
+  { value: 'calendar', label: 'Ticket Calendar' },
   { value: 'tickets', label: 'Heatmap & Tickets' },
 ]
 /** The filters in the bar, in order. The ones that do not apply to the tickets in view (no OEM tickets, no store details) are left out. */
 const BAR_FILTERS: { dim: Dim; label: string; all: string; searchable?: boolean }[] = [
   { dim: 'group', label: 'Filter by group', all: 'All groups' },
+  { dim: 'svc', label: 'Filter by service', all: 'All services' },
+  { dim: 'cat', label: 'Filter by category', all: 'All categories', searchable: true },
+  { dim: 'sub', label: 'Filter by sub category', all: 'All sub categories', searchable: true },
   { dim: 'tech', label: 'Filter by technician', all: 'All technicians', searchable: true },
   { dim: 'region', label: 'Filter by region', all: 'All regions' },
   { dim: 'state', label: 'Filter by state', all: 'All states' },
@@ -413,6 +416,15 @@ function FiltersModal({ now, filters, period, custom, tickets, showPeople, onClo
           <div className="space-y-2">
             <p className="flex items-center gap-1.5 font-semibold uppercase tracking-wider text-muted-foreground"><Search className="h-3.5 w-3.5" />Ticket search</p>
             <input value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="Ticket number, subject, store, technician, OEM..." className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring" />
+          </div>
+
+          <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+            <p className="flex items-center gap-1.5 font-semibold uppercase tracking-wider text-muted-foreground"><Layers className="h-3.5 w-3.5 text-primary" />What the tickets are about <span className="font-normal normal-case tracking-normal">(each list shows only what fits the choices above it)</span></p>
+            <div className="grid gap-5 md:grid-cols-2">
+              <OptionGrid icon={<span className="inline-block h-3.5 w-3.5" />} title="Service" all="All services" value={f.dims.svc} options={o('svc')} onChange={(v) => setF(setDim(f, 'svc', v))} />
+              <OptionGrid icon={<span className="inline-block h-3.5 w-3.5" />} title="Category" all="All categories" value={f.dims.cat} options={o('cat')} onChange={(v) => setF(setDim(f, 'cat', v))} search />
+              <OptionGrid icon={<span className="inline-block h-3.5 w-3.5" />} title="Sub category" all="All sub categories" value={f.dims.sub} options={o('sub')} onChange={(v) => setF(setDim(f, 'sub', v))} search />
+            </div>
           </div>
 
           <div className="grid gap-5 md:grid-cols-2">

@@ -197,7 +197,7 @@ export const applyFilters = (ts: ExecTicket[], f: Filters, now: number, skip: re
 export interface FilterOpt { value: string; label: string; count: number }
 
 /** The filters that have a list of values to choose from, in the order they are shown. */
-export const FILTER_DIMS: Exclude<Dim, 'age'>[] = ['group', 'tech', 'region', 'state', 'cluster', 'stype', 'plist', 'brand', 'ac', 'acb', 'amb', 'amv', 'status', 'prio']
+export const FILTER_DIMS: Exclude<Dim, 'age'>[] = ['group', 'svc', 'cat', 'sub', 'tech', 'region', 'state', 'cluster', 'stype', 'plist', 'brand', 'ac', 'acb', 'amb', 'amv', 'status', 'prio']
 
 export interface FilterOptions {
   /** each filter's values, with how many tickets each has given ALL THE OTHER filters */

@@ -6,7 +6,7 @@ import { fetchAllPages } from '@/lib/queries/paging'
 import { getServiceFormFieldsForOrg } from '@/lib/forms/sections'
 import { acFormFields, answerText, isServerRoomAc, type AcFormFields } from '@/lib/reporting/analytics/facts'
 import { levelFor, type DashLevel } from '@/lib/reporting/executive/levels'
-import type { CalAc, CalTicket } from '@/lib/reporting/executive/ac-calendar'
+import type { AssetKind, CalAc, CalTicket } from '@/lib/reporting/executive/ac-calendar'
 import { createShortCache } from '@/lib/cache/short-ttl'
 import type { ProfileWithTeams } from '@/types'
 
@@ -36,6 +36,7 @@ interface RawTicket {
   request_no: string
   status: string
   service_id: string
+  category_id: string | null
   assigned_to: string | null
   created_at: string
   resolved_at: string | null
@@ -72,8 +73,9 @@ async function loadRows(orgId: string, level: DashLevel, scope: Parameters<typeo
   const now = Date.now()
   const since = new Date(now - LOOKBACK_DAYS * 86_400_000).toISOString()
 
-  const { data: acServices } = await admin.from('services').select('id').eq('org_id', orgId).eq('auto_oem_routing', true)
-  const acServiceIds = ((acServices ?? []) as { id: string }[]).map((s) => s.id)
+  // Only the categories that go to an OEM as machine work are asset tickets: AC (kind 'ac') and genset. Other tickets of the same service (stationery, repairs ...) are not.
+  const { data: kinds } = await admin.from('service_categories').select('id, auto_oem_kind').eq('org_id', orgId).in('auto_oem_kind', ['ac', 'genset'])
+  const kindOfCategory = new Map(((kinds ?? []) as { id: string; auto_oem_kind: AssetKind }[]).map((c) => [c.id, c.auto_oem_kind]))
   const fields = await getServiceFormFieldsForOrg(admin, orgId)
   const byService = new Map<string, typeof fields>()
   for (const f of fields) byService.set(f.serviceId, [...(byService.get(f.serviceId) ?? []), f])
@@ -81,11 +83,11 @@ async function loadRows(orgId: string, level: DashLevel, scope: Parameters<typeo
 
   let rows: RawTicket[] = []
   let truncated = false
-  if (acServiceIds.length > 0) {
+  if (kindOfCategory.size > 0) {
     const got = await fetchAllPages<RawTicket>((from, to) => {
       const q = admin.from('requests')
-        .select('id, request_no, status, service_id, assigned_to, created_at, resolved_at, closed_at, updated_at, requester:profiles!requests_requester_id_fkey(store:stores!profiles_store_id_fkey(code, name, state, cluster, region)), snaps:request_master_snapshots(kind, snapshot)')
-        .eq('org_id', orgId).in('service_id', acServiceIds).neq('status', 'cancelled')
+        .select('id, request_no, status, service_id, category_id, assigned_to, created_at, resolved_at, closed_at, updated_at, requester:profiles!requests_requester_id_fkey(store:stores!profiles_store_id_fkey(code, name, state, cluster, region)), snaps:request_master_snapshots(kind, snapshot)')
+        .eq('org_id', orgId).in('category_id', [...kindOfCategory.keys()]).neq('status', 'cancelled')
         .or(`created_at.gte.${since},and(resolved_at.is.null,closed_at.is.null)`)
       return applyScope(q, scope, '').order('created_at', { ascending: false }).order('id', { ascending: true }).range(from, to)
     }, { maxRows: MAX_ROWS })
@@ -93,12 +95,13 @@ async function loadRows(orgId: string, level: DashLevel, scope: Parameters<typeo
     truncated = got.truncated
   }
 
-  // tickets that carry no copy of the AC (raised before the AC sheet was connected) are matched by the AC number chosen on the form
-  const snapOf = (r: RawTicket): Snap | null => {
-    const s = (r.snaps ?? []).find((x) => x.kind === 'ac')?.snapshot
-    return (Array.isArray(s) ? s[0] : null) as Snap | null
+  const snapOf = (r: RawTicket, kind: AssetKind): Snap | null => {
+    const sn = (r.snaps ?? []).find((x) => x.kind === kind)?.snapshot
+    return (Array.isArray(sn) ? sn[0] : null) as Snap | null
   }
-  const needForm = rows.filter((r) => !snapOf(r)?.ckdesk_no).map((r) => r.id)
+  const kindOf = (r: RawTicket): AssetKind => kindOfCategory.get(r.category_id ?? '') ?? 'ac'
+  // AC tickets that carry no copy of the AC (raised before the AC sheet was connected) are matched by the AC number chosen on the form
+  const needForm = rows.filter((r) => kindOf(r) === 'ac' && !snapOf(r, 'ac')?.ckdesk_no).map((r) => r.id)
   const formAcNo = new Map<string, string>()
   const serviceOf = new Map(rows.map((r) => [r.id, r.service_id]))
   for (let i = 0; i < needForm.length; i += CHUNK) {
@@ -129,22 +132,24 @@ async function loadRows(orgId: string, level: DashLevel, scope: Parameters<typeo
 
   const tickets: CalTicket[] = []
   for (const r of rows) {
+    const kind = kindOf(r)
     const st = r.requester?.store ?? null
-    const snap = snapOf(r)
+    const snap = snapOf(r, kind)
     const store = (snap?.store_code ?? st?.code ?? '').toUpperCase()
-    const acNo = (snap?.ckdesk_no ?? formAcNo.get(r.id) ?? '').trim()
-    if (acNo && isServerRoomAc(acNo)) continue   // the Server Room AC is not one of the store's counted ACs
+    // an AC ticket names its AC; a genset ticket goes to every genset of the store, so the store's genset is the unit
+    const acNo = kind === 'genset' ? 'Genset' : (snap?.ckdesk_no ?? formAcNo.get(r.id) ?? '').trim()
+    if (kind === 'ac' && acNo && isServerRoomAc(acNo)) continue   // the Server Room AC is not one of the store's counted ACs
     const doneIso = r.resolved_at ?? r.closed_at ?? (r.status === 'resolved' || r.status === 'closed' ? r.updated_at : null)
     const who = r.assigned_to ? people.get(r.assigned_to) : undefined
     tickets.push({
-      id: r.id, no: r.request_no, ac: store && acNo ? `${store}|${acNo.toLowerCase()}` : '', acNo, serial: snap?.serial?.trim() ?? '',
+      kind, id: r.id, no: r.request_no, ac: store && acNo ? `${store}|${acNo.toLowerCase()}` : '', acNo, serial: kind === 'genset' ? '' : (snap?.serial?.trim() ?? ''),
       store, storeName: st?.name ?? store, region: set(st?.region), cluster: set(st?.cluster), state: set(st?.state),
       created: new Date(r.created_at).getTime(), resolved: doneIso ? new Date(doneIso).getTime() : null,
       fixedBy: who ? (who.company ? companyName.get(who.company) ?? who.name : who.name) : '', status: r.status,
     })
   }
 
-  // the ACs of the AC sheet: all of them for an administrator; for anyone else only the stores they have tickets for (and their own store)
+  // the machines of the AC and Genset sheets: all of them for an administrator; for anyone else only the stores they have tickets for (and their own store)
   let myStore: string | null = null
   if (myStoreId) {
     const { data } = await admin.from('stores').select('code').eq('id', myStoreId).maybeSingle()
@@ -154,18 +159,31 @@ async function loadRows(orgId: string, level: DashLevel, scope: Parameters<typeo
   const units = await fetchAllPages<{ store_code: string; ckdesk_no: string; serial: string | null; brand: string | null; tonnage: string | null; region: string | null; cluster: string | null; state: string | null; city: string | null }>(
     (from, to) => admin.from('master_ac_units').select('store_code, ckdesk_no, serial, brand, tonnage, region, cluster, state, city')
       .eq('org_id', orgId).eq('is_active', true).is('removed_at', null).order('id', { ascending: true }).range(from, to), { maxRows: MAX_ROWS })
-  const storeNames = new Map<string, string>()
-  const storeRows = await fetchAllPages<{ code: string; name: string }>((from, to) => admin.from('stores').select('code, name').eq('org_id', orgId).order('code', { ascending: true }).range(from, to), { maxRows: MAX_ROWS })
-  for (const s of storeRows.rows) storeNames.set(s.code.toUpperCase(), s.name)
+  const gensets = await fetchAllPages<{ store_code: string; serial: string | null; brand: string | null; kva: string | null }>(
+    (from, to) => admin.from('master_gensets').select('store_code, serial, brand, kva').eq('org_id', orgId).is('removed_at', null).order('id', { ascending: true }).range(from, to), { maxRows: MAX_ROWS })
+  const storeInfo = new Map<string, { name: string; region: string; cluster: string; state: string; city: string }>()
+  const storeRows = await fetchAllPages<{ code: string; name: string; region: string | null; cluster: string | null; state: string | null; city: string | null }>(
+    (from, to) => admin.from('stores').select('code, name, region, cluster, state, city').eq('org_id', orgId).order('code', { ascending: true }).range(from, to), { maxRows: MAX_ROWS })
+  for (const sr of storeRows.rows) storeInfo.set(sr.code.toUpperCase(), { name: sr.name, region: set(sr.region), cluster: set(sr.cluster), state: set(sr.state), city: sr.city?.trim() ?? '' })
   const fleet: CalAc[] = []
   for (const u of units.rows) {
     const store = u.store_code.toUpperCase()
     if (allowed && !allowed.has(store)) continue
     if (isServerRoomAc(u.ckdesk_no)) continue
     fleet.push({
-      key: `${store}|${u.ckdesk_no.trim().toLowerCase()}`, store, storeName: storeNames.get(store) ?? store, no: u.ckdesk_no.trim(), serial: u.serial?.trim() ?? '',
+      kind: 'ac', key: `${store}|${u.ckdesk_no.trim().toLowerCase()}`, store, storeName: storeInfo.get(store)?.name ?? store, no: u.ckdesk_no.trim(), serial: u.serial?.trim() ?? '',
       label: acLabel(u.ckdesk_no.trim(), u.brand, u.tonnage), region: set(u.region), cluster: set(u.cluster), state: set(u.state), city: u.city?.trim() ?? '',
     })
   }
-  return { level, now, tickets, fleet, myStore, truncated: truncated || units.truncated }
+  // gensets: the place comes from the Store Master (the Genset sheet has none); a genset ticket is matched to its store
+  gensets.rows.forEach((g, i) => {
+    const store = g.store_code.toUpperCase()
+    if (allowed && !allowed.has(store)) return
+    const si = storeInfo.get(store)
+    fleet.push({
+      kind: 'genset', key: `${store}|genset|${i}`, store, storeName: si?.name ?? store, no: 'Genset', serial: g.serial?.trim() ?? '',
+      label: `Genset${g.brand ? ` - ${g.brand}` : ''}${g.kva ? ` ${g.kva} KVA` : ''}`, region: si?.region ?? NOT_SET, cluster: si?.cluster ?? NOT_SET, state: si?.state ?? NOT_SET, city: si?.city ?? '',
+    })
+  })
+  return { level, now, tickets, fleet, myStore, truncated: truncated || units.truncated || gensets.truncated || storeRows.truncated }
 }

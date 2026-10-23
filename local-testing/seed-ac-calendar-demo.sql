@@ -10,7 +10,8 @@ DO $$
 DECLARE
   org uuid := '00000000-0000-0000-0000-000000000001';
   svc uuid := (SELECT id FROM services WHERE auto_oem_routing LIMIT 1);
-  team uuid := (SELECT id FROM teams WHERE org_id = org LIMIT 1);
+  team uuid := (SELECT t.id FROM teams t WHERE t.org_id = org AND t.name = 'ADMIN GROUP' LIMIT 1);
+  cat uuid := (SELECT id FROM service_categories WHERE org_id = org AND auto_oem_kind = 'ac' LIMIT 1);
   r record;
   rid uuid;
   unit record;
@@ -28,8 +29,8 @@ BEGIN
     CONTINUE WHEN unit.id IS NULL;
     SELECT p.id INTO requester FROM profiles p JOIN stores s ON s.id = p.store_id WHERE s.code = r.store AND p.role = 'user' AND p.vendor_company_id IS NULL ORDER BY p.created_at LIMIT 1;
     CONTINUE WHEN requester IS NULL;
-    INSERT INTO requests (request_no, title, requester_id, service_id, team_id, org_id, status, created_at, resolved_at, updated_at)
-    VALUES ('', 'DEMOCAL ' || r.store || ' AC ' || r.ac, requester, svc, team, org,
+    INSERT INTO requests (request_no, title, requester_id, service_id, team_id, category_id, org_id, status, created_at, resolved_at, updated_at)
+    VALUES ('', 'DEMOCAL ' || r.store || ' AC ' || r.ac, requester, svc, team, cat, org,
             CASE WHEN r.fixed IS NULL THEN 'in_progress' ELSE 'resolved' END::request_status,
             now() - make_interval(days => r.raised) - interval '3 hours',
             CASE WHEN r.fixed IS NULL THEN NULL ELSE now() - make_interval(days => r.raised - r.fixed) - interval '3 hours' END,

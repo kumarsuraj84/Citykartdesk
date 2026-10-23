@@ -21,6 +21,7 @@ let fx: D03Fixtures
 const CITY_OK = `${tag}Pakur`, CITY_NONE = `${tag}Nowhere`, CITY_DOWN = `${tag}Downtown`
 const STORE_A = `${tag}A`.toUpperCase(), STORE_B = `${tag}B`.toUpperCase()
 const made: string[] = []
+const cats: string[] = []
 
 const today = (ms = Date.now()) => new Date(ms + 19_800_000).toISOString().slice(0, 10)
 const addDays = (key: string, n: number) => today(Date.parse(`${key}T00:00:00+05:30`) + n * 86_400_000)
@@ -58,6 +59,7 @@ afterAll(async () => {
   await a.from('weather_city_daily').delete().like('city', `${tag}%`)
   await a.from('weather_city_geo').delete().like('city', `${tag}%`)
   if (made.length) { await a.from('request_master_snapshots').delete().in('request_id', made); await a.from('request_activity').delete().in('request_id', made); await a.from('requests').delete().in('id', made) }
+  if (cats.length) await a.from('service_categories').delete().in('id', cats)
   await fx?.cleanup()
 }, 180_000)
 
@@ -116,46 +118,69 @@ describe('the server-only tables', () => {
 })
 
 describe('the calendar rows follow the viewer', () => {
-  it('lists the ACs of the AC sheet and the viewer\'s AC tickets (which AC, raised, fixed); a cancelled ticket is left out; an administrator sees every AC, others only the stores they have tickets for', async () => {
+  it('lists the machines of the AC and Genset sheets and the viewer\'s AC / genset tickets (which machine, raised, fixed); cancelled tickets and tickets of other categories are left out; an administrator sees every machine, others only their stores', async () => {
     const a = db()
-    const { data: svc } = await a.from('services').update({ auto_oem_routing: true }).eq('id', fx.teamA.serviceId).select('id').single()
-    expect(svc.id).toBeTruthy()
-    const store = (await a.from('stores').insert({ org_id: fx.orgId, code: STORE_A, name: `${tag} store A` }).select('id').single()).data.id as string
+    const store = (await a.from('stores').insert({ org_id: fx.orgId, code: STORE_A, name: `${tag} store A`, region: 'R9', cluster: 'C9', state: 'JH', city: CITY_OK }).select('id').single()).data.id as string
     await a.from('profiles').update({ store_id: store }).eq('id', fx.requesterA.id)
+    const catAc = (await a.from('service_categories').insert({ org_id: fx.orgId, name: `${tag} ac`, slug: `${tag}-ac`, auto_oem_kind: 'ac' }).select('id').single()).data.id as string
+    const catGen = (await a.from('service_categories').insert({ org_id: fx.orgId, name: `${tag} gen`, slug: `${tag}-gen`, auto_oem_kind: 'genset' }).select('id').single()).data.id as string
+    const catOther = (await a.from('service_categories').insert({ org_id: fx.orgId, name: `${tag} other`, slug: `${tag}-other` }).select('id').single()).data.id as string
+    cats.push(catAc, catGen, catOther)
+    await a.from('master_gensets').insert({ org_id: fx.orgId, store_code: STORE_A, brand: 'CUMMINS', kva: '125', serial: `G-${tag}`, emails: [], sheet_row: 98001 })
     const unit = { id: '00000000-0000-0000-0000-0000000000cc', store_code: STORE_A, ckdesk_no: '1', serial: `${STORE_A}-1`, brand: 'VOLTAS', tonnage: '1.5' }
-    const mk = async (status: string, createdAgo: number, resolvedAgo: number | null) => {
+    const mk = async (cat: string, kind: 'ac' | 'genset' | null, status: string, createdAgo: number, resolvedAgo: number | null, teamId = fx.teamA.id, requester = fx.requesterA.id) => {
       const r = (await a.from('requests').insert({
-        request_no: '', title: `${tag} ac`, requester_id: fx.requesterA.id, service_id: fx.teamA.serviceId, team_id: fx.teamA.id, status,
+        request_no: '', title: `${tag} ticket`, requester_id: requester, service_id: fx.teamA.serviceId, team_id: teamId, category_id: cat, status,
         created_at: new Date(Date.now() - createdAgo * 86_400_000).toISOString(), resolved_at: resolvedAgo === null ? null : new Date(Date.now() - resolvedAgo * 86_400_000).toISOString(),
       }).select('id').single()).data.id as string
       made.push(r)
-      await a.from('request_master_snapshots').insert({ request_id: r, kind: 'ac', unit_ids: [unit.id], snapshot: [unit] })
+      if (kind) await a.from('request_master_snapshots').insert({ request_id: r, kind, unit_ids: [unit.id], snapshot: [unit] })
       return r
     }
-    const open = await mk('in_progress', 2, null)
-    const done = await mk('resolved', 10, 8)
-    await mk('cancelled', 5, null)
+    const open = await mk(catAc, 'ac', 'in_progress', 2, null)
+    const done = await mk(catAc, 'ac', 'resolved', 10, 8)
+    const gen = await mk(catGen, 'genset', 'in_progress', 3, null)
+    const cancelled = await mk(catAc, 'ac', 'cancelled', 5, null)
+    const other = await mk(catOther, null, 'in_progress', 1, null)   // same service, but not machine work
+    // another group's AC ticket: the technician of team A must never see it
+    const teamBTicket = await mk(catAc, 'ac', 'in_progress', 4, null, fx.teamB.id, fx.requesterB.id)
 
-    const adminProfile = (await a.from('profiles').select('*').eq('id', fx.admin.id).single()).data
-    const data = await loadAcCalendarData({ ...adminProfile, team_members: [] } as never, { fresh: true })
+    const profileOf = async (id: string) => {
+      const p = (await a.from('profiles').select('*').eq('id', id).single()).data
+      const tm = (await a.from('team_members').select('team_id, user_id, org_id').eq('user_id', id)).data ?? []
+      return { ...p, team_members: tm } as never
+    }
+    const data = await loadAcCalendarData(await profileOf(fx.admin.id), { fresh: true })
     if ('error' in data) throw new Error(data.error)
     const mine = data.tickets.filter((t) => made.includes(t.id))
-    expect(mine.map((t) => t.id).sort()).toEqual([open, done].sort())
-    expect(mine.find((t) => t.id === open)).toMatchObject({ ac: `${STORE_A}|1`, resolved: null, store: STORE_A })
+    expect(mine.map((t) => t.id).sort()).toEqual([open, done, gen, teamBTicket].sort())   // not the cancelled one, not the other category
+    expect(mine.map((t) => t.id)).not.toContain(cancelled); expect(mine.map((t) => t.id)).not.toContain(other)
+    expect(mine.find((t) => t.id === open)).toMatchObject({ kind: 'ac', ac: `${STORE_A}|1`, resolved: null, store: STORE_A })
     expect(mine.find((t) => t.id === done)?.resolved).not.toBeNull()
-    expect(data.fleet.filter((f) => f.store === STORE_A)).toHaveLength(2)
-    expect(data.fleet.filter((f) => f.store === STORE_B)).toHaveLength(2)   // the administrator sees every store's ACs
+    expect(mine.find((t) => t.id === gen)).toMatchObject({ kind: 'genset', ac: `${STORE_A}|genset` })
+    expect(data.fleet.filter((x) => x.store === STORE_A && x.kind === 'ac')).toHaveLength(2)   // the two AC rows made in beforeAll
+    expect(data.fleet.filter((x) => x.store === STORE_A && x.kind === 'genset')).toHaveLength(1)
+    expect(data.fleet.find((x) => x.kind === 'genset' && x.store === STORE_A)).toMatchObject({ region: 'R9', cluster: 'C9', state: 'JH', city: CITY_OK })
+    expect(data.fleet.filter((x) => x.store === STORE_B)).toHaveLength(2)   // the administrator sees every store's machines
 
-    const reqProfile = (await a.from('profiles').select('*').eq('id', fx.requesterA.id).single()).data
+    // a technician of team A: only team A's tickets, never team B's
+    vi.mocked(createClient).mockResolvedValue(clientForToken(fx.agentA.accessToken) as never)
+    const tech = await loadAcCalendarData(await profileOf(fx.agentA.id), { fresh: true })
+    if ('error' in tech) throw new Error(tech.error)
+    const seen = tech.tickets.filter((t) => made.includes(t.id)).map((t) => t.id)
+    expect(seen.sort()).toEqual([open, done, gen].sort())
+    expect(seen).not.toContain(teamBTicket)
+
+    // a store login: only its own tickets and its own store's machines
     vi.mocked(createClient).mockResolvedValue(clientForToken(fx.requesterA.accessToken) as never)
-    const own = await loadAcCalendarData({ ...reqProfile, team_members: [] } as never, { fresh: true })
+    const own = await loadAcCalendarData(await profileOf(fx.requesterA.id), { fresh: true })
     if ('error' in own) throw new Error(own.error)
     expect(own.myStore).toBe(STORE_A)
-    expect(own.fleet.every((f) => f.store === STORE_A)).toBe(true)
-    expect(own.fleet.some((f) => f.store === STORE_B)).toBe(false)
+    expect(own.fleet.every((x) => x.store === STORE_A)).toBe(true)
+    expect(own.tickets.filter((t) => made.includes(t.id)).map((t) => t.id)).not.toContain(teamBTicket)
 
+    await a.from('master_gensets').delete().eq('store_code', STORE_A)
     await a.from('profiles').update({ store_id: null }).eq('id', fx.requesterA.id)
     await a.from('stores').delete().eq('id', store)
-    await a.from('services').update({ auto_oem_routing: false }).eq('id', fx.teamA.serviceId)
   })
 })

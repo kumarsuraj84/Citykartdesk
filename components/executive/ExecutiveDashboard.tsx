@@ -19,7 +19,7 @@ import { KpiScorecard } from './KpiScorecard'
 import { MatricesSection } from './MatricesSection'
 import { PeopleApprovals } from './PeopleApprovals'
 import { StoresSection } from './StoresSection'
-import { AcCalendarSection } from './AcCalendarSection'
+import { TicketCalendarSection } from './TicketCalendarSection'
 import type { DashData, DrillContext, DrillDims, OpenDrill, ViewMode } from './types'
 import { VelocitySection } from './VelocitySection'
 
@@ -53,8 +53,6 @@ export function ExecutiveDashboard({ level, me, now, tickets, approvals, truncat
 
   const periodText = period === 'custom' ? `${dayLabelYear(W.start)} to ${dayLabelYear(W.end)}` : PERIODS.find((p) => p.value === period)?.label ?? ''
   const inPeriod = useMemo(() => tickets.filter((t) => inWin(t.created, W)), [tickets, W])
-  // the AC Calendar follows the same filters as the rest of the page (group, technician, region, OEM ...): only the tickets that match are in it
-  const calendarIds = useMemo(() => (filterCount(filters) ? new Set(applyFilters(tickets, filters, now).map((t) => t.id)) : null), [tickets, filters, now])
   const matching = useMemo(() => applyFilters(tickets, filters, now).filter((t) => inWin(t.created, W)).length, [tickets, filters, now, W])
 
   // Lists for the filter drop-downs. Each list follows every OTHER filter (pick a cluster and the store, group and technician lists shrink
@@ -154,7 +152,7 @@ export function ExecutiveDashboard({ level, me, now, tickets, approvals, truncat
       {show('people') && <PeopleApprovals d={d} onOpen={open} />}
       {show('matrices') && <MatricesSection d={d} onOpen={open} />}
       {show('stores') && level !== 'requester' && <StoresSection d={d} onOpen={open} />}
-      {show('calendar') && <AcCalendarSection onlyIds={calendarIds} filterNote={pills.filter((p) => !p.label.startsWith('Custom dates')).map((p) => p.label)} />}
+      {show('calendar') && <TicketCalendarSection tickets={tickets} filters={filters} now={now} />}
       {show('tickets') && <ExplorerSection d={d} metric={metric} onOpen={open} onReset={reset} />}
 
       {drill && (

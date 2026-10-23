@@ -8,11 +8,11 @@ import {
 
 const at = (day: string, time = '10:00') => Date.parse(`${day}T${time}:00+05:30`)
 const ac = (store: string, no: string, o: Partial<CalAc> = {}): CalAc => ({
-  key: `${store}|${no}`, store, storeName: `Store ${store}`, no, serial: `SER-${store}-${no}`, label: `AC ${no} Voltas 1.5 T`, region: 'R1', cluster: 'C1', state: 'JH', city: 'Pakur', ...o,
+  kind: 'ac',  key: `${store}|${no}`, store, storeName: `Store ${store}`, no, serial: `SER-${store}-${no}`, label: `AC ${no} Voltas 1.5 T`, region: 'R1', cluster: 'C1', state: 'JH', city: 'Pakur', ...o,
 })
 let n = 0
 const tk = (store: string, acNo: string, created: number, resolved: number | null, o: Partial<CalTicket> = {}): CalTicket => ({
-  id: `t${++n}`, no: `CKSD-${n}`, ac: `${store}|${acNo}`, acNo, serial: '', store, storeName: `Store ${store}`, region: 'R1', cluster: 'C1', state: 'JH', created, resolved, fixedBy: 'Voltas', status: resolved ? 'resolved' : 'in_progress', ...o,
+  kind: 'ac', id: `t${++n}`, no: `CKSD-${n}`, ac: `${store}|${acNo}`, acNo, serial: '', store, storeName: `Store ${store}`, region: 'R1', cluster: 'C1', state: 'JH', created, resolved, fixedBy: 'Voltas', status: resolved ? 'resolved' : 'in_progress', ...o,
 })
 
 describe('days in India time', () => {
