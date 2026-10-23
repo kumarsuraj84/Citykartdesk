@@ -234,7 +234,6 @@ const VERIFY = [
   ['Vendor technicians, parts, PO', 'Main has no vendor tables or pages.', 'Not on main.', 'Confirmed not live', RD],
   ['Ticket Calendar, new filters, weather', 'Main has no calendar, no Service / Category / Sub category filters and no weather job. The live server CAN reach the weather service.', 'Not on main.', 'Confirmed not live', RD],
   ['Tests', 'A clean copy of main: type check and 1456 unit tests pass. This PC: 1539 unit tests and the sheet, vendor, mail and calendar integration suites pass.', 'Both pass.', 'Confirmed', L],
-  ['WhatsApp and DeskTime', 'Left out of the lists as you asked.', '-', 'Not listed', FU],
 ]
 
 // ═══ the workbook ═══════════════════════════════════════════════════════════════════════════
