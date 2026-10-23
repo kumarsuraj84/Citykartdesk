@@ -54,6 +54,7 @@ f(C, 'Ticket as PDF', 'Download the ticket, the form, the whole conversation and
 f(C, 'Automatic time tracking', 'Time starts when work starts and stops when it leaves In Progress.', [T], D, D, 'Worklogs and timers')
 f(C, 'Nudge', 'Remind the handling technician from the dashboard.', [M, T], D, D, 'Reminders / escalation')
 f(C, 'Bulk actions', 'Act on many tickets at once (up to 500).', [T, M], D, D, 'Bulk actions')
+f(C, 'Auto-close after the reopen window', 'A resolved ticket closes by itself when nobody reopens it in time.', [T, M], D, D, 'Auto close', 'Runs whenever someone opens the Home page (there is no scheduled job)')
 f(C, 'Ticket history', 'Every change recorded and shown as a timeline.', [R, T], D, D, 'Request history')
 f(C, 'Hand AC tickets to a vendor technician', 'Rules give the AC ticket to the OEM\'s engineer; the ticket shows "With vendor".', [M, T], D, P, 'No direct equivalent')
 f(C, 'End a vendor hold yourself', 'A Citykart technician can take the ticket back from hold; the vendor is told.', [T], D, P, 'No direct equivalent')
@@ -64,11 +65,12 @@ f(E, 'Public conversation', 'Messages between requester and technician with file
 f(E, 'Internal notes', 'Notes only Citykart staff can see.', [T, M], D, D, 'Notes')
 f(E, 'CC a comment', 'Send a comment, with the whole ticket, to CK Desk users and OEM contacts.', [T], D, D, 'Forward / CC on reply')
 f(E, 'Reply by e-mail', 'A reply to a ticket mail is read from the mailbox every minute and added to the conversation.', [R, T], D, D, 'E-mail reply to request')
-f(E, 'OEM e-mail on AC and Genset tickets', 'A table-style mail goes to the store\'s OEM automatically; OEM replies show in the conversation.', [T], D, D, 'Notify vendor')
+f(E, 'AC ticket: automatic OEM e-mail and In Progress', 'The ticket is mailed to the store\'s AC OEM by itself (table-style mail) and moves to In Progress; OEM replies show in the conversation.', [T], D, D, 'Notify vendor', 'Works when the store has an AC OEM mapped; confirmed working on main')
+f(E, 'Genset ticket: automatic OEM e-mail and In Progress', 'The same automatic mail and In Progress for genset tickets.', [T], D, OFF, 'Notify vendor', 'Code is on main but NOT switched on: needs the category set to Genset in Admin and a Genset OEM on each store (the Genset sheet will supply the addresses)')
 f(E, 'Ticket e-mails', 'Mails for logged, assigned, status change, resolved, cancelled, with the technician\'s comment and real ticket title.', [R, T], D, D, 'Notification templates')
 f(E, 'Notification rules', 'Admin chooses, per event, in-app, e-mail or push; users can opt out.', [M, R, T], D, D, 'Notification rules')
 f(E, 'Bell, unread count and pop-up', 'A bell and a small corner pop-up for new notifications.', ALL, D, D, 'Notifications')
-f(E, 'Browser push notifications', 'Optional push messages in the browser (asks once).', ALL, D, D, 'Mobile / push notifications')
+f(E, 'Browser push notifications', 'Optional push messages in the browser.', ALL, D, OFF, 'Mobile / push notifications', 'Code is on main but the live server has no push keys, so it is switched off')
 f(E, 'Mailbox settings', 'Admin sets the sending mailbox without a redeploy.', [M], D, D, 'Mail server settings')
 
 // ── SLA
@@ -88,7 +90,7 @@ f(Ap, 'Quick approve', 'Approve from the Approvals list or the bell.', [T, M], D
 f(Ap, 'Add approvers and delegate', 'Add approvers while pending; delegate a step; first answer decides.', [T, M], D, D, 'Approvals')
 f(Ap, 'Separation of duties', 'Nobody approves what they raised or sent.', [M], D, D, 'Approval rules')
 f(Ap, 'Daily approval reminder', 'One mail at 10:00 to each approver listing what is waiting.', [M], D, D, 'Approval reminders')
-f(Ap, 'Automatic CVM approval', 'Fixtures / Hangers tickets go to the store\'s CVM for approval by themselves.', [T, R], D, D, 'No direct equivalent')
+f(Ap, 'Automatic CVM approval', 'Fixtures / Hangers tickets go to the store\'s CVM for approval by themselves.', [T, R], D, D, 'No direct equivalent', 'Works once each store has its CVM assigned in Admin (set-up in progress)')
 
 // ── Automation
 const U = 'Automation'
@@ -174,7 +176,7 @@ f(Rp, 'Report Builder', 'Build your own pivot or table report from requests, tas
 f(Rp, 'Saved reports', 'Save a report and open it again.', [T, M], D, D, 'Custom reports')
 f(Rp, 'Report Analytics', 'Fixed reports: age bucket, ticket status, store-wise, AC Not Working, AMC vendor (Excel-style, expand and collapse).', [T, M], D, D, 'Standard reports')
 f(Rp, 'Predefined Reports', '12 fixed Excel-style reports plus weekly, monthly, priority-wise and repeated AC complaint reports; search by name.', [T, M], D, D, 'Standard reports')
-f(Rp, 'Scheduled reports and exports', 'CSV and Excel exports; scheduled daily, weekly or monthly reports to company addresses.', [M], D, D, 'Scheduled reports')
+f(Rp, 'Excel and CSV exports', 'Download a report or a list as CSV or Excel; every export is logged.', [T, M], D, D, 'Export')
 f(Rp, 'India-time reporting', 'Dates and weeks use India time everywhere.', [T, M], D, D, 'Time zone settings')
 
 // ── Projects, tasks, knowledge
@@ -205,7 +207,8 @@ f(Ad, 'Daily weather job', 'A scheduled task at 08:00 that saves the day\'s high
 
 // ── Not built
 const Nb = 'Not built yet'
-f(Nb, 'Reminder for a waiting quote', 'Remind the approver after 1 day and the vendor after 2 days.', [M, V], P, P, 'Escalations')
+f(Nb, 'Send scheduled reports by e-mail', 'The screens to define a schedule exist, but no job sends the reports yet.', [M], P, P, 'Scheduled reports')
+f(Nb, 'Reminder for a waiting quote', 'Remind the approver after 1 day and the vendor after 2 days if a revised price is not answered.', [M, V], P, P, 'Escalations')
 f(Nb, 'Vendor replies by e-mail', 'A vendor answers a mail and it lands in the conversation (not tested for vendors).', [V], P, P, 'E-mail reply to request')
 f(Nb, 'Weather fallback by the nearest store', 'For cities the weather service cannot find, use the nearest store of the same cluster.', [M], P, P, 'No direct equivalent')
 f(Nb, 'Calendar fix for reopened tickets', 'A reopened ticket counts as open for its whole life in the calendar; correct it from the history.', [M], P, P, 'No direct equivalent')
