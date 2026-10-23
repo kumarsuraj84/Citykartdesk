@@ -256,7 +256,10 @@ function featureSheet(wb, name, list, withWho) {
   return ws
 }
 
+module.exports = { rows, gaps, D, P, OFF, R, T, M, V }
+
 ;(async () => {
+  if (require.main !== module) return   // used as a data source by make-management-status-xlsx.cjs
   const wb = new ExcelJS.Workbook()
   wb.creator = 'CityKart Desk'
 
