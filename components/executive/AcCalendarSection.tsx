@@ -32,7 +32,7 @@ const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const deg = (v: number | null) => (v === null ? '' : `${Math.round(v)}°`)
 const dateText = (ms: number) => new Date(ms).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })
 
-export function AcCalendarSection() {
+export function AcCalendarSection({ onlyIds, filterNote }: { onlyIds: Set<string> | null; filterNote: string[] }) {
   const [data, setData] = useState<AcCalendarData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [kind, setKind] = useState<PlaceKind>('all')
@@ -55,7 +55,8 @@ export function AcCalendarSection() {
   }, [])
 
   const fleet = data?.fleet
-  const tickets = data?.tickets
+  // only the tickets that match the dashboard's filters (null = no filter is on)
+  const tickets = useMemo(() => (data ? (onlyIds ? data.tickets.filter((t) => onlyIds.has(t.id)) : data.tickets) : undefined), [data, onlyIds])
   const now = data?.now ?? 0
 
   const options = useMemo(() => (kind === 'all' || !fleet ? [] : placeOptions(kind, fleet)), [kind, fleet])
@@ -149,6 +150,11 @@ export function AcCalendarSection() {
           </>
         }
       />
+      {filterNote.length > 0 && (
+        <p className="mt-2 rounded-md border border-primary/25 bg-primary/5 px-3 py-1.5 text-xs text-primary">
+          Showing only the tickets that match the dashboard filters: <strong>{filterNote.join(' · ')}</strong>. The total ACs stay those of the chosen place.
+        </p>
+      )}
       {data.truncated && <p className="mt-2 rounded-md bg-destructive/10 px-3 py-1.5 text-xs font-semibold text-destructive">There are more tickets than this page can load, so the oldest ones are left out.</p>}
 
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">

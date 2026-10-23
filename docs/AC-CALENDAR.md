@@ -24,3 +24,6 @@ The day it is resolved shows it under **F**, and from the end of that day the AC
 
 ## Code
 `lib/reporting/executive/ac-calendar.ts` (all the arithmetic), `lib/queries/ac-calendar.ts` (rows), `lib/actions/acCalendar.ts`, `components/executive/AcCalendarSection.tsx`, `lib/weather/*`, `app/api/weather/daily/route.ts`. Tests: `tests/unit/ac-calendar.test.ts`, `tests/unit/open-meteo.test.ts`, `tests/vapt/38-ac-calendar-weather.test.ts`. Local demo data: `local-testing/seed-ac-calendar-demo.sql` (titles start with DEMOCAL; remove with `seed-ac-calendar-demo-cleanup.sql`).
+
+## Follows the dashboard filters (added 2026-10-23)
+The calendar uses the same filters as the rest of the Smart Dashboard (group, technician, region, state, cluster, OEM brand, search ...). Choose a group at the top and only that group's AC tickets are in the calendar, the repeat-fault list and the worst-places list; a blue note under the title says which filters are on. The total ACs stay those of the chosen place. The period buttons (30d, 60d ...) do not apply: the calendar has its own month.
