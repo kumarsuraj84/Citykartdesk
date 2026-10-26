@@ -1,7 +1,7 @@
 import { createHash } from 'crypto'
-import { parseAcSheet, parseCvmSheet, parseGensetSheet } from './parse'
+import { parseAcSheet, parseCvmSheet, parseGensetSheet, parsePmsSheet } from './parse'
 import { matchAcUnits, matchGensets, planRemovals, REMOVAL_WAIT_MINUTES } from './diff'
-import type { AcRow, CvmRow, GensetRow, MasterIssue, MasterKind } from './types'
+import type { AcRow, CvmRow, GensetRow, MasterIssue, MasterKind, PmsRow } from './types'
 import type { SheetsSource } from './google'
 
 // Copies the three master sheets into CK Desk's database (read only: nothing is ever written to a sheet). Run three times a day by the scheduled task (see
@@ -112,7 +112,9 @@ async function unknownStoreIssues(db: Db, orgId: string, kind: MasterKind, codes
   }
   return unique.filter((c) => !known.has(c)).map((c) => ({
     kind, severity: 'warning' as const, code: 'unknown_store', storeCode: c, sheetRow: null,
-    message: `Store ${c} is in the sheet but not in the CK Desk store master. Its rows are kept, but nobody can raise a ticket for it until the store exists.`,
+    message: kind === 'pms'
+      ? `Store ${c} is in the AC PMS sheet but not in the CK Desk store master, so no PMS ticket can be made for it until the store exists.`
+      : `Store ${c} is in the sheet but not in the CK Desk store master. Its rows are kept, but nobody can raise a ticket for it until the store exists.`,
   }))
 }
 
@@ -191,7 +193,25 @@ async function applyCvm(p: { db: Db; orgId: string; rows: CvmRow[]; now: Date })
   return { added: without.length, changed: withId.length, removed: plan.removeNow.length, waiting: plan.markMissing.length, waitingIssue }
 }
 
+/** The AC PMS sheet is copied as it is: new dates are added, dates that left the sheet are dropped (tickets already made stay: they are ordinary tickets). */
+async function applyPms(p: { db: Db; orgId: string; rows: PmsRow[]; now: Date }) {
+  const { db, orgId, rows, now } = p
+  const nowIso = now.toISOString()
+  const stored = must<Record<string, unknown>[]>(await db.from('master_pms_dates').select('store_code, pms_date, sheet_row').eq('org_id', orgId), 'read master_pms_dates') ?? []
+  const key = (store: string, date: string) => `${store}|${date}`
+  const have = new Map(stored.map((s) => [key(String(s.store_code), String(s.pms_date)), s]))
+  const want = new Set(rows.map((r) => key(r.storeCode, r.pmsDate)))
+  const adds = rows.filter((r) => !have.has(key(r.storeCode, r.pmsDate)))
+  const moved = rows.filter((r) => { const o = have.get(key(r.storeCode, r.pmsDate)); return o && o.sheet_row !== r.sheetRow })
+  const gone = stored.filter((s) => !want.has(key(String(s.store_code), String(s.pms_date))))
+  await inChunks(adds.map((r) => ({ org_id: orgId, store_code: r.storeCode, pms_date: r.pmsDate, sheet_row: r.sheetRow, first_seen_at: nowIso, last_seen_at: nowIso })), async (c) => must(await db.from('master_pms_dates').insert(c), 'insert PMS dates'))
+  await inChunks(moved.map((r) => ({ org_id: orgId, store_code: r.storeCode, pms_date: r.pmsDate, sheet_row: r.sheetRow, last_seen_at: nowIso })), async (c) => must(await db.from('master_pms_dates').upsert(c, { onConflict: 'org_id,store_code,pms_date' }), 'update PMS dates'))
+  for (const g of gone) must(await db.from('master_pms_dates').delete().eq('org_id', orgId).eq('store_code', g.store_code).eq('pms_date', g.pms_date), 'remove PMS date')
+  return { added: adds.length, changed: moved.length, removed: gone.length, waiting: 0, waitingIssue: null as MasterIssue | null }
+}
+
 async function pendingCount(db: Db, orgId: string, kind: MasterKind): Promise<number> {
+  if (kind === 'pms') return 0   // the PMS copy has no delayed removals
   const table = kind === 'ac' ? 'master_ac_units' : kind === 'genset' ? 'master_gensets' : 'master_store_cvm'
   const { count } = await db.from(table).select('id', { count: 'exact', head: true }).eq('org_id', orgId).is('removed_at', null).not('missing_since', 'is', null)
   return count ?? 0
@@ -244,6 +264,12 @@ async function syncOne(p: { db: Db; orgId: string; kind: MasterKind; source: She
       result = await applyUnits<GensetRow>({ db, orgId, table: 'master_gensets', rows: parsed.rows, now, match: (r, s) => matchGensets(r, s), columns: gensetColumns })
       issues = [...parsed.issues, ...(await unknownStoreIssues(db, orgId, 'genset', parsed.rows.map((r) => r.storeCode)))]
       rowCount = parsed.rows.length
+    } else if (kind === 'pms') {
+      const parsed = parsePmsSheet(values)
+      if (parsed.fatal) return fail(parsed.fatal)
+      result = await applyPms({ db, orgId, rows: parsed.rows, now })
+      issues = [...parsed.issues, ...(await unknownStoreIssues(db, orgId, 'pms', parsed.rows.map((r) => r.storeCode)))]
+      rowCount = parsed.rows.length
     } else {
       const parsed = parseCvmSheet(values)
       if (parsed.fatal) return fail(parsed.fatal)
@@ -275,7 +301,7 @@ export async function syncMasters(p: {
 }): Promise<SyncReport> {
   const now = p.now ?? new Date()
   const report = {} as SyncReport
-  for (const kind of ['ac', 'genset', 'cvm'] as MasterKind[]) {
+  for (const kind of ['ac', 'genset', 'cvm', 'pms'] as MasterKind[]) {
     try {
       report[kind] = await syncOne({ db: p.db, orgId: p.orgId, kind, source: p.source, now, force: p.force ?? false, cvmEmailKnown: p.cvmEmailKnown })
     } catch (e) {

@@ -4,7 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { resolveTemplate } from '@/lib/masters/mail'
 import { demoSheetsDir } from '@/lib/masters/demo'
-import { MastersClient, type SourceView, type IssueView, type TemplateView, type CountsView } from './MastersClient'
+import { istNow } from '@/lib/pms/window'
+import { MastersClient, type SourceView, type IssueView, type TemplateView, type CountsView, type PmsView } from './MastersClient'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -35,6 +36,16 @@ export default async function SheetMastersPage({ searchParams }: { searchParams:
     admin.from('master_ac_units').select('id', { count: 'exact', head: true }).eq('org_id', orgId).is('removed_at', null).eq('is_active', false),
   ])
 
+  const [pmsUpcoming, pmsLog] = await Promise.all([
+    admin.from('master_pms_dates').select('store_code', { count: 'exact', head: true }).eq('org_id', orgId).gte('pms_date', istNow(new Date()).date),
+    admin.from('pms_ticket_log').select('store_code, pms_date, status, note, request:requests(request_no)').eq('org_id', orgId).order('pms_date', { ascending: false }).order('store_code').limit(12),
+  ])
+  const pms: PmsView = {
+    upcoming: pmsUpcoming.count ?? 0,
+    log: ((pmsLog.data ?? []) as { store_code: string; pms_date: string; status: PmsView['log'][number]['status']; note: string | null; request: { request_no: string } | { request_no: string }[] | null }[])
+      .map((l) => ({ store_code: l.store_code, pms_date: l.pms_date, status: l.status, note: l.note, request_no: (Array.isArray(l.request) ? l.request[0] : l.request)?.request_no ?? null })),
+  }
+
   const tpl = (kind: 'ac' | 'genset'): TemplateView => {
     const saved = (templates.data ?? []).find((t: { kind: string }) => t.kind === kind) ?? null
     const t = resolveTemplate(saved, kind)
@@ -48,7 +59,7 @@ export default async function SheetMastersPage({ searchParams }: { searchParams:
     <div className="mx-auto max-w-5xl space-y-4">
       <PageHeader
         title="Sheet Masters"
-        description="The AC, Genset and CVM Google Sheets are the master list. CK Desk copies them into its own database at 11:00, 15:00 and 19:00 and never changes them."
+        description="The AC, Genset, CVM and AC PMS Google Sheets are the master list. CK Desk copies them into its own database at 11:00, 15:00 and 19:00 and never changes them. The AC PMS tickets are made at 09:00 on each PMS date."
       />
       <MastersClient
         googleResult={google ?? null}
@@ -57,6 +68,7 @@ export default async function SheetMastersPage({ searchParams }: { searchParams:
         issues={(issues.data ?? []) as IssueView[]}
         templates={[tpl('ac'), tpl('genset')]}
         counts={counts}
+        pms={pms}
       />
     </div>
   )

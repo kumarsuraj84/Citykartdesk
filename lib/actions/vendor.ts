@@ -4,7 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { applyStatusChange } from '@/lib/requests/status-change'
 import { logActivity } from '@/lib/activity'
 import { notify } from '@/lib/notifications'
-import { buildResolutionText, checkVendorResolve, checkVendorStart, resolutionChoices, todayIstDate } from '@/lib/vendor/fields'
+import { buildPmsResolutionText, buildResolutionText, checkVendorResolve, checkVendorResolvePms, checkVendorStart, resolutionChoices, todayIstDate } from '@/lib/vendor/fields'
+import { isPmsRequest } from '@/lib/pms/is-pms'
 import { loadLiveResolutionField } from '@/lib/vendor/live-form'
 import { linkFilesToComment, ownFiles } from '@/lib/vendor/requests'
 import { refreshVendorPaths, vendorTechAndTicket } from '@/lib/vendor/ctx'
@@ -25,18 +26,25 @@ export async function vendorStartWorking(requestId: string, oemNumberRaw: string
   const { profile, ticket, supabase } = ctx
   if (ticket.status !== 'open' && ticket.status !== 'assigned') return { error: 'This ticket has already been started.' }
 
-  const check = checkVendorStart(oemNumberRaw)
-  if (!check.ok) return { error: check.error }
+  // an AC PMS visit has no OEM ticket number: starting it needs nothing but the button
+  const pms = await isPmsRequest(createAdminClient() as never, requestId)
+  let message: string
+  if (pms) {
+    message = `${profile.full_name} (vendor) started the AC PMS visit.`
+  } else {
+    const check = checkVendorStart(oemNumberRaw)
+    if (!check.ok) return { error: check.error }
 
-  const form = await loadTicketForm(requestId)
-  if (!form) return { error: 'Request not found.' }
-  const patch: Record<string, unknown> = {}
-  if (form.fields.oemNumber) patch[form.fields.oemNumber.id] = check.oemNumber
-  if (form.fields.oemDate) patch[form.fields.oemDate.id] = todayIstDate()
-  const saved = await mergeFormData(requestId, patch)
-  if (saved.error) return saved
+    const form = await loadTicketForm(requestId)
+    if (!form) return { error: 'Request not found.' }
+    const patch: Record<string, unknown> = {}
+    if (form.fields.oemNumber) patch[form.fields.oemNumber.id] = check.oemNumber
+    if (form.fields.oemDate) patch[form.fields.oemDate.id] = todayIstDate()
+    const saved = await mergeFormData(requestId, patch)
+    if (saved.error) return saved
 
-  const message = `${profile.full_name} (vendor) started work on this ticket. OEM ticket number: ${check.oemNumber}.`
+    message = `${profile.full_name} (vendor) started work on this ticket. OEM ticket number: ${check.oemNumber}.`
+  }
   const res = await applyStatusChange({ supabase, profile }, requestId, 'in_progress', message, { vendorFlow: 'start' })
   if (res.error) return res
   refresh(requestId)
@@ -52,6 +60,19 @@ export async function vendorResolve(input: { requestId: string; choice: string; 
 
   const choiceValue = (input.choice ?? '').trim()
   const remarks = (input.remarks ?? '').trim().slice(0, 2000)
+
+  // an AC PMS visit: no resolution list; the PMS report (an attachment) is what is needed, remarks are optional
+  if (await isPmsRequest(createAdminClient() as never, input.requestId)) {
+    const pmsFiles = await ownFiles(input.requestId, profile.id, (input.attachmentIds ?? []).slice(0, 20))
+    const pmsCheck = checkVendorResolvePms({ fsrCount: pmsFiles.length })
+    if (!pmsCheck.ok) return { error: pmsCheck.error }
+    const done = await applyStatusChange({ supabase, profile }, input.requestId, 'resolved', buildPmsResolutionText(remarks), { vendorFlow: 'resolve' })
+    if (done.error) return done
+    await linkFilesToComment(input.requestId, done.commentId, pmsFiles)   // the PMS report shows right under the resolution in the conversation
+    refresh(input.requestId)
+    return {}
+  }
+
   const form = await loadTicketForm(input.requestId)
   if (!form) return { error: 'Request not found.' }
   // the choice must be one of the administrator's CURRENT list (or "Other"); what is saved is the list's own value, what is written to the conversation is its words

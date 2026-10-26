@@ -600,6 +600,29 @@ export async function setCategoryOemKind(id: string, kind: OemKind | null): Prom
   return {}
 }
 
+// ── "AC PMS category" (per category) ───────────────────────────────────────────────────────────────────────────────────────────────────
+// The tickets of this category are the AC PMS tickets: they are made from the AC PMS Google Sheet (lib/pms/tickets.ts) and the vendors see them in their own
+// "AC PMS tickets" tab, apart from their normal AC tickets.
+export async function setCategoryPms(id: string, on: boolean): Promise<ActionResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return guard
+  const orgId = guard.profile!.org_id
+  if (!orgId) return { error: 'Your account is not linked to an organisation.' }
+  const admin = createAdminClient()
+  const { data: before } = await admin.from('service_categories').select('name, is_pms').eq('id', id).eq('org_id', orgId).maybeSingle()
+  if (!before) return { error: 'Category not found.' }
+  if (before.is_pms === on) return {}
+  const { error } = await admin.from('service_categories').update({ is_pms: on }).eq('id', id).eq('org_id', orgId)
+  if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/categories.ts#setCategoryPms' }) }
+  await logAdminAudit({
+    orgId, actorId: guard.profile!.id,
+    entityType: 'service_category', entityId: id, action: 'category_pms_changed',
+    metadata: { name: before.name, from: before.is_pms ? 'on' : 'off', to: on ? 'on' : 'off' },
+  })
+  revalidatePath('/admin/categories')
+  return {}
+}
+
 // ── "Show earlier requests in the approval mail" (per category) ───────────────────────────────────────────────────────────────────────
 // When on, the approver's mail and approve page carry a box with the last decisions on requests of the same store and sub-category. See lib/approvals/history.ts.
 export async function setCategoryApprovalHistory(id: string, on: boolean): Promise<ActionResult> {

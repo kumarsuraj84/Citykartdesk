@@ -50,3 +50,9 @@ $weatherAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-N
 $weatherTrigger = New-ScheduledTaskTrigger -Daily -At '08:00'
 Register-ScheduledTask -TaskName 'CitykartDesk-Cron-WeatherDaily' -Action $weatherAction -Trigger $weatherTrigger -Principal $principal -Settings $settings -Force | Out-Null
 Write-Output 'Installed CitykartDesk-Cron-WeatherDaily (every day at 08:00)'
+
+# AC PMS: re-reads the AC PMS sheet and makes the PMS tickets that are due today, every day at 09:00
+$pmsAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$runner`" -Job pms-daily"
+$pmsTrigger = New-ScheduledTaskTrigger -Daily -At '09:00'
+Register-ScheduledTask -TaskName 'CitykartDesk-Cron-PmsDaily' -Action $pmsAction -Trigger $pmsTrigger -Principal $principal -Settings $settings -Force | Out-Null
+Write-Output 'Installed CitykartDesk-Cron-PmsDaily (every day at 09:00)'

@@ -14,7 +14,7 @@ const RichEmailEditor = dynamic(() => import('@/components/admin/RichEmailEditor
 })
 
 export type SourceView = {
-  kind: 'ac' | 'genset' | 'cvm'
+  kind: 'ac' | 'genset' | 'cvm' | 'pms'
   spreadsheet_id: string
   tab_name: string | null
   last_checked_at: string | null
@@ -23,15 +23,18 @@ export type SourceView = {
   last_error: string | null
   row_count: number | null
 }
-export type IssueView = { kind: 'ac' | 'genset' | 'cvm'; severity: 'error' | 'warning'; code: string; store_code: string | null; sheet_row: number | null; message: string }
+export type IssueView = { kind: 'ac' | 'genset' | 'cvm' | 'pms'; severity: 'error' | 'warning'; code: string; store_code: string | null; sheet_row: number | null; message: string }
 export type TemplateView = { kind: 'ac' | 'genset'; subject: string; body: string; custom: boolean }
 export type CountsView = { acActive: number; acInactive: number; acRemoved: number; gensetActive: number; gensetRemoved: number; cvmStores: number }
+/** The latest AC PMS tickets (or reasons why none was made) and how many PMS dates are still to come in the sheet. */
+export type PmsView = { upcoming: number; log: { store_code: string; pms_date: string; status: 'creating' | 'created' | 'skipped' | 'failed'; note: string | null; request_no: string | null }[] }
 type Connection = { account_email: string | null; status: 'connected' | 'broken'; last_error: string | null; connected_at: string } | null
 
-const SHEETS: { kind: 'ac' | 'genset' | 'cvm'; title: string; hint: string }[] = [
+const SHEETS: { kind: 'ac' | 'genset' | 'cvm' | 'pms'; title: string; hint: string }[] = [
   { kind: 'ac', title: 'AC DETAILS MASTER SHEET-ADMIN', hint: 'One row per AC. Gives the AC choices in the ticket form, the OEM e-mail addresses, and the store address and opening date.' },
   { kind: 'genset', title: 'GENSET Detail MASTER SHEET-ADMIN', hint: 'One row per genset. Gives the OEM e-mail addresses for genset tickets.' },
   { kind: 'cvm', title: 'CVM Detail MASTER SHEET-ADMIN (for Approval)', hint: 'One row per store with its CVM e-mail. The approval goes to that person.' },
+  { kind: 'pms', title: 'AC PMS MASTER SHEET', hint: 'One row per store and PMS date (columns Store Code and AC PMS Date). On that date, from 09:00, one AC PMS ticket is made for the store, in the AC PMS service and category.' },
 ]
 
 const GOOGLE_MESSAGE: Record<string, { ok: boolean; text: string }> = {
@@ -150,17 +153,18 @@ function TemplateCard({ t }: { t: TemplateView }) {
   )
 }
 
-export function MastersClient({ googleResult, connection, sources, issues, templates, counts }: {
+export function MastersClient({ googleResult, connection, sources, issues, templates, counts, pms = { upcoming: 0, log: [] } }: {
   googleResult: string | null
   connection: Connection
   sources: SourceView[]
   issues: IssueView[]
   templates: TemplateView[]
   counts: CountsView
+  pms?: PmsView
 }) {
   const [pending, start] = useTransition()
   const [updateMsg, setUpdateMsg] = useState<{ ok: boolean; text: string } | null>(null)
-  const [filter, setFilter] = useState<'all' | 'ac' | 'genset' | 'cvm'>('all')
+  const [filter, setFilter] = useState<'all' | 'ac' | 'genset' | 'cvm' | 'pms'>('all')
   const flash = googleResult ? GOOGLE_MESSAGE[googleResult] : null
   const connected = connection?.status === 'connected'
   const issueCount = (kind: string) => ({
@@ -230,13 +234,33 @@ export function MastersClient({ googleResult, connection, sources, issues, templ
 
       {SHEETS.map((s) => <SourceCard key={s.kind} source={sources.find((x) => x.kind === s.kind)} spec={s} issueCount={issueCount(s.kind)} />)}
 
+      {sources.some((x) => x.kind === 'pms') && (
+        <Card title={`AC PMS tickets (${pms.upcoming} PMS date${pms.upcoming === 1 ? '' : 's'} still to come in the sheet)`}>
+          {pms.log.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No PMS ticket has been made yet. Tickets are made from 09:00 on the PMS date of each store.</p>
+          ) : (
+            <ul className="divide-y divide-border text-sm">
+              {pms.log.map((l) => (
+                <li key={`${l.store_code}-${l.pms_date}`} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                  <span className="text-foreground">{l.store_code} - {l.pms_date}</span>
+                  <span className={cn('text-xs', l.status === 'created' ? 'text-emerald-700' : l.status === 'creating' ? 'text-amber-700' : 'text-red-600')}>
+                    {l.status === 'created' ? `Ticket ${l.request_no ?? 'made'}` : l.status === 'creating' ? 'Being made' : (l.note ?? 'No ticket made')}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
+
       <Card
         title={`Master data health (${issues.length})`}
         right={
-          <div className="flex gap-1 text-xs">
-            {(['all', 'ac', 'genset', 'cvm'] as const).map((k) => (
+          <div className="flex flex-wrap items-center gap-1 text-xs">
+            <span className="mr-1 text-muted-foreground">Checked {ago(sources.reduce<string | null>((m, s) => (s.last_checked_at && (!m || s.last_checked_at > m) ? s.last_checked_at : m), null))}</span>
+            {(['all', 'ac', 'genset', 'cvm', 'pms'] as const).map((k) => (
               <button key={k} type="button" onClick={() => setFilter(k)} className={cn('rounded-full border px-2.5 py-0.5', filter === k ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground')}>
-                {k === 'all' ? 'All' : k === 'ac' ? 'AC' : k === 'genset' ? 'Genset' : 'CVM'}
+                {k === 'all' ? 'All' : k === 'ac' ? 'AC' : k === 'genset' ? 'Genset' : k === 'pms' ? 'AC PMS' : 'CVM'}
               </button>
             ))}
           </div>

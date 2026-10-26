@@ -1,5 +1,5 @@
 import { parseEmails } from './emails'
-import type { AcRow, CvmRow, GensetRow, MasterIssue, MasterKind, ParseResult } from './types'
+import type { AcRow, CvmRow, GensetRow, MasterIssue, MasterKind, ParseResult, PmsRow } from './types'
 
 // Pure: turns the cells of a master sheet (as the Sheets API returns them) into typed rows plus a list of problems. No database, no network.
 // Columns are found by their heading (case, spaces and punctuation do not matter), so the team can move columns around or add new ones.
@@ -50,7 +50,20 @@ export function toIsoDate(raw: string): string | null {
   if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
   m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(raw)
   if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
+  // 25-Oct-2026, 25 Oct 2026, 25 October 2026 (the form a sheet shows when the cell is formatted as a long date)
+  m = /^(\d{1,2})[\s/.-]([A-Za-z]{3,9})[\s/.,-]+(\d{4})$/.exec(raw)
+  if (m) {
+    const mon = MONTHS.indexOf(m[2].slice(0, 3).toLowerCase())
+    if (mon >= 0) return `${m[3]}-${String(mon + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}`
+  }
   return null
+}
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+
+/** True when yyyy-mm-dd is a real calendar day (31 Feb is not). */
+function realDay(iso: string): boolean {
+  const d = new Date(`${iso}T00:00:00Z`)
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso
 }
 
 function missingColumns(grid: Grid, required: { label: string; keys: string[] }[]): string[] {
@@ -247,6 +260,51 @@ export function parseCvmSheet(values: unknown[][]): ParseResult<CvmRow> {
     }
     seen.set(storeCode, { email, row: sheetRow })
     rows.push({ sheetRow, storeCode, cvmEmail: email })
+  }
+  return { rows, issues }
+}
+
+/**
+ * The AC PMS sheet: one row per store and PMS date (columns Store Code and AC PMS Date; other columns are ignored). A store with no date is simply not due. Several dates
+ * for one store are fine (several rows). A date that cannot be read is reported and skipped; the same store and date twice counts once.
+ */
+export function parsePmsSheet(values: unknown[][]): ParseResult<PmsRow> {
+  const grid = toGrid(values)
+  if (!grid) return { rows: [], issues: [], fatal: 'The AC PMS sheet is empty.' }
+  const STORE = ['storecode', 'store', 'storeid']
+  const DATE = ['acpmsdate', 'pmsdate', 'pmsdates', 'acpmsdates', 'pmsvisitdate']
+  const missing = missingColumns(grid, [
+    { label: 'Store Code', keys: STORE },
+    { label: 'AC PMS Date', keys: DATE },
+  ])
+  if (missing.length) return { rows: [], issues: [], fatal: `The AC PMS sheet is missing the column(s): ${missing.join(', ')}.` }
+
+  const get = reader(grid)
+  const rows: PmsRow[] = []
+  const issues: MasterIssue[] = []
+  const seen = new Map<string, number>()
+  for (const { sheetRow, cells } of grid.body) {
+    if (rowIsBlank(cells)) continue
+    const storeCode = get(cells, ...STORE).toUpperCase()
+    const rawDate = get(cells, ...DATE)
+    if (!storeCode) {
+      if (rawDate) issues.push({ kind: 'pms', severity: 'error', code: 'blank_store', storeCode: null, sheetRow, message: `Row ${sheetRow}: the Store Code is empty, so the PMS date ${rawDate} is skipped.` })
+      continue
+    }
+    if (!rawDate) continue   // no date = no PMS due for this store
+    const iso = toIsoDate(rawDate.replace(/[ T]\d{1,2}:\d{2}.*$/, '').trim())
+    if (!iso || !realDay(iso)) {
+      issues.push({ kind: 'pms', severity: 'error', code: 'bad_date', storeCode, sheetRow, message: `Row ${sheetRow} (${storeCode}): "${rawDate}" is not a date CK Desk can read, so no PMS ticket is made for it. Please write it like 25/10/2026.` })
+      continue
+    }
+    const key = `${storeCode}|${iso}`
+    const prev = seen.get(key)
+    if (prev) {
+      issues.push({ kind: 'pms', severity: 'warning', code: 'duplicate_row', storeCode, sheetRow, message: `Rows ${prev} and ${sheetRow}: ${storeCode} has the PMS date ${iso} twice. Only one ticket is made.` })
+      continue
+    }
+    seen.set(key, sheetRow)
+    rows.push({ sheetRow, storeCode, pmsDate: iso })
   }
   return { rows, issues }
 }

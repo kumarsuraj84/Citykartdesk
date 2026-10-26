@@ -4,7 +4,7 @@ import { verifyCronSecret } from '@/lib/cron-auth'
 import { runMastersSyncForOrg } from '@/lib/masters/run'
 import { demoSheetsDir } from '@/lib/masters/demo'
 
-// Scheduled job (every minute): copies the AC, Genset and CVM Google Sheets into CK Desk. Read only towards Google.
+// Scheduled job (every minute): copies the AC, Genset, CVM and AC PMS Google Sheets into CK Desk (and makes the AC PMS tickets that are due). Read only towards Google.
 // GET /api/masters/sync            normal check
 // GET /api/masters/sync?force=1    read and apply every sheet even when nothing changed
 export async function GET(req: NextRequest) {

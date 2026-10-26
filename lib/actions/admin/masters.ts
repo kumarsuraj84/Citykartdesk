@@ -12,7 +12,7 @@ import { spreadsheetIdFrom } from '@/lib/masters/google'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
 type ActionResult = { error?: string }
-const KINDS = ['ac', 'genset', 'cvm'] as const
+const KINDS = ['ac', 'genset', 'cvm', 'pms'] as const
 const MAIL_KINDS = ['ac', 'genset'] as const
 
 async function requireAdmin() {
@@ -60,7 +60,7 @@ export async function saveMasterTemplate(kind: string, subject: string, bodyHtml
   return {}
 }
 
-/** Copies the three sheets into CK Desk right now (otherwise it happens at 11:00, 15:00 and 19:00). Administrator only; refuses a second run within 30 seconds. */
+/** Copies the sheets (AC, Genset, CVM, AC PMS) into CK Desk right now (otherwise it happens at 11:00, 15:00 and 19:00). Administrator only; refuses a second run within 30 seconds. */
 export async function updateMastersNow(): Promise<ActionResult & { summary?: string }> {
   const guard = await requireAdmin()
   if ('error' in guard) return { error: guard.error }
@@ -72,8 +72,8 @@ export async function updateMastersNow(): Promise<ActionResult & { summary?: str
   const report = await runMastersSyncForOrg(guard.orgId, { force: true })
   revalidatePath('/admin/masters')
   if ('error' in report) return { error: report.error === 'not connected' ? 'Google Sheets is not connected yet.' : report.error }
-  const failed = (['ac', 'genset', 'cvm'] as const).filter((k) => report[k].status === 'error')
-  if (failed.length) return { error: 'Could not read the ' + failed.map((k) => (k === 'ac' ? 'AC' : k === 'genset' ? 'Genset' : 'CVM')).join(', ') + ' sheet. Details are below.' }
+  const failed = (['ac', 'genset', 'cvm', 'pms'] as const).filter((k) => report[k].status === 'error')
+  if (failed.length) return { error: 'Could not read the ' + failed.map((k) => (k === 'ac' ? 'AC' : k === 'genset' ? 'Genset' : k === 'pms' ? 'AC PMS' : 'CVM')).join(', ') + ' sheet. Details are below.' }
   await logAdminAudit({ orgId: guard.orgId, actorId: guard.profile.id, entityType: 'master_sources', entityId: null, action: 'master_sources.updated_now' })
   return { summary: 'The sheets are up to date.' }
 }

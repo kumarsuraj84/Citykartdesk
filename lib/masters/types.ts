@@ -1,4 +1,4 @@
-export type MasterKind = 'ac' | 'genset' | 'cvm'
+export type MasterKind = 'ac' | 'genset' | 'cvm' | 'pms'
 
 export type MasterIssue = {
   kind: MasterKind
@@ -54,6 +54,14 @@ export type CvmRow = {
   sheetRow: number
   storeCode: string
   cvmEmail: string
+}
+
+/** One PMS date of a store (the AC PMS sheet: Store Code + AC PMS Date). A store with several PMS dates has several rows. */
+export type PmsRow = {
+  sheetRow: number
+  storeCode: string
+  /** yyyy-mm-dd */
+  pmsDate: string
 }
 
 export type ParseResult<R> = { rows: R[]; issues: MasterIssue[]; fatal?: string }

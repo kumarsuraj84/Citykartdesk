@@ -70,6 +70,17 @@ export function checkVendorResolve(input: { choice: string; remarks: string; fsr
   return { ok: true }
 }
 
+/** AC PMS tickets: there is no OEM resolution list; the PMS report (at least one attachment) is what proves the visit was done. Remarks are optional. */
+export function checkVendorResolvePms(input: { fsrCount: number }): ResolveCheck {
+  if (input.fsrCount < 1) return { ok: false, error: 'Please attach the PMS report before resolving.' }
+  return { ok: true }
+}
+
+export function buildPmsResolutionText(remarks: string): string {
+  const r = remarks.trim()
+  return r ? `AC PMS done. ${r}` : 'AC PMS done.'
+}
+
 export type StartCheck = { ok: true; oemNumber: string } | { ok: false; error: string }
 
 /** The OEM ticket number is compulsory to start work. */

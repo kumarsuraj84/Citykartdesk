@@ -29,6 +29,8 @@ export type VendorTicketRow = {
   reopen_count: number
   box: VendorBox
   hold_kind: VendorHoldKind
+  /** an AC PMS ticket (its category is the AC PMS category): shown in the vendor's "AC PMS tickets" tab, never in "My tickets" */
+  is_pms: boolean
 }
 
 const MAX_ROWS = 1000
@@ -37,12 +39,12 @@ export async function getVendorTickets(): Promise<VendorTicketRow[]> {
   const supabase = await createClient()
   const { data } = await supabase
     .from('requests')
-    .select('id, request_no, title, status, priority, created_at, updated_at, assigned_to, requester_id, reopen_count, form_data, form_sections_snapshot, assignee:profiles!requests_assigned_to_fkey(full_name), requester:profiles!requests_requester_id_fkey(store_id)')
+    .select('id, request_no, title, status, priority, created_at, updated_at, assigned_to, requester_id, category_id, reopen_count, form_data, form_sections_snapshot, assignee:profiles!requests_assigned_to_fkey(full_name), requester:profiles!requests_requester_id_fkey(store_id)')
     .order('created_at', { ascending: false })
     .limit(MAX_ROWS)
   const rows = (data ?? []) as unknown as Array<{
     id: string; request_no: string; title: string; status: RequestStatus; priority: RequestPriority; created_at: string; updated_at: string
-    assigned_to: string | null; reopen_count: number | null; form_data: Record<string, unknown> | null; form_sections_snapshot: unknown
+    assigned_to: string | null; category_id: string | null; reopen_count: number | null; form_data: Record<string, unknown> | null; form_sections_snapshot: unknown
     assignee: { full_name: string } | null; requester: { store_id: string | null } | null
   }>
   if (rows.length === 0) return []
@@ -50,11 +52,14 @@ export async function getVendorTickets(): Promise<VendorTicketRow[]> {
   const admin = createAdminClient() as unknown as Db
   const storeIds = [...new Set(rows.map((r) => r.requester?.store_id).filter((s): s is string => !!s))]
   const ids = rows.map((r) => r.id)
-  const [{ data: stores }, { data: snaps }, holdKinds] = await Promise.all([
+  const categoryIds = [...new Set(rows.map((r) => r.category_id).filter((c): c is string => !!c))]
+  const [{ data: stores }, { data: snaps }, holdKinds, { data: pmsCats }] = await Promise.all([
     storeIds.length ? admin.from('stores').select('id, code, name').in('id', storeIds) : Promise.resolve({ data: [] }),
     admin.from('request_master_snapshots').select('request_id, snapshot').eq('kind', 'ac').in('request_id', ids),
     holdKindsFor(ids),
+    categoryIds.length ? admin.from('service_categories').select('id').eq('is_pms', true).in('id', categoryIds) : Promise.resolve({ data: [] }),
   ])
+  const pmsCategoryIds = new Set(((pmsCats ?? []) as { id: string }[]).map((c) => c.id))
   const storeById = new Map(((stores ?? []) as { id: string; code: string; name: string }[]).map((s) => [s.id, s]))
   const acByRequest = new Map(((snaps ?? []) as { request_id: string; snapshot: Array<{ ckdesk_no?: string; brand?: string; tonnage?: string }> }[])
     .map((s) => [s.request_id, s.snapshot?.[0] ?? null]))
@@ -73,9 +78,23 @@ export async function getVendorTickets(): Promise<VendorTicketRow[]> {
       store_code: store?.code ?? null, store_name: store?.name ?? null,
       ac_label: ac ? [ac.ckdesk_no, [ac.brand, ac.tonnage].filter(Boolean).join(' ')].filter(Boolean).join(' - ') : null,
       oem_ticket_no: oem || null, reopen_count: r.reopen_count ?? 0,
-      box: vendorBoxOf(r.status, hold_kind), hold_kind,
+      box: vendorBoxOf(r.status, hold_kind), hold_kind, is_pms: !!r.category_id && pmsCategoryIds.has(r.category_id),
     }
   })
+}
+
+export type VendorTab = 'tickets' | 'pms'
+
+export const isVendorTab = (v: unknown): v is VendorTab => v === 'tickets' || v === 'pms'
+
+/** The two tabs of the vendor dashboard never share a ticket: AC PMS tickets are in "pms", every other ticket in "tickets". */
+export function ticketsOfTab(rows: VendorTicketRow[], tab: VendorTab): VendorTicketRow[] {
+  return rows.filter((r) => r.is_pms === (tab === 'pms'))
+}
+
+/** What waits for the vendor in a tab (a revised price to send, a ticket to start): shown as the number on the tab. */
+export function waitingForVendor(rows: VendorTicketRow[]): number {
+  return rows.filter((r) => r.box === 'revise_price' || r.box === 'open').length
 }
 
 export function countByBox(rows: VendorTicketRow[]): Record<VendorBox, number> {

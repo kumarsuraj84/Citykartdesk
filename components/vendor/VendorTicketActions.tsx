@@ -109,11 +109,13 @@ export interface VendorTicketActionsProps {
   canAct: boolean
   resolutionChoices: ResolutionChoice[]
   openRequest?: OpenRequestView | null
+  /** an AC PMS ticket: starting needs no OEM ticket number, and resolving needs the PMS report and no resolution choice */
+  pms?: boolean
 }
 
 type Modal = null | 'start' | 'resolve' | 'parts' | 'received' | 'po' | 'editParts' | 'revise' | 'withdraw'
 
-export function VendorTicketActions({ requestId, status, canAct, resolutionChoices, openRequest = null }: VendorTicketActionsProps) {
+export function VendorTicketActions({ requestId, status, canAct, resolutionChoices, openRequest = null, pms = false }: VendorTicketActionsProps) {
   const router = useRouter()
   const [modal, setModal] = useState<Modal>(null)
   const [pending, startTransition] = useTransition()
@@ -152,11 +154,11 @@ export function VendorTicketActions({ requestId, status, canAct, resolutionChoic
 
   const resolve = () => startTransition(async () => {
     setError(null)
-    if (!choice) { setError('Please choose the resolution.'); return }
-    if (isOtherChoice(resolutionChoices.find((c) => c.value === choice)?.label) && remarks.trim().length < 10) { setError('Please describe what you did (at least 10 characters), because you chose "Other".'); return }
-    if (files.length === 0) { setError('Please attach the FSR (field service report) before resolving.'); return }
+    if (!pms && !choice) { setError('Please choose the resolution.'); return }
+    if (!pms && isOtherChoice(resolutionChoices.find((c) => c.value === choice)?.label) && remarks.trim().length < 10) { setError('Please describe what you did (at least 10 characters), because you chose "Other".'); return }
+    if (files.length === 0) { setError(pms ? 'Please attach the PMS report before resolving.' : 'Please attach the FSR (field service report) before resolving.'); return }
     const ids = await uploadAll(); if (!ids) return
-    const res = await vendorResolve({ requestId, choice, remarks, attachmentIds: ids })
+    const res = await vendorResolve({ requestId, choice: pms ? '' : choice, remarks, attachmentIds: ids })
     if (res.error) { setError(res.error); return }
     setChoice(''); setRemarks('')
     done('Ticket resolved.')
@@ -236,7 +238,7 @@ export function VendorTicketActions({ requestId, status, canAct, resolutionChoic
 
       {(canStart || canResolve || onHold) && (
         <div className="flex flex-wrap items-center gap-2">
-          {canStart && <button type="button" className={primaryBtn} onClick={() => open('start')}><Play className="h-4 w-4" /> Start working</button>}
+          {canStart && <button type="button" className={primaryBtn} onClick={() => open('start')}><Play className="h-4 w-4" /> {pms ? 'Start PMS visit' : 'Start working'}</button>}
           {canResolve && <button type="button" className={primaryBtn} onClick={() => open('resolve')}><CheckCircle2 className="h-4 w-4" /> Resolve</button>}
           {canResolve && <button type="button" className={ghostBtn} onClick={() => open('po', emptyLines())}><FileText className="h-4 w-4" /> PO required</button>}
           {canResolve && <button type="button" className={ghostBtn} onClick={() => open('parts', emptyLines())}><Wrench className="h-4 w-4" /> Part required</button>}
@@ -260,14 +262,20 @@ export function VendorTicketActions({ requestId, status, canAct, resolutionChoic
       )}
 
       {modal === 'start' && (
-        <Modal title="Start working" onClose={close}>
-          <p className="mb-3 text-sm text-muted-foreground">Enter the ticket number of the OEM (your company) for this job. The ticket does not move without it.</p>
-          <label className="mb-1 block text-xs font-medium" htmlFor="oem-no">OEM ticket number *</label>
-          <input id="oem-no" autoFocus value={oem} onChange={(e) => setOem(e.target.value)} maxLength={60} className={inputCls} placeholder="For example VT-2026-004512" />
+        <Modal title={pms ? 'Start the AC PMS visit' : 'Start working'} onClose={close}>
+          {pms ? (
+            <p className="mb-3 text-sm text-muted-foreground">The ticket moves to In process. When the visit is done, press Resolve and attach the PMS report.</p>
+          ) : (
+            <>
+              <p className="mb-3 text-sm text-muted-foreground">Enter the ticket number of the OEM (your company) for this job. The ticket does not move without it.</p>
+              <label className="mb-1 block text-xs font-medium" htmlFor="oem-no">OEM ticket number *</label>
+              <input id="oem-no" autoFocus value={oem} onChange={(e) => setOem(e.target.value)} maxLength={60} className={inputCls} placeholder="For example VT-2026-004512" />
+            </>
+          )}
           {error && <p className="mt-2 text-sm text-destructive" role="alert">{error}</p>}
           <div className="mt-4 flex justify-end gap-2">
             <button type="button" className={ghostBtn} onClick={close}>Cancel</button>
-            <button type="button" className={primaryBtn} disabled={pending || !oem.trim()} onClick={start}>{pending && <Loader2 className="h-4 w-4 animate-spin" />} Start working</button>
+            <button type="button" className={primaryBtn} disabled={pending || (!pms && !oem.trim())} onClick={start}>{pending && <Loader2 className="h-4 w-4 animate-spin" />} {pms ? 'Start PMS visit' : 'Start working'}</button>
           </div>
         </Modal>
       )}
@@ -338,20 +346,24 @@ export function VendorTicketActions({ requestId, status, canAct, resolutionChoic
       )}
 
       {modal === 'resolve' && (
-        <Modal title="Resolve this ticket" onClose={close}>
-          <label className="mb-1 block text-xs font-medium" htmlFor="res-choice">Resolution *</label>
-          <select id="res-choice" value={choice} onChange={(e) => setChoice(e.target.value)} className={inputCls}>
-            <option value="">Choose the resolution…</option>
-            {resolutionChoices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-          </select>
+        <Modal title={pms ? 'AC PMS done' : 'Resolve this ticket'} onClose={close}>
+          {!pms && (
+            <>
+              <label className="mb-1 block text-xs font-medium" htmlFor="res-choice">Resolution *</label>
+              <select id="res-choice" value={choice} onChange={(e) => setChoice(e.target.value)} className={inputCls}>
+                <option value="">Choose the resolution…</option>
+                {resolutionChoices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </>
+          )}
 
-          <label className="mb-1 mt-3 block text-xs font-medium" htmlFor="res-remarks">
-            Remarks {isOtherChoice(resolutionChoices.find((c) => c.value === choice)?.label) ? '*' : '(optional)'}
+          <label className={`mb-1 ${pms ? '' : 'mt-3'} block text-xs font-medium`} htmlFor="res-remarks">
+            Remarks {!pms && isOtherChoice(resolutionChoices.find((c) => c.value === choice)?.label) ? '*' : '(optional)'}
           </label>
           <textarea id="res-remarks" rows={4} value={remarks} onChange={(e) => setRemarks(e.target.value)} maxLength={2000} className={inputCls}
             placeholder={isOtherChoice(resolutionChoices.find((c) => c.value === choice)?.label) ? 'Describe what you did - this becomes the final resolution' : 'Anything the store should know'} />
 
-          <FilePick label="FSR attachment" {...fileProps} />
+          <FilePick label={pms ? 'PMS report *' : 'FSR attachment'} {...fileProps} />
 
           {error && <p className="mt-3 text-sm text-destructive" role="alert">{error}</p>}
           <div className="mt-4 flex justify-end gap-2">

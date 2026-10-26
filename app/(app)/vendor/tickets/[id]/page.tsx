@@ -15,6 +15,7 @@ import { AttachmentChips } from '@/components/requests/AttachmentChips'
 import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
 import { filterFieldsForRequester, filterSectionsForCategory } from '@/lib/forms/sections'
 import { formatDateTime } from '@/lib/utils'
+import { isPmsRequest } from '@/lib/pms/is-pms'
 import type { FormSection } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -82,13 +83,14 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
     .map((s) => ({ ...s, fields: s.fields.filter((f) => !vendorFieldIds.has(f.id) && f.type !== 'store_address') }))
     .filter((s) => s.fields.length > 0)
 
+  const pms = await isPmsRequest(admin as never, id)
   const isTech = vendorRoleOf(profile) === 'technician' && request.assigned_to === profile.id
   const box = vendorBoxOf(request.status, holdKind)
   const visibleComments = comments.filter((c) => !c.is_internal)
 
   return (
     <div className="max-w-5xl space-y-4">
-      <Link href="/vendor" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ChevronLeft className="h-3.5 w-3.5" /> My tickets</Link>
+      <Link href={pms ? '/vendor?tab=pms' : '/vendor'} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ChevronLeft className="h-3.5 w-3.5" /> {pms ? 'AC PMS tickets' : 'My tickets'}</Link>
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -109,6 +111,7 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
         canAct={isTech}
         resolutionChoices={resolutionChoices(liveResolution)}
         openRequest={openRequest}
+        pms={pms}
       />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">

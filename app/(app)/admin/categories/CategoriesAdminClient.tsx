@@ -11,6 +11,7 @@ import {
   setCategoryOemKind,
   setCategoryCvmApproval,
   setCategoryApprovalHistory,
+  setCategoryPms,
 } from '@/lib/actions/admin/categories'
 import { OEM_KINDS, OEM_KIND_LABEL, isOemKind, type OemKind } from '@/lib/oems/kinds'
 import { IconPicker } from '@/components/admin/IconPicker'
@@ -72,6 +73,8 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
   const [cvmApproval, setCvmApproval] = useState(savedCvmApproval)
   const savedApprovalHistory = cat.show_approval_history === true
   const [approvalHistory, setApprovalHistory] = useState(savedApprovalHistory)
+  const savedPms = cat.is_pms === true
+  const [isPms, setIsPms] = useState(savedPms)
   const [error, setError] = useState('')
   const [pending, startTransition] = useTransition()
   const [togglePending, startToggle] = useTransition()
@@ -95,6 +98,10 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
         const r = await setCategoryCvmApproval(cat.id, cvmApproval)
         if (r.error) { setError(r.error); return }
       }
+      if (isPms !== savedPms) {
+        const r = await setCategoryPms(cat.id, isPms)
+        if (r.error) { setError(r.error); return }
+      }
       if (approvalHistory !== savedApprovalHistory) {
         const r = await setCategoryApprovalHistory(cat.id, approvalHistory)
         if (r.error) { setError(r.error); return }
@@ -111,6 +118,7 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
     setOemKind(savedOemKind)
     setCvmApproval(savedCvmApproval)
     setApprovalHistory(savedApprovalHistory)
+    setIsPms(savedPms)
     setError('')
     setEditing(false)
   }
@@ -179,6 +187,10 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
                 Put the ticket In Process and send it for approval to the CVM the CVM sheet lists for the store, automatically
               </label>
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input type="checkbox" checked={isPms} onChange={(e) => setIsPms(e.target.checked)} />
+                AC PMS category: its tickets are made from the AC PMS Google Sheet (one per store on its PMS date, at 09:00) and the vendors see them in their own &quot;AC PMS tickets&quot; tab
+              </label>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <input type="checkbox" checked={approvalHistory} onChange={(e) => setApprovalHistory(e.target.checked)} />
                 Show earlier requests in the approval mail: the last decisions on requests of the same store and sub-category (the answers ticked &quot;Show in approval history&quot; in the form)
               </label>
@@ -218,6 +230,11 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
               {savedCvmApproval && (
                 <p className="mt-1 inline-flex rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">
                   Auto: In Process, then approval by the store&apos;s CVM
+                </p>
+              )}
+              {savedPms && (
+                <p className="mt-1 mr-1 inline-flex rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-700">
+                  AC PMS category (made from the PMS sheet, own vendor tab)
                 </p>
               )}
               {savedApprovalHistory && (
