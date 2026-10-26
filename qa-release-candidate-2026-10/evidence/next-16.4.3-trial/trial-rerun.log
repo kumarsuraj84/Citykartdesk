@@ -1,0 +1,202 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_db_ckdesk_audit, supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [only the user's own browser: chrome.exe(pid 20224) 182.72.84.10:3210 CLOSE_WAIT - NOT the audit; the audit never uses this browser]
+
+ISOLATION GATE: PASSED  (21/21)
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mC:/Users/User2/AppData/Local/Temp/claude/D--ANKUR-AI-PROJECTS-CitykartDesk-ZOHO-Alternate/b1171928-38ee-4239-9671-0c883722e31b/scratchpad/next-trial[39m
+
+ [32m✓[39m tests/integration/nudge-ticket.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 2864[2mms[22m[39m
+   [33m[2m✓[22m[39m Nudge from the Smart Dashboard[2m > [22mreminds the technician handling the ticket, by bell and by e-mail, with the manager's message [33m 759[2mms[22m[39m
+ [32m✓[39m tests/integration/analytics-store-filter.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 806[2mms[22m[39m
+   [33m[2m✓[22m[39m Analytics dashboard store filters (local database)[2m > [22mfollows the region choice exactly, and the region rows add up to the whole [33m 806[2mms[22m[39m
+[90mstdout[2m | tests/integration/dashboard-numbers-audit.test.ts[2m > [22m[2mdashboard numbers vs the raw data (local database)[2m > [22m[2mreconciles every shared figure
+[22m[39m
+ok   [30d] Smart window starts: truth="2026-09-26T18:30" shown="2026-09-26T18:30"
+ok   [30d] Smart created: truth=308 shown=308
+ok   [30d] Smart resolved (resolved in period): truth=123 shown=123
+ok   [30d] Smart open backlog: truth=1596 shown=1596
+ok   [30d] Smart currently breached: truth=0 shown=0
+ok   [30d] Smart SLA %: truth=100 shown=100
+ok   [30d] Smart avg resolution h: truth=92.6 shown=92.6
+ok   [30d] Smart avg first response h: truth=0 shown=0
+ok   [30d] Smart created by status: truth={"assigned":14,"cancelled":9,"closed":59,"hold_purchase_ho":14,"in_progress":74,"open":48,"pending_approval":22,"resolved":47,"waiting_user":21} shown={"assigned":14,"cancelled":9,"closed":59,"hold_purchase_ho":14,"in_progress":74,"open":48,"pending_approval":22,"resolved":47,"waiting_user":21}
+ok   [30d] Smart created by priority: truth={"high":60,"low":55,"medium":129,"urgent":64} shown={"high":60,"low":55,"medium":129,"urgent":64}
+ok   [30d] Smart backlog age buckets: truth={"11–20 days":86,"46–60 days":63,"76–90 days":61,"61–75 days":54,"6–10 days":27,"21–30 days":75,"31–45 days":84,"90+ days":1140,"0–5 days":6} shown={"0–5 days":6,"6–10 days":27,"11–20 days":86,"21–30 days":75,"31–45 days":84,"46–60 days":63,"61–75 days":54,"76–90 days":61,"90+ days":1140}
+ok   [30d] Smart created by group: truth={"ADMIN GROUP":78,"BD GROUP":49,"Demo Admin Repair":7,"FINANCE SUPPORT":53,"HR SUPPORT":48,"IT SUPPORT":63,"QA Admin Group":7,"QA IT Group":3} shown={"ADMIN GROUP":78,"BD GROUP":49,"Demo Admin Repair":7,"FINANCE SUPPORT":53,"HR SUPPORT":48,"IT SUPPORT":63,"QA Admin Group":7,"QA IT Group":3}
+ok   [30d] Smart open by group: truth={"ADMIN GROUP":479,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"FINANCE SUPPORT":249,"IT SUPPORT":369,"QA Admin Group":4,"QA IT Group":2} shown={"ADMIN GROUP":479,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"FINANCE SUPPORT":249,"IT SUPPORT":369,"QA Admin Group":4,"QA IT Group":2}
+ok   [30d] Smart approvals approved: truth=2 shown=2
+ok   [30d] Smart approvals rejected: truth=1 shown=1
+ok   [30d] Smart approvals waiting: truth=1 shown=1
+ok   [30d] Normal Created: truth=308 shown=308
+ok   [30d] Normal Resolved (resolved in period): truth=123 shown=123
+ok   [30d] Normal Open Now: truth=1596 shown=1596
+ok   [30d] Normal Currently Breached: truth=0 shown=0
+ok   [30d] Normal SLA %: truth=100 shown=100
+ok   [30d] Normal avg resolution h: truth=92.6 shown=92.6
+ok   [30d] Normal avg first response h: truth=0 shown=0
+ok   [30d] Normal status counts: truth={"assigned":14,"cancelled":9,"closed":59,"hold_purchase_ho":14,"in_progress":74,"open":48,"pending_approval":22,"resolved":47,"waiting_user":21} shown={"open":48,"assigned":14,"in_progress":74,"waiting_user":21,"hold_purchase_ho":14,"pending_approval":22,"resolved":47,"closed":59,"cancelled":9}
+ok   [30d] Normal backlog aging: truth={"11–20 days":86,"46–60 days":63,"76–90 days":61,"61–75 days":54,"6–10 days":27,"21–30 days":75,"31–45 days":84,"90+ days":1140,"0–5 days":6} shown={"0–5 days":6,"6–10 days":27,"11–20 days":86,"21–30 days":75,"31–45 days":84,"46–60 days":63,"61–75 days":54,"76–90 days":61,"90+ days":1140}
+ok   [30d] Normal group volume: truth={"ADMIN GROUP":78,"BD GROUP":49,"Demo Admin Repair":7,"FINANCE SUPPORT":53,"HR SUPPORT":48,"IT SUPPORT":63,"QA Admin Group":7,"QA IT Group":3} shown={"ADMIN GROUP":78,"IT SUPPORT":63,"FINANCE SUPPORT":53,"BD GROUP":49,"HR SUPPORT":48,"Demo Admin Repair":7,"QA Admin Group":7,"QA IT Group":3}
+ok   [30d] Normal group resolved: truth={"ADMIN GROUP":29,"BD GROUP":20,"Demo Admin Repair":3,"FINANCE SUPPORT":24,"HR SUPPORT":20,"IT SUPPORT":24,"QA Admin Group":2,"QA IT Group":1} shown={"ADMIN GROUP":29,"IT SUPPORT":24,"FINANCE SUPPORT":24,"BD GROUP":20,"HR SUPPORT":20,"Demo Admin Repair":3,"QA Admin Group":2,"QA IT Group":1}
+ok   [30d] Normal group open now: truth={"ADMIN GROUP":479,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"FINANCE SUPPORT":249,"IT SUPPORT":369,"QA Admin Group":4,"QA IT Group":2} shown={"ADMIN GROUP":479,"IT SUPPORT":369,"FINANCE SUPPORT":249,"BD GROUP":241,"HR SUPPORT":248,"Demo Admin Repair":4,"QA Admin Group":4,"QA IT Group":2}
+ok   [30d] Normal priority resolved / SLA: truth={"high":{"resolved":25,"slaBase":1,"slaMet":1},"low":{"resolved":24,"slaBase":1,"slaMet":1},"medium":{"resolved":51,"slaBase":1,"slaMet":1},"urgent":{"resolved":23,"slaBase":0,"slaMet":0}} shown={"urgent":{"resolved":23,"slaBase":0,"slaMet":0},"high":{"resolved":25,"slaBase":1,"slaMet":1},"medium":{"resolved":51,"slaBase":1,"slaMet":1},"low":{"resolved":24,"slaBase":1,"slaMet":1}}
+ok   [30d] Normal agent leaderboard: truth={"4401d05e-917c-4e89-b8db-30fc21b7bc84":{"resolved":12,"open":75},"27d80ea9-efde-441e-a8b1-a583a07b563e":{"resolved":10,"open":86},"d2f8c4c8-21cb-4207-8a0a-0acdc06313f4":{"resolved":9,"open":40},"86376f85-fa44-4f98-ba90-8baf94abce37":{"resolved":7,"open":50},"bfebe447-8828-470c-8a18-9ea0eca38158":{"resolved":7,"open":48},"8ba1706d-9e5f-446e-bc48-263d0f4bf044":{"resolved":6,"open":41},"252e9ed4-b71a-47b6-aa4f-d5895ff685c0":{"resolved":6,"open":73},"26418df8-dba0-45b5-9ae0-da9b1b38f8c5":{"resolved":6,"open":38},"74a53102-5654-4b1b-880f-b8f9b7a3319e":{"resolved":6,"open":50},"661d779f-ed18-4bdc-9f61-47b8d576181a":{"resolved":6,"open":39}} shown={"4401d05e-917c-4e89-b8db-30fc21b7bc84":{"resolved":12,"open":75},"27d80ea9-efde-441e-a8b1-a583a07b563e":{"resolved":10,"open":86},"d2f8c4c8-21cb-4207-8a0a-0acdc06313f4":{"resolved":9,"open":40},"86376f85-fa44-4f98-ba90-8baf94abce37":{"resolved":7,"open":50},"bfebe447-8828-470c-8a18-9ea0eca38158":{"resolved":7,"open":48},"8ba1706d-9e5f-446e-bc48-263d0f4bf044":{"resolved":6,"open":41},"252e9ed4-b71a-47b6-aa4f-d5895ff685c0":{"resolved":6,"open":73},"26418df8-dba0-45b5-9ae0-da9b1b38f8c5":{"resolved":6,"open":38},"74a53102-5654-4b1b-880f-b8f9b7a3319e":{"resolved":6,"open":50},"661d779f-ed18-4bdc-9f61-47b8d576181a":{"resolved":6,"open":39}}
+ok   [30d] Normal approvals: truth={"approved":2,"rejected":1,"pending":1} shown={"approved":2,"rejected":1,"pending":1}
+ok   [60d] Smart window starts: truth="2026-08-27T18:30" shown="2026-08-27T18:30"
+ok   [60d] Smart created: truth=590 shown=590
+ok   [60d] Smart resolved (resolved in period): truth=250 shown=250
+ok   [60d] Smart open backlog: truth=1596 shown=1596
+ok   [60d] Smart currently breached: truth=0 shown=0
+ok   [60d] Smart SLA %: truth=100 shown=100
+ok   [60d] Smart avg resolution h: truth=103.8 shown=103.8
+ok   [60d] Smart avg first response h: truth=0 shown=0
+ok   [60d] Smart created by status: truth={"assigned":26,"cancelled":20,"closed":128,"hold_purchase_ho":32,"in_progress":125,"open":85,"pending_approval":36,"resolved":104,"waiting_user":34} shown={"assigned":26,"cancelled":20,"closed":128,"hold_purchase_ho":32,"in_progress":125,"open":85,"pending_approval":36,"resolved":104,"waiting_user":34}
+ok   [60d] Smart created by priority: truth={"high":120,"low":120,"medium":234,"urgent":116} shown={"high":120,"low":120,"medium":234,"urgent":116}
+ok   [60d] Smart backlog age buckets: truth={"11–20 days":86,"46–60 days":63,"76–90 days":61,"61–75 days":54,"6–10 days":27,"21–30 days":75,"31–45 days":84,"90+ days":1140,"0–5 days":6} shown={"0–5 days":6,"6–10 days":27,"11–20 days":86,"21–30 days":75,"31–45 days":84,"46–60 days":63,"61–75 days":54,"76–90 days":61,"90+ days":1140}
+ok   [60d] Smart created by group: truth={"ADMIN GROUP":165,"BD GROUP":90,"Demo Admin Repair":7,"FINANCE SUPPORT":98,"HR SUPPORT":93,"IT SUPPORT":127,"QA Admin Group":7,"QA IT Group":3} shown={"ADMIN GROUP":165,"BD GROUP":90,"Demo Admin Repair":7,"FINANCE SUPPORT":98,"HR SUPPORT":93,"IT SUPPORT":127,"QA Admin Group":7,"QA IT Group":3}
+ok   [60d] Smart open by group: truth={"ADMIN GROUP":479,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"FINANCE SUPPORT":249,"IT SUPPORT":369,"QA Admin Group":4,"QA IT Group":2} shown={"ADMIN GROUP":479,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"FINANCE SUPPORT":249,"IT SUPPORT":369,"QA Admin Group":4,"QA IT Group":2}
+ok   [60d] Smart approvals approved: truth=2 shown=2
+ok   [60d] Smart approvals rejected: truth=1 shown=1
+ok   [60d] Smart approvals waiting: truth=1 shown=1
+ok   [60d] Normal Created: truth=590 shown=590
+ok   [60d] Normal Resolved (resolved in period): truth=250 shown=250
+ok   [60d] Normal Open Now: truth=1596 shown=1596
+ok   [60d] Normal Currently Breached: truth=0 shown=0
+ok   [60d] Normal SLA %: truth=100 shown=100
+ok   [60d] Normal avg resolution h: truth=103.8 shown=103.8
+ok   [60d] Normal avg first response h: truth=0 shown=0
+ok   [60d] Normal status counts: truth={"assigned":26,"cancelled":20,"closed":128,"hold_purchase_ho":32,"in_progress":125,"open":85,"pending_approval":36,"resolved":104,"waiting_user":34} shown={"open":85,"assigned":26,"in_progress":125,"waiting_user":34,"hold_purchase_ho":32,"pending_approval":36,"resolved":104,"closed":128,"cancelled":20}
+ok   [60d] Normal backlog aging: truth={"11–20 days":86,"46–60 days":63,"76–90 days":61,"61–75 days":54,"6–10 days":27,"21–30 days":75,"31–45 days":84,"90+ days":1140,"0–5 days":6} shown={"0–5 days":6,"6–10 days":27,"11–20 days":86,"21–30 days":75,"31–45 days":84,"46–60 days":63,"61–75 days":54,"76–90 days":61,"90+ days":1140}
+ok   [60d] Normal group volume: truth={"ADMIN GROUP":165,"BD GROUP":90,"Demo Admin Repair":7,"FINANCE SUPPORT":98,"HR SUPPORT":93,"IT SUPPORT":127,"QA Admin Group":7,"QA IT Group":3} shown={"ADMIN GROUP":165,"IT SUPPORT":127,"FINANCE SUPPORT":98,"HR SUPPORT":93,"BD GROUP":90,"Demo Admin Repair":7,"QA Admin Group":7,"QA IT Group":3}
+ok   [60d] Normal group resolved: truth={"ADMIN GROUP":62,"BD GROUP":44,"Demo Admin Repair":3,"FINANCE SUPPORT":43,"HR SUPPORT":36,"IT SUPPORT":59,"QA Admin Group":2,"QA IT Group":1} shown={"ADMIN GROUP":62,"IT SUPPORT":59,"FINANCE SUPPORT":43,"HR SUPPORT":36,"BD GROUP":44,"Demo Admin Repair":3,"QA Admin Group":2,"QA IT Group":1}
+ok   [60d] Normal group open now: truth={"ADMIN GROUP":479,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"FINANCE SUPPORT":249,"IT SUPPORT":369,"QA Admin Group":4,"QA IT Group":2} shown={"ADMIN GROUP":479,"IT SUPPORT":369,"FINANCE SUPPORT":249,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"QA Admin Group":4,"QA IT Group":2}
+ok   [60d] Normal priority resolved / SLA: truth={"high":{"resolved":53,"slaBase":1,"slaMet":1},"low":{"resolved":49,"slaBase":1,"slaMet":1},"medium":{"resolved":102,"slaBase":1,"slaMet":1},"urgent":{"resolved":46,"slaBase":0,"slaMet":0}} shown={"urgent":{"resolved":46,"slaBase":0,"slaMet":0},"high":{"resolved":53,"slaBase":1,"slaMet":1},"medium":{"resolved":102,"slaBase":1,"slaMet":1},"low":{"resolved":49,"slaBase":1,"slaMet":1}}
+ok   [60d] Normal agent leaderboard: truth={"4401d05e-917c-4e89-b8db-30fc21b7bc84":{"resolved":20,"open":75},"27d80ea9-efde-441e-a8b1-a583a07b563e":{"resolved":18,"open":86},"bfebe447-8828-470c-8a18-9ea0eca38158":{"resolved":17,"open":48},"86376f85-fa44-4f98-ba90-8baf94abce37":{"resolved":16,"open":50},"252e9ed4-b71a-47b6-aa4f-d5895ff685c0":{"resolved":16,"open":73},"9dc1d3ce-46b3-497f-9d20-60765b9fec95":{"resolved":13,"open":75},"86e9db0d-d6fb-436c-acf4-bf5c96034069":{"resolved":13,"open":38},"d2f8c4c8-21cb-4207-8a0a-0acdc06313f4":{"resolved":12,"open":40},"3786362d-2c0f-4aa3-b468-cb70079d9906":{"resolved":12,"open":36},"e0d20344-53bb-445a-8cba-13f1e8d80fd5":{"resolved":11,"open":81}} shown={"4401d05e-917c-4e89-b8db-30fc21b7bc84":{"resolved":20,"open":75},"27d80ea9-efde-441e-a8b1-a583a07b563e":{"resolved":18,"open":86},"bfebe447-8828-470c-8a18-9ea0eca38158":{"resolved":17,"open":48},"86376f85-fa44-4f98-ba90-8baf94abce37":{"resolved":16,"open":50},"252e9ed4-b71a-47b6-aa4f-d5895ff685c0":{"resolved":16,"open":73},"9dc1d3ce-46b3-497f-9d20-60765b9fec95":{"resolved":13,"open":75},"86e9db0d-d6fb-436c-acf4-bf5c96034069":{"resolved":13,"open":38},"d2f8c4c8-21cb-4207-8a0a-0acdc06313f4":{"resolved":12,"open":40},"3786362d-2c0f-4aa3-b468-cb70079d9906":{"resolved":12,"open":36},"e0d20344-53bb-445a-8cba-13f1e8d80fd5":{"resolved":11,"open":81}}
+ok   [60d] Normal approvals: truth={"approved":2,"rejected":1,"pending":1} shown={"approved":2,"rejected":1,"pending":1}
+ok   [90d] Smart window starts: truth="2026-07-28T18:30" shown="2026-07-28T18:30"
+ok   [90d] Smart created: truth=843 shown=843
+ok   [90d] Smart resolved (resolved in period): truth=371 shown=371
+ok   [90d] Smart open backlog: truth=1596 shown=1596
+ok   [90d] Smart currently breached: truth=0 shown=0
+ok   [90d] Smart SLA %: truth=100 shown=100
+ok   [90d] Smart avg resolution h: truth=104.4 shown=104.4
+ok   [90d] Smart avg first response h: truth=0 shown=0
+ok   [90d] Smart created by status: truth={"assigned":36,"waiting_user":43,"closed":203,"cancelled":32,"resolved":154,"pending_approval":45,"hold_purchase_ho":42,"open":118,"in_progress":170} shown={"assigned":36,"waiting_user":43,"closed":203,"cancelled":32,"resolved":154,"pending_approval":45,"hold_purchase_ho":42,"open":118,"in_progress":170}
+ok   [90d] Smart created by priority: truth={"medium":325,"urgent":164,"high":182,"low":172} shown={"medium":325,"urgent":164,"high":182,"low":172}
+ok   [90d] Smart backlog age buckets: truth={"11–20 days":86,"46–60 days":63,"76–90 days":61,"61–75 days":54,"6–10 days":27,"21–30 days":75,"31–45 days":84,"90+ days":1140,"0–5 days":6} shown={"0–5 days":6,"6–10 days":27,"11–20 days":86,"21–30 days":75,"31–45 days":84,"46–60 days":63,"61–75 days":54,"76–90 days":61,"90+ days":1140}
+ok   [90d] Smart created by group: truth={"ADMIN GROUP":236,"HR SUPPORT":134,"BD GROUP":129,"Demo Admin Repair":7,"FINANCE SUPPORT":136,"IT SUPPORT":191,"QA Admin Group":7,"QA IT Group":3} shown={"ADMIN GROUP":236,"HR SUPPORT":134,"BD GROUP":129,"Demo Admin Repair":7,"FINANCE SUPPORT":136,"IT SUPPORT":191,"QA Admin Group":7,"QA IT Group":3}
+ok   [90d] Smart open by group: truth={"ADMIN GROUP":479,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"FINANCE SUPPORT":249,"IT SUPPORT":369,"QA Admin Group":4,"QA IT Group":2} shown={"ADMIN GROUP":479,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"FINANCE SUPPORT":249,"IT SUPPORT":369,"QA Admin Group":4,"QA IT Group":2}
+ok   [90d] Smart approvals approved: truth=2 shown=2
+ok   [90d] Smart approvals rejected: truth=1 shown=1
+ok   [90d] Smart approvals waiting: truth=1 shown=1
+ok   [90d] Normal Created: truth=843 shown=843
+ok   [90d] Normal Resolved (resolved in period): truth=371 shown=371
+ok   [90d] Normal Open Now: truth=1596 shown=1596
+ok   [90d] Normal Currently Breached: truth=0 shown=0
+ok   [90d] Normal SLA %: truth=100 shown=100
+ok   [90d] Normal avg resolution h: truth=104.4 shown=104.4
+ok   [90d] Normal avg first response h: truth=0 shown=0
+ok   [90d] Normal status counts: truth={"assigned":36,"waiting_user":43,"closed":203,"cancelled":32,"resolved":154,"pending_approval":45,"hold_purchase_ho":42,"open":118,"in_progress":170} shown={"open":118,"assigned":36,"in_progress":170,"waiting_user":43,"hold_purchase_ho":42,"pending_approval":45,"resolved":154,"closed":203,"cancelled":32}
+ok   [90d] Normal backlog aging: truth={"11–20 days":86,"46–60 days":63,"76–90 days":61,"61–75 days":54,"6–10 days":27,"21–30 days":75,"31–45 days":84,"90+ days":1140,"0–5 days":6} shown={"0–5 days":6,"6–10 days":27,"11–20 days":86,"21–30 days":75,"31–45 days":84,"46–60 days":63,"61–75 days":54,"76–90 days":61,"90+ days":1140}
+ok   [90d] Normal group volume: truth={"ADMIN GROUP":236,"HR SUPPORT":134,"BD GROUP":129,"Demo Admin Repair":7,"FINANCE SUPPORT":136,"IT SUPPORT":191,"QA Admin Group":7,"QA IT Group":3} shown={"ADMIN GROUP":236,"IT SUPPORT":191,"FINANCE SUPPORT":136,"HR SUPPORT":134,"BD GROUP":129,"Demo Admin Repair":7,"QA Admin Group":7,"QA IT Group":3}
+ok   [90d] Normal group resolved: truth={"ADMIN GROUP":96,"BD GROUP":63,"Demo Admin Repair":3,"FINANCE SUPPORT":62,"HR SUPPORT":62,"IT SUPPORT":82,"QA Admin Group":2,"QA IT Group":1} shown={"ADMIN GROUP":96,"IT SUPPORT":82,"FINANCE SUPPORT":62,"HR SUPPORT":62,"BD GROUP":63,"Demo Admin Repair":3,"QA Admin Group":2,"QA IT Group":1}
+ok   [90d] Normal group open now: truth={"ADMIN GROUP":479,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"FINANCE SUPPORT":249,"IT SUPPORT":369,"QA Admin Group":4,"QA IT Group":2} shown={"ADMIN GROUP":479,"IT SUPPORT":369,"FINANCE SUPPORT":249,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"QA Admin Group":4,"QA IT Group":2}
+ok   [90d] Normal priority resolved / SLA: truth={"high":{"resolved":85,"slaBase":1,"slaMet":1},"low":{"resolved":70,"slaBase":1,"slaMet":1},"medium":{"resolved":143,"slaBase":1,"slaMet":1},"urgent":{"resolved":73,"slaBase":0,"slaMet":0}} shown={"urgent":{"resolved":73,"slaBase":0,"slaMet":0},"high":{"resolved":85,"slaBase":1,"slaMet":1},"medium":{"resolved":143,"slaBase":1,"slaMet":1},"low":{"resolved":70,"slaBase":1,"slaMet":1}}
+ok   [90d] Normal agent leaderboard: truth={"4401d05e-917c-4e89-b8db-30fc21b7bc84":{"resolved":31,"open":75},"27d80ea9-efde-441e-a8b1-a583a07b563e":{"resolved":28,"open":86},"bfebe447-8828-470c-8a18-9ea0eca38158":{"resolved":25,"open":48},"252e9ed4-b71a-47b6-aa4f-d5895ff685c0":{"resolved":23,"open":73},"12bbca59-c8d4-4626-8548-88217452cb7b":{"resolved":20,"open":30},"9dc1d3ce-46b3-497f-9d20-60765b9fec95":{"resolved":20,"open":75},"86376f85-fa44-4f98-ba90-8baf94abce37":{"resolved":19,"open":50},"86e9db0d-d6fb-436c-acf4-bf5c96034069":{"resolved":18,"open":38},"3786362d-2c0f-4aa3-b468-cb70079d9906":{"resolved":18,"open":36},"d2f8c4c8-21cb-4207-8a0a-0acdc06313f4":{"resolved":18,"open":40}} shown={"4401d05e-917c-4e89-b8db-30fc21b7bc84":{"resolved":31,"open":75},"27d80ea9-efde-441e-a8b1-a583a07b563e":{"resolved":28,"open":86},"bfebe447-8828-470c-8a18-9ea0eca38158":{"resolved":25,"open":48},"252e9ed4-b71a-47b6-aa4f-d5895ff685c0":{"resolved":23,"open":73},"12bbca59-c8d4-4626-8548-88217452cb7b":{"resolved":20,"open":30},"9dc1d3ce-46b3-497f-9d20-60765b9fec95":{"resolved":20,"open":75},"86376f85-fa44-4f98-ba90-8baf94abce37":{"resolved":19,"open":50},"86e9db0d-d6fb-436c-acf4-bf5c96034069":{"resolved":18,"open":38},"3786362d-2c0f-4aa3-b468-cb70079d9906":{"resolved":18,"open":36},"d2f8c4c8-21cb-4207-8a0a-0acdc06313f4":{"resolved":18,"open":40}}
+ok   [90d] Normal approvals: truth={"approved":2,"rejected":1,"pending":1} shown={"approved":2,"rejected":1,"pending":1}
+ok   [120d] Smart window starts: truth="2026-06-28T18:30" shown="2026-06-28T18:30"
+ok   [120d] Smart created: truth=1085 shown=1085
+ok   [120d] Smart resolved (resolved in period): truth=487 shown=487
+ok   [120d] Smart open backlog: truth=1596 shown=1596
+ok   [120d] Smart currently breached: truth=0 shown=0
+ok   [120d] Smart SLA %: truth=100 shown=100
+ok   [120d] Smart avg resolution h: truth=105.9 shown=105.9
+ok   [120d] Smart avg first response h: truth=0 shown=0
+ok   [120d] Smart created by status: truth={"assigned":49,"waiting_user":52,"closed":275,"cancelled":42,"resolved":196,"pending_approval":55,"hold_purchase_ho":50,"open":149,"in_progress":217} shown={"assigned":49,"waiting_user":52,"closed":275,"cancelled":42,"resolved":196,"pending_approval":55,"hold_purchase_ho":50,"open":149,"in_progress":217}
+ok   [120d] Smart created by priority: truth={"medium":418,"urgent":214,"high":227,"low":226} shown={"medium":418,"urgent":214,"high":227,"low":226}
+ok   [120d] Smart backlog age buckets: truth={"11–20 days":86,"46–60 days":63,"76–90 days":61,"61–75 days":54,"6–10 days":27,"21–30 days":75,"31–45 days":84,"90+ days":1140,"0–5 days":6} shown={"0–5 days":6,"6–10 days":27,"11–20 days":86,"21–30 days":75,"31–45 days":84,"46–60 days":63,"61–75 days":54,"76–90 days":61,"90+ days":1140}
+ok   [120d] Smart created by group: truth={"ADMIN GROUP":309,"HR SUPPORT":172,"BD GROUP":161,"Demo Admin Repair":7,"FINANCE SUPPORT":167,"IT SUPPORT":259,"QA Admin Group":7,"QA IT Group":3} shown={"ADMIN GROUP":309,"HR SUPPORT":172,"BD GROUP":161,"Demo Admin Repair":7,"FINANCE SUPPORT":167,"IT SUPPORT":259,"QA Admin Group":7,"QA IT Group":3}
+ok   [120d] Smart open by group: truth={"ADMIN GROUP":479,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"FINANCE SUPPORT":249,"IT SUPPORT":369,"QA Admin Group":4,"QA IT Group":2} shown={"ADMIN GROUP":479,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"FINANCE SUPPORT":249,"IT SUPPORT":369,"QA Admin Group":4,"QA IT Group":2}
+ok   [120d] Smart approvals approved: truth=2 shown=2
+ok   [120d] Smart approvals rejected: truth=1 shown=1
+ok   [120d] Smart approvals waiting: truth=1 shown=1
+ok   [120d] Normal Created: truth=1085 shown=1085
+ok   [120d] Normal Resolved (resolved in period): truth=487 shown=487
+ok   [120d] Normal Open Now: truth=1596 shown=1596
+ok   [120d] Normal Currently Breached: truth=0 shown=0
+ok   [120d] Normal SLA %: truth=100 shown=100
+ok   [120d] Normal avg resolution h: truth=105.9 shown=105.9
+ok   [120d] Normal avg first response h: truth=0 shown=0
+ok   [120d] Normal status counts: truth={"assigned":49,"waiting_user":52,"closed":275,"cancelled":42,"resolved":196,"pending_approval":55,"hold_purchase_ho":50,"open":149,"in_progress":217} shown={"open":149,"assigned":49,"in_progress":217,"waiting_user":52,"hold_purchase_ho":50,"pending_approval":55,"resolved":196,"closed":275,"cancelled":42}
+ok   [120d] Normal backlog aging: truth={"11–20 days":86,"46–60 days":63,"76–90 days":61,"61–75 days":54,"6–10 days":27,"21–30 days":75,"31–45 days":84,"90+ days":1140,"0–5 days":6} shown={"0–5 days":6,"6–10 days":27,"11–20 days":86,"21–30 days":75,"31–45 days":84,"46–60 days":63,"61–75 days":54,"76–90 days":61,"90+ days":1140}
+ok   [120d] Normal group volume: truth={"ADMIN GROUP":309,"HR SUPPORT":172,"BD GROUP":161,"Demo Admin Repair":7,"FINANCE SUPPORT":167,"IT SUPPORT":259,"QA Admin Group":7,"QA IT Group":3} shown={"ADMIN GROUP":309,"IT SUPPORT":259,"HR SUPPORT":172,"FINANCE SUPPORT":167,"BD GROUP":161,"Demo Admin Repair":7,"QA Admin Group":7,"QA IT Group":3}
+ok   [120d] Normal group resolved: truth={"ADMIN GROUP":129,"BD GROUP":78,"Demo Admin Repair":3,"FINANCE SUPPORT":76,"HR SUPPORT":82,"IT SUPPORT":116,"QA Admin Group":2,"QA IT Group":1} shown={"ADMIN GROUP":129,"IT SUPPORT":116,"HR SUPPORT":82,"FINANCE SUPPORT":76,"BD GROUP":78,"Demo Admin Repair":3,"QA Admin Group":2,"QA IT Group":1}
+ok   [120d] Normal group open now: truth={"ADMIN GROUP":479,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"FINANCE SUPPORT":249,"IT SUPPORT":369,"QA Admin Group":4,"QA IT Group":2} shown={"ADMIN GROUP":479,"IT SUPPORT":369,"HR SUPPORT":248,"FINANCE SUPPORT":249,"BD GROUP":241,"Demo Admin Repair":4,"QA Admin Group":4,"QA IT Group":2}
+ok   [120d] Normal priority resolved / SLA: truth={"high":{"resolved":103,"slaBase":1,"slaMet":1},"low":{"resolved":101,"slaBase":1,"slaMet":1},"medium":{"resolved":189,"slaBase":1,"slaMet":1},"urgent":{"resolved":94,"slaBase":0,"slaMet":0}} shown={"urgent":{"resolved":94,"slaBase":0,"slaMet":0},"high":{"resolved":103,"slaBase":1,"slaMet":1},"medium":{"resolved":189,"slaBase":1,"slaMet":1},"low":{"resolved":101,"slaBase":1,"slaMet":1}}
+ok   [120d] Normal agent leaderboard: truth={"4401d05e-917c-4e89-b8db-30fc21b7bc84":{"resolved":41,"open":75},"27d80ea9-efde-441e-a8b1-a583a07b563e":{"resolved":37,"open":86},"bfebe447-8828-470c-8a18-9ea0eca38158":{"resolved":33,"open":48},"86376f85-fa44-4f98-ba90-8baf94abce37":{"resolved":31,"open":50},"252e9ed4-b71a-47b6-aa4f-d5895ff685c0":{"resolved":30,"open":73},"9dc1d3ce-46b3-497f-9d20-60765b9fec95":{"resolved":27,"open":75},"12bbca59-c8d4-4626-8548-88217452cb7b":{"resolved":25,"open":30},"e0d20344-53bb-445a-8cba-13f1e8d80fd5":{"resolved":24,"open":81},"86e9db0d-d6fb-436c-acf4-bf5c96034069":{"resolved":23,"open":38},"d22b6602-7934-44f4-bb7c-cb54c72523b0":{"resolved":22,"open":67}} shown={"4401d05e-917c-4e89-b8db-30fc21b7bc84":{"resolved":41,"open":75},"27d80ea9-efde-441e-a8b1-a583a07b563e":{"resolved":37,"open":86},"bfebe447-8828-470c-8a18-9ea0eca38158":{"resolved":33,"open":48},"86376f85-fa44-4f98-ba90-8baf94abce37":{"resolved":31,"open":50},"252e9ed4-b71a-47b6-aa4f-d5895ff685c0":{"resolved":30,"open":73},"9dc1d3ce-46b3-497f-9d20-60765b9fec95":{"resolved":27,"open":75},"12bbca59-c8d4-4626-8548-88217452cb7b":{"resolved":25,"open":30},"e0d20344-53bb-445a-8cba-13f1e8d80fd5":{"resolved":24,"open":81},"86e9db0d-d6fb-436c-acf4-bf5c96034069":{"resolved":23,"open":38},"d22b6602-7934-44f4-bb7c-cb54c72523b0":{"resolved":22,"open":67}}
+ok   [120d] Normal approvals: truth={"approved":2,"rejected":1,"pending":1} shown={"approved":2,"rejected":1,"pending":1}
+ok   [fy] Smart window starts: truth="2026-03-31T18:30" shown="2026-03-31T18:30"
+ok   [fy] Smart created: truth=1794 shown=1794
+ok   [fy] Smart resolved (resolved in period): truth=833 shown=833
+ok   [fy] Smart open backlog: truth=1596 shown=1596
+ok   [fy] Smart currently breached: truth=0 shown=0
+ok   [fy] Smart SLA %: truth=100 shown=100
+ok   [fy] Smart avg resolution h: truth=107.4 shown=107.4
+ok   [fy] Smart avg first response h: truth=0 shown=0
+ok   [fy] Smart created by status: truth={"assigned":86,"waiting_user":83,"closed":481,"cancelled":64,"resolved":335,"pending_approval":81,"hold_purchase_ho":75,"open":238,"in_progress":351} shown={"assigned":86,"waiting_user":83,"closed":481,"cancelled":64,"resolved":335,"pending_approval":81,"hold_purchase_ho":75,"open":238,"in_progress":351}
+ok   [fy] Smart created by priority: truth={"medium":720,"urgent":339,"high":372,"low":363} shown={"medium":720,"urgent":339,"high":372,"low":363}
+ok   [fy] Smart backlog age buckets: truth={"11–20 days":86,"46–60 days":63,"76–90 days":61,"61–75 days":54,"6–10 days":27,"21–30 days":75,"31–45 days":84,"90+ days":1140,"0–5 days":6} shown={"0–5 days":6,"6–10 days":27,"11–20 days":86,"21–30 days":75,"31–45 days":84,"46–60 days":63,"61–75 days":54,"76–90 days":61,"90+ days":1140}
+ok   [fy] Smart created by group: truth={"ADMIN GROUP":532,"HR SUPPORT":282,"BD GROUP":269,"Demo Admin Repair":7,"FINANCE SUPPORT":282,"IT SUPPORT":412,"QA Admin Group":7,"QA IT Group":3} shown={"ADMIN GROUP":532,"HR SUPPORT":282,"BD GROUP":269,"Demo Admin Repair":7,"FINANCE SUPPORT":282,"IT SUPPORT":412,"QA Admin Group":7,"QA IT Group":3}
+ok   [fy] Smart open by group: truth={"ADMIN GROUP":479,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"FINANCE SUPPORT":249,"IT SUPPORT":369,"QA Admin Group":4,"QA IT Group":2} shown={"ADMIN GROUP":479,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"FINANCE SUPPORT":249,"IT SUPPORT":369,"QA Admin Group":4,"QA IT Group":2}
+ok   [fy] Smart approvals approved: truth=2 shown=2
+ok   [fy] Smart approvals rejected: truth=1 shown=1
+ok   [fy] Smart approvals waiting: truth=1 shown=1
+ok   [fy] Normal Created: truth=1794 shown=1794
+ok   [fy] Normal Resolved (resolved in period): truth=833 shown=833
+ok   [fy] Normal Open Now: truth=1596 shown=1596
+ok   [fy] Normal Currently Breached: truth=0 shown=0
+ok   [fy] Normal SLA %: truth=100 shown=100
+ok   [fy] Normal avg resolution h: truth=107.4 shown=107.4
+ok   [fy] Normal avg first response h: truth=0 shown=0
+ok   [fy] Normal status counts: truth={"assigned":86,"waiting_user":83,"closed":481,"cancelled":64,"resolved":335,"pending_approval":81,"hold_purchase_ho":75,"open":238,"in_progress":351} shown={"open":238,"assigned":86,"in_progress":351,"waiting_user":83,"hold_purchase_ho":75,"pending_approval":81,"resolved":335,"closed":481,"cancelled":64}
+ok   [fy] Normal backlog aging: truth={"11–20 days":86,"46–60 days":63,"76–90 days":61,"61–75 days":54,"6–10 days":27,"21–30 days":75,"31–45 days":84,"90+ days":1140,"0–5 days":6} shown={"0–5 days":6,"6–10 days":27,"11–20 days":86,"21–30 days":75,"31–45 days":84,"46–60 days":63,"61–75 days":54,"76–90 days":61,"90+ days":1140}
+ok   [fy] Normal group volume: truth={"ADMIN GROUP":532,"HR SUPPORT":282,"BD GROUP":269,"Demo Admin Repair":7,"FINANCE SUPPORT":282,"IT SUPPORT":412,"QA Admin Group":7,"QA IT Group":3} shown={"ADMIN GROUP":532,"IT SUPPORT":412,"FINANCE SUPPORT":282,"HR SUPPORT":282,"BD GROUP":269,"Demo Admin Repair":7,"QA Admin Group":7,"QA IT Group":3}
+ok   [fy] Normal group resolved: truth={"ADMIN GROUP":247,"BD GROUP":124,"Demo Admin Repair":3,"FINANCE SUPPORT":135,"HR SUPPORT":132,"IT SUPPORT":189,"QA Admin Group":2,"QA IT Group":1} shown={"ADMIN GROUP":247,"IT SUPPORT":189,"FINANCE SUPPORT":135,"HR SUPPORT":132,"BD GROUP":124,"Demo Admin Repair":3,"QA Admin Group":2,"QA IT Group":1}
+ok   [fy] Normal group open now: truth={"ADMIN GROUP":479,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"FINANCE SUPPORT":249,"IT SUPPORT":369,"QA Admin Group":4,"QA IT Group":2} shown={"ADMIN GROUP":479,"IT SUPPORT":369,"FINANCE SUPPORT":249,"HR SUPPORT":248,"BD GROUP":241,"Demo Admin Repair":4,"QA Admin Group":4,"QA IT Group":2}
+ok   [fy] Normal priority resolved / SLA: truth={"high":{"resolved":172,"slaBase":1,"slaMet":1},"low":{"resolved":174,"slaBase":1,"slaMet":1},"medium":{"resolved":331,"slaBase":1,"slaMet":1},"urgent":{"resolved":156,"slaBase":0,"slaMet":0}} shown={"urgent":{"resolved":156,"slaBase":0,"slaMet":0},"high":{"resolved":172,"slaBase":1,"slaMet":1},"medium":{"resolved":331,"slaBase":1,"slaMet":1},"low":{"resolved":174,"slaBase":1,"slaMet":1}}
+ok   [fy] Normal agent leaderboard: truth={"4401d05e-917c-4e89-b8db-30fc21b7bc84":{"resolved":75,"open":75},"e0d20344-53bb-445a-8cba-13f1e8d80fd5":{"resolved":59,"open":81},"27d80ea9-efde-441e-a8b1-a583a07b563e":{"resolved":58,"open":86},"9dc1d3ce-46b3-497f-9d20-60765b9fec95":{"resolved":55,"open":75},"252e9ed4-b71a-47b6-aa4f-d5895ff685c0":{"resolved":51,"open":73},"bfebe447-8828-470c-8a18-9ea0eca38158":{"resolved":49,"open":48},"86376f85-fa44-4f98-ba90-8baf94abce37":{"resolved":49,"open":50},"d22b6602-7934-44f4-bb7c-cb54c72523b0":{"resolved":40,"open":67},"12bbca59-c8d4-4626-8548-88217452cb7b":{"resolved":38,"open":30},"d2f8c4c8-21cb-4207-8a0a-0acdc06313f4":{"resolved":35,"open":40}} shown={"4401d05e-917c-4e89-b8db-30fc21b7bc84":{"resolved":75,"open":75},"e0d20344-53bb-445a-8cba-13f1e8d80fd5":{"resolved":59,"open":81},"27d80ea9-efde-441e-a8b1-a583a07b563e":{"resolved":58,"open":86},"9dc1d3ce-46b3-497f-9d20-60765b9fec95":{"resolved":55,"open":75},"252e9ed4-b71a-47b6-aa4f-d5895ff685c0":{"resolved":51,"open":73},"bfebe447-8828-470c-8a18-9ea0eca38158":{"resolved":49,"open":48},"86376f85-fa44-4f98-ba90-8baf94abce37":{"resolved":49,"open":50},"d22b6602-7934-44f4-bb7c-cb54c72523b0":{"resolved":40,"open":67},"12bbca59-c8d4-4626-8548-88217452cb7b":{"resolved":38,"open":30},"d2f8c4c8-21cb-4207-8a0a-0acdc06313f4":{"resolved":35,"open":40}}
+ok   [fy] Normal approvals: truth={"approved":2,"rejected":1,"pending":1} shown={"approved":2,"rejected":1,"pending":1}
+
+0 differences
+
+
+ [32m✓[39m tests/integration/dashboard-numbers-audit.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 3816[2mms[22m[39m
+   [33m[2m✓[22m[39m dashboard numbers vs the raw data (local database)[2m > [22mreconciles every shared figure [33m 3815[2mms[22m[39m
+ [32m✓[39m tests/integration/fixed-reports.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 3420[2mms[22m[39m
+   [33m[2m✓[22m[39m fixed reports (local database)[2m > [22mloads all twelve, and the Admin and BD summaries count exactly the open tickets of their groups [33m 3107[2mms[22m[39m
+   [33m[2m✓[22m[39m fixed reports (local database)[2m > [22ma technician starts on their own groups, and an admin on every group [33m 313[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[32m11 passed[39m[22m[90m (11)[39m
+[2m   Start at [22m 18:00:53
+[2m   Duration [22m 12.61s[2m (transform 224ms, setup 64ms, collect 230ms, tests 10.91s, environment 0ms, prepare 191ms)[22m
+

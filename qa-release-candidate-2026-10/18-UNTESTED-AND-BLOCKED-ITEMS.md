@@ -34,7 +34,7 @@ Nothing here is hidden behind a PASS. "Blocked" = could not be done safely or at
 | Field-level SLA override really shortens a deadline | wrong deadline | unit test of `lib/sla/matrix.ts` |
 | Notification opt-out per user, browser push failure handling | people get / miss messages | small test |
 | Knowledge Base, Runbooks, drag-and-drop dashboard widgets, dashboard export, day pop-up of the calendar, intake rules and classification, daily alert digest | low | listed as NOT TESTED in report 02 |
-| Export files compared row by row with the screen (requests, Excel, PO register) | wrong numbers in a file | 30-minute check by the report owner |
+| Excel (xlsx) and PO-register exports compared row by row (the CSV of requests was compared and fixed, QA-D020) | wrong numbers in a file | 30-minute check by the report owner |
 | Report Builder / Predefined Reports compared with the dashboard for the same period | two screens disagree | same |
 | SLA breach count recounted by hand across business hours and holidays | wrong breach numbers | recount a sample of 20 tickets |
 | Creating and editing services, forms, categories, rules, roles through the admin screens in the browser | admin screens | covered by integration/vapt tests, not walked by hand |

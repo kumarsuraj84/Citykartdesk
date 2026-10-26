@@ -5,3 +5,4 @@
 {"at":"2026-10-26T11:01:12.564Z","id":"QA-D017","status":"PASS","note":"FIXED: attachment route answers 503 + Retry-After when storage is unreachable/5xx; real missing file stays 404. tests/unit/attachment-storage-outage.test.ts failed 2/4 before, 4/4 after","defect":"QA-D017"}
 {"at":"2026-10-26T11:09:27.545Z","id":"QA-D018","status":"PASS","note":"FIXED: round robin takes its position with compare-and-set; reproduced 8:0 before, spread after (qa-gap-coverage); assign/rules tests 26 pass","defect":"QA-D018"}
 {"at":"2026-10-26T11:09:27.748Z","id":"QA-D019","status":"PASS","note":"FIXED: System Log integrity check walks all chained rows in pieces; unit test 2 of 3 failed before; found by final regression test 105 once the log passed 500,000 rows","defect":"QA-D019"}
+{"at":"2026-10-26T12:18:54.094Z","id":"QA-D020","status":"PASS","note":"FIXED: exports of requests/tasks/projects/stores read in pages; reconciliation test failed 1000 vs 3274 before","defect":"QA-D020"}

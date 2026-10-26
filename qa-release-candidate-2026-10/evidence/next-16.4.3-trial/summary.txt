@@ -1,0 +1,4 @@
+ISOLATION GATE: PASSED  (21/21)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  4 failed | 314 passed | 4 skipped (322)
+      Tests  1 failed | 2414 passed | 18 skipped (2433)

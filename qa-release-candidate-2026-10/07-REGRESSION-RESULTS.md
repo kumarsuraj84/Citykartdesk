@@ -37,4 +37,8 @@ Regressions caused by the fixes: **none found** (run 5 passes every earlier test
 * Mobile menu (QA-D009): the older overflow tests (cap of 4 primary items) still pass.
 * Migration 185: security tests on categories / templates / groups pass with 185 applied; **not applied** anywhere else.
 
+## After the final run: export fix (QA-D020)
+
+A reconciliation test found that exports stopped at 1,000 rows; the fix touched only `lib/export/reports.ts`. After it, the 5 export test files (16 tests, including the new reconciliation and guard tests) passed on the current code, and the whole suite (2,433 tests) passed on the Next.js 16.4.3 trial copy that contained the fix (report 20). A fresh full run on the real project with the export fix was not repeated.
+
 Verdict: **PASS.**

@@ -25,8 +25,8 @@ Feature coverage (report 02): of the 155 features, **141 PASS**, **7 NOT TESTED*
 
 | | P0 | P1 | P2 | P3 | Total |
 |---|---|---|---|---|---|
-| Found | 0 | 1 | 9 | 9 | 19 |
-| Fixed and re-tested | 0 | 1 | 8 | 6 | 15 |
+| Found | 0 | 1 | 10 | 9 | 20 |
+| Fixed and re-tested | 0 | 1 | 9 | 6 | 16 |
 | Open (your decision) | 0 | 0 | 1 | 3 | 4 |
 | Blocked / reopened / regressions | 0 | 0 | 0 | 0 | 0 |
 
@@ -36,6 +36,7 @@ The ones that matter most:
 * **P2 — the audit-log integrity check stopped after 500,000 rows but said "all intact".** Fixed.
 * **P2 — round-robin gave a whole burst of tickets to one technician.** Fixed.
 * **P2 — AC PMS tickets were not routed to the vendor technician.** Fixed.
+* **P2 — Excel/CSV exports stopped silently after 1,000 rows** (requests, tasks, projects, stores). Fixed.
 * **P2 — two sheet updates at once could clash.** Fixed.
 * **P2 — sign-in outage told people "wrong password".** Fixed. (and storage outage said "not found"; vendor phone menu; many accessibility names)
 * **P2, OPEN — Next.js has critical security advisories; upgrade to 16.4.3 recommended** (needs your OK).

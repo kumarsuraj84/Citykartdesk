@@ -71,25 +71,26 @@ export async function exportRequestsCSV(orgId: string, f?: ExportFilters): Promi
   // org_id filter MUST be applied explicitly to keep the export scoped to one tenant.
   const admin = createAdminClient() as unknown as AnyClient
 
-  let query = admin
-    .from('requests')
-    .select(
-      'id,title,status,priority,created_at,updated_at,resolution_due_at,service:services(name),requester:profiles!requester_id(full_name),assignee:profiles!assigned_to(full_name),team:teams(name)'
-    )
-    .eq('org_id', orgId)
+  const makeQuery = () => {
+    let query = admin
+      .from('requests')
+      .select(
+        'id,title,status,priority,created_at,updated_at,resolution_due_at,service:services(name),requester:profiles!requester_id(full_name),assignee:profiles!assigned_to(full_name),team:teams(name)'
+      )
+      .eq('org_id', orgId)
 
-  if (f?.status)      query = query.eq('status', f.status)
-  if (f?.priority)    query = query.eq('priority', f.priority)
-  if (f?.assignee_id) query = query.eq('assigned_to', f.assignee_id)
-  if (f?.teamId)      query = query.eq('team_id', f.teamId)
-  if (f?.date_from)   query = query.gte('created_at', f.date_from)
-  if (f?.date_to)     query = query.lte('created_at', f.date_to)
+    if (f?.status)      query = query.eq('status', f.status)
+    if (f?.priority)    query = query.eq('priority', f.priority)
+    if (f?.assignee_id) query = query.eq('assigned_to', f.assignee_id)
+    if (f?.teamId)      query = query.eq('team_id', f.teamId)
+    if (f?.date_from)   query = query.gte('created_at', f.date_from)
+    if (f?.date_to)     query = query.lte('created_at', f.date_to)
+    return query.order('id', { ascending: true })
+  }
 
-  // Fetch one extra to detect overflow
-  query = query.limit(MAX_EXPORT_ROWS + 1)
-
-  const { data, error } = await query
-  if (error) throw new Error(error.message)
+  // QA-D020: read in pages. A single request is cut at the data service's own limit (1000 rows) without any error, so the file used to stop at 1,000 tickets unnoticed.
+  // One extra row is still read to detect the overflow of MAX_EXPORT_ROWS.
+  const { rows: data } = await fetchAllPages<unknown>((from, to) => makeQuery().range(from, to), { maxRows: MAX_EXPORT_ROWS + 1 })
 
   if ((data ?? []).length > MAX_EXPORT_ROWS) {
     throw new Error(
@@ -141,27 +142,28 @@ export async function exportTasksCSV(orgId: string, f?: ExportFilters, teamIds?:
   // Service-role client — apply org_id filter explicitly to keep the export tenant-scoped.
   const admin = createAdminClient() as unknown as AnyClient
 
-  let query = admin
-    .from('tasks')
-    .select(
-      'id,title,status,priority,due_date,created_at,updated_at,assignee:profiles!assignee_id(full_name),request:requests(title)'
-    )
-    .eq('org_id', orgId)
+  const makeQuery = () => {
+    let query = admin
+      .from('tasks')
+      .select(
+        'id,title,status,priority,due_date,created_at,updated_at,assignee:profiles!assignee_id(full_name),request:requests(title)'
+      )
+      .eq('org_id', orgId)
 
-  // Non-admin/manager callers only export the team(s) they're on, not the whole org
-  // (undefined = org-wide, an already-verified admin/manager caller).
-  if (teamIds) query = query.in('team_id', teamIds)
+    // Non-admin/manager callers only export the team(s) they're on, not the whole org
+    // (undefined = org-wide, an already-verified admin/manager caller).
+    if (teamIds) query = query.in('team_id', teamIds)
 
-  if (f?.status)      query = query.eq('status', f.status)
-  if (f?.priority)    query = query.eq('priority', f.priority)
-  if (f?.assignee_id) query = query.eq('assignee_id', f.assignee_id)
-  if (f?.date_from)   query = query.gte('created_at', f.date_from)
-  if (f?.date_to)     query = query.lte('created_at', f.date_to)
+    if (f?.status)      query = query.eq('status', f.status)
+    if (f?.priority)    query = query.eq('priority', f.priority)
+    if (f?.assignee_id) query = query.eq('assignee_id', f.assignee_id)
+    if (f?.date_from)   query = query.gte('created_at', f.date_from)
+    if (f?.date_to)     query = query.lte('created_at', f.date_to)
+    return query.order('id', { ascending: true })
+  }
 
-  query = query.limit(MAX_EXPORT_ROWS + 1)
-
-  const { data, error } = await query
-  if (error) throw new Error(error.message)
+  // QA-D020: read in pages (a response is cut at 1000 rows by the data service, silently)
+  const { rows: data } = await fetchAllPages<unknown>((from, to) => makeQuery().range(from, to), { maxRows: MAX_EXPORT_ROWS + 1 })
 
   if ((data ?? []).length > MAX_EXPORT_ROWS) {
     throw new Error(
@@ -214,23 +216,24 @@ const PROJECT_STATUS_LABELS: Record<string, string> = {
 export async function exportProjectsCSV(orgId: string, teamIds?: string[]): Promise<string> {
   const admin = createAdminClient() as unknown as AnyClient
 
-  let query = admin
-    .from('projects')
-    .select(
-      'id,name,description,priority,status,start_date,target_date,owner:profiles!projects_owner_id_fkey(full_name),functional_owner:profiles!projects_functional_owner_id_fkey(full_name),team:teams(name)'
-    )
-    .eq('org_id', orgId)
-    .is('archived_at', null)
+  const makeQuery = () => {
+    let query = admin
+      .from('projects')
+      .select(
+        'id,name,description,priority,status,start_date,target_date,owner:profiles!projects_owner_id_fkey(full_name),functional_owner:profiles!projects_functional_owner_id_fkey(full_name),team:teams(name)'
+      )
+      .eq('org_id', orgId)
+      .is('archived_at', null)
 
-  // Non-admin/manager callers only export the team(s) they're on, not the whole org
-  // (undefined = org-wide, an already-verified admin/manager caller).
-  if (teamIds) query = query.in('team_id', teamIds)
+    // Non-admin/manager callers only export the team(s) they're on, not the whole org
+    // (undefined = org-wide, an already-verified admin/manager caller).
+    if (teamIds) query = query.in('team_id', teamIds)
 
-  const { data, error } = await query
-    .order('created_at', { ascending: false })
-    .limit(MAX_EXPORT_ROWS + 1)
+    return query.order('created_at', { ascending: false }).order('id', { ascending: true })
+  }
 
-  if (error) throw new Error(error.message)
+  // QA-D020: read in pages (a response is cut at 1000 rows by the data service, silently)
+  const { rows: data } = await fetchAllPages<unknown>((from, to) => makeQuery().range(from, to), { maxRows: MAX_EXPORT_ROWS + 1 })
 
   if ((data ?? []).length > MAX_EXPORT_ROWS) {
     throw new Error(
@@ -278,14 +281,13 @@ export async function exportProjectsCSV(orgId: string, teamIds?: string[]): Prom
 export async function exportStoresCSV(orgId: string): Promise<string> {
   const admin = createAdminClient() as unknown as AnyClient
 
-  const { data, error } = await admin
+  // QA-D020: read in pages (a response is cut at 1000 rows by the data service, silently)
+  const { rows: data } = await fetchAllPages<unknown>((from, to) => admin
     .from('stores')
     .select('code,name,address,city,state,pincode,is_active,ac_total,ac_brand,ac_amc_brand,ac_amc_vendor,zenatix,open_date,cluster,region,priority_list,festival,oem:oems!stores_oem_id_fkey(name),genset_oem:oems!stores_genset_oem_id_fkey(name),cvm:profiles!stores_cvm_id_fkey(full_name)')
     .eq('org_id', orgId)
     .order('code', { ascending: true })
-    .limit(MAX_EXPORT_ROWS + 1)
-
-  if (error) throw new Error(error.message)
+    .range(from, to), { maxRows: MAX_EXPORT_ROWS + 1 })
 
   if ((data ?? []).length > MAX_EXPORT_ROWS) {
     throw new Error(
