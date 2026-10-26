@@ -1294,6 +1294,25 @@ export function SectionBuilder({
                 </div>
               )}
 
+              {selectedField.type !== 'store_address' && selectedField.type !== 'file' && (
+                <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={selectedField.show_in_approval_history === true}
+                      onChange={(e) => updateField(selectedSection.id, selectedField.id, { show_in_approval_history: e.target.checked ? true : undefined })}
+                    />
+                    <span>
+                      <span className="font-medium">Show in approval history</span>
+                      <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                        When this request goes for approval, the approver sees this answer for the request now and for the earlier requests of the same store and sub-category (for example the Qty approved last time). Only for the categories that have &quot;Show earlier requests in the approval mail&quot; switched on.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
+
               {selectedField.type === 'select' && (
                 <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
                   <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">

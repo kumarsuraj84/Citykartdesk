@@ -1,5 +1,6 @@
 import { escapeEmailFields, escapeHtml } from './escape'
 import { LINK_DAYS } from '@/lib/approvals/email-link'
+import { approvalHistoryHtml, approvalHistoryText, type ApprovalHistory } from '@/lib/approvals/history-model'
 
 export function layout(body: string): string {
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#ffffff;font-family:sans-serif;">
@@ -142,12 +143,15 @@ export function approvalRequiredEmail(d: {
   /** this approver's own links: decide straight from the e-mail (after confirming it is them, with a comment) */
   approveUrl?: string
   rejectUrl?: string
+  /** what the store is asking now and the last decisions on the same store and sub-category (only for the categories that switch it on) */
+  history?: ApprovalHistory | null
 }): { subject: string; html: string; text: string } {
-  const e = escapeEmailFields(d, ['requestUrl', 'approveUrl', 'rejectUrl'])
+  const e = escapeEmailFields({ ...d, history: undefined }, ['requestUrl', 'approveUrl', 'rejectUrl'])
   const subject = `Approval required: ${d.requestTitle}`
   const html = layout(`
     <p>Hi ${e.approverName},</p>
     <p>${approvalRequestSentence(d, (s) => `<strong>${escapeHtml(s)}</strong>`)}</p>
+    ${d.history ? approvalHistoryHtml(d.history) : ''}
     ${d.approveUrl && d.rejectUrl
       ? `<p style="margin:18px 0 6px;">
            <a href="${e.approveUrl}" style="display:inline-block;background:#16a34a;color:#ffffff;padding:12px 26px;border-radius:6px;text-decoration:none;font-weight:600;margin:0 8px 8px 0;">Approve</a>
@@ -156,7 +160,7 @@ export function approvalRequiredEmail(d: {
          <p style="font-size:13px;color:#6B7280;margin:4px 0 12px;">A comment is required. Only <strong>${e.approverName}</strong> can decide from this e-mail: you will be asked to confirm it is you. The buttons work for ${LINK_DAYS} days. Or <a href="${e.requestUrl}" style="color:#2563eb;">open the request in Citykart Desk</a>.</p>`
       : btn(e.requestUrl, 'Review & Approve')}
   `)
-  const text = `Hi ${d.approverName},\n\n${approvalRequestSentence(d, (s) => s)}\n\n${d.approveUrl && d.rejectUrl ? `Approve: ${d.approveUrl}\nReject: ${d.rejectUrl}\n(A comment is required. Only ${d.approverName} can decide from this e-mail; you will be asked to confirm it is you. The links work for ${LINK_DAYS} days.)\n\nOr open it in Citykart Desk: ${d.requestUrl}` : `Review it here: ${d.requestUrl}`}`
+  const text = `Hi ${d.approverName},\n\n${approvalRequestSentence(d, (s) => s)}\n\n${d.history ? `${approvalHistoryText(d.history)}\n\n` : ''}${d.approveUrl && d.rejectUrl ? `Approve: ${d.approveUrl}\nReject: ${d.rejectUrl}\n(A comment is required. Only ${d.approverName} can decide from this e-mail; you will be asked to confirm it is you. The links work for ${LINK_DAYS} days.)\n\nOr open it in Citykart Desk: ${d.requestUrl}` : `Review it here: ${d.requestUrl}`}`
   return { subject, html, text }
 }
 

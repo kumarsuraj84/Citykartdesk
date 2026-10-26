@@ -10,6 +10,7 @@ import {
   deleteCategory,
   setCategoryOemKind,
   setCategoryCvmApproval,
+  setCategoryApprovalHistory,
 } from '@/lib/actions/admin/categories'
 import { OEM_KINDS, OEM_KIND_LABEL, isOemKind, type OemKind } from '@/lib/oems/kinds'
 import { IconPicker } from '@/components/admin/IconPicker'
@@ -69,6 +70,8 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
   const [oemKind, setOemKind] = useState<OemKind | ''>(savedOemKind)
   const savedCvmApproval = cat.auto_cvm_approval === true
   const [cvmApproval, setCvmApproval] = useState(savedCvmApproval)
+  const savedApprovalHistory = cat.show_approval_history === true
+  const [approvalHistory, setApprovalHistory] = useState(savedApprovalHistory)
   const [error, setError] = useState('')
   const [pending, startTransition] = useTransition()
   const [togglePending, startToggle] = useTransition()
@@ -92,6 +95,10 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
         const r = await setCategoryCvmApproval(cat.id, cvmApproval)
         if (r.error) { setError(r.error); return }
       }
+      if (approvalHistory !== savedApprovalHistory) {
+        const r = await setCategoryApprovalHistory(cat.id, approvalHistory)
+        if (r.error) { setError(r.error); return }
+      }
       setEditing(false)
     })
   }
@@ -103,6 +110,7 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
     setIconImageUrl(cat.icon_image_url ?? null)
     setOemKind(savedOemKind)
     setCvmApproval(savedCvmApproval)
+    setApprovalHistory(savedApprovalHistory)
     setError('')
     setEditing(false)
   }
@@ -170,6 +178,10 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
                 <input type="checkbox" checked={cvmApproval} onChange={(e) => setCvmApproval(e.target.checked)} />
                 Put the ticket In Process and send it for approval to the CVM the CVM sheet lists for the store, automatically
               </label>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input type="checkbox" checked={approvalHistory} onChange={(e) => setApprovalHistory(e.target.checked)} />
+                Show earlier requests in the approval mail: the last decisions on requests of the same store and sub-category (the answers ticked &quot;Show in approval history&quot; in the form)
+              </label>
               {error && <p className="text-xs text-destructive">{error}</p>}
             </div>
             <div className="flex shrink-0 items-center gap-1">
@@ -206,6 +218,11 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
               {savedCvmApproval && (
                 <p className="mt-1 inline-flex rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">
                   Auto: In Process, then approval by the store&apos;s CVM
+                </p>
+              )}
+              {savedApprovalHistory && (
+                <p className="mt-1 mr-1 inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-700">
+                  Approval mail shows earlier requests of the store
                 </p>
               )}
               {savedOemKind && (

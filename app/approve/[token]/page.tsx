@@ -7,6 +7,7 @@ import { OWN_REQUEST_MESSAGE } from '@/lib/approvals/decision'
 import { isVerified, notAuthorisedMessage, verifiedCookieName, verifyApprovalToken } from '@/lib/approvals/email-link'
 import { ApprovalDecisionForm } from './ApprovalDecisionForm'
 import { ApprovalGate } from './ApprovalGate'
+import { ApprovalHistoryBox } from '@/components/requests/ApprovalHistoryBox'
 
 export const metadata = { title: 'Approve or reject', robots: { index: false, follow: false } }
 export const dynamic = 'force-dynamic'
@@ -158,6 +159,7 @@ export default async function ApprovePage({
         <dt className="text-muted-foreground">Sent to</dt><dd className="font-medium">{list(state.sentTo)}</dd>
       </dl>
       {d.description && <p className="whitespace-pre-wrap text-sm">{d.description}</p>}
+      {d.history && <ApprovalHistoryBox history={d.history} />}
       {d.conversation.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Conversation</p>

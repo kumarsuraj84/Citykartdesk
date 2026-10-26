@@ -30,6 +30,14 @@ const SIMPLE_REQUEST_EVENTS: Record<string, string> = {
   priority_changed: 'Priority changed',
 }
 
+/** The "earlier requests of this store" box for an approval mail; null when there is none to show (loaded on demand, so other mails never touch the database for it). */
+async function approvalHistoryFor(approvalId: string | undefined) {
+  if (!approvalId) return null
+  const { createAdminClient } = await import('@/lib/supabase/admin')
+  const { loadApprovalHistory } = await import('@/lib/approvals/history')
+  return loadApprovalHistory(createAdminClient(), approvalId)
+}
+
 export async function sendNotificationEmail(opts: {
   type: string
   recipientEmail: string
@@ -105,6 +113,8 @@ export async function sendNotificationEmail(opts: {
           break
         }
         template = approvalRequiredEmail({
+          // the box "Asking now / earlier requests of this store" (null for a category that has it switched off; never stops the mail)
+          history: await approvalHistoryFor(data.approvalId),
           approverName: recipientName || '',
           requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',

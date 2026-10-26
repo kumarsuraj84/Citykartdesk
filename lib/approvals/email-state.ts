@@ -5,6 +5,8 @@
 import { resolveApprovalContextFor, type ApprovalDb } from '@/lib/approvals/decision'
 import { pdfDateTime } from '@/lib/requests/ticket-pdf-model'
 import { linkIsExpired, type VerifiedLink } from '@/lib/approvals/email-link'
+import { loadApprovalHistory } from '@/lib/approvals/history'
+import type { ApprovalHistory } from '@/lib/approvals/history-model'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -18,6 +20,8 @@ export interface PendingDetail {
   description: string
   created: string
   conversation: { author: string; at: string; body: string }[]
+  /** what the store asks now and the last decisions on the same store and sub-category (null when the category does not switch it on) */
+  history: ApprovalHistory | null
 }
 
 interface Common { requestNo: string; title: string; sentTo: string[]; approverName: string }
@@ -76,7 +80,8 @@ export async function describeApprovalLink(admin: AnyClient, approvalId: string,
     return { kind: 'not_current', ...common, waitingOn: [...new Set(waiting.map(nameOf))] }
   }
 
-  const [{ data: sentBy }, { data: comments }] = await Promise.all([
+  const [history, { data: sentBy }, { data: comments }] = await Promise.all([
+    loadApprovalHistory(admin, approvalId),
     approval.requested_by ? admin.from('profiles').select('full_name').eq('id', approval.requested_by).maybeSingle() : Promise.resolve({ data: null }),
     admin.from('request_comments').select('body, created_at, is_internal, author:profiles!request_comments_author_id_fkey(full_name), external_name').eq('request_id', approval.request_id).eq('is_internal', false).order('created_at', { ascending: false }).limit(6),
   ])
@@ -90,7 +95,7 @@ export async function describeApprovalLink(admin: AnyClient, approvalId: string,
       priority: req.priority, requesterName, sentByName: (sentBy as { full_name: string } | null)?.full_name ?? '',
       service: one(req.service as { name: string } | { name: string }[] | null)?.name ?? '',
       category: [one(req.category as { name: string } | { name: string }[] | null)?.name, one(req.sub_category as { name: string } | { name: string }[] | null)?.name].filter(Boolean).join(' > '),
-      description: clip(req.description, 800), created: pdfDateTime(req.created_at), conversation,
+      description: clip(req.description, 800), created: pdfDateTime(req.created_at), conversation, history,
     },
   }
 }

@@ -18,6 +18,10 @@ import { getApprovalsForRequest } from '@/lib/queries/approvals'
 import { buildTicketSummary } from '@/lib/requests/ticket-summary'
 import { TicketSummaryCard } from '@/components/requests/TicketSummaryCard'
 import { ApprovalPanel } from '@/components/requests/ApprovalPanel'
+import { ApprovalHistoryBox } from '@/components/requests/ApprovalHistoryBox'
+import { canActOnApproval } from '@/lib/approvals/canAct'
+import { loadApprovalHistory } from '@/lib/approvals/history'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { RelatedRequestsPanel } from '@/components/requests/RelatedRequestsPanel'
 import { CsatSurvey } from '@/components/requests/CsatSurvey'
 import { SLABadge } from '@/components/requests/SLABadge'
@@ -385,6 +389,10 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
 
   if (!request) notFound()
 
+  // The box "asking now / earlier requests of this store" goes only to a person who can decide the approval that is waiting now.
+  const waitingApproval = approvals.find((a) => a.status === 'pending')
+  const approvalHistory = waitingApproval && canActOnApproval(waitingApproval, profile.id, profile.role) ? await loadApprovalHistory(createAdminClient(), waitingApproval.id) : null
+
   const linkedProject = allProjects.find((p) => p.id === (request as { project_id?: string | null }).project_id) ?? null
 
   const isAgent =
@@ -740,6 +748,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
               {idx === 0 && ' · Latest'}
             </p>
           )}
+          {approvalHistory && a.id === waitingApproval?.id && <div className="mb-3"><ApprovalHistoryBox history={approvalHistory} /></div>}
           <ApprovalPanel
             approval={a}
             viewerId={profile.id}
