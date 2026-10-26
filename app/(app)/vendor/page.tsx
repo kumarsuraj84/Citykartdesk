@@ -73,7 +73,7 @@ export default async function VendorDashboardPage({ searchParams }: { searchPara
           >
             <div className="text-2xl font-semibold tabular-nums">{counts[b]}</div>
             <div className="text-xs font-medium leading-tight">{VENDOR_BOX_LABELS[b]}</div>
-            <div className="mt-0.5 text-[10px] opacity-70">{VENDOR_BOX_TURN[b]}</div>
+            <div className="mt-0.5 text-[10px]">{VENDOR_BOX_TURN[b]}</div>
           </Link>
         ))}
       </div>
@@ -89,7 +89,7 @@ export default async function VendorDashboardPage({ searchParams }: { searchPara
         {q && <Link href={`/vendor?tab=${tab}&box=${activeBox}`} className="text-sm text-muted-foreground hover:text-foreground">Clear</Link>}
       </form>
 
-      <div className="overflow-x-auto rounded-xl border border-border">
+      <div className="overflow-x-auto rounded-xl border border-border" tabIndex={0} role="region" aria-label="Your tickets (scroll sideways on a small screen)">
         <table className="w-full min-w-[760px] text-sm">
           <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
             <tr>

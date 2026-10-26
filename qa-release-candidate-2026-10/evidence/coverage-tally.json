@@ -1,0 +1,58 @@
+{
+ "tally": {
+  "PASS": 141,
+  "FAIL": 0,
+  "BLOCKED": 0,
+  "NOT TESTED": 7,
+  "OUT OF SCOPE": 7
+ },
+ "totals": {
+  "qa-new": {
+   "files": 5,
+   "tests": 41,
+   "passed": 41,
+   "failed": 0,
+   "skipped": 0,
+   "filesFailed": 0
+  },
+  "integration": {
+   "files": 81,
+   "tests": 411,
+   "passed": 393,
+   "failed": 0,
+   "skipped": 18,
+   "filesFailed": 0
+  },
+  "remediation": {
+   "files": 32,
+   "tests": 181,
+   "passed": 181,
+   "failed": 0,
+   "skipped": 0,
+   "filesFailed": 0
+  },
+  "vapt": {
+   "files": 23,
+   "tests": 205,
+   "passed": 205,
+   "failed": 0,
+   "skipped": 0,
+   "filesFailed": 0
+  },
+  "unit": {
+   "files": 179,
+   "tests": 1593,
+   "passed": 1593,
+   "failed": 0,
+   "skipped": 0,
+   "filesFailed": 0
+  }
+ },
+ "all": {
+  "files": 320,
+  "tests": 2431,
+  "passed": 2413,
+  "failed": 0,
+  "skipped": 18
+ }
+}

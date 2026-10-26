@@ -1,0 +1,52 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_db_ckdesk_audit, supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [none]
+
+ISOLATION GATE: PASSED  (21/21)
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate[39m
+
+ [32m✓[39m qa-release-candidate-2026-10/tests/qa-gap-coverage.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 7040[2mms[22m[39m
+   [33m[2m✓[22m[39m assignment strategies of Business Rules[2m > [22mround robin hands tickets to the listed technicians in turn [33m 1417[2mms[22m[39m
+   [33m[2m✓[22m[39m assignment strategies of Business Rules[2m > [22mround robin: eight tickets created at the very same moment are spread four and four (QA-D018) [33m 1728[2mms[22m[39m
+   [33m[2m✓[22m[39m assignment strategies of Business Rules[2m > [22mload balanced gives the ticket to the technician with fewer open tickets; resolved and closed ones do not count [33m 669[2mms[22m[39m
+   [33m[2m✓[22m[39m assignment strategies of Business Rules[2m > [22ma ticket held by a vendor technician is never taken away by a rule, round robin included [33m 639[2mms[22m[39m
+[90mstderr[2m | tests/integration/assign-rule-and-status-email.test.ts[2m > [22m[2massign-rule re-firing + status email content[2m > [22m[2mthe "in progress" email to the requester shows the real status, not blank — the second reported bug
+[22m[39m[business-rules] assign action for rule f48df8d5-119a-4940-ad00-8655de1a8cd8 chose user 11f79ac0-92fb-42e7-885c-833c91742ccb, who is not on request 6192b6c6-b314-4f59-85e0-ec43d140a6cc's team — skipped.
+
+ [32m✓[39m tests/integration/assign-rule-and-status-email.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 6739[2mms[22m[39m
+   [33m[2m✓[22m[39m assign-rule re-firing + status email content[2m > [22mStart Working (assigned -> in_progress) re-runs the same rule but sends NO second "assigned" email — the reported bug [33m 894[2mms[22m[39m
+[90mstderr[2m | tests/vapt/23-permission-matrix-and-rules.test.ts[2m > [22m[2mwhat a Business Rule may do to a ticket[2m > [22m[2mcannot revive a cancelled ticket or close one that was never resolved; can still do the moves a person could
+[22m[39m{"ts":"2026-10-26T11:09:11.702Z","level":"warn","event":"rules.status_move_refused","message":"A Business Rule tried a status move that is not allowed","route":"rules/actions.ts#runSetStatus","requestId":"b897e67f-c81c-45d3-b089-8e4d04d50789","context":{"from":"cancelled","to":"in_progress","ruleId":"54409d31-ac48-4813-a541-2d2eb931b318"}}
+
+[90mstderr[2m | tests/vapt/23-permission-matrix-and-rules.test.ts[2m > [22m[2mwhat a Business Rule may do to a ticket[2m > [22m[2mcannot revive a cancelled ticket or close one that was never resolved; can still do the moves a person could
+[22m[39m{"ts":"2026-10-26T11:09:11.725Z","level":"warn","event":"rules.status_move_refused","message":"A Business Rule tried a status move that is not allowed","route":"rules/actions.ts#runSetStatus","requestId":"91fbabd0-c427-4e8c-a519-8fb18b552dea","context":{"from":"in_progress","to":"closed","ruleId":"7520fec4-733e-4a3c-8f6f-95d6b811c5b6"}}
+
+[90mstderr[2m | tests/vapt/23-permission-matrix-and-rules.test.ts[2m > [22m[2mwhat a Business Rule may do to a ticket[2m > [22m[2mcannot revive a cancelled ticket or close one that was never resolved; can still do the moves a person could
+[22m[39m{"ts":"2026-10-26T11:09:11.778Z","level":"warn","event":"rules.status_move_refused","message":"A Business Rule tried a status move that is not allowed","route":"rules/actions.ts#runSetStatus","requestId":"819bd394-2c8d-4f4c-90e1-9ffa585f34ce","context":{"from":"hold_purchase_ho","to":"waiting_user","ruleId":"f7ae0dc3-47a2-4aec-9466-796a39d850b8"}}
+
+ [32m✓[39m tests/vapt/23-permission-matrix-and-rules.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 3004[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m26 passed[39m[22m[90m (26)[39m
+[2m   Start at [22m 16:38:54
+[2m   Duration [22m 19.22s[2m (transform 325ms, setup 43ms, collect 731ms, tests 16.78s, environment 0ms, prepare 130ms)[22m
+

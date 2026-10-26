@@ -184,7 +184,7 @@ function CommentBubble({
             <span className="text-sm font-semibold text-foreground">
               {displayName}
             </span>
-            <span className="shrink-0 text-[11px] text-muted-foreground/70">
+            <span className="shrink-0 text-[11px] text-muted-foreground">
               {formatDateTime(comment.created_at)}
             </span>
           </div>
@@ -584,7 +584,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
                       <span className="text-sm font-semibold text-foreground">
                         {request.requester.full_name}
                       </span>
-                      <span className="shrink-0 text-[11px] text-muted-foreground/70">
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
                         {formatDateTime(request.created_at)}
                       </span>
                     </div>

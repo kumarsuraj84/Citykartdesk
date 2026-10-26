@@ -143,8 +143,9 @@ describe('integrity check', () => {
       psql(`update system_log set message = 'tampered' where id = ${victim}`)
       const bad = await verifyLogIntegrity()
       expect(bad).toMatchObject({ ok: false, brokenId: victim })
-      psql(`update system_log set message = '${original.replace(/'/g, "''")}' ${original === '' ? ', message = NULL' : ''} where id = ${victim}`)
     } finally {
+      // the record is put back even when the expectation above fails (QA: a failed run used to leave the tampered text behind and break the chain of the test database)
+      psql(`update system_log set message = '${original.replace(/'/g, "''")}' ${original === '' ? ', message = NULL' : ''} where id = ${victim}`)
       psql('alter table system_log enable trigger trg_system_log_guard')
     }
     expect((await verifyLogIntegrity()).ok).toBe(true)

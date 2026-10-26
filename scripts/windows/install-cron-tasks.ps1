@@ -30,8 +30,8 @@ $shipTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInt
 Register-ScheduledTask -TaskName 'CitykartDesk-LogShipper' -Action $shipAction -Trigger $shipTrigger -Principal $principal -Settings $settings -Force | Out-Null
 Write-Output 'Installed CitykartDesk-LogShipper (every 2 min)'
 
-# engineer visit reports: auto-resolve after the deadline and the store reminder, every 15 minutes
-Install-Job 'CitykartDesk-Cron-Visits' 'visit-automation' 15
+# (QA-D006) the task "CitykartDesk-Cron-Visits" (job visit-automation) was removed here: the engineer-visit module was dropped, no such job route exists, and the task would
+# only fail every 15 minutes. If a server still has that task from an earlier install, remove it:  Unregister-ScheduledTask -TaskName 'CitykartDesk-Cron-Visits' -Confirm:$false
 
 # the AC / Genset / CVM Google Sheets are copied into the database three times a day (same times as lib/masters/schedule.ts)
 $mastersAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$runner`" -Job masters-sync"

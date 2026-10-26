@@ -1,0 +1,197 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_db_ckdesk_audit, supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [none]
+
+ISOLATION GATE: PASSED  (21/21)
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate[39m
+
+[90mstdout[2m | tests/vapt/91-performance-scale.test.ts[2m > [22m[2mlatency and throughput at scale[2m > [22m[2mmeasures and records
+[22m[39m{
+ "label": "qa-100k",
+ "at": "2026-10-26T10:11:36.133Z",
+ "tickets": 103268,
+ "runs_per_operation": 40,
+ "reads_ms": {
+  "manager: list 1000 tickets": {
+   "p50": 5.5,
+   "p95": 7.7,
+   "p99": 8.5,
+   "runs": 40,
+   "errors": 0
+  },
+  "manager: count all tickets": {
+   "p50": 19.5,
+   "p95": 22.1,
+   "p99": 22.6,
+   "runs": 40,
+   "errors": 0
+  },
+  "technician: list own group tickets": {
+   "p50": 29.5,
+   "p95": 32.9,
+   "p99": 33.5,
+   "runs": 40,
+   "errors": 0
+  },
+  "requester: list own tickets": {
+   "p50": 26.6,
+   "p95": 27.5,
+   "p99": 31.4,
+   "runs": 40,
+   "errors": 0
+  },
+  "technician: open one ticket": {
+   "p50": 2.1,
+   "p95": 2.9,
+   "p99": 3.3,
+   "runs": 40,
+   "errors": 0
+  },
+  "requester: attachment rows of a ticket": {
+   "p50": 1.6,
+   "p95": 3.8,
+   "p99": 4.3,
+   "runs": 40,
+   "errors": 0
+  },
+  "manager: title search": {
+   "p50": 2.4,
+   "p95": 3.3,
+   "p99": 3.9,
+   "runs": 40,
+   "errors": 0
+  },
+  "requester: list people they can see (profile rule)": {
+   "p50": 16.6,
+   "p95": 21.5,
+   "p99": 22.6,
+   "runs": 40,
+   "errors": 0
+  },
+  "technician: list people": {
+   "p50": 11.8,
+   "p95": 12.9,
+   "p99": 13,
+   "runs": 40,
+   "errors": 0
+  },
+  "requester: home dashboard": {
+   "p50": 2.6,
+   "p95": 3.7,
+   "p99": 4,
+   "runs": 40,
+   "errors": 0
+  },
+  "manager: home dashboard": {
+   "p50": 3.7,
+   "p95": 5,
+   "p99": 6.1,
+   "runs": 40,
+   "errors": 0
+  },
+  "technician: activity of one ticket": {
+   "p50": 2.3,
+   "p95": 3.3,
+   "p99": 3.7,
+   "runs": 40,
+   "errors": 0
+  }
+ },
+ "writes": {
+  "1 parallel updates": {
+   "p50": 2.5,
+   "p95": 3.7,
+   "p99": 4.5,
+   "runs": 600,
+   "errors": 0,
+   "updates": 600,
+   "seconds": 1.6,
+   "updates_per_second": 368.2
+  },
+  "10 parallel updates": {
+   "p50": 3.9,
+   "p95": 5.6,
+   "p99": 7,
+   "runs": 600,
+   "errors": 0,
+   "updates": 600,
+   "seconds": 0.3,
+   "updates_per_second": 2121.9
+  },
+  "25 parallel updates": {
+   "p50": 6.4,
+   "p95": 10.5,
+   "p99": 12.1,
+   "runs": 600,
+   "errors": 0,
+   "updates": 600,
+   "seconds": 0.2,
+   "updates_per_second": 2610.1
+  }
+ },
+ "system_log_appends": {
+  "1 parallel chained appends": {
+   "p50": 2.4,
+   "p95": 3.6,
+   "p99": 4.5,
+   "runs": 600,
+   "errors": 0,
+   "appends": 600,
+   "seconds": 1.5,
+   "appends_per_second": 388.6
+  },
+  "10 parallel chained appends": {
+   "p50": 6.6,
+   "p95": 10.4,
+   "p99": 11.8,
+   "runs": 600,
+   "errors": 0,
+   "appends": 600,
+   "seconds": 0.6,
+   "appends_per_second": 978.2
+  },
+  "25 parallel chained appends": {
+   "p50": 14.6,
+   "p95": 25.1,
+   "p99": 28.1,
+   "runs": 600,
+   "errors": 0,
+   "appends": 600,
+   "seconds": 0.6,
+   "appends_per_second": 986.9
+  }
+ },
+ "chain_sequence_gap": 0,
+ "database_samples": [],
+ "system_log_rows": 161755,
+ "chain_broken_rows": 0,
+ "chain_rows_verified": 20000
+}
+
+ [32m✓[39m tests/vapt/91-performance-scale.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 13562[2mms[22m[39m
+   [33m[2m✓[22m[39m latency and throughput at scale[2m > [22mmeasures and records [33m 11618[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m   Start at [22m 15:41:35
+[2m   Duration [22m 14.11s[2m (transform 47ms, setup 24ms, collect 74ms, tests 13.56s, environment 0ms, prepare 46ms)[22m
+

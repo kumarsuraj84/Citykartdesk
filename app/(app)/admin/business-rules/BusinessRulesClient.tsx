@@ -147,12 +147,13 @@ const NOTIFY_ROLE_OPTIONS: UserRole[] = ['manager', 'admin', 'platform_owner']
 
 // ── Small UI primitives ──────────────────────────────────────────────────────
 
-function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+function Toggle({ checked, onChange, disabled, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
@@ -801,7 +802,7 @@ function RuleEditor({
               <p className="text-sm font-medium text-foreground">Active</p>
               <p className="text-xs text-muted-foreground">Rule runs automatically when enabled</p>
             </div>
-            <Toggle checked={form.is_active} onChange={(v) => set('is_active', v)} />
+            <Toggle label="Rule is active" checked={form.is_active} onChange={(v) => set('is_active', v)} />
           </div>
         </div>
 
@@ -852,7 +853,7 @@ function RuleCard({ rule, onEdit, onDuplicate, onDelete }: { rule: BusinessRuleR
         </p>
       </div>
       <div className="flex items-center gap-3 shrink-0">
-        <Toggle checked={localActive} onChange={handleToggle} disabled={isPending} />
+        <Toggle label={`Rule "${rule.name}" is active`} checked={localActive} onChange={handleToggle} disabled={isPending} />
         <button onClick={onEdit} className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Edit rule">
           <Pencil className="h-4 w-4" />
         </button>

@@ -1,0 +1,133 @@
+{
+  "label": "run",
+  "at": "2026-10-26T11:24:52.143Z",
+  "tickets_in_database": 3269,
+  "runs_per_operation": 15,
+  "create_ticket_sequential": {
+    "p50": 132.5,
+    "p95": 155.6,
+    "p99": 183.2,
+    "runs": 30,
+    "errors": 0
+  },
+  "create_ticket_burst": {
+    "10 at once": {
+      "p50": 222.1,
+      "p95": 267.3,
+      "p99": 267.3,
+      "runs": 10,
+      "errors": 0,
+      "seconds": 0.27,
+      "tickets_per_second": 37.4,
+      "stored": 10,
+      "lost_or_doubled": 0
+    },
+    "25 at once": {
+      "p50": 429.6,
+      "p95": 491,
+      "p99": 492.6,
+      "runs": 25,
+      "errors": 0,
+      "seconds": 0.49,
+      "tickets_per_second": 50.7,
+      "stored": 25,
+      "lost_or_doubled": 0
+    }
+  },
+  "queue_team_first_page": {
+    "p50": 38.9,
+    "p95": 49.7,
+    "p99": 49.7,
+    "runs": 15,
+    "errors": 0
+  },
+  "queue_search_text": {
+    "p50": 90.5,
+    "p95": 98.2,
+    "p99": 98.2,
+    "runs": 15,
+    "errors": 0
+  },
+  "queue_manager_first_page": {
+    "p50": 43.3,
+    "p95": 51.8,
+    "p99": 51.8,
+    "runs": 15,
+    "errors": 0
+  },
+  "executive_dashboard_load_all_rows": {
+    "p50": 159.7,
+    "p95": 163.2,
+    "p99": 163.2,
+    "runs": 5,
+    "errors": 0
+  },
+  "export_requests_csv": {
+    "p50": 71,
+    "p95": 71.7,
+    "p99": 71.7,
+    "runs": 3,
+    "errors": 0
+  },
+  "vendor_dashboard_list": {
+    "p50": 31.2,
+    "p95": 32.4,
+    "p99": 32.4,
+    "runs": 15,
+    "errors": 0
+  },
+  "approval_decide_sequential": {
+    "p50": 63.6,
+    "p95": 80.8,
+    "p99": 80.8,
+    "runs": 15,
+    "errors": 0
+  },
+  "approval_decide_20_at_once": {
+    "p50": 183.5,
+    "p95": 194.7,
+    "p99": 196.4,
+    "runs": 20,
+    "errors": 0,
+    "seconds": 0.2
+  },
+  "approval_same_approval_decided_twice": {
+    "results": [
+      "accepted",
+      "refused"
+    ],
+    "decisions_stored": 1
+  },
+  "pms_generation": {
+    "stores_due": 60,
+    "created": 60,
+    "skipped": 0,
+    "failed": 0,
+    "seconds": 2.47,
+    "tickets_per_second": 24.3,
+    "second_run_created": 0,
+    "setup_problem": null
+  },
+  "sheet_sync": {
+    "rows": 3000,
+    "first_copy": {
+      "seconds": 0.22,
+      "status": "ok",
+      "added": 3000
+    },
+    "unchanged_copy": {
+      "seconds": 0.03,
+      "status": "unchanged"
+    },
+    "one_row_changed": {
+      "seconds": 0.19,
+      "status": "ok",
+      "changed": 1
+    }
+  },
+  "database_after": {
+    "requests": 3431,
+    "connections": 28,
+    "waiting_locks": 0
+  }
+}

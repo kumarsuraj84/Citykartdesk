@@ -48,7 +48,9 @@ export async function loadApprovalHistory(admin: AnyClient, approvalId: string):
       peerIds = [...new Set([req.requester_id, ...((people ?? []) as { id: string }[]).map((p) => p.id)])]
     }
 
-    const since = new Date(Date.now() - HISTORY_MONTHS * 31 * 86_400_000).toISOString()
+    // exactly 12 calendar months back (QA-D007: it used to be 12 x 31 days = 372 days)
+    const sinceDate = new Date(); sinceDate.setMonth(sinceDate.getMonth() - HISTORY_MONTHS)
+    const since = sinceDate.toISOString()
     let q = admin.from('approvals')
       .select('id, status, created_at, request_id, requests!inner(request_no, requester_id, category_id, sub_category_id, form_data, form_sections_snapshot)')
       .in('status', ['approved', 'rejected', 'pending'])
@@ -56,7 +58,7 @@ export async function loadApprovalHistory(admin: AnyClient, approvalId: string):
       .gte('created_at', since)
       .in('requests.requester_id', peerIds)
     q = req.sub_category_id ? q.eq('requests.sub_category_id', req.sub_category_id) : q.eq('requests.category_id', req.category_id).is('requests.sub_category_id', null)
-    const { data: rows } = await q.order('created_at', { ascending: false }).limit(100)
+    const { data: rows } = await q.order('created_at', { ascending: false }).limit(1000)
     const found = (rows ?? []) as { id: string; status: 'approved' | 'rejected' | 'pending'; created_at: string; requests: unknown }[]
 
     const ids = found.map((r) => r.id)

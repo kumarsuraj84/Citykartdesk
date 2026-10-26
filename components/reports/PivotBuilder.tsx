@@ -309,6 +309,7 @@ export function PivotBuilder() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <select
+            aria-label="What to report on"
             value={entity}
             onChange={(e) => setEntity(e.target.value as EntityKey)}
             className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -319,6 +320,7 @@ export function PivotBuilder() {
           </select>
 
           <select
+            aria-label="Saved reports"
             value={selectedReportId}
             onChange={(e) => loadSavedReport(e.target.value)}
             className="min-w-[160px] rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -477,6 +479,7 @@ export function PivotBuilder() {
                         <div key={vf.field} className="flex items-center gap-1 rounded-md bg-primary/10 pl-2 pr-1 py-1 text-xs text-foreground">
                           <span className="truncate max-w-[90px]">{f?.label ?? vf.field}</span>
                           <select
+                            aria-label={`How to add up ${f?.label ?? vf.field}`}
                             value={vf.agg}
                             onChange={(e) =>
                               setValueFields((prev) => prev.map((v, vi) => (vi === i ? { ...v, agg: e.target.value as AggFunc } : v)))
@@ -487,7 +490,7 @@ export function PivotBuilder() {
                               <option key={a.value} value={a.value}>{a.label}</option>
                             ))}
                           </select>
-                          <button type="button" onClick={() => setValueFields((prev) => prev.filter((_, vi) => vi !== i))} className="text-muted-foreground hover:text-foreground">
+                          <button type="button" aria-label={`Remove ${f?.label ?? vf.field}`} onClick={() => setValueFields((prev) => prev.filter((_, vi) => vi !== i))} className="text-muted-foreground hover:text-foreground">
                             <X className="h-3 w-3" />
                           </button>
                         </div>
@@ -505,6 +508,7 @@ export function PivotBuilder() {
                   <div className="flex flex-wrap items-center gap-2">
                     {dateFieldOptions.length > 1 ? (
                       <select
+                        aria-label="Date field for the range"
                         value={dateRangeField}
                         onChange={(e) => setDateRangeField(e.target.value)}
                         className={inputCls}
@@ -516,9 +520,9 @@ export function PivotBuilder() {
                     ) : (
                       <span className="text-xs font-medium text-foreground">{dateFieldOptions[0]?.label}</span>
                     )}
-                    <input type="date" value={dateFrom} onChange={(e) => { setDatePreset(null); setDateFrom(e.target.value) }} className={inputCls} />
+                    <input type="date" aria-label="Date range from" value={dateFrom} onChange={(e) => { setDatePreset(null); setDateFrom(e.target.value) }} className={inputCls} />
                     <span className="text-xs text-muted-foreground">to</span>
-                    <input type="date" value={dateTo} onChange={(e) => { setDatePreset(null); setDateTo(e.target.value) }} className={inputCls} />
+                    <input type="date" aria-label="Date range to" value={dateTo} onChange={(e) => { setDatePreset(null); setDateTo(e.target.value) }} className={inputCls} />
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {DATE_PRESETS.map((p) => (
@@ -699,7 +703,7 @@ function FieldChip({ field, mode, onAdd }: { field: ReportField; mode: Mode; onA
         <span className="break-words leading-snug">{field.label}</span>
       </span>
       <DropdownMenu>
-        <DropdownMenuTrigger className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-muted transition-all">
+        <DropdownMenuTrigger aria-label={`Options for ${field.label}`} className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-muted transition-all">
           <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor"><circle cx="8" cy="3" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="8" cy="13" r="1.3"/></svg>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
@@ -739,16 +743,16 @@ function Chip({
     <div className="flex items-center gap-1 rounded-md bg-primary/10 pl-2 pr-1 py-1 text-xs text-foreground">
       <span className="truncate max-w-[120px]">{label}</span>
       {onMoveUp && (
-        <button type="button" onClick={onMoveUp} className="text-muted-foreground hover:text-foreground">
+        <button type="button" aria-label="Move up" onClick={onMoveUp} className="text-muted-foreground hover:text-foreground">
           <ChevronUp className="h-3 w-3" />
         </button>
       )}
       {onMoveDown && (
-        <button type="button" onClick={onMoveDown} className="text-muted-foreground hover:text-foreground">
+        <button type="button" aria-label="Move down" onClick={onMoveDown} className="text-muted-foreground hover:text-foreground">
           <ChevronDown className="h-3 w-3" />
         </button>
       )}
-      <button type="button" onClick={onRemove} className="text-muted-foreground hover:text-foreground">
+      <button type="button" aria-label="Remove from the list" onClick={onRemove} className="text-muted-foreground hover:text-foreground">
         <X className="h-3 w-3" />
       </button>
     </div>
@@ -774,19 +778,19 @@ function FilterRow({
     <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/30 px-2 py-1.5">
       <span className="text-[11px] font-medium text-foreground min-w-[90px]">{label}</span>
       {field?.type === 'enum' && (
-        <select value={String(filter.value)} onChange={(e) => onChange({ ...filter, op: 'eq', value: e.target.value })} className={inputCls}>
+        <select aria-label={`${label} value`} value={String(filter.value)} onChange={(e) => onChange({ ...filter, op: 'eq', value: e.target.value })} className={inputCls}>
           {field.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       )}
       {field?.type === 'boolean' && (
-        <select value={String(filter.value)} onChange={(e) => onChange({ ...filter, op: 'eq', value: e.target.value })} className={inputCls}>
+        <select aria-label={`${label} value`} value={String(filter.value)} onChange={(e) => onChange({ ...filter, op: 'eq', value: e.target.value })} className={inputCls}>
           <option value="true">Yes</option>
           <option value="false">No</option>
         </select>
       )}
       {field?.type === 'number' && (
         <>
-          <select value={filter.op} onChange={(e) => onChange({ ...filter, op: e.target.value as FilterOp })} className={inputCls}>
+          <select aria-label={`${label} comparison`} value={filter.op} onChange={(e) => onChange({ ...filter, op: e.target.value as FilterOp })} className={inputCls}>
             <option value="gte">≥</option>
             <option value="lte">≤</option>
             <option value="eq">=</option>
@@ -796,11 +800,11 @@ function FilterRow({
       )}
       {field?.type === 'date' && (
         <>
-          <select value={filter.op} onChange={(e) => onChange({ ...filter, op: e.target.value as FilterOp })} className={inputCls}>
+          <select aria-label={`${label} comparison`} value={filter.op} onChange={(e) => onChange({ ...filter, op: e.target.value as FilterOp })} className={inputCls}>
             <option value="gte">From</option>
             <option value="lte">Until</option>
           </select>
-          <input type="date" value={String(filter.value)} onChange={(e) => onChange({ ...filter, value: e.target.value })} className={inputCls} />
+          <input type="date" aria-label={`${label} date`} value={String(filter.value)} onChange={(e) => onChange({ ...filter, value: e.target.value })} className={inputCls} />
         </>
       )}
       {(!field || field.type === 'string') && (

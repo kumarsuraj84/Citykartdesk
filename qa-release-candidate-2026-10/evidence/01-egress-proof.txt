@@ -1,0 +1,14 @@
+
+ISOLATION GATE: PASSED  (21/21)
+NODE_OPTIONS has the guard: true
+production app server      10.0.1.98:3210  ->  refused: [ckdesk-audit-guard] outbound connection to 10.0.1.98:3210 refused (audit mode allows loop
+production database        10.0.0.205:5432  ->  refused: [ckdesk-audit-guard] outbound connection to 10.0.0.205:5432 refused (audit mode allows loo
+production NAS             10.0.0.25:445  ->  refused: [ckdesk-audit-guard] outbound connection to 10.0.0.25:445 refused (audit mode allows loopb
+retired main server        10.0.1.12:3210  ->  refused: [ckdesk-audit-guard] outbound connection to 10.0.1.12:3210 refused (audit mode allows loop
+public production address  182.72.84.10:3210  ->  refused: [ckdesk-audit-guard] outbound connection to 182.72.84.10:3210 refused (audit mode allows l
+public web                 example.com:443  ->  refused: [ckdesk-audit-guard] outbound connection to example.com:443 refused (audit mode allows loo
+weather service            api.open-meteo.com:443  ->  refused: [ckdesk-audit-guard] outbound connection to api.open-meteo.com:443 refused (audit mode all
+google sheets api          sheets.googleapis.com:443  ->  refused: [ckdesk-audit-guard] outbound connection to sheets.googleapis.com:443 refused (audit mode 
+smtp server                smtp.gmail.com:587  ->  refused: [ckdesk-audit-guard] outbound connection to smtp.gmail.com:587 refused (audit mode allows 
+loopback API of the isolated stack 127.0.0.1:55421  ->  CONNECTED (BAD)
+RESULT: every outside connection was refused or never made

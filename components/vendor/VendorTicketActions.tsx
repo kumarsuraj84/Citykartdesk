@@ -363,7 +363,7 @@ export function VendorTicketActions({ requestId, status, canAct, resolutionChoic
           <textarea id="res-remarks" rows={4} value={remarks} onChange={(e) => setRemarks(e.target.value)} maxLength={2000} className={inputCls}
             placeholder={isOtherChoice(resolutionChoices.find((c) => c.value === choice)?.label) ? 'Describe what you did - this becomes the final resolution' : 'Anything the store should know'} />
 
-          <FilePick label={pms ? 'PMS report *' : 'FSR attachment'} {...fileProps} />
+          <FilePick label={pms ? 'PMS report' : 'FSR attachment'} {...fileProps} />
 
           {error && <p className="mt-3 text-sm text-destructive" role="alert">{error}</p>}
           <div className="mt-4 flex justify-end gap-2">

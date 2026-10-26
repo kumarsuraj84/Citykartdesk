@@ -83,13 +83,13 @@ export function VendorsClient({ companies, people, staff, approverId }: { compan
                 <tr key={p.id}>
                   <td className="py-2 pr-3">{p.full_name}</td>
                   <td className="py-2 pr-3">
-                    <select className="h-8 rounded border border-border bg-background px-2 text-sm" value={p.vendor_company_id} disabled={pending}
+                    <select aria-label={`Company of ${p.full_name}`} className="h-8 rounded border border-border bg-background px-2 text-sm" value={p.vendor_company_id} disabled={pending}
                       onChange={(e) => run(() => updateVendorPerson(p.id, { company_id: e.target.value }), 'Company changed.')}>
                       {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </td>
                   <td className="py-2 pr-3">
-                    <select className="h-8 rounded border border-border bg-background px-2 text-sm" value={p.vendor_role} disabled={pending}
+                    <select aria-label={`Kind of ${p.full_name}`} className="h-8 rounded border border-border bg-background px-2 text-sm" value={p.vendor_role} disabled={pending}
                       onChange={(e) => run(() => updateVendorPerson(p.id, { vendor_role: e.target.value as 'technician' | 'manager' }), 'Changed.')}>
                       <option value="technician">Technician</option>
                       <option value="manager">Manager (view only)</option>

@@ -204,10 +204,19 @@ export async function verifyLogIntegrity(): Promise<IntegrityResult> {
   try {
     const profile = await requireAdmin()
     const admin = createAdminClient() as unknown as { rpc: (fn: string, a: object) => Promise<{ data: { broken_id: number; reason: string }[] | null; error: { message: string } | null }>; from: (t: string) => any } // eslint-disable-line @typescript-eslint/no-explicit-any
-    const { data, error } = await admin.rpc('system_log_verify_chain', { p_from_seq: 0, p_limit: 500_000 })
-    if (error) return { ok: false, checked: 0, error: 'The check could not be run.' }
+    // The whole chain is walked in pieces (QA-D019: one call of at most 500,000 rows used to stop there and still report every row as verified).
+    // Each piece starts on the last row of the one before, so a record missing exactly between two pieces is noticed too.
+    const PIECE = 250_000
+    const { data: head } = await admin.from('system_log_chain_head').select('seq').maybeSingle() as { data: { seq: number } | null }
+    const lastSeq = Number(head?.seq ?? 0)
+    let broken: { broken_id: number; reason: string } | undefined
+    for (let from = 0; ; from += PIECE - 1) {
+      const { data, error } = await admin.rpc('system_log_verify_chain', { p_from_seq: from, p_limit: PIECE })
+      if (error) return { ok: false, checked: 0, error: 'The check could not be run.' }
+      broken = data?.[0]
+      if (broken || from + PIECE > lastSeq) break
+    }
     const { count } = await admin.from('system_log').select('id', { count: 'exact', head: true }).not('row_hash', 'is', null)
-    const broken = data?.[0]
     await recordAudit({ category: 'security', action: 'system_log.integrity_checked', outcome: broken ? 'failure' : 'success', severity: broken ? 'warning' : 'info', message: broken ? `Chain broken at row ${broken.broken_id}: ${broken.reason}` : `${count ?? 0} chained rows verified`, actorId: profile.id, orgId: profile.org_id })
     return broken ? { ok: false, checked: count ?? 0, brokenId: broken.broken_id, reason: broken.reason } : { ok: true, checked: count ?? 0 }
   } catch (e) {

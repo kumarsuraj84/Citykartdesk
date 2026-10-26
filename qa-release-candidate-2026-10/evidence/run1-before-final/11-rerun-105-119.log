@@ -1,0 +1,77 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_db_ckdesk_audit, supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [none]
+
+ISOLATION GATE: PASSED  (21/21)
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate[39m
+
+ [32m✓[39m tests/remediation/105-system-log-screen.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 26313[2mms[22m[39m
+   [33m[2m✓[22m[39m who may use the screen[2m > [22monly administrators and platform owners; everyone else is refused [33m 804[2mms[22m[39m
+   [33m[2m✓[22m[39m the log[2m > [22mfilters by category, source, severity, click and text; pages of 100 with a next-page flag [33m 5793[2mms[22m[39m
+   [33m[2m✓[22m[39m the log[2m > [22mhostile search text cannot break the query [33m 923[2mms[22m[39m
+   [33m[2m✓[22m[39m the log[2m > [22manother organization's administrator sees none of our rows, and we see none of theirs [33m 926[2mms[22m[39m
+   [33m[2m✓[22m[39m grouped errors, export and the Claude bundle[2m > [22mthe bundle is redacted markdown naming the problem; copying it is itself audited [33m 361[2mms[22m[39m
+   [33m[2m✓[22m[39m grouped errors, export and the Claude bundle[2m > [22mCSV and JSON exports hold the rows and are audited with the filters used [33m 2128[2mms[22m[39m
+   [33m[2m✓[22m[39m integrity check[2m > [22mreports an intact chain, and finds a record changed behind the application's back [33m 12752[2mms[22m[39m
+ [31m❯[39m tests/remediation/119-dashboard-drill-parity.test.ts [2m([22m[2m6 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 3600[2mms[22m[39m
+   [32m✓[39m the normal dashboard numbers open pop-ups with exactly the same tickets[2m > [22mthe data is there to test with[32m 0[2mms[22m[39m
+   [32m✓[39m the normal dashboard numbers open pop-ups with exactly the same tickets[2m > [22mcreated, resolved and closed in the page period[32m 136[2mms[22m[39m
+   [33m[2m✓[22m[39m the normal dashboard numbers open pop-ups with exactly the same tickets[2m > [22mcreated, resolved and closed over a day and over a week (the Daily Activity and inflow / outflow cards) [33m 465[2mms[22m[39m
+   [32m✓[39m the normal dashboard numbers open pop-ups with exactly the same tickets[2m > [22mcurrently breached, first response overdue, all open[32m 128[2mms[22m[39m
+[31m   [31m×[31m the normal dashboard numbers open pop-ups with exactly the same tickets[2m > [22mevery status, priority, group and technician row[39m[33m 708[2mms[22m[39m
+[31m     → expected { title: 'Tech D03 Agent B', …(3) } to deeply equal { title: 'Tech D03 Agent B', …(3) }[39m
+   [32m✓[39m the normal dashboard numbers open pop-ups with exactly the same tickets[2m > [22mwith a Store Master choice on, the pop-up holds only the tickets of those stores (the same as the old list)[32m 43[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/remediation/119-dashboard-drill-parity.test.ts[2m > [22mthe normal dashboard numbers open pop-ups with exactly the same tickets[2m > [22mevery status, priority, group and technician row
+[31m[1mAssertionError[22m: expected { title: 'Tech D03 Agent B', …(3) } to deeply equal { title: 'Tech D03 Agent B', …(3) }[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  {[22m
+[32m-   "extra": 0,[39m
+[31m+   "extra": 1,[39m
+[2m    "missing": 0,[22m
+[32m-   "size": 1,[39m
+[31m+   "size": 2,[39m
+[2m    "title": "Tech D03 Agent B",[22m
+[2m  }[22m
+
+[36m [2m❯[22m check tests/remediation/119-dashboard-drill-parity.test.ts:[2m97:62[22m[39m
+    [90m 95| [39m  [35mconst[39m missing [33m=[39m [[33m...[39mexpected][33m.[39m[34mfilter[39m((x) [33m=>[39m [33m![39mgot[33m.[39m[34mhas[39m(x))[33m.[39mlength
+    [90m 96| [39m  [35mconst[39m extra [33m=[39m [[33m...[39mgot][33m.[39m[34mfilter[39m((x) [33m=>[39m [33m![39mexpected[33m.[39m[34mhas[39m(x))[33m.[39mlength
+    [90m 97| [39m  expect({ title: f.title, size: got.size, missing, extra }).toEqual({…
+    [90m   | [39m                                                             [31m^[39m
+    [90m 98| [39m
+    [90m 99| [39m  // the real old drawer (50 most recent rows) must be inside the pop-…
+[90m [2m❯[22m tests/remediation/119-dashboard-drill-parity.test.ts:[2m138:31[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m13 passed[39m[22m[90m (14)[39m
+[2m   Start at [22m 16:51:06
+[2m   Duration [22m 30.97s[2m (transform 175ms, setup 33ms, collect 322ms, tests 29.91s, environment 0ms, prepare 81ms)[22m
+

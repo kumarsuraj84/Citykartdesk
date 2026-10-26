@@ -147,7 +147,7 @@ export function ExplorerSection({ d, metric, onOpen, onReset }: {
               <p className="mx-auto max-w-md text-xs text-muted-foreground">Clear one of the filters, the search or the SLA tab to see matching requests.</p>
             </div>
           ) : (
-            <div className="max-h-[420px] overflow-auto">
+            <div className="max-h-[420px] overflow-auto" tabIndex={0} role="region" aria-label="Drill-down list">
               <table className="w-full border-collapse text-left">
                 <thead className="sticky top-0 z-10 border-b border-border bg-muted text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   <tr>

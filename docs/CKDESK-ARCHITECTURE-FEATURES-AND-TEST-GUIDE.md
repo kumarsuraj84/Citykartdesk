@@ -588,3 +588,67 @@ Columns: module · feature · what it does · who uses it · status on the **loc
 
 (155 rows. "Live" = the production system as of the last comparison; "Built - switched off" means the code is on live but the switch is off.)
 
+## Errata found by the QA of 26 Oct 2026
+
+The independent QA (folder `qa-release-candidate-2026-10/`) read the code behind every row of Appendix A. Where the text above is wrong or incomplete, the code is right. Nothing above was rewritten, so the first reading stays visible.
+
+### Where the guide and the code differ
+
+* **D001** — Guide: Guide 8.8 step 5 and scenario E6: 'Reject only the quote' puts the ticket back to In Progress. **Code:** The ticket stays on Hold (SLA still paused) and moves to the vendor's Part required box with the quote items (no prices). Only cancelTicket=true cancels.
+* **D002** — Guide: Appendix A, Auto-close: 'Runs whenever someone opens the Home page (there is no scheduled job)'. Sections 8.11 and 9 say job csat every 30 minutes. **Code:** Auto-close is done by /api/csat/run (every 30 min, all organisations); the Home trigger is only a legacy extra for managers. The guide contradicts itself.
+* **D003** — Guide: Appendix A: Permission matrix has 'four switches'. **Code:** Six policy keys exist (global_settings_write, business_rules_write, workflow_edit, intake_priority_override, external_invites, report_recipients). Guide section 2.4 lists six.
+* **D004** — Guide: Guide 8.10: time periods 7/30/60/90/120 days, FY. **Code:** Period options are 30d, 60d, 90d, 120d, fy and custom; no 7-day option (Appendix A is right).
+* **D005** — Guide: Guide 8.10 lists drag-and-drop widgets as part of the Smart Dashboard. **Code:** @dnd-kit widget reordering exists only in AnalyticsDashboard (/dashboards and /admin/reports), not in the Smart Dashboard (Appendix A says normal dashboards).
+* **D006** — Guide: Guide 8.10: calendar days are yellow when >10% and red when >30% over the group's normal. **Code:** The 10%/30% rule applies to the share of faulty ACs (AC/genset calendar). Groups without assets use the median and busiest-15% level of the last 90 days.
+* **D007** — Guide: Appendix A lists Requester as a user of the Smart Dashboard, Place picker, Faulty AC calendar and Day pop-up ('one dashboard for every role'). Section 4 says requesters get Home only. **Code:** /dashboards/executive redirects role user to /home and the sidebar hides it from requesters. Section 4 is right; Appendix A 'Who' is wrong for those rows (the requester level copy in levels.ts is unreachable).
+* **D008** — Guide: Section 4: Reports - requester: no. **Code:** Report Builder (/reports/pivot) is open to every signed-in role with the Requests module; a requester sees only their own tickets (scope own). Other entities stay manager+.
+* **D009** — Guide: Appendix A: Knowledge Base used by Requester and Technician. **Code:** The only Knowledge Base screen is /admin/knowledge-base (manager, admin, platform owner); no requester-facing article page was found.
+* **D010** — Guide: Appendix A 'Roles ... each with its own pages and rights' and section 7 Roles screen. **Code:** Admin > Roles permission matrix (custom roles / overrides) is read-only and labelled 'Not enforced - Coming soon'; toggles change nothing. Only the five fixed roles are enforced.
+* **D011** — Guide: Section 6.1 transition table. **Code:** Agents may also move Waiting on User -> Resolved; requesters may move Waiting on User -> Open and -> Cancelled; agents cannot cancel from Waiting on User or Hold (Hold -> Cancelled exists only for a system PO rejection). Table says Open/Assigned/... -> Cancelled.
+* **D012** — Guide: Section 9 scheduled job list. **Code:** install-cron-tasks.ps1 also registers CitykartDesk-Cron-Visits (job visit-automation, every 15 min) for the dropped engineer-visit module. cron-tick.mjs has no such job, so it would call /api/visit-automation/run (no such route) and log a failure every 15 minutes. Re-running the installer on the server would create it.
+* **D013** — Guide: Sheet copies run at 11:00, 15:00, 19:00 (section 8.7, 9). **Code:** Times agree with schedule.ts and the installer, but the route comment in app/api/masters/sync/route.ts says 'Scheduled job (every minute)' and docs/SHEET-MASTERS-GUIDE.md still says three sheets (now four).
+* **D014** — Guide: Section 8.8 / 12: the PO default approver is the single approver set in Admin > Vendors. **Code:** When no approver is set, code falls back to a hard-coded person's company e-mail address (DEFAULT_PO_APPROVER_EMAIL) found in auth users.
+* **D015** — Guide: Appendix A, SLA escalation and alert rules 'at 15-minute checks'. **Code:** Scheduled Business Rules (SLA %, unassigned minutes) run every 15 min; alert rules (unassigned requests, task/milestone alerts) run in the alerts job every 30 min.
+* **D016** — Guide: Appendix A, Daily alert digest: 'One summary mail every morning at 08:00'. **Code:** The digest is an in-app notification to the alert rule's roles (manager, admin by default); an e-mail goes out only when the rule has the email channel. The hour test uses server local time (getHours()===8), not explicit India time.
+* **D017** — Guide: Section 11: 'Unit (about 1,560 tests)'. **Code:** A count of it/test declarations in tests/unit gives about 1,405 (before it.each expansion). Cannot confirm 1,560 without running.
+* **D018** — Guide: Section 2.3: 184 numbered migrations (000 ... 184); rollbacks kept from 164. **Code:** There are 184 files because number 176 does not exist (175 -> 177); there is no 176 rollback.
+* **D019** — Guide: docs/ARCHITECTURE.md vs the guide. **Code:** ARCHITECTURE.md states Next.js 16.2.9 (package.json: 16.3.8), e-mail via Resend (code: SMTP, Resend only as fallback), deployment 'local only' (CLAUDE.md: production on 10.0.1.98), 87 migrations (184), in-process rate limiting only, and has no vendor/PMS/sheet masters. The guide calls it partly outdated.
+* **D020** — Guide: HANDOVER.md (old session note) vs the guide. **Code:** HANDOVER.md says Docker is not running, describes a single-admin model and QA leftovers, and treats SLA escalation as Business Rules; the guide section 5 still lists escalation_policies / sla_escalation_rules / sla_escalation_events as current tables. Code reads sla_escalation_rules only in the one-time conversion action.
+* **D021** — Guide: Guide 8.9(4) and docs/AC-PMS.md: PMS tickets are not counted in the AC Ticket Calendar and AC complaint reports. **Code:** No PMS check exists in the calendar or report code. Exclusion happens only because those read categories with auto_oem_kind ac/genset and services with auto_oem_routing, so it holds only if the AC-PMS category/service lack those flags. Untested.
+* **D022** — Guide: Guide 8.5e: last 5 decisions of the same store and sub-category in the last 12 months. **Code:** Rows also include approvals still waiting; the window is 12 x 31 days; at most 100 earlier approvals are read (totals could be understated for very large histories).
+* **D023** — Guide: Section 10.1: job routes without x-cron-secret return 401. **Code:** They return 401 for a missing/wrong secret but 503 when CRON_SECRET is not configured on the server.
+* **D024** — Guide: Guide and Appendix: vendor dashboard has 7 boxes. **Code:** Code and tests agree (7), but a code comment in lib/vendor/access.ts and the test title 'the six boxes' still say six.
+* **D025** — Guide: Comment in lib/constants/request-transitions.ts points to tests/vapt/23-business-rule-limits.test.ts. **Code:** That file does not exist; the matching test is tests/vapt/23-permission-matrix-and-rules.test.ts.
+* **D026** — Guide: Guide 8.11 / Appendix: a low CSAT rating alerts managers. **Code:** Ratings of 1-2 stars notify the technician who handled the ticket and the leads of its group (bell).
+* **D027** — Guide: Guide 8.2: Qty appears for FIXTURES/HANGERS. **Code:** Depends on the form configuration; the automated test only proves Qty for the Fixture category and absence elsewhere.
+* **D028** — Guide: CLAUDE.md and AGENTS.md vs the guide. **Code:** No contradiction found: guide section 0 (no push, no deploy, test locally) is consistent with CLAUDE.md; CLAUDE.md production topology is not repeated in the guide.
+
+### Things the application does that the guide does not describe
+
+* Kanban board view of requests and tasks (drag between statuses using AGENT_TRANSITIONS) (components/requests/RequestBoardView.tsx, components/tasks/TaskBoardView.tsx, app/(app)/requests/queue/page.tsx)
+* Global search box in the top bar (components/layout/GlobalSearch.tsx, lib/actions/search.ts)
+* Manual Send now for a scheduled report (lib/actions/admin/reports.ts, app/(app)/admin/reports/ScheduledReportsClient.tsx)
+* Duplicate a ticket; edit category / sub-category and form answers after creation; change ticket source (lib/actions/requests.ts)
+* Admin > Task Configuration (task statuses, priorities, templates) (app/(app)/admin/task-config/page.tsx, lib/actions/admin/config.ts)
+* Admin > Audit Logs and Event Log screens; /api/admin/audit (app/(app)/admin/audit/page.tsx, app/(app)/admin/event-log/page.tsx, app/api/admin/audit/route.ts)
+* Trial banner and Trial expired page (app/trial-expired/page.tsx, components/layout/TrialBanner.tsx, lib/queries/profiles.ts)
+* WhatsApp intake, conversation engine, questionnaire (out of scope, code present) (lib/whatsapp, lib/conversations, lib/requests/questionnaire, app/api/intake/webhook/whatsapp/route.ts, lib/actions/intake/whatsapp-channel.ts)
+* DeskTime sync and admin screen (out of scope, code present) (lib/desktime, app/(app)/admin/desktime/page.tsx, app/api/desktime/sync/route.ts)
+* Mobile-number management for users (used by WhatsApp) (lib/actions/admin/users.ts, lib/users/mobile.ts)
+* Server Room AC is excluded from counted ACs in the calendar and AC reports (lib/reporting/analytics/facts.ts, lib/queries/ac-calendar.ts)
+* Home cards: store snapshot and technician workload (components/home/StoreSnapshotCard.tsx, components/home/TechnicianWorkloadCard.tsx, lib/queries/store-snapshot.ts)
+* Theme switcher, mobile navigation, new-version banner (components/layout/ThemeSwitcher.tsx, components/layout/MobileNav.tsx, components/layout/NewVersionBanner.tsx)
+* Public endpoints: CSP report, system-log ingest, public storage route (app/api/csp-report/route.ts, app/api/system-log/ingest/route.ts, app/api/storage/public/[bucket]/[...path]/route.ts)
+* Preview configuration citykart-desk-qa (port 3310, same as demo) (.claude/launch.json, qa-release-candidate-2026-10/tooling/qa-start.cjs)
+* Engineer-visit scheduled task still in the installer (module dropped) (scripts/windows/install-cron-tasks.ps1)
+* Resend e-mail provider as third sending option (lib/email/config.ts, lib/email/send.ts)
+* Intake pages: queue, inbox, channels, settings (app/(app)/intake/queue/page.tsx, app/(app)/intake/inbox/page.tsx, app/(app)/intake/channels/page.tsx, app/(app)/intake/settings/page.tsx)
+
+### Added by the QA itself
+
+* Vendor logins see their own phone menu (My tickets / My POs / Notifications).
+* Round-robin takes its place with a compare-and-set (a burst of tickets is spread).
+* The System Log integrity check walks the whole chain in pieces of 250,000 rows.
+* Sign-in says "temporarily unavailable" when the sign-in service is down; an attachment answers 503 when file storage is down.
+* Migration 185 (categories, form templates and technician groups: administrators and platform owners only).
+

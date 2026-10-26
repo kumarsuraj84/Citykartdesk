@@ -687,7 +687,7 @@ function CollaboratorsRow({ requestId, assigneeId, viewerId, initialCollaborator
             </span>
           </button>
         ))}
-        <button onClick={() => setOpen(v => !v)}
+        <button onClick={() => setOpen(v => !v)} aria-label="Add a collaborator" title="Add a collaborator"
           className="flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground hover:border-primary hover:text-primary transition-colors">
           <UserPlus className="h-2.5 w-2.5" />
         </button>

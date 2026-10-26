@@ -217,7 +217,31 @@ async function pendingCount(db: Db, orgId: string, kind: MasterKind): Promise<nu
   return count ?? 0
 }
 
+// Only ONE copy of a sheet runs at a time (QA defect QA-D001): two overlapping copies (the 11:00 job and an administrator pressing "Update from sheets now", or the 09:00 PMS job)
+// both found the units missing and both inserted them, so every AC / genset appeared twice or three times. The run that comes second is told to wait for the next update.
+// The claim is one row in app_settings (the key is unique); a claim older than STALE_LOCK_MINUTES belongs to a run that died and is taken over.
+const STALE_LOCK_MINUTES = 10
+async function claimSync(db: Db, orgId: string, kind: MasterKind, now: Date): Promise<{ claimed: boolean; release: () => Promise<void> }> {
+  const key = `masters_sync_lock:${orgId}:${kind}`
+  const mine = now.toISOString()
+  const release = async () => { await db.from('app_settings').delete().eq('key', key).eq('value', mine) }
+  const ins = await db.from('app_settings').insert({ key, value: mine })
+  if (!ins.error) return { claimed: true, release }
+  const { data: row } = await db.from('app_settings').select('value').eq('key', key).maybeSingle()
+  const held = row?.value as string | undefined
+  if (held && now.getTime() - new Date(held).getTime() < STALE_LOCK_MINUTES * 60_000) return { claimed: false, release: async () => {} }
+  // the holder died: only the call that still sees the old value takes it over
+  const { data: taken } = await db.from('app_settings').update({ value: mine }).eq('key', key).eq('value', held ?? '').select('key')
+  return (taken?.length ?? 0) > 0 ? { claimed: true, release } : { claimed: false, release: async () => {} }
+}
+
 async function syncOne(p: { db: Db; orgId: string; kind: MasterKind; source: SheetsSource; now: Date; force: boolean; cvmEmailKnown?: (email: string) => Promise<'ok' | 'unknown'> }): Promise<KindReport> {
+  const lock = await claimSync(p.db, p.orgId, p.kind, p.now)
+  if (!lock.claimed) return { status: 'unchanged', message: 'Another update of this sheet is already running; this one was skipped.' }
+  try { return await syncOneUnlocked(p) } finally { await lock.release().catch(() => {}) }
+}
+
+async function syncOneUnlocked(p: { db: Db; orgId: string; kind: MasterKind; source: SheetsSource; now: Date; force: boolean; cvmEmailKnown?: (email: string) => Promise<'ok' | 'unknown'> }): Promise<KindReport> {
   const { db, orgId, kind, now } = p
   const { data: src } = await db.from('master_sources').select('*').eq('org_id', orgId).eq('kind', kind).maybeSingle()
   if (!src?.spreadsheet_id) return { status: 'unconfigured' }

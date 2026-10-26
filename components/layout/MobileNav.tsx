@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { navActivePath } from '@/lib/requests/origin'
-import { Home, LayoutGrid, Inbox, ListTodo, CheckCircle, Bell, Sparkles, FolderKanban, Menu, Headset } from 'lucide-react'
+import { Home, LayoutGrid, Inbox, ListTodo, CheckCircle, Bell, Sparkles, FolderKanban, Menu, Headset, Wrench, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Sidebar } from './Sidebar'
@@ -46,7 +46,14 @@ export function MobileNav({ profile, navVisibility, navCounts }: MobileNavProps)
     { label: 'Notifications', href: '/notifications', icon: Bell,        show: true },
   ]
 
-  const visible = items.filter((i) => i.show)
+  // An OEM engineer (vendor login) is sent back to /vendor from every staff page, so the phone bar offers the same small menu as the desktop sidebar (QA-D009).
+  const vendorItems: MobileNavItem[] = [
+    { label: 'My tickets',    href: '/vendor',        icon: Wrench,      show: true },
+    { label: 'My POs',        href: '/vendor/pos',    icon: FileText,    show: true },
+    { label: 'Notifications', href: '/notifications', icon: Bell,        show: true },
+  ]
+
+  const visible = (profile.vendor_company_id ? vendorItems : items).filter((i) => i.show)
 
   // DESK-UI-004: this bar used to render every visible item (up to 8, at
   // min-w-[60px] each — ~544px minimum, wider than any phone) inside an

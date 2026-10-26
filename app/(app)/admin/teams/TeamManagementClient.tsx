@@ -208,7 +208,7 @@ function TeamCard({
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50">
         <button
-          onClick={() => setExpanded((v) => !v)}
+          onClick={() => setExpanded((v) => !v)} aria-expanded={expanded} aria-label={expanded ? 'Hide the members' : 'Show the members'}
           className="text-muted-foreground hover:text-foreground transition-colors"
         >
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}

@@ -20,6 +20,14 @@
         "audit-2026-10/demo/start-demo.cjs"
       ],
       "port": 3310
+    },
+    {
+      "name": "citykart-desk-qa",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": [
+        "qa-release-candidate-2026-10/tooling/qa-start.cjs"
+      ],
+      "port": 3310
     }
   ]
 }

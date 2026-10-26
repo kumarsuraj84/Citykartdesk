@@ -31,6 +31,7 @@ const code = (s: string) => `${tag}${s}`.toUpperCase()
 const A = code('a'), B = code('b'), C = code('c'), D = code('d')
 const ids = { storeA: '', storeB: '', catPms: '', catNormal: '', subPms: '', subNormal: '', co: '' }
 const made: string[] = []
+const rules: string[] = []
 const SHEET = `${tag}-sheet-pms-000000000`
 const sheets: Record<string, unknown[][]> = {}
 const source: SheetsSource = { fetchValues: async (id) => { if (!sheets[id]) throw new Error('no such sheet'); return sheets[id] } }
@@ -60,9 +61,16 @@ async function vendorTicket(category: string, title: string): Promise<string> {
 }
 const fsr = async (id: string, by: TestUser) => (await db().from('request_attachments').insert({ request_id: id, uploaded_by: by.id, file_name: 'pms-report.png', file_size: 70, mime_type: 'image/png', storage_path: `${id}/pms-${Date.now()}.png` }).select('id').single()).data.id as string
 
+const setAside: { categories: string[]; source: Record<string, unknown> | null } = { categories: [], source: null }
+
 beforeAll(async () => {
   fx = await setupD03Fixtures()
   const a = db()
+  // isolation: other AC PMS categories / an existing PMS sheet source of the same organisation (for example the QA seed company) are set aside while this file runs and put back afterwards
+  const keepPms = ((await a.from('service_categories').select('id').eq('is_pms', true)).data ?? []).map((c: { id: string }) => c.id)
+  if (keepPms.length) await a.from('service_categories').update({ is_pms: false }).in('id', keepPms)
+  setAside.categories = keepPms
+  setAside.source = (await a.from('master_sources').select('*').eq('org_id', fx.orgId).eq('kind', 'pms').maybeSingle()).data ?? null
   const mkStore = async (c: string, name: string) => (await a.from('stores').insert({ org_id: fx.orgId, code: c, name, address: 'x' }).select('id').single()).data.id as string
   ids.storeA = await mkStore(A, `${tag} Jaipur`); ids.storeB = await mkStore(B, `${tag} Nolgin`)
   await a.from('profiles').update({ store_id: ids.storeA }).eq('id', fx.requesterA.id)   // store A has a login; store B has none; store C does not exist
@@ -88,8 +96,10 @@ beforeAll(async () => {
 afterAll(async () => {
   const a = db()
   const all = [...made, ...(await pmsTickets()).map((t) => t.id)]
-  await a.from('pms_ticket_log').delete().eq('org_id', fx.orgId)
-  await a.from('master_pms_dates').delete().eq('org_id', fx.orgId)
+  if (rules.length) await a.from('business_rules').delete().in('id', rules)
+  await a.from('master_ac_units').delete().eq('org_id', fx.orgId).eq('store_code', A)
+  await a.from('pms_ticket_log').delete().eq('org_id', fx.orgId).like('store_code', `${tag.toUpperCase()}%`)
+  await a.from('master_pms_dates').delete().eq('org_id', fx.orgId).like('store_code', `${tag.toUpperCase()}%`)
   await a.from('master_issues').delete().eq('org_id', fx.orgId).eq('kind', 'pms')
   await a.from('master_sources').delete().eq('org_id', fx.orgId).eq('kind', 'pms')
   if (all.length) {
@@ -106,6 +116,8 @@ afterAll(async () => {
   await a.from('service_sub_categories').delete().in('id', subs)
   await a.from('service_categories').delete().in('id', [ids.catPms, ids.catNormal].filter(Boolean))
   await a.from('stores').delete().in('id', [ids.storeA, ids.storeB].filter(Boolean))
+  if (setAside.categories.length) await a.from('service_categories').update({ is_pms: true }).in('id', setAside.categories)
+  if (setAside.source) await a.from('master_sources').upsert(setAside.source, { onConflict: 'org_id,kind' })
   await fx?.cleanup()
 }, 180_000)
 
@@ -190,6 +202,50 @@ describe('the tickets are made from 09:00 on the PMS date', () => {
     const r = await createDuePmsTickets(db(), fx.orgId, T0900)
     expect(r).toEqual({ created: 0, alreadyDone: 0, skipped: 0, failed: 0 })
     await db().from('master_sources').upsert({ org_id: fx.orgId, kind: 'pms', spreadsheet_id: SHEET }, { onConflict: 'org_id,kind' })
+  })
+})
+
+describe('an AC PMS ticket is routed to the vendor like an AC complaint (QA-D004)', () => {
+  it('the active ACs of the store go with the ticket, so a rule that routes by the AC vendor gives it to that vendor technician, who sees it in the AC PMS tab', async () => {
+    const a = db()
+    await a.from('master_ac_units').insert({ org_id: fx.orgId, store_code: A, ckdesk_no: '1', serial: `${tag}-1`, brand: 'VOLTAS', amc_vendor: 'VOLTAS', region: 'R1', state: 'RJ', cluster: 'C1', is_active: true, emails: ['oem@oem.test'], po_emails: [], approver_emails: [] })
+    const rule = (await a.from('business_rules').insert({ org_id: fx.orgId, name: `${tag} pms voltas`, is_active: true, trigger: ['created'], execution_order: -20, conditions_logic: 'AND',
+      conditions: [{ field: 'category_id', operator: 'equals', value: ids.catPms }, { field: 'ac_amc_vendor', logic: 'AND', operator: 'contains', value: 'voltas' }],
+      actions: [{ type: 'assign', params: { strategy: 'direct', assigneeIds: [v1.id] } }] }).select('id').single()).data.id
+    rules.push(rule)
+    await a.from('master_pms_dates').insert({ org_id: fx.orgId, store_code: A, pms_date: '2026-10-24', sheet_row: 99 })
+    const r = await createDuePmsTickets(a, fx.orgId, T0900)
+    expect(r.created).toBe(1)
+    const t = (await a.from('requests').select('id, assigned_to, status').eq('category_id', ids.catPms).like('title', '%24 Oct 2026').single()).data
+    expect(t.assigned_to).toBe(v1.id)
+    expect(t.status).toBe('open')
+    const snap = (await a.from('request_master_snapshots').select('snapshot').eq('request_id', t.id).eq('kind', 'ac').single()).data.snapshot as { amc_vendor: string }[]
+    expect(snap.length).toBe(1)
+    actAs(v1)
+    const mine = (await getVendorTickets()).filter((x) => x.id === t.id)
+    expect(mine.length).toBe(1)
+    expect(mine[0].is_pms).toBe(true)
+  })
+
+  it('a store with no active AC in the sheet still gets its PMS ticket, with a note that no vendor could be chosen', async () => {
+    const a = db()
+    const code = `${tag}N`.toUpperCase()
+    const st = (await a.from('stores').insert({ org_id: fx.orgId, code, name: `${tag} No AC store`, address: 'x' }).select('id').single()).data.id
+    await a.from('profiles').update({ store_id: st }).eq('id', fx.requesterB.id)
+    await a.from('master_pms_dates').insert({ org_id: fx.orgId, store_code: code, pms_date: '2026-10-25', sheet_row: 97 })
+    try {
+      const r = await createDuePmsTickets(a, fx.orgId, T0900)
+      expect(r.created).toBe(1)
+      const t = (await a.from('requests').select('id, assigned_to').eq('category_id', ids.catPms).like('title', `%No AC store%`).single()).data
+      expect(t.assigned_to).toBeNull()
+      const notes = ((await a.from('request_comments').select('body').eq('request_id', t.id).eq('is_internal', true)).data ?? []) as { body: string }[]
+      expect(notes.some((n) => /lists no active AC/.test(n.body))).toBe(true)
+    } finally {
+      await a.from('profiles').update({ store_id: null }).eq('id', fx.requesterB.id)
+      const rq = ((await a.from('requests').select('id').like('title', '%No AC store%')).data ?? []).map((x: { id: string }) => x.id)
+      if (rq.length) { await a.from('request_comments').delete().in('request_id', rq); await a.from('request_activity').delete().in('request_id', rq); await a.from('requests').delete().in('id', rq) }
+      await a.from('pms_ticket_log').delete().eq('store_code', code); await a.from('master_pms_dates').delete().eq('store_code', code); await a.from('stores').delete().eq('id', st)
+    }
   })
 })
 

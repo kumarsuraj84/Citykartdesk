@@ -250,7 +250,7 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
                 <button type="button" aria-label="Next month" onClick={() => { setMonth(shiftMonth(month, 1)); setPicked(null) }} disabled={month >= thisMonth} className="rounded-md border border-border p-1 hover:bg-muted disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
               </div>
             </div>
-            <div className="grid grid-cols-7 gap-1" role="grid" aria-label={`${monthTitle(month)} for ${place}`}>
+            <div className="grid grid-cols-7 gap-1" role="group" aria-label={`${monthTitle(month)} for ${place}`}>
               {WEEKDAYS.map((w) => <div key={w} className="pb-0.5 text-center text-[11px] font-medium text-muted-foreground">{w}</div>)}
               {Array.from({ length: firstWeekday(month) }, (_, i) => <div key={`b${i}`} />)}
               {cells.map(cell)}

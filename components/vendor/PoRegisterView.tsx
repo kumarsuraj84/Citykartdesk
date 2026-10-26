@@ -38,7 +38,7 @@ export function PoRegisterView({ rows, basePath, filters, showVendor, ticketHref
 
       <div className="text-xs text-muted-foreground">{rows.length} row{rows.length === 1 ? '' : 's'} · amount without GST {formatMoney(total)}</div>
 
-      <div className="overflow-x-auto rounded-xl border border-border">
+      <div className="overflow-x-auto rounded-xl border border-border" tabIndex={0} role="region" aria-label="Purchase orders (scroll sideways on a small screen)">
         <table className="w-full min-w-[820px] text-sm">
           <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
             <tr>

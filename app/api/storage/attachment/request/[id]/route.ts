@@ -47,6 +47,11 @@ export async function GET(
     .from('request-attachments')
     .download(attachment.storage_path)
   if (downloadError || !data) {
+    // the storage service itself did not answer (down, unreachable, 5xx): the file is not missing, so say so (QA-D017)
+    const e = downloadError as { name?: string; status?: number } | null
+    if (e && (e.name === 'StorageUnknownError' || (typeof e.status === 'number' && e.status >= 500))) {
+      return NextResponse.json({ error: 'file storage is temporarily unavailable' }, { status: 503, headers: { 'Retry-After': '30' } })
+    }
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
 

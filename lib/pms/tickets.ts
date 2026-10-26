@@ -1,6 +1,7 @@
 import 'server-only'
 import { createRequestCore } from '@/lib/requests/create-request-core'
 import { resolveServiceFormSections } from '@/lib/forms/sections'
+import { loadActiveAcUnits } from '@/lib/masters/resolve'
 import { pmsDateLabel, pmsDueRange } from '@/lib/pms/window'
 import type { FormField } from '@/types'
 
@@ -115,15 +116,21 @@ export async function createDuePmsTickets(db: Db, orgId: string, now: Date = new
           const formData: Record<string, unknown> = {}
           if (fields.subject) formData[fields.subject.id] = title
           if (fields.description) formData[fields.description.id] = text
+          // the store's active ACs go with the ticket (before the Business Rules run), so a rule that routes AC tickets by the AC's vendor / region routes the PMS ticket the same way
+          const acUnits = await loadActiveAcUnits(db, orgId, store.code)
           const res = await createRequestCore({
             client: db, orgId, requesterId, actingUserId: requesterId,
             serviceId: setup.serviceId, subCategoryId: setup.subCategoryId, formData,
             description: fields.description ? null : text,
             source: 'api', sourceMetadata: { pms_source: 'ac_pms_sheet', pms_date: d.pms_date, store_code: d.store_code },
-            useAdminForWrites: true, titleOverride: title,
+            useAdminForWrites: true, titleOverride: title, acUnitsForRouting: acUnits,
           })
           if (res.error || !res.requestId) { await settle(db, orgId, d.store_code, d.pms_date, 'failed', null, res.error ?? 'The ticket could not be created.'); out.failed++; continue }
           await settle(db, orgId, d.store_code, d.pms_date, 'created', res.requestId, null)
+          if (acUnits.length === 0) {
+            // nothing to route by: the ticket exists but no rule can hand it to a vendor, so the people who work tickets are told
+            await db.from('request_comments').insert({ request_id: res.requestId, author_id: requesterId, is_internal: true, body: `The AC sheet lists no active AC for store ${store.code}, so this PMS ticket could not be given to a vendor technician automatically. Please assign it yourself.` })
+          }
           out.created++
         } catch (e) {
           console.error('[pms] ticket failed', d.store_code, d.pms_date, e)

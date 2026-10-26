@@ -55,7 +55,8 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
     admin.from('request_master_snapshots').select('snapshot').eq('request_id', id).eq('kind', 'ac').maybeSingle(),
     requesterStoreId ? admin.from('stores').select('code, name, address, city, state').eq('id', requesterStoreId).maybeSingle() : Promise.resolve({ data: null }),
   ])
-  const ac = (Array.isArray(snapRes.data?.snapshot) ? snapRes.data.snapshot[0] : null) as Record<string, string | null> | null
+  const acs = (Array.isArray(snapRes.data?.snapshot) ? snapRes.data.snapshot : []) as Record<string, string | null>[]
+  const ac = acs[0] ?? null
   const store = storeRes.data as { code: string; name: string; address: string | null; city: string | null; state: string | null } | null
 
   const sections = (Array.isArray(request.form_sections_snapshot) ? request.form_sections_snapshot : []) as unknown as FormSection[]
@@ -186,6 +187,24 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
             </dl>
           </section>
 
+          {pms ? (
+            // an AC PMS visit is for the whole store: every active AC of the store is listed
+            <section className="rounded-xl border border-border">
+              <h2 className="border-b border-border px-4 py-2 text-sm font-semibold">ACs to service ({acs.length})</h2>
+              {acs.length === 0 ? (
+                <p className="px-4 py-3 text-xs text-muted-foreground">The AC sheet lists no active AC for this store. Ask Citykart which ACs are to be serviced.</p>
+              ) : (
+                <ul className="divide-y divide-border text-xs">
+                  {acs.map((u, i) => (
+                    <li key={i} className="px-4 py-2">
+                      <span className="font-medium">{[u.ckdesk_no, [u.brand, u.tonnage].filter(Boolean).join(' ')].filter(Boolean).join(' - ')}</span>
+                      <span className="text-muted-foreground">{[u.ac_type, u.floor, u.serial ? `serial ${u.serial}` : ''].filter(Boolean).length ? ` (${[u.ac_type, u.floor, u.serial ? `serial ${u.serial}` : ''].filter(Boolean).join(', ')})` : ''}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          ) : (
           <section className="rounded-xl border border-border">
             <h2 className="border-b border-border px-4 py-2 text-sm font-semibold">AC</h2>
             <dl className="divide-y divide-border">
@@ -197,6 +216,7 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
               <Row label="AMC vendor" value={ac?.amc_vendor} />
             </dl>
           </section>
+          )}
 
           <section className="rounded-xl border border-border">
             <h2 className="border-b border-border px-4 py-2 text-sm font-semibold">OEM details</h2>

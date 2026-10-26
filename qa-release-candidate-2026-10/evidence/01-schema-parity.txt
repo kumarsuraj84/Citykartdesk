@@ -1,0 +1,10 @@
+== schema parity: tables dev vs audit
+supabase_db_citykart_desk: tables=128 columns=1278 functions=98
+supabase_db_ckdesk_audit: tables=128 columns=1278 functions=98
+== newest objects on audit
+3|3
+== API ports
+8000/tcp -> 0.0.0.0:55421
+8000/tcp -> [::]:55421
+8000/tcp -> 0.0.0.0:54321
+8000/tcp -> [::]:54321

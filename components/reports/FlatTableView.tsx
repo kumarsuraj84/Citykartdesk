@@ -27,7 +27,7 @@ export function FlatTableView({
   }
 
   return (
-    <div className="overflow-auto rounded-lg border border-border bg-card max-h-[70vh]">
+    <div className="overflow-auto rounded-lg border border-border bg-card max-h-[70vh]" tabIndex={0} role="region" aria-label="Report table">
       <table className="w-full text-sm border-collapse">
         <thead className="sticky top-0 z-10 bg-primary text-primary-foreground">
           <tr>

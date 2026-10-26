@@ -64,7 +64,9 @@ function LoginForm() {
             </div>
           )}
 
+          {/* method="post": if the form is sent before the page has finished loading (fast typing, slow device, script blocked) the browser must NOT put the e-mail / password into the web address (QA-D003) */}
           <form
+            method="post"
             onSubmit={passwordForm.handleSubmit(handlePasswordSubmit)}
             className="space-y-4"
           >

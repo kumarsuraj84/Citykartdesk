@@ -129,7 +129,7 @@ export default function RichEmailEditor({ label, value, onChange, hint, placehol
     ],
     content: toEditorHtml(value),
     editorProps: {
-      attributes: { class: 'oem-editor-body min-h-[260px] px-4 py-3 text-sm focus:outline-none' },
+      attributes: { 'aria-label': 'E-mail message', class: 'oem-editor-body min-h-[260px] px-4 py-3 text-sm focus:outline-none' },
     },
     onUpdate: ({ editor: ed }) => onChange(ed.isEmpty ? '' : ed.getHTML()),
   })

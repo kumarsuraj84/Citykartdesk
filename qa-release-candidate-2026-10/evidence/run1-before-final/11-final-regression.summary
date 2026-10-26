@@ -1,0 +1,5 @@
+      Tests  2 failed | 2411 passed | 18 skipped (2431)
+ FAIL  tests/remediation/105-system-log-screen.test.ts > integrity check > reports an intact chain, and finds a record changed behind the application's back
+ FAIL  tests/remediation/119-dashboard-drill-parity.test.ts > the normal dashboard numbers open pop-ups with exactly the same tickets > every status, priority, group and technician row
+ Test Files  2 failed | 314 passed | 4 skipped (320)
+ISOLATION GATE: PASSED  (21/21)

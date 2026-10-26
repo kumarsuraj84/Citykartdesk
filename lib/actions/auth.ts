@@ -11,6 +11,12 @@ import { emailPasswordResetLink } from '@/lib/email/auth-mail'
 import { recordAudit } from '@/lib/syslog/audit'
 import { startedByRecentLink } from '@/lib/auth/session-methods'
 
+/** True when the authentication service did not give an answer about the credentials at all (network failure, or a server-side 5xx). */
+function isSignInServiceDown(error: { name?: string; status?: number }): boolean {
+  if (error.name === 'AuthRetryableFetchError' || error.name === 'AuthUnknownError') return true
+  return typeof error.status === 'number' && (error.status === 0 || error.status >= 500)
+}
+
 export async function signInWithPassword(formData: FormData) {
   const supabase = await createClient()
 
@@ -32,6 +38,12 @@ export async function signInWithPassword(formData: FormData) {
   }
 
   const { data: signedIn, error } = await supabase.auth.signInWithPassword({ email, password })
+
+  if (error && isSignInServiceDown(error)) {
+    // the sign-in service itself could not answer (stopped, unreachable, 5xx): that is not a wrong password and must not count toward the wrong-password limit (QA-D016)
+    await recordAudit({ category: 'security', source: 'auth', action: 'auth.login_service_unavailable', outcome: 'failure', severity: 'warning', message: 'Sign-in service did not answer' })
+    return { error: 'Sign-in is temporarily unavailable. Please try again in a few minutes.' }
+  }
 
   if (error) {
     recordEvent(failKey, 10 * 60_000)

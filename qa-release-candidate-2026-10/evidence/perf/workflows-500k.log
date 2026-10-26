@@ -1,0 +1,169 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_db_ckdesk_audit, supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [only the user's own browser: chrome.exe(pid 20224) 182.72.84.10:3210 CLOSE_WAIT - NOT the audit; the audit never uses this browser]
+
+ISOLATION GATE: PASSED  (21/21)
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate[39m
+
+[90mstdout[2m | qa-release-candidate-2026-10/tests/qa-perf-workflows.test.ts[2m > [22m[2mworkflow performance[2m > [22m[2mmeasures and records
+[22m[39m{
+ "label": "qa-500k",
+ "at": "2026-10-26T10:18:39.046Z",
+ "tickets_in_database": 503268,
+ "runs_per_operation": 15,
+ "create_ticket_sequential": {
+  "p50": 122.2,
+  "p95": 154.6,
+  "p99": 167.8,
+  "runs": 30,
+  "errors": 0
+ },
+ "create_ticket_burst": {
+  "10 at once": {
+   "p50": 195.6,
+   "p95": 219.8,
+   "p99": 219.8,
+   "runs": 10,
+   "errors": 0,
+   "seconds": 0.22,
+   "tickets_per_second": 45.5,
+   "stored": 10,
+   "lost_or_doubled": 0
+  },
+  "25 at once": {
+   "p50": 419.5,
+   "p95": 493.3,
+   "p99": 495.3,
+   "runs": 25,
+   "errors": 0,
+   "seconds": 0.5,
+   "tickets_per_second": 50.4,
+   "stored": 25,
+   "lost_or_doubled": 0
+  }
+ },
+ "queue_team_first_page": {
+  "p50": 273.7,
+  "p95": 289.6,
+  "p99": 289.6,
+  "runs": 15,
+  "errors": 0
+ },
+ "queue_search_text": {
+  "p50": 320.7,
+  "p95": 356.3,
+  "p99": 356.3,
+  "runs": 15,
+  "errors": 0
+ },
+ "queue_manager_first_page": {
+  "p50": 2521,
+  "p95": 2624.3,
+  "p99": 2624.3,
+  "runs": 15,
+  "errors": 0
+ },
+ "executive_dashboard_load_all_rows": {
+  "p50": 4077.2,
+  "p95": 4178.5,
+  "p99": 4178.5,
+  "runs": 5,
+  "errors": 0
+ },
+ "export_requests_csv": {
+  "p50": 71.7,
+  "p95": 72.7,
+  "p99": 72.7,
+  "runs": 3,
+  "errors": 0
+ },
+ "vendor_dashboard_list": {
+  "p50": 319.6,
+  "p95": 361,
+  "p99": 361,
+  "runs": 15,
+  "errors": 0
+ },
+ "approval_decide_sequential": {
+  "p50": 65.5,
+  "p95": 91.7,
+  "p99": 91.7,
+  "runs": 15,
+  "errors": 0
+ },
+ "approval_decide_20_at_once": {
+  "p50": 248,
+  "p95": 264.6,
+  "p99": 265.2,
+  "runs": 20,
+  "errors": 0,
+  "seconds": 0.27
+ },
+ "approval_same_approval_decided_twice": {
+  "results": [
+   "accepted",
+   "accepted"
+  ],
+  "decisions_stored": 2
+ },
+ "pms_generation": {
+  "stores_due": 60,
+  "created": 60,
+  "skipped": 0,
+  "failed": 0,
+  "seconds": 2.99,
+  "tickets_per_second": 20.1,
+  "second_run_created": 0,
+  "setup_problem": null
+ },
+ "sheet_sync": {
+  "rows": 3000,
+  "first_copy": {
+   "seconds": 0.25,
+   "status": "ok",
+   "added": 3000
+  },
+  "unchanged_copy": {
+   "seconds": 0.22,
+   "status": "ok"
+  },
+  "one_row_changed": {
+   "seconds": 0.18,
+   "status": "ok",
+   "changed": 1
+  }
+ },
+ "database_after": {
+  "requests": 503430,
+  "connections": 27,
+  "waiting_locks": 0
+ }
+}
+
+ [32m✓[39m qa-release-candidate-2026-10/tests/qa-perf-workflows.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 103512[2mms[22m[39m
+   [33m[2m✓[22m[39m workflow performance[2m > [22mmeasures and records [33m 101336[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m   Start at [22m 15:48:37
+[2m   Duration [22m 104.60s[2m (transform 360ms, setup 27ms, collect 602ms, tests 103.51s, environment 0ms, prepare 45ms)[22m
+

@@ -1,0 +1,57 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_db_ckdesk_audit, supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [only the user's own browser: chrome.exe(pid 20224) 182.72.84.10:3210 CLOSE_WAIT - NOT the audit; the audit never uses this browser]
+
+ISOLATION GATE: PASSED  (21/21)
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate[39m
+
+ [31m❯[39m qa-release-candidate-2026-10/tests/qa-gap-coverage.test.ts [2m([22m[2m8 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 6966[2mms[22m[39m
+   [32m✓[39m automatic time tracking[2m > [22mstarts on In Progress, stops when the ticket leaves it, starts a new entry on return, never two open at once[32m 265[2mms[22m[39m
+   [32m✓[39m automatic time tracking[2m > [22mthe entry of one technician is stopped even when another technician resolves the ticket[32m 163[2mms[22m[39m
+   [33m[2m✓[22m[39m assignment strategies of Business Rules[2m > [22mround robin hands tickets to the listed technicians in turn [33m 1379[2mms[22m[39m
+[31m   [31m×[31m assignment strategies of Business Rules[2m > [22mround robin: eight tickets created at the very same moment are spread four and four (QA-D018)[39m[33m 1633[2mms[22m[39m
+[31m     → expected 8 to be less than or equal to 2[39m
+   [33m[2m✓[22m[39m assignment strategies of Business Rules[2m > [22mload balanced gives the ticket to the technician with fewer open tickets; resolved and closed ones do not count [33m 705[2mms[22m[39m
+   [33m[2m✓[22m[39m assignment strategies of Business Rules[2m > [22ma ticket held by a vendor technician is never taken away by a rule, round robin included [33m 648[2mms[22m[39m
+   [32m✓[39m home dashboard counts[2m > [22mrequester: open count grows by waiting, held and pending-approval tickets, not by resolved / closed / cancelled ones[32m 44[2mms[22m[39m
+   [32m✓[39m home dashboard counts[2m > [22mtechnician: a held ticket assigned to them is in their queue; a resolved one is not[32m 19[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m qa-release-candidate-2026-10/tests/qa-gap-coverage.test.ts[2m > [22massignment strategies of Business Rules[2m > [22mround robin: eight tickets created at the very same moment are spread four and four (QA-D018)
+[31m[1mAssertionError[22m: expected 8 to be less than or equal to 2[39m
+[36m [2m❯[22m qa-release-candidate-2026-10/tests/qa-gap-coverage.test.ts:[2m122:29[22m[39m
+    [90m120| [39m    const a = got.filter((x) => x === fx.agentA.id).length, b = got.fi…
+    [90m121| [39m    [34mexpect[39m(a [33m+[39m b)[33m.[39m[34mtoBe[39m([34m8[39m)
+    [90m122| [39m    expect(Math.abs(a - b)).toBeLessThanOrEqual(2)   // exactly 4 and …
+    [90m   | [39m                            [31m^[39m
+    [90m123| [39m    await db().from('business_rules').update({ is_active: false }).eq(…
+    [90m124| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m7 passed[39m[22m[90m (8)[39m
+[2m   Start at [22m 16:38:25
+[2m   Duration [22m 7.92s[2m (transform 251ms, setup 23ms, collect 449ms, tests 6.97s, environment 0ms, prepare 44ms)[22m
+

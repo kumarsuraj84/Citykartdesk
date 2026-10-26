@@ -123,6 +123,24 @@ describe('earlier requests of the same store and sub-category', () => {
     expect(h.earlier.map((r) => r.values[0])).not.toContain('6')
   })
 
+  it('looks back exactly 12 calendar months: an approval 11 months old is listed, one 13 months old is not (QA-D007)', async () => {
+    const mk = async (qty: number, monthsAgo: number) => {
+      const t = await raise(ids.subOn, qty, `old ${monthsAgo}m`)
+      const ap = await sendToCvm(t)
+      actAs(fx.agentA); expect((await approveApproval(ap, 'fine')).error).toBeUndefined()
+      const when = new Date(); when.setMonth(when.getMonth() - monthsAgo)
+      await db().from('approvals').update({ created_at: when.toISOString() }).eq('id', ap)
+      await db().from('approval_decisions').update({ decided_at: when.toISOString() }).eq('approval_id', ap)
+      return (await db().from('requests').select('request_no').eq('id', t).single()).data.request_no as string
+    }
+    const recent = await mk(33, 11)
+    const tooOld = await mk(77, 13)
+    const h = (await loadApprovalHistory(db(), nowApproval))!
+    const nos = h.earlier.map((r) => r.requestNo)
+    expect(nos).toContain(recent)
+    expect(nos).not.toContain(tooOld)
+  })
+
   it('shows nothing for a category that has the box switched off', async () => {
     const t = await raise(ids.subOff, 3, 'plain request')
     const approvalId = await sendToCvm(t)
@@ -132,15 +150,15 @@ describe('earlier requests of the same store and sub-category', () => {
   it('the approve page and the approval mail carry the box', async () => {
     const state = await describeApprovalLink(db(), nowApproval, fx.agentA.id)
     expect(state.kind).toBe('pending')
-    if (state.kind === 'pending') expect(state.detail.history?.earlier).toHaveLength(2)
+    if (state.kind === 'pending') expect(state.detail.history?.earlier.length).toBeGreaterThanOrEqual(2)
 
-    vi.mocked(sendEmail).mockClear()
+    await new Promise((r) => setTimeout(r, 1500))   // the mail of the approval itself (sent without waiting for it) must have arrived before we look
     const res = await sendNotificationEmail({ type: 'approval_requested', recipientEmail: fx.agentA.email, recipientName: 'CVM', data: { approvalId: nowApproval, approverId: fx.agentA.id, requestTitle: `${tag} shelf now`, link: '/requests/x', title: 'Approval required', body: '' } })
     expect(res.error).toBeUndefined()
     const sent = vi.mocked(sendEmail).mock.calls.map((c) => c[0] as { html: string; text?: string })
-    expect(sent).toHaveLength(1)
-    expect(sent[0].html).toContain('Earlier requests of this store')
-    expect(sent[0].html).toContain('not needed')
-    expect(sent[0].text).toContain('Approved in these 12 months: Qty 4')
+    // the approval itself already mailed the approver (asynchronously); we sent the same mail by hand. Every approval mail of this ticket must carry the box.
+    const mine = sent.filter((m) => /Earlier requests of this store/.test(m.html) && m.html.includes(`${tag} shelf now`))
+    expect(mine.length).toBeGreaterThanOrEqual(1)
+    expect(mine.every((m) => m.html.includes('not needed') && /Approved in these 12 months: Qty \d+/.test(m.text ?? ''))).toBe(true)
   })
 })

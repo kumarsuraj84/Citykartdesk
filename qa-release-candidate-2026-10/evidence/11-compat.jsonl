@@ -1,0 +1,5 @@
+{"at":"2026-10-26T10:21:36.138Z","id":"C-mobile-375","status":"PASS","note":"Chromium engine only (Claude desktop browser pane, Chrome 152 UA). 375x812: no horizontal page scroll on /home, /requests, /services form, /dashboards/executive, /reports/pivot, /admin/masters, /admin/users, /admin/business-rules, vendor list/PMS tab/POs/ticket; wide tables scroll inside their own box","defect":""}
+{"at":"2026-10-26T10:21:36.370Z","id":"C-tablet-768","status":"PASS","note":"768x1024: no horizontal page scroll on /home, dashboards, /admin/masters, /requests/queue","defect":""}
+{"at":"2026-10-26T10:21:36.586Z","id":"C-edge","status":"NOT TESTED","note":"Edge not installed/connected in this session (Chromium engine is the same family but the real Edge was not run)","defect":""}
+{"at":"2026-10-26T10:21:36.796Z","id":"C-firefox","status":"NOT TESTED","note":"Firefox (Gecko engine) not available to the test tools; not run","defect":""}
+{"at":"2026-10-26T10:21:37.031Z","id":"C-safari","status":"NOT TESTED","note":"Safari/WebKit and real iOS/Android devices not available; only emulated phone size in Chromium","defect":""}

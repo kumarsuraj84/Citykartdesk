@@ -1,0 +1,68 @@
+=== 3k: 3266 tickets, 95 MB database ===
+      Tests  1 passed (1)
+ Test Files  1 passed (1)
+ISOLATION GATE: PASSED  (21/21)
+      Tests  1 passed (1)
+ Test Files  1 passed (1)
+ISOLATION GATE: PASSED  (21/21)
+have 0, adding 100000
+INSERT 0 25000
+25000
+INSERT 0 25000
+50000
+INSERT 0 25000
+75000
+INSERT 0 25000
+100000
+ANALYZE
+total requests: 103266
+=== 100k: 103266 tickets, 289 MB database ===
+      Tests  1 passed (1)
+ Test Files  1 passed (1)
+ISOLATION GATE: PASSED  (21/21)
+      Tests  1 passed (1)
+ Test Files  1 passed (1)
+ISOLATION GATE: PASSED  (21/21)
+have 100000, adding 400000
+INSERT 0 25000
+125000
+INSERT 0 25000
+150000
+INSERT 0 25000
+175000
+INSERT 0 25000
+200000
+INSERT 0 25000
+225000
+INSERT 0 25000
+250000
+INSERT 0 25000
+275000
+INSERT 0 25000
+300000
+INSERT 0 25000
+325000
+INSERT 0 25000
+350000
+INSERT 0 25000
+375000
+INSERT 0 25000
+400000
+INSERT 0 25000
+425000
+INSERT 0 25000
+450000
+INSERT 0 25000
+475000
+INSERT 0 25000
+500000
+ANALYZE
+total requests: 503266
+=== 500k: 503266 tickets, 1001 MB database ===
+      Tests  1 passed (1)
+ Test Files  1 passed (1)
+ISOLATION GATE: PASSED  (21/21)
+      Tests  1 passed (1)
+ Test Files  1 passed (1)
+ISOLATION GATE: PASSED  (21/21)
+=== campaign finished Mon Oct 26 15:50:23 IST 2026 ===

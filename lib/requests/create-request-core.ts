@@ -10,7 +10,7 @@ import { notifyRequesterTicketLogged } from '@/lib/requests/notify-requester'
 import { isOemKind, type OemKind } from '@/lib/oems/kinds'
 import { runAutoCvmApproval } from '@/lib/cvm/auto-approval'
 import { runMasterOemRouting, saveMasterSnapshot } from '@/lib/requests/master-routing'
-import { findSelectedUnit, loadActiveAcUnits, loadCvmEmail } from '@/lib/masters/resolve'
+import { findSelectedUnit, loadActiveAcUnits, loadCvmEmail, type AcUnitRecord } from '@/lib/masters/resolve'
 import { loadCvmCandidates } from '@/lib/cvm/load'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import type { FormField, RequestPriority } from '@/types'
@@ -124,6 +124,10 @@ export type CreateRequestCoreParams = {
    *  below, unchanged — so no existing caller (web, Email Intake) is
    *  affected by this parameter's mere existence. */
   titleOverride?: string
+  /** QA-D004: the ACs to save with the ticket as "the AC it was raised for" even though the requester chose none (the AC PMS ticket of a store: every active AC of the store).
+   *  Saved BEFORE the Business Rules run, so a rule can route the ticket by the AC's vendor, brand and region exactly as it routes an AC complaint.
+   *  Ignored when the requester chose an AC themselves. */
+  acUnitsForRouting?: AcUnitRecord[]
 }
 
 export type CreateRequestCoreResult =
@@ -150,6 +154,7 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     teamIdOverride,
     priorityOverride,
     titleOverride,
+    acUnitsForRouting,
   } = params
 
   const admin = createAdminClient()
@@ -430,6 +435,10 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     } catch (e) {
       console.error('[createRequestCore] AC snapshot failed', e)
     }
+  }
+
+  if (!(acField && chosenAcValue) && acUnitsForRouting && acUnitsForRouting.length > 0) {
+    try { await saveMasterSnapshot(admin, { requestId: request.id, kind: 'ac', units: acUnitsForRouting }) } catch (e) { console.error('[createRequestCore] AC snapshot (routing) failed', e) }
   }
 
   // Business Rules: "created" trigger — assign/set priority/set status/notify

@@ -103,17 +103,26 @@ async function runAssign(
   if (strategy === 'direct') {
     chosenId = assigneeIds[0] ?? null
   } else if (strategy === 'round_robin') {
-    const { data: rule } = await admin
-      .from('business_rules')
-      .select('last_assigned_index')
-      .eq('id', ctx.ruleId)
-      .single()
-    const index = ((rule?.last_assigned_index ?? 0) as number) % assigneeIds.length
-    chosenId = assigneeIds[index] ?? null
-    await admin
-      .from('business_rules')
-      .update({ last_assigned_index: (index + 1) % assigneeIds.length })
-      .eq('id', ctx.ruleId)
+    // The position is taken with a compare-and-set (QA-D018): two tickets created at the very same moment used to read the same position and both went to one person.
+    // Whoever changes the stored position first keeps it; the other reads the new position and tries again.
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const { data: rule } = await admin
+        .from('business_rules')
+        .select('last_assigned_index')
+        .eq('id', ctx.ruleId)
+        .single()
+      const stored = (rule?.last_assigned_index ?? null) as number | null
+      const index = (stored ?? 0) % assigneeIds.length
+      let claim = admin.from('business_rules').update({ last_assigned_index: (index + 1) % assigneeIds.length }).eq('id', ctx.ruleId)
+      claim = stored === null ? claim.is('last_assigned_index', null) : claim.eq('last_assigned_index', stored)
+      const { data: won } = await claim.select('id')
+      if (won && won.length > 0) { chosenId = assigneeIds[index] ?? null; break }
+      await new Promise((r) => setTimeout(r, 15 + Math.floor(Math.random() * 40)))
+    }
+    if (!chosenId) {
+      // twelve lost races in a row: do not leave the ticket without a person; fall back to the first listed technician
+      chosenId = assigneeIds[0] ?? null
+    }
   } else if (strategy === 'load_balanced') {
     const counts = await Promise.all(
       assigneeIds.map(async (id) => {

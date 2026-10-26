@@ -76,7 +76,7 @@ function ForgotPasswordForm() {
         </div>
       )}
 
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+      <form method="post" onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="email">Email address</Label>
           <div className="relative">
