@@ -16,7 +16,7 @@ Meaning in simple words: *the application is in good shape locally and everythin
 ## Why not C or D
 
 * Every executed category ended with **0 failing tests**: 2,431 tests run, 2,413 passed, 0 failed, 18 skipped (WhatsApp, out of scope). All eight journeys were completed.
-* **20 defects found, 16 fixed and re-tested** (1 × P1, 9 × P2, 6 × P3), 4 left for your decision, **0 P0**, **0 blocked**, **0 reopened**, **0 regressions** caused by the fixes.
+* **21 defects found, 17 fixed and re-tested** (2 × P1, 9 × P2, 6 × P3), 4 left for your decision, **0 P0**, **0 blocked**, **0 reopened**, **0 regressions** caused by the fixes.
 * Isolation was proved before every run; production was never touched.
 
 ## Conditions to move to A (in this order)

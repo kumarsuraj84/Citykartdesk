@@ -7,8 +7,8 @@ Severity: **P0** stops release / data loss / security breach · **P1** serious, 
 
 | | P0 | P1 | P2 | P3 | P4 | Total |
 |---|---|---|---|---|---|---|
-| Found | 0 | 1 | 10 | 9 | 0 | 20 |
-| Fixed and retested | 0 | 1 | 9 | 6 | 0 | 16 |
+| Found | 0 | 2 | 10 | 9 | 0 | 21 |
+| Fixed and retested | 0 | 2 | 9 | 6 | 0 | 17 |
 | Open — needs a decision | 0 | 0 | 1 | 3 | 0 | 4 (D005, D013, D014, D015) |
 | Blocked | 0 | 0 | 0 | 0 | 0 | 0 |
 | Reopened (an earlier fix failed again) | 0 | 0 | 0 | 0 | 0 | 0 |
@@ -38,6 +38,7 @@ Severity: **P0** stops release / data loss / security breach · **P1** serious, 
 | QA-D018 | P2 | Assignment | **Round robin gave a burst of tickets to one technician.** Eight tickets created at the same moment all went to the same person (8 : 0) because each read the "last used" position before the other wrote it. Matters for bursts (the 09:00 AC PMS run, bulk loads). | new test (reproduced 8 : 0) | **FIXED** | `lib/rules/actions.ts`: the position is taken with a compare-and-set and retried. Test `qa-gap-coverage` "eight tickets created at the very same moment are spread" now passes; assign / rules tests (26) pass. |
 | QA-D019 | P2 | System Log | **The integrity check stopped at 500,000 rows but reported every row as checked.** After a big scale test the log held 568,670 chained rows; a changed record among the newest 68,000 was reported as "intact". An audit trail check that cannot see new tampering is worse than none. | final regression (test 105 "finds a record changed behind the back") | **FIXED** | `lib/actions/admin/system-log.ts`: the whole chain is walked in pieces of 250,000 rows, each starting on the last row of the one before. Test `tests/unit/system-log-integrity-chunks.test.ts` (failed 2 of 3 before). |
 | QA-D020 | P2 | Exports | **Exports silently stopped at 1,000 rows.** The data service cuts every single answer at 1,000 rows without an error, so the CSV of requests, tasks, projects and stores held only the first 1,000 although SQL counted 3,274. The "more than 10,000 rows" warning could never trigger. (The approvals export had already been fixed this way earlier, the other four had not.) Whether live shows the same depends on the live data service limit; the default is 1,000. | new reconciliation test (export vs SQL count: 1000 vs 3274) | **FIXED** | `lib/export/reports.ts`: all four exports read in pages (`fetchAllPages`, stable order). Tests `qa-reconcile-exports.test.ts` (4: count, filters, quotes/commas/line breaks, formula characters) and `tests/unit/export-paging-guard.test.ts`. |
+| QA-D021 | **P1** | Sheet Masters | **Every sheet update added the AC sheet again.** On the real AC sheet (2,316 rows) the first copy was right, the second copy added 1,320 duplicate units (3,636), the third would add more — at 11:00, 15:00 and 19:00 every day. Cause: the copy read the stored units in ONE request and the data service cuts one answer at 1,000 rows silently, so it only "saw" 1,000 stored units and treated every other sheet row as new. The same limit also cut the OEM contact list used for CC. Found when the user's local portal was re-synced with the real Google sheets (not with the small QA sheets). | resync of the real sheets on the local portal | **FIXED** | `lib/masters/sync.ts` (units, CVM, PMS dates read in pages), `lib/masters/contacts.ts`. Test `qa-release-candidate-2026-10/tests/qa-sheet-scale.test.ts`: 2,316-row sheet copied 4 times stays 2,316 (failed before: 3,632 then 4,948); a change in row 2,100 changes only that unit. Local dev database cleaned (1,320 duplicate rows removed) and re-synced: 2,316 active, stable over repeated updates. **Not on live yet (Sheet Masters is still a local branch) — must not go live without this fix.** |
 
 ## Items that are decisions, not defects (kept visible)
 
@@ -49,4 +50,4 @@ Severity: **P0** stops release / data loss / security breach · **P1** serious, 
 
 ## How the counts were made
 
-P1: D002. P2: D001, D003, D004, D005, D010, D012, D016, D018, D019, D020 (10). P3: D006, D007, D008, D009, D011, D013, D014, D015, D017 (9). Total 20. Fixed: D001–D004, D006–D012, D016–D020 (16). Open: D005, D013, D014, D015 (4).
+P1: D002, D021. P2: D001, D003, D004, D005, D010, D012, D016, D018, D019, D020 (10). P3: D006, D007, D008, D009, D011, D013, D014, D015, D017 (9). Total 21. Fixed: D001–D004, D006–D012, D016–D021 (17). Open: D005, D013, D014, D015 (4).

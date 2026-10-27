@@ -3,6 +3,7 @@ import { parseAcSheet, parseCvmSheet, parseGensetSheet, parsePmsSheet } from './
 import { matchAcUnits, matchGensets, planRemovals, REMOVAL_WAIT_MINUTES } from './diff'
 import type { AcRow, CvmRow, GensetRow, MasterIssue, MasterKind, PmsRow } from './types'
 import type { SheetsSource } from './google'
+import { fetchAllPages } from '@/lib/queries/paging'
 
 // Copies the three master sheets into CK Desk's database (read only: nothing is ever written to a sheet). Run three times a day by the scheduled task (see
 // schedule.ts) and on demand by an administrator. Everything else in CK Desk reads the database copy, never Google.
@@ -22,6 +23,19 @@ const CHUNK = 200
 function must<T>(res: { data?: T; error?: { message: string } | null }, what: string): T {
   if (res.error) throw new Error(`${what}: ${res.error.message}`)
   return res.data as T
+}
+
+/**
+ * Reads every row of a master table of one organisation. QA-D021: the data service cuts ONE answer at 1,000 rows without any error, so reading the stored units in a single
+ * request showed the copy only the first 1,000 of 2,316 units; every other sheet row looked new and was added again at every update. Read in pages, in a fixed order.
+ */
+async function readAll(db: Db, table: string, columns: string, orgId: string, order: string[]): Promise<Record<string, unknown>[]> {
+  const { rows } = await fetchAllPages<Record<string, unknown>>((from, to) => {
+    let q = db.from(table).select(columns).eq('org_id', orgId)
+    for (const o of order) q = q.order(o, { ascending: true })
+    return q.range(from, to)
+  })
+  return rows
 }
 
 async function inChunks<T>(items: T[], fn: (chunk: T[]) => Promise<unknown>) {
@@ -125,7 +139,7 @@ async function applyUnits<R extends { storeCode: string }>(p: {
 }): Promise<{ added: number; changed: number; removed: number; waiting: number; waitingIssue: MasterIssue | null }> {
   const { db, orgId, table, rows, now } = p
   const nowIso = now.toISOString()
-  const stored = must<Record<string, unknown>[]>(await db.from(table).select('*').eq('org_id', orgId), `read ${table}`) ?? []
+  const stored = await readAll(db, table, '*', orgId, ['id'])
   const byId = new Map(stored.map((s) => [String(s.id), s]))
   const m = p.match(rows, stored.map((s) => ({
     id: String(s.id), storeCode: String(s.store_code), ckdeskNo: String(s.ckdesk_no ?? ''), serial: (s.serial as string | null) ?? null,
@@ -168,7 +182,7 @@ async function applyUnits<R extends { storeCode: string }>(p: {
 async function applyCvm(p: { db: Db; orgId: string; rows: CvmRow[]; now: Date }) {
   const { db, orgId, rows, now } = p
   const nowIso = now.toISOString()
-  const stored = must<Record<string, unknown>[]>(await db.from('master_store_cvm').select('*').eq('org_id', orgId), 'read master_store_cvm') ?? []
+  const stored = await readAll(db, 'master_store_cvm', '*', orgId, ['id'])
   const byStore = new Map(stored.map((s) => [String(s.store_code), s]))
   const upserts: Record<string, unknown>[] = []
   for (const r of rows) {
@@ -197,7 +211,7 @@ async function applyCvm(p: { db: Db; orgId: string; rows: CvmRow[]; now: Date })
 async function applyPms(p: { db: Db; orgId: string; rows: PmsRow[]; now: Date }) {
   const { db, orgId, rows, now } = p
   const nowIso = now.toISOString()
-  const stored = must<Record<string, unknown>[]>(await db.from('master_pms_dates').select('store_code, pms_date, sheet_row').eq('org_id', orgId), 'read master_pms_dates') ?? []
+  const stored = await readAll(db, 'master_pms_dates', 'store_code, pms_date, sheet_row', orgId, ['store_code', 'pms_date'])
   const key = (store: string, date: string) => `${store}|${date}`
   const have = new Map(stored.map((s) => [key(String(s.store_code), String(s.pms_date)), s]))
   const want = new Set(rows.map((r) => key(r.storeCode, r.pmsDate)))
