@@ -62,9 +62,10 @@ export function acOptionsFor(units: AcUnitRecord[]): AcOption[] {
   for (const u of units) count.set(u.ckdesk_no, (count.get(u.ckdesk_no) ?? 0) + 1)
   return units.map((u) => {
     const dup = (count.get(u.ckdesk_no) ?? 0) > 1
-    const hint = [u.floor, [u.ac_type, u.tonnage].filter(Boolean).join(' ')].filter(Boolean).join(', ')
     const value = dup ? `${u.ckdesk_no} (${u.serial || `row ${u.sheet_row ?? '?'}`})` : u.ckdesk_no
-    return { value, label: hint ? `${value} - ${hint}` : value, unitId: u.id }
+    // The requester picks by the CKDESK number only. Floor, type, tonnage and brand stay in the database and in the ticket's saved AC details (OEM mail, reports, analysis),
+    // but are not shown in this list, so nobody is confused by them.
+    return { value, label: value, unitId: u.id }
   })
 }
 
