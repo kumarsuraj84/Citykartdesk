@@ -1,0 +1,55 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_db_ckdesk_audit, supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [only the user's own browser: chrome.exe(pid 20224) 182.72.84.10:3210 ESTABLISHED - NOT the audit; the audit never uses this browser]
+
+ISOLATION GATE: PASSED  (21/21)
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate[39m
+
+ [32m✓[39m tests/vapt/37-vendor-mail-journey.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 31158[2mms[22m[39m
+   [33m[2m✓[22m[39m who is mailed at each step of the vendor journey[2m > [22massignment by the rules: ONLY the vendor and the store hear of it (the vendor rule runs before the Citykart rule) [33m 988[2mms[22m[39m
+   [33m[2m✓[22m[39m who is mailed at each step of the vendor journey[2m > [22mPO path: start, quote, revision asked, revised quote, approved, resolved, reopened [33m 7289[2mms[22m[39m
+   [33m[2m✓[22m[39m who is mailed at each step of the vendor journey[2m > [22mPO path: quote rejected (ticket goes on) / quote rejected and ticket cancelled [33m 5103[2mms[22m[39m
+   [33m[2m✓[22m[39m who is mailed at each step of the vendor journey[2m > [22mparts path and the smaller events [33m 7008[2mms[22m[39m
+   [33m[2m✓[22m[39m PO approvers named for the AC in the sheet (CK PO Approver Mail To)[2m > [22mone mail to every approver of that AC; the first decision wins and the other is told; a revised quote and a withdrawal reach all of them [33m 4310[2mms[22m[39m
+   [33m[2m✓[22m[39m PO approvers named for the AC in the sheet (CK PO Approver Mail To)[2m > [22man address in the sheet that is not an active staff login is skipped: the default approver is used; a withdrawal then reaches him [33m 2111[2mms[22m[39m
+   [33m[2m✓[22m[39m a quote the vendor withdraws[2m > [22mKrishan is told (he was waiting to decide it); the store hears the ticket is back in progress [33m 2085[2mms[22m[39m
+ [32m✓[39m tests/vapt/36-vendor-module.test.ts [2m([22m[2m19 tests[22m[2m)[22m[33m 8505[2mms[22m[39m
+   [33m[2m✓[22m[39m start working and resolve[2m > [22mstart needs the OEM ticket number; it is saved with today's date; then resolve needs the choice, remarks for Other, and the FSR [33m 524[2mms[22m[39m
+   [33m[2m✓[22m[39m part required (no PO)[2m > [22mlists the items, puts the ticket on hold, and only "Parts received" with a remark brings it back; a hold cannot be resolved [33m 371[2mms[22m[39m
+   [33m[2m✓[22m[39m PO required from Citykart[2m > [22monly the approver decides; approving needs the PO number, date and document; it returns the ticket to In Progress and mails the OEM with the document [33m 661[2mms[22m[39m
+   [33m[2m✓[22m[39m PO required from Citykart[2m > [22mrejecting needs a reason, cancels the ticket like a rejected approval (48 h to reopen) and mails the OEM once; the store can reopen it [33m 412[2mms[22m[39m
+   [33m[2m✓[22m[39m reopen after resolve[2m > [22mgoes back to the same vendor technician, Open, with the OEM number and date emptied, and the OEM mailed again is the status-change's job [33m 412[2mms[22m[39m
+   [33m[2m✓[22m[39m quote versions, revised price, parts list changes, and files under their messages[2m > [22mthe quote file is tied to the PO-request message; asking for a revised price moves the ticket to "Revise price required" and back; only the newest version can be approved [33m 743[2mms[22m[39m
+   [33m[2m✓[22m[39m quote versions, revised price, parts list changes, and files under their messages[2m > [22mthe vendor changes the parts list while on hold (a new version, the old one kept) and can withdraw a request [33m 369[2mms[22m[39m
+   [33m[2m✓[22m[39m quote versions, revised price, parts list changes, and files under their messages[2m > [22mrejecting only the quote: the ticket is NOT cancelled, it moves to "Part required" with the quote items (no prices); the vendor is told; the OEM is not mailed; Parts received brings it back [33m 600[2mms[22m[39m
+   [33m[2m✓[22m[39m quote versions, revised price, parts list changes, and files under their messages[2m > [22ma quote can be withdrawn too; the FSR is tied to the resolution message [33m 378[2mms[22m[39m
+ [32m✓[39m tests/vapt/34-sheet-masters.test.ts [2m([22m[2m23 tests[22m[2m)[22m[33m 6305[2mms[22m[39m
+   [33m[2m✓[22m[39m the sheets are copied into the database[2m > [22ma big disappearance is only applied at a later update (a mistake can be undone) [33m 418[2mms[22m[39m
+   [33m[2m✓[22m[39m an AC ticket goes to the OEM of the AC the requester chose[2m > [22mwhen the store reopens the resolved ticket the OEM is e-mailed again, for the same AC, marked REOPENED with the reason of the store [33m 315[2mms[22m[39m
+   [33m[2m✓[22m[39m the CVM comes from the CVM sheet[2m > [22mthe approval goes to the staff member whose e-mail the sheet lists (any capitals); the ticket is on hold in Pending Approval [33m 311[2mms[22m[39m
+ [32m✓[39m tests/vapt/40-ac-pms.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 3163[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[32m62 passed[39m[22m[90m (62)[39m
+[2m   Start at [22m 14:41:48
+[2m   Duration [22m 51.76s[2m (transform 430ms, setup 58ms, collect 1.15s, tests 49.13s, environment 0ms, prepare 165ms)[22m
+

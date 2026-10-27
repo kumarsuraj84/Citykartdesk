@@ -1,110 +1,110 @@
 {
   "label": "run",
-  "at": "2026-10-26T11:24:52.143Z",
+  "at": "2026-10-27T09:21:23.968Z",
   "tickets_in_database": 3269,
   "runs_per_operation": 15,
   "create_ticket_sequential": {
-    "p50": 132.5,
-    "p95": 155.6,
-    "p99": 183.2,
+    "p50": 131.9,
+    "p95": 161.7,
+    "p99": 169.1,
     "runs": 30,
     "errors": 0
   },
   "create_ticket_burst": {
     "10 at once": {
-      "p50": 222.1,
-      "p95": 267.3,
-      "p99": 267.3,
+      "p50": 199,
+      "p95": 239.8,
+      "p99": 239.8,
       "runs": 10,
       "errors": 0,
-      "seconds": 0.27,
-      "tickets_per_second": 37.4,
+      "seconds": 0.24,
+      "tickets_per_second": 41.7,
       "stored": 10,
       "lost_or_doubled": 0
     },
     "25 at once": {
-      "p50": 429.6,
-      "p95": 491,
-      "p99": 492.6,
+      "p50": 430.9,
+      "p95": 503.4,
+      "p99": 505.5,
       "runs": 25,
       "errors": 0,
-      "seconds": 0.49,
-      "tickets_per_second": 50.7,
+      "seconds": 0.51,
+      "tickets_per_second": 49.4,
       "stored": 25,
       "lost_or_doubled": 0
     }
   },
   "queue_team_first_page": {
-    "p50": 38.9,
-    "p95": 49.7,
-    "p99": 49.7,
+    "p50": 42.7,
+    "p95": 46.7,
+    "p99": 46.7,
     "runs": 15,
     "errors": 0
   },
   "queue_search_text": {
-    "p50": 90.5,
-    "p95": 98.2,
-    "p99": 98.2,
+    "p50": 95.6,
+    "p95": 102.7,
+    "p99": 102.7,
     "runs": 15,
     "errors": 0
   },
   "queue_manager_first_page": {
-    "p50": 43.3,
-    "p95": 51.8,
-    "p99": 51.8,
+    "p50": 47.5,
+    "p95": 51.1,
+    "p99": 51.1,
     "runs": 15,
     "errors": 0
   },
   "executive_dashboard_load_all_rows": {
-    "p50": 159.7,
-    "p95": 163.2,
-    "p99": 163.2,
+    "p50": 155.1,
+    "p95": 157.9,
+    "p99": 157.9,
     "runs": 5,
     "errors": 0
   },
   "export_requests_csv": {
-    "p50": 71,
-    "p95": 71.7,
-    "p99": 71.7,
+    "p50": 274.1,
+    "p95": 329.1,
+    "p99": 329.1,
     "runs": 3,
     "errors": 0
   },
   "vendor_dashboard_list": {
-    "p50": 31.2,
-    "p95": 32.4,
-    "p99": 32.4,
+    "p50": 35.9,
+    "p95": 38.8,
+    "p99": 38.8,
     "runs": 15,
     "errors": 0
   },
   "approval_decide_sequential": {
-    "p50": 63.6,
-    "p95": 80.8,
-    "p99": 80.8,
+    "p50": 56.5,
+    "p95": 70.1,
+    "p99": 70.1,
     "runs": 15,
     "errors": 0
   },
   "approval_decide_20_at_once": {
-    "p50": 183.5,
-    "p95": 194.7,
-    "p99": 196.4,
+    "p50": 178.7,
+    "p95": 195.6,
+    "p99": 209.5,
     "runs": 20,
     "errors": 0,
-    "seconds": 0.2
+    "seconds": 0.21
   },
   "approval_same_approval_decided_twice": {
     "results": [
       "accepted",
-      "refused"
+      "accepted"
     ],
-    "decisions_stored": 1
+    "decisions_stored": 2
   },
   "pms_generation": {
     "stores_due": 60,
     "created": 60,
     "skipped": 0,
     "failed": 0,
-    "seconds": 2.47,
-    "tickets_per_second": 24.3,
+    "seconds": 2.56,
+    "tickets_per_second": 23.4,
     "second_run_created": 0,
     "setup_problem": null
   },
@@ -120,7 +120,7 @@
       "status": "unchanged"
     },
     "one_row_changed": {
-      "seconds": 0.19,
+      "seconds": 0.15,
       "status": "ok",
       "changed": 1
     }

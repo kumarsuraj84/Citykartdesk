@@ -1,0 +1,4 @@
+      Tests  1 failed | 2423 passed | 18 skipped (2442)
+ FAIL  tests/vapt/27-partial-findings-019-021-056.test.ts > VAPT-019: an ordinary user sees only the people they deal with > staff (technician, manager, administrator) still see everybody in the organisation, and nobody sees another organisation
+ Test Files  1 failed | 319 passed | 4 skipped (324)
+ISOLATION GATE: PASSED  (21/21)
