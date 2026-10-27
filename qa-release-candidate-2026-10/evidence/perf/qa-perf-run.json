@@ -1,95 +1,95 @@
 {
   "label": "run",
-  "at": "2026-10-27T09:21:23.968Z",
+  "at": "2026-10-27T09:39:52.949Z",
   "tickets_in_database": 3269,
   "runs_per_operation": 15,
   "create_ticket_sequential": {
-    "p50": 131.9,
-    "p95": 161.7,
-    "p99": 169.1,
+    "p50": 127.4,
+    "p95": 147.4,
+    "p99": 151.7,
     "runs": 30,
     "errors": 0
   },
   "create_ticket_burst": {
     "10 at once": {
-      "p50": 199,
-      "p95": 239.8,
-      "p99": 239.8,
+      "p50": 208.1,
+      "p95": 236.6,
+      "p99": 236.6,
       "runs": 10,
       "errors": 0,
       "seconds": 0.24,
-      "tickets_per_second": 41.7,
+      "tickets_per_second": 42.3,
       "stored": 10,
       "lost_or_doubled": 0
     },
     "25 at once": {
-      "p50": 430.9,
-      "p95": 503.4,
-      "p99": 505.5,
+      "p50": 411.4,
+      "p95": 498,
+      "p99": 507.2,
       "runs": 25,
       "errors": 0,
       "seconds": 0.51,
-      "tickets_per_second": 49.4,
+      "tickets_per_second": 49.2,
       "stored": 25,
       "lost_or_doubled": 0
     }
   },
   "queue_team_first_page": {
-    "p50": 42.7,
-    "p95": 46.7,
-    "p99": 46.7,
+    "p50": 30,
+    "p95": 37.3,
+    "p99": 37.3,
     "runs": 15,
     "errors": 0
   },
   "queue_search_text": {
-    "p50": 95.6,
-    "p95": 102.7,
-    "p99": 102.7,
+    "p50": 73.4,
+    "p95": 80.1,
+    "p99": 80.1,
     "runs": 15,
     "errors": 0
   },
   "queue_manager_first_page": {
-    "p50": 47.5,
-    "p95": 51.1,
-    "p99": 51.1,
+    "p50": 40.1,
+    "p95": 42.5,
+    "p99": 42.5,
     "runs": 15,
     "errors": 0
   },
   "executive_dashboard_load_all_rows": {
-    "p50": 155.1,
-    "p95": 157.9,
-    "p99": 157.9,
+    "p50": 151.4,
+    "p95": 159,
+    "p99": 159,
     "runs": 5,
     "errors": 0
   },
   "export_requests_csv": {
-    "p50": 274.1,
-    "p95": 329.1,
-    "p99": 329.1,
+    "p50": 288.7,
+    "p95": 330,
+    "p99": 330,
     "runs": 3,
     "errors": 0
   },
   "vendor_dashboard_list": {
-    "p50": 35.9,
-    "p95": 38.8,
-    "p99": 38.8,
+    "p50": 22.4,
+    "p95": 24.4,
+    "p99": 24.4,
     "runs": 15,
     "errors": 0
   },
   "approval_decide_sequential": {
-    "p50": 56.5,
-    "p95": 70.1,
-    "p99": 70.1,
+    "p50": 66.8,
+    "p95": 74.6,
+    "p99": 74.6,
     "runs": 15,
     "errors": 0
   },
   "approval_decide_20_at_once": {
-    "p50": 178.7,
-    "p95": 195.6,
-    "p99": 209.5,
+    "p50": 170.2,
+    "p95": 184,
+    "p99": 185.5,
     "runs": 20,
     "errors": 0,
-    "seconds": 0.21
+    "seconds": 0.19
   },
   "approval_same_approval_decided_twice": {
     "results": [
@@ -103,8 +103,8 @@
     "created": 60,
     "skipped": 0,
     "failed": 0,
-    "seconds": 2.56,
-    "tickets_per_second": 23.4,
+    "seconds": 2.58,
+    "tickets_per_second": 23.3,
     "second_run_created": 0,
     "setup_problem": null
   },
@@ -120,7 +120,7 @@
       "status": "unchanged"
     },
     "one_row_changed": {
-      "seconds": 0.15,
+      "seconds": 0.16,
       "status": "ok",
       "changed": 1
     }

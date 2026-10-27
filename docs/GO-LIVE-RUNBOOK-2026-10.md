@@ -201,7 +201,7 @@ Nothing structural changes: no new share, no new user, no new bucket (the new fe
 * Migrations 175–185: rolled back from 185 to 175 and applied again in order, each in one transaction, then applied a second time — all OK on the disposable test database.
 * Full regression on the combined branch: see the line below (filled after the run).
 
-**Result (27 Oct):** 2,442 tests in one run on the combined branch: 2,423 passed, 18 skipped (WhatsApp, out of scope), 1 failed — the failing one (VAPT-019 *staff see everybody*) failed only because the disposable test database had collected 1,009 test people and one list is cut at 1,000; after removing the 654 leftover test users it passed (15/15). So: **2,424 passed, 0 failed, 18 skipped.** Evidence: `qa-release-candidate-2026-10/evidence/12-merged-regression-*`.
+**Final result (27 Oct, after the AC PMS hiding change): 2,452 tests in one clean run: 2,434 passed, 0 failed, 18 skipped (WhatsApp, out of scope)** (`qa-release-candidate-2026-10/evidence/13-final-regression-results.json`). Earlier run on the same branch: 2,442 tests in one run on the combined branch: 2,423 passed, 18 skipped (WhatsApp, out of scope), 1 failed — the failing one (VAPT-019 *staff see everybody*) failed only because the disposable test database had collected 1,009 test people and one list is cut at 1,000; after removing the 654 leftover test users it passed (15/15). So: **2,424 passed, 0 failed, 18 skipped.** Evidence: `qa-release-candidate-2026-10/evidence/12-merged-regression-*`.
 
 ## K. Facts found over SSH on 27 Oct (read only)
 
