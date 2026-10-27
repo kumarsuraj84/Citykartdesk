@@ -87,6 +87,32 @@ async function filterServicesByLocation<T extends { id: string }>(
   return services.filter((s) => !restricted.has(s.id) || allowedForMe.has(s.id))
 }
 
+/**
+ * A service whose sub category belongs to an AC PMS category is made for the daily AC PMS job: it is not offered to requesters, technicians or managers in the catalogue,
+ * the search or by its web address. Only an administrator (or platform owner) sees it.
+ */
+async function hideAcPmsServices<T extends { id: string }>(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  services: T[]
+): Promise<T[]> {
+  if (services.length === 0) return services
+  const profile = await getCurrentProfile()
+  if (profile && (profile.role === 'admin' || profile.role === 'platform_owner')) return services
+  const { data } = await supabase
+    .from('service_sub_category_tags')
+    .select('service_id, sub:service_sub_categories(category:service_categories(is_pms))')
+    .in('service_id', services.map((s) => s.id))
+  const pms = new Set<string>()
+  for (const r of (data ?? []) as unknown as { service_id: string; sub: { category: { is_pms: boolean } | { is_pms: boolean }[] | null } | { category: { is_pms: boolean } | null }[] | null }[]) {
+    const subs = Array.isArray(r.sub) ? r.sub : r.sub ? [r.sub] : []
+    for (const sub of subs) {
+      const cats = Array.isArray(sub.category) ? sub.category : sub.category ? [sub.category] : []
+      if (cats.some((c) => c.is_pms === true)) pms.add(r.service_id)
+    }
+  }
+  return services.filter((s) => !pms.has(s.id))
+}
+
 // ── Public catalog queries ─────────────────────────────────────────────────────
 
 export async function getServiceCategories(): Promise<ServiceCategory[]> {
@@ -140,7 +166,7 @@ export async function searchServices(query: string): Promise<ServiceWithRelation
   }
 
   const { data } = await q
-  return filterServicesByLocation(supabase, (data ?? []) as ServiceWithRelations[])
+  return hideAcPmsServices(supabase, await filterServicesByLocation(supabase, (data ?? []) as ServiceWithRelations[]))
 }
 
 /** Flat, active-and-visible service list for the /services catalog root — the
@@ -162,7 +188,7 @@ export async function getServices(): Promise<ServiceWithRelations[]> {
   }
 
   const { data } = await query
-  return filterServicesByLocation(supabase, (data ?? []) as ServiceWithRelations[])
+  return hideAcPmsServices(supabase, await filterServicesByLocation(supabase, (data ?? []) as ServiceWithRelations[]))
 }
 
 export type ServiceSubCategoryFilterOption = { id: string; name: string; category_name: string }
@@ -223,7 +249,7 @@ export async function getServiceBySlug(slug: string): Promise<ServiceWithRelatio
   // Same location-scoped visibility as getServices() — a Requester
   // navigating straight to a restricted service's URL (bookmark, shared
   // link) shouldn't reach a service the catalog wouldn't show them either.
-  const visible = await filterServicesByLocation(supabase, [data as ServiceWithRelations])
+  const visible = await hideAcPmsServices(supabase, await filterServicesByLocation(supabase, [data as ServiceWithRelations]))
   return visible[0] ?? null
 }
 

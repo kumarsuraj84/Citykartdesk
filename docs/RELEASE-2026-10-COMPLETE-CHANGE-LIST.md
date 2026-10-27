@@ -40,6 +40,7 @@ The comparison was **read only** (no push, no change to `main`, nothing done on 
 * A fourth sheet (Store Code, AC PMS Date). At **09:00** on each PMS date one **AC PMS ticket per store** is made (a log makes sure no date creates two); a PMS category switch (`is_pms`) tells the system which category to use.
 * Vendor sees PMS tickets in their own tab ("AC PMS tickets"), never mixed with normal tickets; lighter visit (no OEM ticket number; PMS report file).
 * **Nothing happens until the PMS sheet is linked and the AC PMS service / category / sub category exist** (section 6 of the runbook).
+* **The AC PMS service is hidden from requesters, technicians and managers** (catalogue, search, web address); only an administrator sees it; nobody else can raise an AC PMS ticket by hand, nor through mail / WhatsApp. Only the daily job makes them.
 
 ### D. Approval history box (migration 183)
 * In the approval mail and on the approve page: the store's earlier requests of the **same sub category in the last 12 months** (who decided, when, which Qty), and the approved total. Per category switch (`show_approval_history`); migration 183 switches it on for every category that already has automatic CVM approval (Fixtures, Hangers, Fixture Attachments). The form fields shown (for example Qty) are ticked in the form builder.

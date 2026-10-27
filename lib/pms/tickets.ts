@@ -123,7 +123,7 @@ export async function createDuePmsTickets(db: Db, orgId: string, now: Date = new
             serviceId: setup.serviceId, subCategoryId: setup.subCategoryId, formData,
             description: fields.description ? null : text,
             source: 'api', sourceMetadata: { pms_source: 'ac_pms_sheet', pms_date: d.pms_date, store_code: d.store_code },
-            useAdminForWrites: true, titleOverride: title, acUnitsForRouting: acUnits,
+            useAdminForWrites: true, titleOverride: title, acUnitsForRouting: acUnits, systemGenerated: true,
           })
           if (res.error || !res.requestId) { await settle(db, orgId, d.store_code, d.pms_date, 'failed', null, res.error ?? 'The ticket could not be created.'); out.failed++; continue }
           await settle(db, orgId, d.store_code, d.pms_date, 'created', res.requestId, null)

@@ -62,6 +62,8 @@ export type CreateRequestCoreParams = {
   actingUserId: string
   serviceId: string
   subCategoryId?: string | null
+  /** True only for a ticket the SYSTEM makes (the daily AC PMS job). An AC PMS category is refused for every person and every channel except an administrator / platform owner on the web form. */
+  systemGenerated?: boolean
   formData: Record<string, unknown>
   projectId?: string | null
   /** Free-text description stored directly on requests.description. The web
@@ -155,6 +157,7 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     priorityOverride,
     titleOverride,
     acUnitsForRouting,
+    systemGenerated = false,
   } = params
 
   const admin = createAdminClient()
@@ -205,6 +208,11 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   if (!subCategoryResolution.ok) return { error: subCategoryResolution.error }
 
   const categoryId = subCategoryResolution.categoryId
+  // AC PMS tickets are made by the daily job from the PMS sheet. By hand only an administrator (or platform owner) may raise one; a store, a technician or a manager cannot, and no mail / WhatsApp channel can.
+  if (categoryId && !systemGenerated && actingUserRoleForLocationCheck !== 'admin' && actingUserRoleForLocationCheck !== 'platform_owner') {
+    const { data: pmsCat } = await admin.from('service_categories').select('is_pms').eq('id', categoryId).maybeSingle()
+    if (pmsCat?.is_pms === true) return { error: 'AC PMS tickets are made automatically from the AC PMS sheet and cannot be raised by hand (only an administrator can).' }
+  }
   const resolvedSubCategoryId = subCategoryResolution.subCategoryId
 
   // ── Resolve the form: template (if tagged) is the live source of truth,
