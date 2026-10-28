@@ -12,7 +12,9 @@ import { getSecret } from '@/lib/secrets'
 // Vault, then arms the channel for native API push (Gmail watch or Graph
 // subscription). Falls back gracefully to IMAP polling if push env vars are absent.
 export async function GET(req: NextRequest) {
-  const origin = req.nextUrl.origin
+  // Behind the app server req.nextUrl.origin is the internal address (for example http://0.0.0.0:3210), which the browser cannot open;
+  // the return address registered with Google is the one the person actually used, so the final redirect goes back to it.
+  const origin = process.env.OAUTH_REDIRECT_BASE_URL || req.nextUrl.origin
   const back = (q: string) => NextResponse.redirect(new URL(`/intake/channels?${q}`, origin))
 
   const profile = await getCurrentProfile()

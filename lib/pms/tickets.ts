@@ -9,7 +9,7 @@ import type { FormField } from '@/types'
 //  - for each store whose PMS date is due (see lib/pms/window.ts) ONE ticket is made, in the AC PMS service / category / sub-category, raised from the store's own login;
 //  - pms_ticket_log keeps one row per store and date, so a date never makes two tickets, whatever runs twice or restarts;
 //  - a date that cannot be made (no category set, store unknown, no login, ticket refused) is written to the log and shown in the Sheet Masters problem list, and tried
-//    again at the next run until it is older than the catch-up days.
+//    again at the next run of the same day (a date that has passed is never made).
 // Never throws: the sheet copy must not fail because of this.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

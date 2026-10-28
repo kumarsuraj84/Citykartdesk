@@ -135,7 +135,7 @@ The combined branch is `release/all-pending-2026-10`; **`main` (03959d0) is alre
 | **Who can see the service** | **Decided by you: hidden from requesters, technicians and managers; only an administrator sees it** (and can raise one by hand if ever needed). This is built into the code of this release (the catalogue, the search and the web address hide it; a ticket of an AC PMS category cannot be raised by a store, technician or manager, nor through mail / WhatsApp). The daily job is not affected. Nothing to set for visibility — just create the service as above. |
 | **Business Rule** | **none on live for now.** (Local has `[LOCAL TEST] AC PMS tickets of Voltas/Blue Star go to a technician` — test data, **do not copy**.) PMS tickets stay Open for ADMIN GROUP until the vendor stage |
 
-- [ ] After E3 is created: paste the **AC PMS** sheet link (E1), *Update from sheets now*. The health shows how many PMS dates are read; "AC PMS tickets (n PMS dates still to come)" lists them. **Check the dates in the sheet first:** a past or today's date makes a ticket at the next 09:00 run (or at the next sheet copy after 09:00) — only put real dates you want ticketed.
+- [ ] After E3 is created: paste the **AC PMS** sheet link (E1), *Update from sheets now*. The health shows how many PMS dates are read; "AC PMS tickets (n PMS dates still to come)" lists them. **A ticket is made only for a store whose PMS date is TODAY** (from 09:00; at the 09:00 run or at any sheet copy later that day). A date that has already passed is never made. Only put real dates you want ticketed.
 - [ ] If you do **not** want PMS tickets yet: leave the PMS link empty — nothing happens.
 
 ### E4. First runs of the scheduled tasks (watch them)

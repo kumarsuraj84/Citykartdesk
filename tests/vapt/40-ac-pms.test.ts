@@ -1,6 +1,6 @@
 // AC PMS on the isolated audit stack (the sheet is replaced by fixed rows, mail goes nowhere):
 //  - the PMS sheet is copied into the database (store + date); a date that cannot be read, a store that does not exist and a missing date are reported;
-//  - one ticket per store and PMS date, from 09:00 India time on that day; a missed date is still made for two days, never older; the same date never makes two tickets,
+//  - one ticket per store and PMS date, from 09:00 India time on that day only (a date that has passed is never made); the same date never makes two tickets,
 //    not even when two runs overlap; a store with no login or no store record is reported, not forgotten; a date removed from the sheet leaves the tickets alone;
 //  - a PMS ticket starts without an OEM ticket number and is resolved with a PMS report (no resolution list); a normal ticket still needs the OEM ticket number;
 //  - the vendor's two tabs never share a ticket.
@@ -39,6 +39,7 @@ const sync = () => syncMasters({ db: db(), orgId: fx.orgId, source, force: true 
 // 08:30 and 09:30 India time on 26 Oct 2026
 const T0830 = new Date('2026-10-26T03:00:00Z')
 const T0900 = new Date('2026-10-26T03:30:00Z')
+const T0900_27 = new Date('2026-10-27T03:30:00Z')   // the next day
 const HEAD = ['Store Code', 'AC PMS Date']
 const pmsTickets = async () => ((await db().from('requests').select('id, title, status, category_id, sub_category_id, service_id, requester_id, source_metadata').eq('category_id', ids.catPms).like('title', `%${tag}%`).order('created_at')).data ?? []) as
   { id: string; title: string; status: string; category_id: string; sub_category_id: string; service_id: string; requester_id: string; source_metadata: { pms_date?: string; pms_source?: string } }[]
@@ -136,28 +137,29 @@ describe('the AC PMS sheet is copied into the database', () => {
 })
 
 describe('the tickets are made from 09:00 on the PMS date', () => {
-  it('before 09:00 only the missed day before is made, not today', async () => {
+  it('before 09:00 nothing is made: not today (not open yet) and not the day before (a passed date is never made)', async () => {
     const r = await createDuePmsTickets(db(), fx.orgId, T0830)
-    expect(r.created).toBe(1)
-    const t = await pmsTickets()
-    expect(t.map((x) => x.source_metadata.pms_date)).toEqual(['2026-10-25'])
+    expect(r.created).toBe(0)
+    expect(await pmsTickets()).toEqual([])
     expect((await logOf(A, '2026-10-26'))).toBeNull()
+    expect((await logOf(A, '2026-10-25'))).toBeNull()
   })
 
-  it('at 09:00 one ticket per store and date, even when two runs overlap; older dates are never made', async () => {
+  it('at 09:00 one ticket per store and date, even when two runs overlap; a passed date is never made', async () => {
     const [r1, r2] = await Promise.all([createDuePmsTickets(db(), fx.orgId, T0900), createDuePmsTickets(db(), fx.orgId, T0900)])
-    expect(r1.created + r2.created).toBe(1)   // A 26 Oct (A 25 Oct was made before)
+    expect(r1.created + r2.created).toBe(1)   // A 26 Oct only (A 25 Oct and 23 Oct have passed)
     const t = await pmsTickets()
-    expect(t.map((x) => x.source_metadata.pms_date).sort()).toEqual(['2026-10-25', '2026-10-26'])
+    expect(t.map((x) => x.source_metadata.pms_date).sort()).toEqual(['2026-10-26'])
     expect(t.every((x) => x.category_id === ids.catPms && x.sub_category_id === ids.subPms && x.service_id === fx.teamA.serviceId && x.requester_id === fx.requesterA.id && x.source_metadata.pms_source === 'ac_pms_sheet')).toBe(true)
     expect(t.find((x) => x.source_metadata.pms_date === '2026-10-26')!.title).toBe(`AC PMS - ${tag} Jaipur - 26 Oct 2026`)
-    expect(await logOf(A, '2026-10-23')).toBeNull()   // older than the catch-up days
+    expect(await logOf(A, '2026-10-25')).toBeNull()   // yesterday: never made
+    expect(await logOf(A, '2026-10-23')).toBeNull()   // older: never made
   })
 
   it('a second run the same morning makes nothing new', async () => {
     const r = await createDuePmsTickets(db(), fx.orgId, T0900)
     expect(r.created).toBe(0)
-    expect((await pmsTickets()).length).toBe(2)
+    expect((await pmsTickets()).length).toBe(1)
   })
 
   it('a store with no login and a store that does not exist are reported, with the reason', async () => {
@@ -193,7 +195,7 @@ describe('the tickets are made from 09:00 on the PMS date', () => {
     await sync()
     const rows = ((await db().from('master_pms_dates').select('store_code, pms_date').eq('org_id', fx.orgId).eq('store_code', A)).data ?? []) as { pms_date: string }[]
     expect(rows.map((r) => r.pms_date)).toEqual(['2026-10-25'])
-    expect((await pmsTickets()).length).toBe(3)
+    expect((await pmsTickets()).length).toBe(2)
   })
 
   it('nothing is made when the PMS sheet is not set up', async () => {
@@ -213,10 +215,10 @@ describe('an AC PMS ticket is routed to the vendor like an AC complaint (QA-D004
       conditions: [{ field: 'category_id', operator: 'equals', value: ids.catPms }, { field: 'ac_amc_vendor', logic: 'AND', operator: 'contains', value: 'voltas' }],
       actions: [{ type: 'assign', params: { strategy: 'direct', assigneeIds: [v1.id] } }] }).select('id').single()).data.id
     rules.push(rule)
-    await a.from('master_pms_dates').insert({ org_id: fx.orgId, store_code: A, pms_date: '2026-10-24', sheet_row: 99 })
-    const r = await createDuePmsTickets(a, fx.orgId, T0900)
+    await a.from('master_pms_dates').insert({ org_id: fx.orgId, store_code: A, pms_date: '2026-10-27', sheet_row: 99 })
+    const r = await createDuePmsTickets(a, fx.orgId, T0900_27)   // the next day, 09:30 India time
     expect(r.created).toBe(1)
-    const t = (await a.from('requests').select('id, assigned_to, status').eq('category_id', ids.catPms).like('title', '%24 Oct 2026').single()).data
+    const t = (await a.from('requests').select('id, assigned_to, status').eq('category_id', ids.catPms).like('title', '%27 Oct 2026').single()).data
     expect(t.assigned_to).toBe(v1.id)
     expect(t.status).toBe('open')
     const snap = (await a.from('request_master_snapshots').select('snapshot').eq('request_id', t.id).eq('kind', 'ac').single()).data.snapshot as { amc_vendor: string }[]
@@ -232,7 +234,7 @@ describe('an AC PMS ticket is routed to the vendor like an AC complaint (QA-D004
     const code = `${tag}N`.toUpperCase()
     const st = (await a.from('stores').insert({ org_id: fx.orgId, code, name: `${tag} No AC store`, address: 'x' }).select('id').single()).data.id
     await a.from('profiles').update({ store_id: st }).eq('id', fx.requesterB.id)
-    await a.from('master_pms_dates').insert({ org_id: fx.orgId, store_code: code, pms_date: '2026-10-25', sheet_row: 97 })
+    await a.from('master_pms_dates').insert({ org_id: fx.orgId, store_code: code, pms_date: '2026-10-26', sheet_row: 97 })
     try {
       const r = await createDuePmsTickets(a, fx.orgId, T0900)
       expect(r.created).toBe(1)
