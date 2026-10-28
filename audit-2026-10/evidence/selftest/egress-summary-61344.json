@@ -1,0 +1,10 @@
+{
+ "pid": 61344,
+ "argv": [
+  "D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\audit-2026-10\\guard\\isolation-check.mjs"
+ ],
+ "loopbackConnects": {
+  "127.0.0.1:55421": 1,
+  "localhost:55421": 1
+ }
+}

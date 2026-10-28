@@ -1,0 +1,161 @@
+{
+  "label": "qa-3k",
+  "at": "2026-10-26T10:09:31.867Z",
+  "tickets": 3268,
+  "runs_per_operation": 40,
+  "reads_ms": {
+    "manager: list 1000 tickets": {
+      "p50": 4.5,
+      "p95": 6,
+      "p99": 6.8,
+      "runs": 40,
+      "errors": 0
+    },
+    "manager: count all tickets": {
+      "p50": 4.2,
+      "p95": 5.3,
+      "p99": 6.5,
+      "runs": 40,
+      "errors": 0
+    },
+    "technician: list own group tickets": {
+      "p50": 6.6,
+      "p95": 7.5,
+      "p99": 8.6,
+      "runs": 40,
+      "errors": 0
+    },
+    "requester: list own tickets": {
+      "p50": 6.2,
+      "p95": 6.6,
+      "p99": 6.9,
+      "runs": 40,
+      "errors": 0
+    },
+    "technician: open one ticket": {
+      "p50": 2.2,
+      "p95": 5.1,
+      "p99": 5.7,
+      "runs": 40,
+      "errors": 0
+    },
+    "requester: attachment rows of a ticket": {
+      "p50": 3.3,
+      "p95": 5.1,
+      "p99": 6,
+      "runs": 40,
+      "errors": 0
+    },
+    "manager: title search": {
+      "p50": 2.3,
+      "p95": 3,
+      "p99": 3.6,
+      "runs": 40,
+      "errors": 0
+    },
+    "requester: list people they can see (profile rule)": {
+      "p50": 19.2,
+      "p95": 20.8,
+      "p99": 20.9,
+      "runs": 40,
+      "errors": 0
+    },
+    "technician: list people": {
+      "p50": 10.4,
+      "p95": 15.7,
+      "p99": 15.9,
+      "runs": 40,
+      "errors": 0
+    },
+    "requester: home dashboard": {
+      "p50": 3.1,
+      "p95": 5,
+      "p99": 6.5,
+      "runs": 40,
+      "errors": 0
+    },
+    "manager: home dashboard": {
+      "p50": 4.1,
+      "p95": 6.6,
+      "p99": 6.8,
+      "runs": 40,
+      "errors": 0
+    },
+    "technician: activity of one ticket": {
+      "p50": 2.8,
+      "p95": 3.7,
+      "p99": 3.9,
+      "runs": 40,
+      "errors": 0
+    }
+  },
+  "writes": {
+    "1 parallel updates": {
+      "p50": 2.7,
+      "p95": 4,
+      "p99": 4.6,
+      "runs": 600,
+      "errors": 0,
+      "updates": 600,
+      "seconds": 1.7,
+      "updates_per_second": 352.2
+    },
+    "10 parallel updates": {
+      "p50": 4.3,
+      "p95": 6.7,
+      "p99": 7.4,
+      "runs": 600,
+      "errors": 0,
+      "updates": 600,
+      "seconds": 0.3,
+      "updates_per_second": 1946.6
+    },
+    "25 parallel updates": {
+      "p50": 6.9,
+      "p95": 9.7,
+      "p99": 12.7,
+      "runs": 600,
+      "errors": 0,
+      "updates": 600,
+      "seconds": 0.2,
+      "updates_per_second": 2615
+    }
+  },
+  "system_log_appends": {
+    "1 parallel chained appends": {
+      "p50": 2.7,
+      "p95": 3.9,
+      "p99": 4.7,
+      "runs": 600,
+      "errors": 0,
+      "appends": 600,
+      "seconds": 1.7,
+      "appends_per_second": 352.6
+    },
+    "10 parallel chained appends": {
+      "p50": 6.8,
+      "p95": 10.8,
+      "p99": 12.3,
+      "runs": 600,
+      "errors": 0,
+      "appends": 600,
+      "seconds": 0.6,
+      "appends_per_second": 948.7
+    },
+    "25 parallel chained appends": {
+      "p50": 13.9,
+      "p95": 22.9,
+      "p99": 24.3,
+      "runs": 600,
+      "errors": 0,
+      "appends": 600,
+      "seconds": 0.6,
+      "appends_per_second": 1062.5
+    }
+  },
+  "chain_sequence_gap": 0,
+  "database_samples": [],
+  "system_log_rows": 58886,
+  "chain_broken_rows": 0,
+  "chain_rows_verified": 20000
+}

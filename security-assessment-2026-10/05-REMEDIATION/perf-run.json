@@ -1,47 +1,47 @@
 {
   "label": "run",
-  "at": "2026-10-15T11:15:30.616Z",
-  "tickets_in_audit_db": 3002,
+  "at": "2026-10-27T09:43:49.112Z",
+  "tickets_in_audit_db": 3269,
   "manager: list 1000 tickets (row security over the whole organisation)": {
-    "p50": 5.1,
-    "p95": 6.8,
-    "p99": 7.9,
+    "p50": 5,
+    "p95": 5.9,
+    "p99": 6.7,
     "runs": 40
   },
   "manager: count all tickets": {
-    "p50": 5.1,
-    "p95": 6,
-    "p99": 6.5,
+    "p50": 4.4,
+    "p95": 5.5,
+    "p99": 6.2,
     "runs": 40
   },
   "technician: list own group tickets": {
-    "p50": 6.4,
-    "p95": 7.1,
-    "p99": 7.3,
+    "p50": 6.2,
+    "p95": 6.9,
+    "p99": 9.8,
     "runs": 40
   },
   "requester: list own tickets": {
-    "p50": 5.3,
-    "p95": 6.8,
-    "p99": 7.2,
+    "p50": 6.1,
+    "p95": 6.6,
+    "p99": 6.8,
     "runs": 40
   },
-  "technician: edit a ticket (update trigger path)": {
-    "p50": 5.5,
-    "p95": 6.1,
-    "p99": 6.5,
+  "technician: open one ticket by id": {
+    "p50": 2.3,
+    "p95": 3.1,
+    "p99": 3.5,
     "runs": 40
   },
   "requester: read attachments rows of a ticket": {
-    "p50": 3.9,
-    "p95": 4.4,
-    "p99": 4.5,
+    "p50": 3,
+    "p95": 4.3,
+    "p99": 5.3,
     "runs": 40
   },
   "search: manager title search": {
-    "p50": 2.5,
-    "p95": 4,
-    "p99": 4.1,
+    "p50": 2.1,
+    "p95": 2.8,
+    "p99": 2.8,
     "runs": 40
   }
 }

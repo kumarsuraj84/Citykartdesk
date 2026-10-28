@@ -1,0 +1,181 @@
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+{"ts":"2026-10-13T13:46:51.642Z","level":"error","event":"error_sanitized","message":"Raw error intercepted at the client boundary and replaced with a safe message","route":"auth.ts#signInWithPassword","error":{"message":"Invalid login credentials","stack":"AuthApiError: Invalid login credentials\n    at handleError (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\.next-audit\\dev\\server\\chunks\\ssr\\node_modules_@supabase_auth-js_dist_module_1n0p09k._.js:936:11)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async _handleRequest (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\.next-audit\\dev\\server\\chunks\\ssr\\node_modules_@supabase_auth-js_dist_module_1n0p09k._.js:986:9)\n    at async _request (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\.next-audit\\dev\\server\\chunks\\ssr\\node_modules_@supabase_auth-js_dist_module_1n0p09k._.js:966:18)\n    at async SupabaseAuthClient.signInWithPassword (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\.next-audit\\dev\\server\\chunks\\ssr\\node_modules_@supabase_auth-js_dist_module_1n0p09k._.js:4479:23)\n    at async signInWithPassword (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\.next-audit\\dev\\server\\chunks\\ssr\\[root-of-the-server]__17ouaaw._.js:1609:39)\n    at async executeActionAndPrepareForRender (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\compiled\\next-server\\app-page-turbo.runtime.dev.js:64:5248)\n    at async D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\compiled\\next-server\\app-page-turbo.runtime.dev.js:64:1986\n    at async handleAction (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\compiled\\next-server\\app-page-turbo.runtime.dev.js:62:25687)\n    at async renderToHTMLOrFlightImpl (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\compiled\\next-server\\app-page-turbo.runtime.dev.js:69:55695)\n    at async doRender (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\.next-audit\\dev\\server\\chunks\\ssr\\node_modules_next_dist_0shc53_._.js:5152:28)\n    at async AppPageRouteModule.handleResponse (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\compiled\\next-server\\app-page-turbo.runtime.dev.js:71:66429)\n    at async handleResponse (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\.next-audit\\dev\\server\\chunks\\ssr\\node_modules_next_dist_0shc53_._.js:5463:32)\n    at async Module.handler (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\.next-audit\\dev\\server\\chunks\\ssr\\node_modules_next_dist_0shc53_._.js:5869:20)\n    at async DevServer.renderToResponseWithComponentsImpl (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\server\\base-server.js:1462:9)\n    at async DevServer.renderPageComponent (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\server\\base-server.js:1514:24)\n    at async DevServer.renderToResponseImpl (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\server\\base-server.js:1564:32)\n    at async DevServer.pipeImpl (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\server\\base-server.js:1044:25)\n    at async NextNodeServer.handleCatchallRenderRequest (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\server\\next-server.js:338:17)\n    at async DevServer.handleRequestImpl (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\server\\base-server.js:935:17)\n    at async D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\server\\dev\\next-dev-server.js:394:20\n    at async Span.traceAsyncFn (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\trace\\trace.js:164:20)\n    at async DevServer.handleRequest (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\server\\dev\\next-dev-server.js:390:24)\n    at async invokeRender (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\server\\lib\\router-server.js:266:21)\n    at async handleRequest (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\server\\lib\\router-server.js:465:24)\n    at async requestHandlerImpl (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\server\\lib\\router-server.js:514:13)\n    at async Server.requestListener (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\node_modules\\next\\dist\\server\\lib\\start-server.js:225:13)"}}

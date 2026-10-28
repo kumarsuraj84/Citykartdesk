@@ -1,0 +1,7 @@
+ ✓ tests/remediation/91-reliability.test.ts (9 tests) 193076ms
+   ✓ reliability simulations > duplicate file names are kept as separate files with separate storage keys  355ms
+   ✓ reliability simulations > an upload whose database record fails leaves no orphan file behind  944ms
+   ✓ reliability simulations > storage unavailable: the upload fails cleanly (no record, no crash), and works again once storage is back  22934ms
+   ✓ reliability simulations > API layer down: actions fail without crashing or changing anything, and everything works after it is back  164733ms
+   ✓ reliability simulations > two overlapping runs of the scheduled business-rules job fire a rule once per ticket  2298ms
+      Tests  9 passed (9)

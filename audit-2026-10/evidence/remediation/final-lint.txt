@@ -1,0 +1,39 @@
+
+> citykart-desk@0.1.0 lint
+> node node_modules/eslint/bin/eslint.js app lib components types proxy.ts
+
+
+D:\ANKUR AI PROJECTS\CitykartDesk-ZOHO Alternate\app\(app)\admin\reports\AnalyticsDashboard.tsx
+  740:5  warning  Unused eslint-disable directive (no problems were reported from 'react-hooks/exhaustive-deps')
+  751:5  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+D:\ANKUR AI PROJECTS\CitykartDesk-ZOHO Alternate\app\(app)\admin\reports\AnalyticsDashboard.tsx:751:5
+  749 |   // (e.g. technician-workload card appearing/disappearing with the data).
+  750 |   useEffect(() => {
+> 751 |     setOrder(loadSavedOrder(userId, defaultOrder))
+      |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  752 |     // eslint-disable-next-line react-hooks/exhaustive-deps
+  753 |   }, [userId, defaultOrder.join(',')])
+  754 |  react-hooks/set-state-in-effect
+
+D:\ANKUR AI PROJECTS\CitykartDesk-ZOHO Alternate\app\(app)\requests\queue\page.tsx
+  14:15  warning  'RequestStatus' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\ANKUR AI PROJECTS\CitykartDesk-ZOHO Alternate\components\projects\NewMilestonePanel.tsx
+  28:6  warning  React Hook useEffect has a missing dependency: 'handleClose'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+D:\ANKUR AI PROJECTS\CitykartDesk-ZOHO Alternate\components\projects\NewProjectPanel.tsx
+  45:6  warning  React Hook useEffect has a missing dependency: 'reset'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+D:\ANKUR AI PROJECTS\CitykartDesk-ZOHO Alternate\components\requests\RequestActionBar.tsx
+  57:10  warning  'activeTimer' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+✖ 6 problems (1 error, 5 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+

@@ -1,0 +1,133 @@
+{
+ "at": "2026-10-28T23:03:49.961Z",
+ "pass": 21,
+ "fail": 0,
+ "results": [
+  {
+   "id": "C1",
+   "ok": true,
+   "what": "every URL-valued setting resolves to loopback",
+   "detail": ""
+  },
+  {
+   "id": "C2",
+   "ok": true,
+   "what": "no setting contains a production / retired address",
+   "detail": ""
+  },
+  {
+   "id": "C3",
+   "ok": true,
+   "what": "email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)",
+   "detail": ""
+  },
+  {
+   "id": "C4",
+   "ok": true,
+   "what": "Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else",
+   "detail": "http://127.0.0.1:55421"
+  },
+  {
+   "id": "C5",
+   "ok": true,
+   "what": "app URL and cron target are localhost:33xx",
+   "detail": "http://localhost:3310 / http://localhost:3310"
+  },
+  {
+   "id": "C6",
+   "ok": true,
+   "what": "every key in .env.local is overridden by the audit env (nothing falls through to the dev file)",
+   "detail": ""
+  },
+  {
+   "id": "C7",
+   "ok": true,
+   "what": "NODE_OPTIONS preloads the egress guard in this process",
+   "detail": "set"
+  },
+  {
+   "id": "C8",
+   "ok": true,
+   "what": "every outward-facing environment variable the code reads is explicitly defined in the audit env",
+   "detail": ""
+  },
+  {
+   "id": "G1",
+   "ok": true,
+   "what": "guard refuses 9 forbidden/non-loopback targets before any socket is opened",
+   "detail": ""
+  },
+  {
+   "id": "G2",
+   "ok": true,
+   "what": "guard lets loopback targets through",
+   "detail": ""
+  },
+  {
+   "id": "G3",
+   "ok": true,
+   "what": "net.Socket#connect is patched when the guard is preloaded",
+   "detail": "patched in this process"
+  },
+  {
+   "id": "D1",
+   "ok": true,
+   "what": "audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)",
+   "detail": "supabase_db_ckdesk_audit, supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit"
+  },
+  {
+   "id": "D2",
+   "ok": true,
+   "what": "Auth (GoTrue) sends mail only to the local mail trap",
+   "detail": "supabase_inbucket_ckdesk_audit"
+  },
+  {
+   "id": "D3",
+   "ok": true,
+   "what": "Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)",
+   "detail": "file volume:supabase_storage_ckdesk_audit/_data;"
+  },
+  {
+   "id": "D4",
+   "ok": true,
+   "what": "no audit-container setting references a production / retired address",
+   "detail": ""
+  },
+  {
+   "id": "D5",
+   "ok": true,
+   "what": "the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit",
+   "detail": "11 dev containers present, not used"
+  },
+  {
+   "id": "B1",
+   "ok": true,
+   "what": "no mailbox (SMTP) settings stored in the audit database",
+   "detail": "0"
+  },
+  {
+   "id": "B2",
+   "ok": true,
+   "what": "no active WhatsApp / email intake channel in the audit database",
+   "detail": "0"
+  },
+  {
+   "id": "B3",
+   "ok": true,
+   "what": "every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin",
+   "detail": "0"
+  },
+  {
+   "id": "B4",
+   "ok": true,
+   "what": "every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets",
+   "detail": "0"
+  },
+  {
+   "id": "N1",
+   "ok": true,
+   "what": "no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10",
+   "detail": "none"
+  }
+ ]
+}

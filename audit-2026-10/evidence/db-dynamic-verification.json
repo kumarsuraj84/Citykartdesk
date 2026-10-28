@@ -1,0 +1,120 @@
+{
+ "at": "2026-10-13T10:08:53.297Z",
+ "stack": "http://127.0.0.1:55421",
+ "results": [
+  {
+   "id": "DB-01a",
+   "verdict": "EXPLOITABLE",
+   "what": "anon calls owner_delete_org (non-existent org)  — function executes without any identity",
+   "evidence": "{\"status\":200,\"json\":{\"ok\":false,\"error\":\"Organization not found\"}}"
+  },
+  {
+   "id": "DB-01b",
+   "verdict": "EXPLOITABLE",
+   "what": "anon calls owner_delete_org on an existing throwaway org",
+   "evidence": "{\"status\":200,\"json\":{\"ok\":true,\"deleted\":\"AUDIT Throwaway\"}} | org still exists: false"
+  },
+  {
+   "id": "DB-01c",
+   "verdict": "EXPLOITABLE",
+   "what": "plain role=user calls owner_delete_org",
+   "evidence": "{\"status\":200,\"json\":{\"ok\":false,\"error\":\"Organization not found\"}}"
+  },
+  {
+   "id": "DB-02a",
+   "verdict": "BLOCKED",
+   "what": "unrelated requester (staff2) downloads another request's attachment straight from Storage",
+   "evidence": "upload 200; download 400 {\"statusCode\":\"403\",\"error\":\"Unauthorize"
+  },
+  {
+   "id": "DB-02b",
+   "verdict": "BLOCKED",
+   "what": "unrelated requester lists the attachment bucket",
+   "evidence": "{\"statusCode\":\"403\",\"error\":\"Unauthorized\",\"message\":\"permission denied for table task_attachments\",\"code\":\"AccessDenied\"}"
+  },
+  {
+   "id": "DB-02c",
+   "verdict": "EXPLOITABLE",
+   "what": "unrelated requester uploads a file into another request's folder",
+   "evidence": "{\"status\":200,\"json\":{\"Key\":\"request-attachments/4c4c7afc-04c1-4cd8-a59f-4fedc50df00a/staff-planted.txt\",\"Id\":\"66713752-f480-46e7-ba7b-a70da4b5e01e\"}}"
+  },
+  {
+   "id": "DB-03a",
+   "verdict": "EXPLOITABLE",
+   "what": "technician moves their own profile into another tenant (org_id)",
+   "evidence": "200 org_id now tenant B"
+  },
+  {
+   "id": "DB-03b",
+   "verdict": "EXPLOITABLE",
+   "what": "admin promotes themselves to platform_owner through PostgREST",
+   "evidence": "200 role now platform_owner"
+  },
+  {
+   "id": "DB-03c",
+   "verdict": "EXPLOITABLE",
+   "what": "manager rewrites own employee_id / manager_id / must_reset_password",
+   "evidence": "200 {\"employee_id\":\"FORGED\",\"manager_id\":\"6da59d3f-5bea-43b9-a102-ffcdfa08d7f7\"}"
+  },
+  {
+   "id": "DB-09",
+   "verdict": "INFO",
+   "what": "a user flagged is_active=false still reads tickets with the existing token",
+   "evidence": "200 rows=0"
+  },
+  {
+   "id": "DB-09b",
+   "verdict": "EXPLOITABLE",
+   "what": "the deactivated user re-activates themselves",
+   "evidence": "{\"status\":200,\"json\":[{\"id\":\"5b4fe095-03c9-42fa-9816-b4768ac2642c\",\"full_name\":\"Audit Staff 2\",\"avatar_url\":null,\"role\":\"user\",\"is_active\":true,\"created_at\":\"20"
+  },
+  {
+   "id": "DB-04a",
+   "verdict": "EXPLOITABLE",
+   "what": "anonymous (anon key only) reads SLA escalation rules",
+   "evidence": "[{\"id\":\"ea3b99df-63c8-4db4-925e-f705c6eb23f1\"},{\"id\":\"850d67b8-f513-4f80-ae4a-f5657e1ae558\"}]"
+  },
+  {
+   "id": "DB-04b",
+   "verdict": "EXPLOITABLE",
+   "what": "a manager changes the (global, all-tenant) business hours directly",
+   "evidence": "200 is_active true -> false"
+  },
+  {
+   "id": "DB-04c",
+   "verdict": "EXPLOITABLE",
+   "what": "admin of any tenant edits the global app_settings row",
+   "evidence": "{\"status\":200,\"json\":[{\"key\":\"auto_close_days\",\"value\":\"1\"}]}"
+  },
+  {
+   "id": "DB-05",
+   "verdict": "BLOCKED",
+   "what": "manager of tenant A sends an UNFILTERED DELETE /tasks — does tenant B's task survive?",
+   "evidence": "create 201; delete 400 {\"code\":\"21000\",\"details\":null,\"hint\":null,\"message\":\"DELETE requires a WHERE clause\"}; tenant-B task survives: true"
+  },
+  {
+   "id": "DB-06a",
+   "verdict": "EXPLOITABLE",
+   "what": "anon burns ticket numbers via generate_request_no()",
+   "evidence": "\"CKSD-003223\" then \"CKSD-003224\""
+  },
+  {
+   "id": "DB-06b",
+   "verdict": "EXPLOITABLE",
+   "what": "anon runs seed_default_sla_config(org)",
+   "evidence": "{\"status\":204,\"json\":\"\"}"
+  },
+  {
+   "id": "DB-07a",
+   "verdict": "EXPLOITABLE",
+   "what": "a requester inserts a ticket directly as status=closed with a 2099 SLA deadline",
+   "evidence": "201 {\"status\":\"closed\",\"due\":\"2099-01-01T00:00:00+00:00\",\"no\":\"CKSD-003225\"}"
+  },
+  {
+   "id": "DB-07b",
+   "verdict": "EXPLOITABLE",
+   "what": "a technician rewrites a ticket number",
+   "evidence": "\"CKSD-000001\""
+  }
+ ]
+}

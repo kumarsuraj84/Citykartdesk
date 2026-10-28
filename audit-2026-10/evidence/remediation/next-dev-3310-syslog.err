@@ -1,0 +1,2234 @@
+⨯ ./lib/actions/admin/system-log.ts:63:1
+Only async functions are allowed to be exported in a "use server" file.
+  [90m61 |[0m }
+  [90m62 |[0m
+[31m[1m>[0m [90m63 |[0m [36mexport[0m [36mconst[0m [33mSYSTEM_LOG_PAGE_SIZE[0m = [35m100[0m
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m64 |[0m [36mconst[0m [33mEXPORT_LIMIT[0m = [35m50[0m_000
+  [90m65 |[0m [36mconst[0m [33mGROUP_SCAN_LIMIT[0m = [35m5000[0m
+  [90m66 |[0m [36mconst[0m [33mCOLUMNS[0m = [32m'id, created_at, category, source, severity, outcome, action, actor_id, ac...[0m
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./lib/actions/admin/system-log.ts [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./lib/actions/admin/system-log.ts [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component]
+
+
+
+./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export buildErrorBundle doesn't exist in target module
+  [90m 3 |[0m [36mimport[0m { [33mFragment[0m, useCallback, useEffect, useState, useTransition } [36mfrom[0m [32m'react'[0m
+  [90m 4 |[0m [36mimport[0m { [33mChevronDown[0m, [33mChevronRight[0m, [33mClipboardCopy[0m, [33mDownload[0m, [33mLoader2[0m, [33mRefreshCw[0m, [33mShieldChe..[0m.
+[31m[1m>[0m [90m 5 |[0m [36mimport[0m {
+  [90m   |[0m [31m[1m^^^^^^^[0m
+[31m[1m>[0m [90m 6 |[0m   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 7 |[0m   [36mtype[0m [33mIntegrityResult[0m, [36mtype[0m [33mSystemLogEntry[0m, [36mtype[0m [33mSystemLogFilters[0m,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 8 |[0m } [36mfrom[0m [32m'@/lib/actions/admin/system-log'[0m
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m 9 |[0m [36mimport[0m [36mtype[0m { [33mErrorGroup[0m } [36mfrom[0m [32m'@/lib/syslog/bundle'[0m
+  [90m10 |[0m
+  [90m11 |[0m [36mconst[0m [33mCATEGORY_STYLES[0m: [33mRecord[0m<string, string> = {
+
+The export buildErrorBundle was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx
+
+
+
+./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export buildErrorBundle doesn't exist in target module
+  [90m 3 |[0m [36mimport[0m { [33mFragment[0m, useCallback, useEffect, useState, useTransition } [36mfrom[0m [32m'react'[0m
+  [90m 4 |[0m [36mimport[0m { [33mChevronDown[0m, [33mChevronRight[0m, [33mClipboardCopy[0m, [33mDownload[0m, [33mLoader2[0m, [33mRefreshCw[0m, [33mShieldChe..[0m.
+[31m[1m>[0m [90m 5 |[0m [36mimport[0m {
+  [90m   |[0m [31m[1m^^^^^^^[0m
+[31m[1m>[0m [90m 6 |[0m   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 7 |[0m   [36mtype[0m [33mIntegrityResult[0m, [36mtype[0m [33mSystemLogEntry[0m, [36mtype[0m [33mSystemLogFilters[0m,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 8 |[0m } [36mfrom[0m [32m'@/lib/actions/admin/system-log'[0m
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m 9 |[0m [36mimport[0m [36mtype[0m { [33mErrorGroup[0m } [36mfrom[0m [32m'@/lib/syslog/bundle'[0m
+  [90m10 |[0m
+  [90m11 |[0m [36mconst[0m [33mCATEGORY_STYLES[0m: [33mRecord[0m<string, string> = {
+
+The export buildErrorBundle was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx
+
+
+
+./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export exportSystemLog doesn't exist in target module
+  [90m 3 |[0m [36mimport[0m { [33mFragment[0m, useCallback, useEffect, useState, useTransition } [36mfrom[0m [32m'react'[0m
+  [90m 4 |[0m [36mimport[0m { [33mChevronDown[0m, [33mChevronRight[0m, [33mClipboardCopy[0m, [33mDownload[0m, [33mLoader2[0m, [33mRefreshCw[0m, [33mShieldChe..[0m.
+[31m[1m>[0m [90m 5 |[0m [36mimport[0m {
+  [90m   |[0m [31m[1m^^^^^^^[0m
+[31m[1m>[0m [90m 6 |[0m   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 7 |[0m   [36mtype[0m [33mIntegrityResult[0m, [36mtype[0m [33mSystemLogEntry[0m, [36mtype[0m [33mSystemLogFilters[0m,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 8 |[0m } [36mfrom[0m [32m'@/lib/actions/admin/system-log'[0m
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m 9 |[0m [36mimport[0m [36mtype[0m { [33mErrorGroup[0m } [36mfrom[0m [32m'@/lib/syslog/bundle'[0m
+  [90m10 |[0m
+  [90m11 |[0m [36mconst[0m [33mCATEGORY_STYLES[0m: [33mRecord[0m<string, string> = {
+
+The export exportSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx
+
+
+
+./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export exportSystemLog doesn't exist in target module
+  [90m 3 |[0m [36mimport[0m { [33mFragment[0m, useCallback, useEffect, useState, useTransition } [36mfrom[0m [32m'react'[0m
+  [90m 4 |[0m [36mimport[0m { [33mChevronDown[0m, [33mChevronRight[0m, [33mClipboardCopy[0m, [33mDownload[0m, [33mLoader2[0m, [33mRefreshCw[0m, [33mShieldChe..[0m.
+[31m[1m>[0m [90m 5 |[0m [36mimport[0m {
+  [90m   |[0m [31m[1m^^^^^^^[0m
+[31m[1m>[0m [90m 6 |[0m   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 7 |[0m   [36mtype[0m [33mIntegrityResult[0m, [36mtype[0m [33mSystemLogEntry[0m, [36mtype[0m [33mSystemLogFilters[0m,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 8 |[0m } [36mfrom[0m [32m'@/lib/actions/admin/system-log'[0m
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m 9 |[0m [36mimport[0m [36mtype[0m { [33mErrorGroup[0m } [36mfrom[0m [32m'@/lib/syslog/bundle'[0m
+  [90m10 |[0m
+  [90m11 |[0m [36mconst[0m [33mCATEGORY_STYLES[0m: [33mRecord[0m<string, string> = {
+
+The export exportSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx
+
+
+
+./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listErrorGroups doesn't exist in target module
+  [90m 3 |[0m [36mimport[0m { [33mFragment[0m, useCallback, useEffect, useState, useTransition } [36mfrom[0m [32m'react'[0m
+  [90m 4 |[0m [36mimport[0m { [33mChevronDown[0m, [33mChevronRight[0m, [33mClipboardCopy[0m, [33mDownload[0m, [33mLoader2[0m, [33mRefreshCw[0m, [33mShieldChe..[0m.
+[31m[1m>[0m [90m 5 |[0m [36mimport[0m {
+  [90m   |[0m [31m[1m^^^^^^^[0m
+[31m[1m>[0m [90m 6 |[0m   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 7 |[0m   [36mtype[0m [33mIntegrityResult[0m, [36mtype[0m [33mSystemLogEntry[0m, [36mtype[0m [33mSystemLogFilters[0m,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 8 |[0m } [36mfrom[0m [32m'@/lib/actions/admin/system-log'[0m
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m 9 |[0m [36mimport[0m [36mtype[0m { [33mErrorGroup[0m } [36mfrom[0m [32m'@/lib/syslog/bundle'[0m
+  [90m10 |[0m
+  [90m11 |[0m [36mconst[0m [33mCATEGORY_STYLES[0m: [33mRecord[0m<string, string> = {
+
+The export listErrorGroups was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx
+
+
+
+./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listErrorGroups doesn't exist in target module
+  [90m 3 |[0m [36mimport[0m { [33mFragment[0m, useCallback, useEffect, useState, useTransition } [36mfrom[0m [32m'react'[0m
+  [90m 4 |[0m [36mimport[0m { [33mChevronDown[0m, [33mChevronRight[0m, [33mClipboardCopy[0m, [33mDownload[0m, [33mLoader2[0m, [33mRefreshCw[0m, [33mShieldChe..[0m.
+[31m[1m>[0m [90m 5 |[0m [36mimport[0m {
+  [90m   |[0m [31m[1m^^^^^^^[0m
+[31m[1m>[0m [90m 6 |[0m   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 7 |[0m   [36mtype[0m [33mIntegrityResult[0m, [36mtype[0m [33mSystemLogEntry[0m, [36mtype[0m [33mSystemLogFilters[0m,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 8 |[0m } [36mfrom[0m [32m'@/lib/actions/admin/system-log'[0m
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m 9 |[0m [36mimport[0m [36mtype[0m { [33mErrorGroup[0m } [36mfrom[0m [32m'@/lib/syslog/bundle'[0m
+  [90m10 |[0m
+  [90m11 |[0m [36mconst[0m [33mCATEGORY_STYLES[0m: [33mRecord[0m<string, string> = {
+
+The export listErrorGroups was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx
+
+
+
+./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listSystemLog doesn't exist in target module
+  [90m 3 |[0m [36mimport[0m { [33mFragment[0m, useCallback, useEffect, useState, useTransition } [36mfrom[0m [32m'react'[0m
+  [90m 4 |[0m [36mimport[0m { [33mChevronDown[0m, [33mChevronRight[0m, [33mClipboardCopy[0m, [33mDownload[0m, [33mLoader2[0m, [33mRefreshCw[0m, [33mShieldChe..[0m.
+[31m[1m>[0m [90m 5 |[0m [36mimport[0m {
+  [90m   |[0m [31m[1m^^^^^^^[0m
+[31m[1m>[0m [90m 6 |[0m   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 7 |[0m   [36mtype[0m [33mIntegrityResult[0m, [36mtype[0m [33mSystemLogEntry[0m, [36mtype[0m [33mSystemLogFilters[0m,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 8 |[0m } [36mfrom[0m [32m'@/lib/actions/admin/system-log'[0m
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m 9 |[0m [36mimport[0m [36mtype[0m { [33mErrorGroup[0m } [36mfrom[0m [32m'@/lib/syslog/bundle'[0m
+  [90m10 |[0m
+  [90m11 |[0m [36mconst[0m [33mCATEGORY_STYLES[0m: [33mRecord[0m<string, string> = {
+
+The export listSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx
+
+
+
+./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listSystemLog doesn't exist in target module
+  [90m 3 |[0m [36mimport[0m { [33mFragment[0m, useCallback, useEffect, useState, useTransition } [36mfrom[0m [32m'react'[0m
+  [90m 4 |[0m [36mimport[0m { [33mChevronDown[0m, [33mChevronRight[0m, [33mClipboardCopy[0m, [33mDownload[0m, [33mLoader2[0m, [33mRefreshCw[0m, [33mShieldChe..[0m.
+[31m[1m>[0m [90m 5 |[0m [36mimport[0m {
+  [90m   |[0m [31m[1m^^^^^^^[0m
+[31m[1m>[0m [90m 6 |[0m   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 7 |[0m   [36mtype[0m [33mIntegrityResult[0m, [36mtype[0m [33mSystemLogEntry[0m, [36mtype[0m [33mSystemLogFilters[0m,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 8 |[0m } [36mfrom[0m [32m'@/lib/actions/admin/system-log'[0m
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m 9 |[0m [36mimport[0m [36mtype[0m { [33mErrorGroup[0m } [36mfrom[0m [32m'@/lib/syslog/bundle'[0m
+  [90m10 |[0m
+  [90m11 |[0m [36mconst[0m [33mCATEGORY_STYLES[0m: [33mRecord[0m<string, string> = {
+
+The export listSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx
+
+
+
+./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export verifyLogIntegrity doesn't exist in target module
+  [90m 3 |[0m [36mimport[0m { [33mFragment[0m, useCallback, useEffect, useState, useTransition } [36mfrom[0m [32m'react'[0m
+  [90m 4 |[0m [36mimport[0m { [33mChevronDown[0m, [33mChevronRight[0m, [33mClipboardCopy[0m, [33mDownload[0m, [33mLoader2[0m, [33mRefreshCw[0m, [33mShieldChe..[0m.
+[31m[1m>[0m [90m 5 |[0m [36mimport[0m {
+  [90m   |[0m [31m[1m^^^^^^^[0m
+[31m[1m>[0m [90m 6 |[0m   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 7 |[0m   [36mtype[0m [33mIntegrityResult[0m, [36mtype[0m [33mSystemLogEntry[0m, [36mtype[0m [33mSystemLogFilters[0m,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 8 |[0m } [36mfrom[0m [32m'@/lib/actions/admin/system-log'[0m
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m 9 |[0m [36mimport[0m [36mtype[0m { [33mErrorGroup[0m } [36mfrom[0m [32m'@/lib/syslog/bundle'[0m
+  [90m10 |[0m
+  [90m11 |[0m [36mconst[0m [33mCATEGORY_STYLES[0m: [33mRecord[0m<string, string> = {
+
+The export verifyLogIntegrity was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx
+
+
+
+./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export verifyLogIntegrity doesn't exist in target module
+  [90m 3 |[0m [36mimport[0m { [33mFragment[0m, useCallback, useEffect, useState, useTransition } [36mfrom[0m [32m'react'[0m
+  [90m 4 |[0m [36mimport[0m { [33mChevronDown[0m, [33mChevronRight[0m, [33mClipboardCopy[0m, [33mDownload[0m, [33mLoader2[0m, [33mRefreshCw[0m, [33mShieldChe..[0m.
+[31m[1m>[0m [90m 5 |[0m [36mimport[0m {
+  [90m   |[0m [31m[1m^^^^^^^[0m
+[31m[1m>[0m [90m 6 |[0m   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 7 |[0m   [36mtype[0m [33mIntegrityResult[0m, [36mtype[0m [33mSystemLogEntry[0m, [36mtype[0m [33mSystemLogFilters[0m,
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[31m[1m>[0m [90m 8 |[0m } [36mfrom[0m [32m'@/lib/actions/admin/system-log'[0m
+  [90m   |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m 9 |[0m [36mimport[0m [36mtype[0m { [33mErrorGroup[0m } [36mfrom[0m [32m'@/lib/syslog/bundle'[0m
+  [90m10 |[0m
+  [90m11 |[0m [36mconst[0m [33mCATEGORY_STYLES[0m: [33mRecord[0m<string, string> = {
+
+The export verifyLogIntegrity was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx
+
+
+[browser] Uncaught Error: ./lib/actions/admin/system-log.ts:63:1
+Only async functions are allowed to be exported in a "use server" file.
+  61 | }
+  62 |
+> 63 | export const SYSTEM_LOG_PAGE_SIZE = 100
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  64 | const EXPORT_LIMIT = 50_000
+  65 | const GROUP_SCAN_LIMIT = 5000
+  66 | const COLUMNS = 'id, created_at, category, source, severity, outcome, action, actor_id, ac...
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./lib/actions/admin/system-log.ts [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./lib/actions/admin/system-log.ts [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component]
+
+
+    at <unknown> (Error: ./lib/actions/admin/system-log.ts:63:1)
+    at <unknown> (Error: (./lib/actions/admin/system-log.ts:63:1)
+[browser] ./lib/actions/admin/system-log.ts:63:1
+Only async functions are allowed to be exported in a "use server" file.
+  61 | }
+  62 |
+> 63 | export const SYSTEM_LOG_PAGE_SIZE = 100
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  64 | const EXPORT_LIMIT = 50_000
+  65 | const GROUP_SCAN_LIMIT = 5000
+  66 | const COLUMNS = 'id, created_at, category, source, severity, outcome, action, actor_id, ac...
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./lib/actions/admin/system-log.ts [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./lib/actions/admin/system-log.ts [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component] 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export buildErrorBundle doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export buildErrorBundle was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export buildErrorBundle doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export buildErrorBundle was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export exportSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export exportSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export exportSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export exportSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listErrorGroups doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listErrorGroups was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listErrorGroups doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listErrorGroups was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export verifyLogIntegrity doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export verifyLogIntegrity was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export verifyLogIntegrity doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export verifyLogIntegrity was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./lib/actions/admin/system-log.ts:63:1
+Only async functions are allowed to be exported in a "use server" file.
+  61 | }
+  62 |
+> 63 | export const SYSTEM_LOG_PAGE_SIZE = 100
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  64 | const EXPORT_LIMIT = 50_000
+  65 | const GROUP_SCAN_LIMIT = 5000
+  66 | const COLUMNS = 'id, created_at, category, source, severity, outcome, action, actor_id, ac...
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./lib/actions/admin/system-log.ts [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./lib/actions/admin/system-log.ts [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component] 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export buildErrorBundle doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export buildErrorBundle was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export buildErrorBundle doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export buildErrorBundle was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export exportSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export exportSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export exportSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export exportSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listErrorGroups doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listErrorGroups was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listErrorGroups doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listErrorGroups was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export verifyLogIntegrity doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export verifyLogIntegrity was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export verifyLogIntegrity doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export verifyLogIntegrity was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./lib/actions/admin/system-log.ts:63:1
+Only async functions are allowed to be exported in a "use server" file.
+  61 | }
+  62 |
+> 63 | export const SYSTEM_LOG_PAGE_SIZE = 100
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  64 | const EXPORT_LIMIT = 50_000
+  65 | const GROUP_SCAN_LIMIT = 5000
+  66 | const COLUMNS = 'id, created_at, category, source, severity, outcome, action, actor_id, ac...
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./lib/actions/admin/system-log.ts [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./lib/actions/admin/system-log.ts [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component] 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export buildErrorBundle doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export buildErrorBundle was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export buildErrorBundle doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export buildErrorBundle was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export exportSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export exportSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export exportSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export exportSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listErrorGroups doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listErrorGroups was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listErrorGroups doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listErrorGroups was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export verifyLogIntegrity doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export verifyLogIntegrity was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export verifyLogIntegrity doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export verifyLogIntegrity was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./lib/actions/admin/system-log.ts:63:1
+Only async functions are allowed to be exported in a "use server" file.
+  61 | }
+  62 |
+> 63 | export const SYSTEM_LOG_PAGE_SIZE = 100
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  64 | const EXPORT_LIMIT = 50_000
+  65 | const GROUP_SCAN_LIMIT = 5000
+  66 | const COLUMNS = 'id, created_at, category, source, severity, outcome, action, actor_id, ac...
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./lib/actions/admin/system-log.ts [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./lib/actions/admin/system-log.ts [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component] 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export buildErrorBundle doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export buildErrorBundle was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export buildErrorBundle doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export buildErrorBundle was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export exportSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export exportSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export exportSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export exportSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listErrorGroups doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listErrorGroups was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listErrorGroups doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listErrorGroups was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export verifyLogIntegrity doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export verifyLogIntegrity was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export verifyLogIntegrity doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export verifyLogIntegrity was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./lib/actions/admin/system-log.ts:63:1
+Only async functions are allowed to be exported in a "use server" file.
+  61 | }
+  62 |
+> 63 | export const SYSTEM_LOG_PAGE_SIZE = 100
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  64 | const EXPORT_LIMIT = 50_000
+  65 | const GROUP_SCAN_LIMIT = 5000
+  66 | const COLUMNS = 'id, created_at, category, source, severity, outcome, action, actor_id, ac...
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./lib/actions/admin/system-log.ts [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./lib/actions/admin/system-log.ts [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component] 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export buildErrorBundle doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export buildErrorBundle was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export buildErrorBundle doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export buildErrorBundle was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export exportSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export exportSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export exportSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export exportSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listErrorGroups doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listErrorGroups was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listErrorGroups doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listErrorGroups was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export verifyLogIntegrity doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export verifyLogIntegrity was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export verifyLogIntegrity doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export verifyLogIntegrity was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./lib/actions/admin/system-log.ts:63:1
+Only async functions are allowed to be exported in a "use server" file.
+  61 | }
+  62 |
+> 63 | export const SYSTEM_LOG_PAGE_SIZE = 100
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  64 | const EXPORT_LIMIT = 50_000
+  65 | const GROUP_SCAN_LIMIT = 5000
+  66 | const COLUMNS = 'id, created_at, category, source, severity, outcome, action, actor_id, ac...
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./lib/actions/admin/system-log.ts [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component Browser]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./lib/actions/admin/system-log.ts [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Client Component SSR]
+    ./app/(app)/admin/system-log/SystemLogClient.tsx [Server Component]
+    ./app/(app)/admin/system-log/page.tsx [Server Component] 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export buildErrorBundle doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export buildErrorBundle was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export buildErrorBundle doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export buildErrorBundle was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export exportSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export exportSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export exportSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export exportSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listErrorGroups doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listErrorGroups was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listErrorGroups doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listErrorGroups was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export listSystemLog doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export listSystemLog was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export verifyLogIntegrity doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export verifyLogIntegrity was not found in module [project]/lib/actions/admin/system-log.ts [app-client] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+[browser] ./app/(app)/admin/system-log/SystemLogClient.tsx:5:1
+Export verifyLogIntegrity doesn't exist in target module
+   3 | import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
+   4 | import { ChevronDown, ChevronRight, ClipboardCopy, Download, Loader2, RefreshCw, ShieldChe...
+>  5 | import {
+     | ^^^^^^^
+>  6 |   buildErrorBundle, exportSystemLog, listErrorGroups, listSystemLog, verifyLogIntegrity,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   type IntegrityResult, type SystemLogEntry, type SystemLogFilters,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/actions/admin/system-log'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import type { ErrorGroup } from '@/lib/syslog/bundle'
+  10 |
+  11 | const CATEGORY_STYLES: Record<string, string> = {
+
+The export verifyLogIntegrity was not found in module [project]/lib/actions/admin/system-log.ts [app-ssr] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./app/(app)/admin/system-log/SystemLogClient.tsx
+    ./app/(app)/admin/system-log/page.tsx 
+    at handleErrors (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+    at processMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2828:28)
+    at <unknown> (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2680:13)
+    at WebSocket.handleMessage (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2325:17) (file://D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/.next-audit/dev/static/chunks/node_modules_next_dist_client_16lnmlo._.js:2774:21)
+⚠ Fast Refresh had to perform a full reload when ./node_modules/next/dist/client/image-component.js changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⨯ Error: Could not load the signed-in profile
+    at <unknown> (lib\queries\profiles.ts:60:9)
+    at async GET (app\api\notifications\new\route.ts:11:19)
+  58 |   const { recordEvents } = await import('@/lib/events/record')
+  59 |   await recordEvents([{ kind: 'server_error', message: 'Could not load the signed-in profi...
+> 60 |   throw new Error('Could not load the signed-in profile')
+     |         ^
+  61 | })
+  62 |
+  63 | export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
+⚠ Fast Refresh had to perform a full reload when ./node_modules/next/dist/client/image-component.js changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload

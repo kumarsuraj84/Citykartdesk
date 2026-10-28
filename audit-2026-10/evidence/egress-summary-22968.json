@@ -1,0 +1,9 @@
+{
+ "pid": 22968,
+ "argv": [
+  "C:\\Users\\User2\\AppData\\Local\\Temp\\claude\\D--ANKUR-AI-PROJECTS-CitykartDesk-ZOHO-Alternate\\b1171928-38ee-4239-9671-0c883722e31b\\scratchpad\\count-approvals.mjs"
+ ],
+ "loopbackConnects": {
+  "127.0.0.1:55421": 2
+ }
+}

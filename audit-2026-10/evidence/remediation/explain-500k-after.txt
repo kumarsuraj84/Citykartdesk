@@ -1,0 +1,10 @@
+=== manager org-wide recent 25 (no count) ===
+ Execution Time: 1.280 ms
+=== manager count exact ===
+ Execution Time: 79.628 ms
+=== technician queue (team filter, open statuses, order due) ===
+ Execution Time: 0.625 ms
+=== technician count exact ===
+ Execution Time: 25.022 ms
+=== same technician query as service role (RLS bypassed) for comparison ===
+ Execution Time: 1.412 ms

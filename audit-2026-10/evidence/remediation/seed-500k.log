@@ -1,0 +1,16 @@
+SELECT 5
+SELECT 1
+SELECT 13
+SELECT 1
+SELECT 1
+INSERT 0 497000
+ANALYZE
+ requests_total 
+----------------
+         500000
+(1 row)
+
+
+real	25m56.854s
+user	0m0.045s
+sys	0m0.061s

@@ -1,0 +1,109 @@
+{
+ "meta": {
+  "label": "smoke",
+  "at": "2026-10-13T10:34:03.035Z",
+  "stack": "http://127.0.0.1:55421",
+  "tickets": 100000,
+  "users": 100,
+  "thinkMs": 1000,
+  "holdS": 8,
+  "rampS": 2
+ },
+ "stages": [
+  {
+   "vus": 20,
+   "seconds": 10,
+   "requests": 67,
+   "rps": 6.7,
+   "errorRate": 7.46,
+   "p50": 24.4,
+   "p95": 3529.1,
+   "p99": 8021.5,
+   "max": 8021.5,
+   "peaks": {
+    "cpu": {
+     "db": 379.54,
+     "rest": 0.13,
+     "kong": 0.05,
+     "auth": 0.01
+    },
+    "conns": 22,
+    "lockWaits": 0,
+    "mem": {
+     "db": "287.6MiB / 62.68GiB",
+     "rest": "187.9MiB / 62.68GiB",
+     "kong": "174.9MiB / 62.68GiB",
+     "auth": "19.52MiB / 62.68GiB"
+    }
+   },
+   "per": {
+    "home dashboard RPC": {
+     "n": 15,
+     "err": 0,
+     "codes": {},
+     "p50": 9,
+     "p95": 25.3,
+     "p99": 25.3
+    },
+    "ticket detail (joins)": {
+     "n": 29,
+     "err": 0,
+     "codes": {},
+     "p50": 21.5,
+     "p95": 36.7,
+     "p99": 39.3
+    },
+    "add comment (insert)": {
+     "n": 3,
+     "err": 2,
+     "codes": {
+      "403": 2
+     },
+     "p50": 12,
+     "p95": 12.6,
+     "p99": 12.6
+    },
+    "technician queue (open, count exact)": {
+     "n": 17,
+     "err": 0,
+     "codes": {},
+     "p50": 1559.5,
+     "p95": 3529.1,
+     "p99": 3529.1
+    },
+    "manager: org-wide recent (25)": {
+     "n": 3,
+     "err": 3,
+     "codes": {
+      "500": 3
+     },
+     "p50": 8019.8,
+     "p95": 8021.5,
+     "p99": 8021.5
+    }
+   }
+  }
+ ],
+ "bursts": [
+  {
+   "burst": 200,
+   "wallMs": 9521,
+   "rps": 21,
+   "errorRate": 2,
+   "p50": 600.3,
+   "p95": 1658.4,
+   "p99": 8033,
+   "max": 9514.2
+  },
+  {
+   "burst": 50,
+   "wallMs": 8011,
+   "rps": 6.2,
+   "errorRate": 4,
+   "p50": 70.5,
+   "p95": 1827.1,
+   "p99": 8009.9,
+   "max": 8009.9
+  }
+ ]
+}

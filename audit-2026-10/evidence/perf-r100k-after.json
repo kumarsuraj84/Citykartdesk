@@ -1,0 +1,305 @@
+{
+ "meta": {
+  "label": "r100k-after",
+  "at": "2026-10-13T11:49:06.138Z",
+  "stack": "http://127.0.0.1:55421",
+  "tickets": 100141,
+  "users": 100,
+  "thinkMs": 1000,
+  "holdS": 25,
+  "rampS": 5
+ },
+ "stages": [
+  {
+   "vus": 50,
+   "seconds": 30,
+   "requests": 899,
+   "rps": 30,
+   "errorRate": 0,
+   "p50": 6.2,
+   "p95": 31.1,
+   "p99": 39.6,
+   "max": 47.5,
+   "peaks": {
+    "cpu": {
+     "db": 0.18,
+     "rest": 0.31,
+     "kong": 0.01,
+     "auth": 1.62
+    },
+    "conns": 22,
+    "lockWaits": 0,
+    "mem": {
+     "db": "575.8MiB / 62.68GiB",
+     "rest": "225.3MiB / 62.68GiB",
+     "kong": "182.1MiB / 62.68GiB",
+     "auth": "21.88MiB / 62.68GiB"
+    }
+   },
+   "per": {
+    "ticket detail (joins)": {
+     "n": 359,
+     "err": 0,
+     "codes": {},
+     "p50": 6.3,
+     "p95": 31.1,
+     "p99": 34.8
+    },
+    "add comment (insert)": {
+     "n": 40,
+     "err": 0,
+     "codes": {},
+     "p50": 5.9,
+     "p95": 28.9,
+     "p99": 31.1
+    },
+    "technician queue (open, count exact)": {
+     "n": 112,
+     "err": 0,
+     "codes": {},
+     "p50": 8.8,
+     "p95": 33.7,
+     "p99": 35.1
+    },
+    "home dashboard RPC": {
+     "n": 150,
+     "err": 0,
+     "codes": {},
+     "p50": 5.1,
+     "p95": 30.2,
+     "p99": 39.2
+    },
+    "create ticket (insert)": {
+     "n": 35,
+     "err": 0,
+     "codes": {},
+     "p50": 5.2,
+     "p95": 31.1,
+     "p99": 31.8
+    },
+    "requester: my tickets (25)": {
+     "n": 192,
+     "err": 0,
+     "codes": {},
+     "p50": 3.7,
+     "p95": 28.5,
+     "p99": 41.7
+    },
+    "manager: org-wide recent (25)": {
+     "n": 11,
+     "err": 0,
+     "codes": {},
+     "p50": 20.6,
+     "p95": 47.5,
+     "p99": 47.5
+    }
+   }
+  },
+  {
+   "vus": 200,
+   "seconds": 30,
+   "requests": 3294,
+   "rps": 109.8,
+   "errorRate": 0,
+   "p50": 5.5,
+   "p95": 138.8,
+   "p99": 221.2,
+   "max": 2879.8,
+   "peaks": {
+    "cpu": {
+     "db": 0.08,
+     "rest": 0.56,
+     "kong": 5.68,
+     "auth": 1.69
+    },
+    "conns": 22,
+    "lockWaits": 0,
+    "mem": {
+     "db": "575.9MiB / 62.68GiB",
+     "rest": "225.8MiB / 62.68GiB",
+     "kong": "183.4MiB / 62.68GiB",
+     "auth": "21.71MiB / 62.68GiB"
+    }
+   },
+   "per": {
+    "manager: org-wide recent (25)": {
+     "n": 35,
+     "err": 0,
+     "codes": {},
+     "p50": 19.2,
+     "p95": 132.5,
+     "p99": 177.8
+    },
+    "ticket detail (joins)": {
+     "n": 1223,
+     "err": 0,
+     "codes": {},
+     "p50": 6,
+     "p95": 134.1,
+     "p99": 224.3
+    },
+    "home dashboard RPC": {
+     "n": 456,
+     "err": 0,
+     "codes": {},
+     "p50": 4.2,
+     "p95": 135.1,
+     "p99": 221.2
+    },
+    "technician queue (open, count exact)": {
+     "n": 235,
+     "err": 0,
+     "codes": {},
+     "p50": 7.7,
+     "p95": 137.2,
+     "p99": 223.6
+    },
+    "requester: my tickets (25)": {
+     "n": 1090,
+     "err": 0,
+     "codes": {},
+     "p50": 3.5,
+     "p95": 136.5,
+     "p99": 219.2
+    },
+    "create ticket (insert)": {
+     "n": 189,
+     "err": 0,
+     "codes": {},
+     "p50": 5.7,
+     "p95": 173.9,
+     "p99": 211.8
+    },
+    "add comment (insert)": {
+     "n": 66,
+     "err": 0,
+     "codes": {},
+     "p50": 6.9,
+     "p95": 210.9,
+     "p99": 226.8
+    }
+   }
+  },
+  {
+   "vus": 500,
+   "seconds": 30,
+   "requests": 8387,
+   "rps": 279.6,
+   "errorRate": 4.89,
+   "p50": 4.8,
+   "p95": 235.1,
+   "p99": 389.5,
+   "max": 2858.5,
+   "peaks": {
+    "cpu": {
+     "db": 2.22,
+     "rest": 0.75,
+     "kong": 0.01,
+     "auth": 1.82
+    },
+    "conns": 22,
+    "lockWaits": 0,
+    "mem": {
+     "db": "576.4MiB / 62.68GiB",
+     "rest": "227.6MiB / 62.68GiB",
+     "kong": "184.1MiB / 62.68GiB",
+     "auth": "21.7MiB / 62.68GiB"
+    }
+   },
+   "per": {
+    "manager: org-wide recent (25)": {
+     "n": 77,
+     "err": 3,
+     "codes": {
+      "-1": 3
+     },
+     "p50": 19.5,
+     "p95": 258.8,
+     "p99": 376.1
+    },
+    "ticket detail (joins)": {
+     "n": 3081,
+     "err": 167,
+     "codes": {
+      "-1": 167
+     },
+     "p50": 5.6,
+     "p95": 239.2,
+     "p99": 394.7
+    },
+    "home dashboard RPC": {
+     "n": 1293,
+     "err": 55,
+     "codes": {
+      "-1": 55
+     },
+     "p50": 3.8,
+     "p95": 212.2,
+     "p99": 351.1
+    },
+    "add comment (insert)": {
+     "n": 196,
+     "err": 8,
+     "codes": {
+      "-1": 8
+     },
+     "p50": 4.3,
+     "p95": 242.3,
+     "p99": 441
+    },
+    "technician queue (open, count exact)": {
+     "n": 586,
+     "err": 30,
+     "codes": {
+      "-1": 30
+     },
+     "p50": 7.6,
+     "p95": 241.4,
+     "p99": 419.4
+    },
+    "requester: my tickets (25)": {
+     "n": 2686,
+     "err": 116,
+     "codes": {
+      "-1": 116
+     },
+     "p50": 3.1,
+     "p95": 233,
+     "p99": 389.3
+    },
+    "create ticket (insert)": {
+     "n": 468,
+     "err": 31,
+     "codes": {
+      "-1": 31
+     },
+     "p50": 4.1,
+     "p95": 240.8,
+     "p99": 407.2
+    }
+   }
+  }
+ ],
+ "bursts": [
+  {
+   "burst": 200,
+   "wallMs": 162,
+   "rps": 1234.7,
+   "errorRate": 0,
+   "p50": 111.5,
+   "p95": 156.2,
+   "p99": 159.2,
+   "max": 159.9
+  },
+  {
+   "burst": 1000,
+   "wallMs": 611,
+   "rps": 1637.2,
+   "errorRate": 53.9,
+   "p50": 277.8,
+   "p95": 515.8,
+   "p99": 550.1,
+   "max": 564.5
+  }
+ ]
+}

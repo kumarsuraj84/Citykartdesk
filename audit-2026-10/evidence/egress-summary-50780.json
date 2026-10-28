@@ -1,0 +1,9 @@
+{
+ "pid": 50780,
+ "argv": [
+  "D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\qa-release-candidate-2026-10\\tooling\\egress-proof.cjs"
+ ],
+ "loopbackConnects": {
+  "127.0.0.1:55421": 1
+ }
+}

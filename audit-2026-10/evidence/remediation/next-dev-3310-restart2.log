@@ -1,0 +1,46 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit, supabase_db_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [only the user's own browser: chrome.exe(pid 32748) 182.72.84.10:3210 ESTABLISHED - NOT the audit; the audit never uses this browser]
+
+ISOLATION GATE: PASSED  (21/21)
+▲ Next.js 16.2.9 (Turbopack)
+- Local:         http://localhost:3310
+- Network:       http://10.0.0.47:3310
+- Environments: .env.local
+✓ Ready in 396ms
+- Experiments (use with caution):
+  · serverActions
+  ⨯ serverComponentsHmrCache
+  · staleTimes
+
+ GET /api/notifications/new?since=2026-10-13T14%3A07%3A54.458Z 200 in 614ms (next.js: 300ms, proxy.ts: 275ms, application-code: 38ms)
+ GET /api/health 200 in 46ms (next.js: 28ms, proxy.ts: 2ms, application-code: 16ms)
+○ Compiling /api/notifications/new ...
+ GET /home 200 in 5.8s (next.js: 4.5s, proxy.ts: 266ms, application-code: 994ms)
+ GET /home 200 in 146ms (next.js: 3ms, proxy.ts: 7ms, application-code: 136ms)
+ GET /api/notifications/new?since=2026-10-13T14%3A08%3A07.424Z 200 in 57ms (next.js: 1671µs, proxy.ts: 3ms, application-code: 52ms)
+ POST /api/events 200 in 43ms (next.js: 17ms, proxy.ts: 10ms, application-code: 17ms)
+ GET /api/notifications/new?since=2026-10-13T14%3A08%3A13.447Z 200 in 36ms (next.js: 1709µs, proxy.ts: 3ms, application-code: 31ms)
+ GET /api/notifications/new?since=2026-10-13T14%3A08%3A15.428Z 200 in 29ms (next.js: 2ms, proxy.ts: 4ms, application-code: 23ms)
+ GET /api/notifications/new?since=2026-10-13T14%3A08%3A17.422Z 200 in 35ms (next.js: 3ms, proxy.ts: 4ms, application-code: 28ms)
+ GET /api/notifications/new?since=2026-10-13T14%3A08%3A19.438Z 200 in 56ms (next.js: 6ms, proxy.ts: 9ms, application-code: 41ms)
+ GET /api/notifications/new?since=2026-10-13T14%3A08%3A21.457Z 200 in 36ms (next.js: 2ms, proxy.ts: 4ms, application-code: 30ms)
+[?25h
