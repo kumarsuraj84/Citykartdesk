@@ -20,7 +20,7 @@
  * any other mandatory field.
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
-import { getAdmin, createTestUser, type TestUser } from '../setup/fixtures-d03'
+import { getAdmin, createTestUser, ensureTestLocation, type TestUser } from '../setup/fixtures-d03'
 import { createTestDepartment, deleteTestDepartment } from '../setup/test-department'
 
 // lib/sla/business-hours.ts (via resolveSlaDeadlines(), called inside
@@ -131,6 +131,10 @@ async function setup(): Promise<Fx> {
   const { error: tagError } = await admin.from('service_sub_category_tags').insert({ service_id: service.id, sub_category_id: subCategory.id })
   if (tagError) throw new Error(`[stage3.1 e2e fixtures] tag: ${tagError.message}`)
 
+  // the service shows only to people at a Location ticked on it; every test user sits in the permanent test Location
+  const { error: locationTagError } = await admin.from('service_location_tags').insert({ service_id: service.id, location_id: await ensureTestLocation(EXISTING_ORG_ID) })
+  if (locationTagError) throw new Error(`[stage3.1 e2e fixtures] location tag: ${locationTagError.message}`)
+
   const requester = await createTestUser('stage3-1-e2e-requester', 'Stage3.1 E2E Requester')
 
   return {
@@ -171,7 +175,7 @@ describe('Stage 3.1, Step 17 — corrected description/title contract, end-to-en
     mockedCreateClient.mockResolvedValue(admin as never)
 
     // Step 2/3: catalog + search.
-    const services = await listQuestionnaireServices({ client: admin, orgId: fx.orgId })
+    const services = await listQuestionnaireServices({ client: admin, orgId: fx.orgId, requesterLocationId: await ensureTestLocation(fx.orgId) })
     const service = services.find((s) => s.id === fx.serviceId)
     expect(service).toBeTruthy()
 

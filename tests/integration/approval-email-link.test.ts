@@ -40,7 +40,7 @@ describe('approve / reject from the e-mail link', () => {
 
   beforeAll(async () => {
     process.env.NEXT_PUBLIC_APP_URL = 'http://app.test'
-    process.env.CSAT_LINK_SECRET = 'approval-link-test-secret'
+    process.env.APPROVAL_LINK_SECRET = 'approval-link-test-secret'
     fx = await setupD03Fixtures()
   }, 90_000)
   afterAll(async () => { await fx?.cleanup() }, 90_000)

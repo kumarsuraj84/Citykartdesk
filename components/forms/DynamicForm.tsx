@@ -32,6 +32,8 @@ interface DynamicFormProps {
   /** The Active AC numbers of the signed-in user's store (from the AC master sheet), for a dropdown whose options come from the sheet.
    *  undefined = the user has no store, so the typed list of the field is used as it always was. */
   acUnitOptions?: { value: string; label: string }[]
+  /** For every category of an active machine program: the machines of the requester's store (empty = none listed). A category not listed has no machine box. Undefined = no store, the typed list is used. */
+  programMachineOptions?: Record<string, { value: string; label: string }[]>
 }
 
 /** Imperative handle so an external "Recently Used"/"Frequent Issues"
@@ -162,6 +164,20 @@ function withAcUnitOptions(sections: FormSection[], opts: { value: string; label
   }))
 }
 
+/** A dropdown marked "machines of a Vendor Program": for a category of such a program it lists the store's machines (compulsory when there are some); for any other category it is not shown. */
+export function withProgramMachineOptions(sections: FormSection[], byCategory: Record<string, { value: string; label: string }[]> | undefined, categoryId: string | null | undefined): FormSection[] {
+  if (!byCategory) return sections
+  const opts = categoryId ? byCategory[categoryId] : undefined
+  return sections.map((s) => ({
+    ...s,
+    fields: s.fields.flatMap((f) => {
+      if (f.options_source !== 'program_machines') return [f]
+      if (!opts) return []
+      return [{ ...f, options: opts, required: opts.length > 0, help_text: opts.length === 0 ? 'No machine is listed for your store in the sheet of this service line. Please contact the admin team.' : f.help_text }]
+    }),
+  }))
+}
+
 function flattenSections(sections: FormSection[]): FormField[] {
   return [...sections]
     .sort((a, b) => a.order - b.order)
@@ -257,7 +273,7 @@ export function SectionBlock({ section, values, errors, onChange, requesterConte
 // ── DynamicForm ───────────────────────────────────────────────────────────────
 
 export const DynamicForm = forwardRef<DynamicFormHandle, DynamicFormProps>(function DynamicForm(
-  { service, canBookOnBehalf, allowedSubCategories, currentUserStoreAddress, acUnitOptions },
+  { service, canBookOnBehalf, allowedSubCategories, currentUserStoreAddress, acUnitOptions, programMachineOptions },
   ref
 ) {
   const router = useRouter()
@@ -300,7 +316,7 @@ export const DynamicForm = forwardRef<DynamicFormHandle, DynamicFormProps>(funct
   // from values/validation/rendering all at once.
   const sectionsForAnyCategory = filterFieldsForRequester(resolveServiceFormSections(service))
   // A field limited to certain categories (for example Qty for fixtures) appears only after one of them is chosen, and is then checked like any other field.
-  const sections = withAcUnitOptions(filterSectionsForCategory(sectionsForAnyCategory, categoryId), acUnitOptions)
+  const sections = withProgramMachineOptions(withAcUnitOptions(filterSectionsForCategory(sectionsForAnyCategory, categoryId), acUnitOptions), programMachineOptions, categoryId)
   const allFields: FormField[] = flattenSections(sections)
   const everyField: FormField[] = flattenSections(sectionsForAnyCategory)
 

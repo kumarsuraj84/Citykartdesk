@@ -16,7 +16,7 @@
  * set PRESERVE_UAT_FIXTURES=true to leave them in place for manual review.
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
-import { getAdmin, createTestUser, type TestUser } from '../setup/fixtures-d03'
+import { getAdmin, createTestUser, ensureTestLocation, type TestUser } from '../setup/fixtures-d03'
 import { createTestDepartment, deleteTestDepartment } from '../setup/test-department'
 import {
   setupWhatsAppChannelFixture, signPayload, buildTextMessagePayload, buildInteractivePayload,
@@ -183,6 +183,9 @@ describe('STAGE 7 UAT (Agent 7a) — Step 13 attachments + UAT Fixture — Field
     }).select('id').single()
     if (serviceErr || !service) throw new Error(`service: ${serviceErr?.message}`)
     serviceId = service.id
+    // the service shows only to people at a Location ticked on it; every test user sits in the permanent test Location
+    const { error: locTagErr } = await admin.from('service_location_tags').insert({ service_id: service.id, location_id: await ensureTestLocation(ORG_ID) })
+    if (locTagErr) throw new Error(`location tag: ${locTagErr.message}`)
 
     const { data: category, error: catErr } = await admin.from('service_categories').insert({
       name: `UAT7a Fixture Category (${RUN_TAG})`, slug: `uat7a-fixture-category-${RUN_TAG}`, org_id: ORG_ID,

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
 import { cn, formatDateTime } from '@/lib/utils'
 import {
-  deleteProgram, resetProgramTemplate, saveProgramBasics, moveCategoriesToProgram, saveProgramApprovers, saveProgramCategories, saveProgramDetailsTemplate, saveProgramPortalOptions, saveProgramResolutions, saveProgramSheet, saveProgramTemplate, sendProgramTestMail, setProgramActive, setProgramLevel, updateProgramNow,
+  deleteProgram, resetProgramTemplate, saveProgramBasics, moveCategoriesToProgram, saveProgramApprovers, saveProgramCategories, saveProgramDetailsTemplate, saveProgramPortalOptions, saveProgramPmsSheet, saveProgramResolutions, saveProgramSheet, saveProgramTemplate, sendProgramTestMail, setProgramActive, setProgramLevel, updateProgramNow,
 } from '@/lib/actions/admin/programs'
 import { allowedFields, DEFAULT_PROGRAM_BODY, PROGRAM_SAMPLE_VALUES, rowFieldNames } from '@/lib/programs/mail'
 import { DEFAULT_HEADINGS, FIELD_LABEL, PROGRAM_FIELDS, type ProgramColumns, type ProgramField } from '@/lib/programs/types'
@@ -19,7 +19,7 @@ const RichEmailEditor = dynamic(() => import('@/components/admin/RichEmailEditor
 
 type Msg = { ok: boolean; text: string } | null
 
-function Card({ n, title, hint, children }: { n: number; title: string; hint?: string; children: React.ReactNode }) {
+function Card({ n, title, hint, children }: { n: number | string; title: string; hint?: string; children: React.ReactNode }) {
   return (
     <section className="rounded-xl border border-border bg-card p-4">
       <h2 className="text-sm font-semibold text-foreground"><span className="mr-2 inline-grid h-5 w-5 place-items-center rounded-full bg-primary/10 text-[11px] text-primary">{n}</span>{title}</h2>
@@ -51,6 +51,10 @@ export function ProgramEditorClient({ data, subject: subject0, body: body0, cust
   const [tab, setTab] = useState(program.tab_name ?? '')
   const [columns, setColumns] = useState<ProgramColumns>(program.columns ?? {})
   const [sheetMsg, setSheetMsg] = useState<Msg>(null)
+
+  const [pmsLink, setPmsLink] = useState(program.pms_spreadsheet_id ? `https://docs.google.com/spreadsheets/d/${program.pms_spreadsheet_id}/edit` : '')
+  const [pmsTab, setPmsTab] = useState(program.pms_tab_name ?? '')
+  const [pmsMsg, setPmsMsg] = useState<Msg>(null)
 
   const [subject, setSubject] = useState(subject0)
   const [body, setBody] = useState(body0)
@@ -188,6 +192,28 @@ export function ProgramEditorClient({ data, subject: subject0, body: body0, cust
               {issues.map((i, k) => <li key={k} className={i.severity === 'error' ? 'text-red-700' : 'text-amber-800'}>{i.message}</li>)}
             </ul>
           </details>
+        )}
+      </Card>
+
+      <Card n="+" title="PMS tickets (optional)" hint="Only if this program has scheduled service visits (PMS, preventive maintenance). If it has none, leave this empty: nothing is created and nothing else changes. With a PMS sheet, CK Desk makes ONE ticket per store on its PMS date (from 09:00), mails it to this program's vendor together with all the store's machines, and the vendor works it like any ticket of the program. The sheet has two columns: Store Code and PMS Date (one row per store and date, written like 25/10/2026). CK Desk copies it with the other sheets and never changes it.">
+        <div className="flex flex-wrap items-center gap-2">
+          <input value={pmsLink} onChange={(e) => setPmsLink(e.target.value)} aria-label="PMS Google Sheet link" placeholder="Paste the PMS Google Sheet link (leave empty if this program has no PMS)" className="min-w-[16rem] flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-sm" />
+          <input value={pmsTab} onChange={(e) => setPmsTab(e.target.value)} aria-label="PMS sheet tab name" placeholder="Tab name (optional)" className="w-44 rounded-lg border border-border bg-background px-3 py-1.5 text-sm" />
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {(pmsLink.trim() !== '' || !!program.pms_spreadsheet_id) && <button type="button" disabled={pending} className={btn} onClick={() => run(async () => { const r = await saveProgramPmsSheet(program.id, pmsLink, pmsTab); setPmsMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: pmsLink.trim() ? 'Saved. Press "Update from sheet now" above to copy it.' : 'Saved. This program has no PMS tickets.' }) })}>{pmsLink.trim() ? 'Save PMS sheet' : 'Remove PMS sheet'}</button>}
+          <Note m={pmsMsg} />
+        </div>
+        {program.pms_spreadsheet_id && (
+          <>
+            <dl className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+              <div><dt className="text-muted-foreground">Last checked</dt><dd>{program.pms_last_checked_at ? formatDateTime(program.pms_last_checked_at) : 'not yet'}</dd></div>
+              <div><dt className="text-muted-foreground">PMS dates read</dt><dd>{program.pms_row_count ?? '-'}</dd></div>
+              <div><dt className="text-muted-foreground">Status</dt><dd>{program.pms_last_status === 'ok' ? 'OK' : program.pms_last_status === 'error' ? 'Problem' : 'not yet copied'}</dd></div>
+            </dl>
+            {program.pms_last_status === 'error' && program.pms_last_error && <p role="alert" className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{program.pms_last_error} CK Desk keeps the last good copy.</p>}
+            <p className="mt-3 text-[11px] text-muted-foreground">To make the tickets you also need: a category for the PMS tickets (Admin &gt; Categories, tick &quot;AC PMS category&quot;) added to this program in the Categories card above and to a service, this program switched on, and a Business Rule if the PMS tickets should go to a particular vendor technician. Problems (a date CK Desk cannot read, a store with no login) appear in the problems list above.</p>
+          </>
         )}
       </Card>
 

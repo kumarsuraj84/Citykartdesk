@@ -4,7 +4,7 @@
  * admin/service-role client, which has no RLS protection at all) (AC-4.14).
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
-import { getAdmin, createTestUser, type TestUser } from '../setup/fixtures-d03'
+import { getAdmin, createTestUser, ensureTestLocation, type TestUser } from '../setup/fixtures-d03'
 import { deleteTestOrg } from '../setup/cleanup-org'
 import { setupConversationFixture, type ConversationFixture } from '../setup/conversation-fixtures'
 import type { FormField } from '@/types'
@@ -48,7 +48,7 @@ async function setup(): Promise<Fx> {
 
   const requesterA = await createTestUser('stage4-tenant-req-a', 'Stage4 Tenant Requester A')
   const requesterB = await createTestUser('stage4-tenant-req-b', 'Stage4 Tenant Requester B')
-  await admin.from('profiles').update({ org_id: orgB.id }).eq('id', requesterB.id)
+  await admin.from('profiles').update({ org_id: orgB.id, location_id: await ensureTestLocation(orgB.id) }).eq('id', requesterB.id)
 
   return {
     orgAId: fxA.orgId,

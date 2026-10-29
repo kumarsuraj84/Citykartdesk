@@ -3,6 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import type { SheetsSource } from '@/lib/masters/google'
 import { sheetsSourceForOrg } from '@/lib/masters/source'
 import { syncPrograms, type ProgramSyncReport } from './sync'
+import { createDueProgramPmsTickets } from './pms'
+import type { ProgramRecord } from './types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (t: string) => any; rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: any; error: { message: string } | null }> }
@@ -33,5 +35,10 @@ export async function runProgramSyncNow(orgId: string, programId: string): Promi
   const resolved = await sheetsSourceForOrg(db, orgId)
   if ('error' in resolved) return { error: resolved.error === 'not connected' ? 'Google Sheets is not connected yet (Admin > Sheet Masters > Connect Google Sheets).' : resolved.error }
   const [report] = await runProgramsSync({ db, orgId, source: resolved.source, force: true, programId })
+  // a program with a PMS sheet: the PMS tickets that are due now are made right away (never twice: the log keeps one row per store and date)
+  if (report?.pms && report.pms.status !== 'error') {
+    const { data: program } = await db.from('vendor_programs').select('*').eq('org_id', orgId).eq('id', programId).maybeSingle()
+    if (program) await createDueProgramPmsTickets(db, orgId, program as ProgramRecord)
+  }
   return report ?? { error: 'That program has no sheet saved yet.' }
 }

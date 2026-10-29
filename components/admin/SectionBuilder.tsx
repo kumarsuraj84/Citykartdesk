@@ -229,7 +229,7 @@ function getValidationErrors(sections: FormSection[]): string[] {
     if (!s.title.trim()) errors.push('A section is missing a title')
     s.fields.forEach((f) => {
       if (!f.label.trim()) errors.push('A field is missing a label')
-      if ((f.type === 'select' || f.type === 'multiselect') && f.options_source !== 'ac_units') {
+      if ((f.type === 'select' || f.type === 'multiselect') && f.options_source !== 'ac_units' && f.options_source !== 'program_machines') {
         const activeLeaves = countActiveLeaves(f.options ?? [])
         if (activeLeaves < 2)
           errors.push(`"${f.label || 'Field'}" needs at least 2 active (non-archived) selectable options`)
@@ -1326,6 +1326,25 @@ export function SectionBuilder({
                       <span className="font-medium">Choices come from the AC sheet</span>
                       <span className="mt-0.5 block text-[11px] text-muted-foreground">
                         The requester sees only the Active AC numbers (AC CKDESK SERIAL NO) of their own store, read from the AC master sheet. The typed list below is used only for a requester who has no store.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {selectedField.type === 'select' && (
+                <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={selectedField.options_source === 'program_machines'}
+                      onChange={(e) => updateField(selectedSection.id, selectedField.id, { options_source: e.target.checked ? 'program_machines' : undefined, ...(e.target.checked ? { required: false } : {}) })}
+                    />
+                    <span>
+                      <span className="font-medium">Choices are the machines of a Vendor Program (one row per machine)</span>
+                      <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                        For a category of a Vendor Program whose sheet has one row per machine, the requester chooses one of the machines of their own store; for every other category the box is hidden. It becomes compulsory by itself when the store has machines (leave &quot;Required&quot; off). The mail then names only that machine.
                       </span>
                     </span>
                   </label>

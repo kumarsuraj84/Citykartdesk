@@ -6,7 +6,7 @@
  * cross-tenant resolution anywhere in the pipeline.
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
-import { getAdmin, createTestUser, type TestUser } from '../setup/fixtures-d03'
+import { getAdmin, createTestUser, ensureTestLocation, type TestUser } from '../setup/fixtures-d03'
 import { deleteTestOrg } from '../setup/cleanup-org'
 import { setupConversationFixture, type ConversationFixture } from '../setup/conversation-fixtures'
 import { setupWhatsAppChannelFixture, signPayload, buildTextMessagePayload, buildInteractivePayload, createMockGraphFetch, type WhatsAppChannelFixture } from '../setup/whatsapp-fixtures'
@@ -51,7 +51,7 @@ describe('Stage 5 — tenant isolation from Meta phone_number_id through ticket 
     requesterA = await createTestUser('stage5-tenant-req-a', 'Stage5 Tenant Requester A')
     requesterB = await createTestUser('stage5-tenant-req-b', 'Stage5 Tenant Requester B')
     await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requesterA.id)
-    await admin.from('profiles').update({ org_id: orgBId, whatsapp_enabled: true, is_active: true }).eq('id', requesterB.id)
+    await admin.from('profiles').update({ org_id: orgBId, location_id: await ensureTestLocation(orgBId), whatsapp_enabled: true, is_active: true }).eq('id', requesterB.id)
     await admin.from('profile_mobile_numbers').insert({ profile_id: requesterA.id, org_id: fxA.orgId, mobile_number: SHARED_MOBILE })
     await admin.from('profile_mobile_numbers').insert({ profile_id: requesterB.id, org_id: orgBId, mobile_number: SHARED_MOBILE })
     mockedCreateClient.mockResolvedValue(admin as never)

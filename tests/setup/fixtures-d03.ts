@@ -37,6 +37,34 @@ export function clientForToken(accessToken: string): SupabaseClient<Database> {
   )
 }
 
+/**
+ * A service shows to a requester only when the requester's Location is ticked on it (nothing ticked = nobody). Tests use ONE permanent test Location: every test user sits in it and every
+ * test service is ticked for it, the same set-up a real service needs. Found by its name, created once, never deleted (it only exists in test / local databases).
+ */
+const TEST_LOCATION_NAME = 'ZZ TEST LOCATION (automated tests)'
+// one lookup per organisation, shared by every caller of this file: several test users are made at the same moment and must all get the SAME location
+const _testLocationIds = new Map<string, Promise<string>>()
+export function ensureTestLocation(orgId: string = EXISTING_ORG_ID): Promise<string> {
+  const known = _testLocationIds.get(orgId)
+  if (known) return known
+  const made = (async () => {
+    const admin = getAdmin()
+    const find = async () => (await admin.from('locations').select('id').eq('org_id', orgId).eq('name', TEST_LOCATION_NAME).order('created_at', { ascending: true }).limit(1).maybeSingle()).data?.id as string | undefined
+    const found = await find()
+    if (found) return found
+    const { data: row, error } = await admin.from('locations').insert({ org_id: orgId, name: TEST_LOCATION_NAME }).select('id').single()
+    if (error || !row) {
+      // another test file made it at the same moment
+      const again = await find()
+      if (!again) throw new Error(`[fixtures-d03] test location: ${error?.message}`)
+      return again
+    }
+    return row.id as string
+  })()
+  _testLocationIds.set(orgId, made)
+  return made
+}
+
 export type TestUser = { id: string; email: string; accessToken: string }
 
 export async function createTestUser(label: string, fullName: string): Promise<TestUser> {
@@ -63,6 +91,13 @@ export async function createTestUser(label: string, fullName: string): Promise<T
   const { data: signIn, error: signInError } = await anon.auth.signInWithPassword({ email, password: TEST_PASSWORD })
   if (signInError || !signIn.session) throw new Error(`[fixtures-d03] failed to sign in ${label}: ${signInError?.message}`)
 
+  // the profile row is made by a database trigger a moment after the login: wait until it exists and carries the test Location
+  const testLocationId = await ensureTestLocation()
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const { data: updated } = await admin.from('profiles').update({ location_id: testLocationId }).eq('id', data.user.id).select('id, location_id')
+    if (updated?.length && updated[0].location_id === testLocationId) break
+    await new Promise((r) => setTimeout(r, 100))
+  }
   return { id: data.user.id, email, accessToken: signIn.session.access_token }
 }
 
@@ -154,6 +189,10 @@ export async function setupD03Fixtures(): Promise<D03Fixtures> {
     createTestUser('admin', 'D03 Admin'),
     createTestUser('platform-owner', 'D03 Platform Owner'),
   ])
+
+  // the two test services are ticked for the test Location (the test users sit in it, see createTestUser)
+  const { error: locationError } = await admin.from('service_location_tags').insert([{ service_id: serviceAId, location_id: await ensureTestLocation() }, { service_id: serviceBId, location_id: await ensureTestLocation() }])
+  if (locationError) throw new Error(`[fixtures-d03] location tags: ${locationError.message}`)
 
   const roleUpdates = await Promise.all([
     admin.from('profiles').update({ role: 'agent', department_id: departmentId }).eq('id', agentA.id),

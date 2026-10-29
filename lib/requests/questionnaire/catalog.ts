@@ -1,4 +1,5 @@
 import type { QuestionnaireServiceSummary, SubCategorySearchResult } from './types'
+import { isServiceVisibleToLocation } from '@/lib/services/location-visibility'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -36,8 +37,8 @@ export async function listQuestionnaireServices(params: {
   if (services.length === 0) return services
 
   // Location-scoped visibility — same rule as filterServicesByLocation() in
-  // lib/queries/services.ts (no tags = visible to everyone; tagged = only to
-  // a requester at one of the tagged locations), reimplemented here against
+  // lib/queries/services.ts (a requester sees a service only when one of its ticked
+  // locations is theirs; nothing ticked = nobody), reimplemented here against
   // an explicit requesterLocationId instead of the RLS-session-bound
   // getCurrentProfile() that function uses, since a channel with no browser
   // session has no such session to read from.
@@ -46,14 +47,12 @@ export async function listQuestionnaireServices(params: {
     .select('service_id, location_id')
     .in('service_id', services.map((s) => s.id))
 
-  const restricted = new Set<string>()
-  const allowedForMe = new Set<string>()
+  const byService = new Map<string, string[]>()
   for (const t of (tags ?? []) as { service_id: string; location_id: string }[]) {
-    restricted.add(t.service_id)
-    if (requesterLocationId && t.location_id === requesterLocationId) allowedForMe.add(t.service_id)
+    byService.set(t.service_id, [...(byService.get(t.service_id) ?? []), t.location_id])
   }
 
-  return services.filter((s) => !restricted.has(s.id) || allowedForMe.has(s.id))
+  return services.filter((s) => isServiceVisibleToLocation(byService.get(s.id) ?? [], requesterLocationId))
 }
 
 // ── Step 3: issue-keyword search over Sub-categories ────────────────────────

@@ -35,6 +35,7 @@ const JOB_PATHS = {
   'masters-sync': '/api/masters/sync',
   'weather-daily': '/api/weather/daily',
   'pms-daily': '/api/pms/daily',
+  'automation-retry': '/api/automation/retry',
 }
 
 const secret = process.env.CRON_SECRET

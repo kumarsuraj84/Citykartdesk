@@ -26,6 +26,14 @@ type AnyClient = { from: (t: string) => any }
  */
 export async function deleteTestOrg(admin: AnyClient, orgId: string): Promise<void> {
   await admin.from('global_sla_config').delete().eq('org_id', orgId)
+  // the permanent automated-test Location that ensureTestLocation(orgId) makes in a second test org (tests/setup/fixtures-d03.ts): nobody may still sit in it, then it goes
+  const { data: testLocations } = await admin.from('locations').select('id').eq('org_id', orgId).eq('name', 'ZZ TEST LOCATION (automated tests)')
+  const testLocationIds = ((testLocations ?? []) as { id: string }[]).map((l) => l.id)
+  if (testLocationIds.length) {
+    await admin.from('profiles').update({ location_id: null }).in('location_id', testLocationIds)
+    await admin.from('service_location_tags').delete().in('location_id', testLocationIds)
+    await admin.from('locations').delete().in('id', testLocationIds)
+  }
   const { error } = await admin.from('organizations').delete().eq('id', orgId)
   if (error) {
     throw new Error(

@@ -22,7 +22,7 @@
  * select field, and a Business Rule without touching any other suite's data.
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
-import { createTestUser, clientForToken, getAdmin, type TestUser } from '../setup/fixtures-d03'
+import { createTestUser, clientForToken, getAdmin, ensureTestLocation, type TestUser } from '../setup/fixtures-d03'
 import { createTestDepartment, deleteTestDepartment } from '../setup/test-department'
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
@@ -176,6 +176,14 @@ async function setup(): Promise<Fx> {
     .select('id')
     .single()
   if (intakeServiceError || !intakeService) throw new Error(`[stage1 fixtures] intake service: ${intakeServiceError?.message}`)
+
+  // both services show only to people at a Location ticked on them; every test user sits in the permanent test Location
+  const testLocationId = await ensureTestLocation(EXISTING_ORG_ID)
+  const { error: locationTagError } = await admin.from('service_location_tags').insert([
+    { service_id: service.id, location_id: testLocationId },
+    { service_id: intakeService.id, location_id: testLocationId },
+  ])
+  if (locationTagError) throw new Error(`[stage1 fixtures] location tags: ${locationTagError.message}`)
 
   const [requester, otherRequester, agent] = await Promise.all([
     createTestUser('stage1-requester', 'Stage1 Requester'),

@@ -25,6 +25,7 @@ export function ServiceRequestWorkspace({
   allowedSubCategories,
   currentUserStoreAddress,
   acUnitOptions,
+  programMachineOptions,
   description,
   slaConfig,
   recent,
@@ -35,6 +36,7 @@ export function ServiceRequestWorkspace({
   allowedSubCategories: AllowedSubCategory[]
   currentUserStoreAddress: string | null
   acUnitOptions?: { value: string; label: string }[]
+  programMachineOptions?: Record<string, { value: string; label: string }[]>
   description: string | null
   slaConfig: SLAConfig | null | undefined
   recent: RequesterServiceShortcut[]
@@ -100,6 +102,7 @@ export function ServiceRequestWorkspace({
             allowedSubCategories={allowedSubCategories}
             currentUserStoreAddress={currentUserStoreAddress}
             acUnitOptions={acUnitOptions}
+            programMachineOptions={programMachineOptions}
           />
         </div>
       </div>

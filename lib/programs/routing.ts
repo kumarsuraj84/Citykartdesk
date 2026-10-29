@@ -7,6 +7,7 @@ import { masterSentComment, renderMasterMail } from '@/lib/masters/mail'
 import { programTemplate, programVars, type ProgramRowRecord } from './mail'
 import { programNoteLabel, type ProgramRecord } from './types'
 import { isAssignedToVendor } from '@/lib/vendor/ticket-fields'
+import { findSelectedMachine } from './machines'
 
 // Sends a ticket to the vendor / OEM of a program, right after the ticket is created (and again, marked REOPENED, when the store reopens it). Same rules as the AC /
 // Genset routing (lib/requests/master-routing.ts):
@@ -53,6 +54,8 @@ export async function runProgramRouting(p: {
   requesterEmail: string
   requesterPhone: string
   storeAddress: string | null
+  /** The machine the requester chose (one row per machine): the mail names only it and the ticket keeps only that row. */
+  machineValue?: string
   /** Set when a reopened ticket is sent to the vendor again: the reason the store gave. */
   reopen?: { reason: string }
 }): Promise<void> {
@@ -65,9 +68,12 @@ export async function runProgramRouting(p: {
   const saved = p.reopen ? await loadSnapshotRows(db, request.id, program.id) : []
   if (!p.storeCode && saved.length === 0) { await note(`This requester is not linked to a store, so the ticket was not sent to the ${label} vendor automatically. Please send it to them yourself.`); return }
 
-  const rows = saved.length > 0 ? saved : await loadActiveProgramRows(db, orgId, program.id, p.storeCode ?? '')
+  const allRows = saved.length > 0 ? saved : await loadActiveProgramRows(db, orgId, program.id, p.storeCode ?? '')
+  // the machine the requester chose: only that row is mailed and kept with the ticket (when it has no address, the addresses of the store's other machines are used)
+  const chosenRow = !p.reopen && p.machineValue ? findSelectedMachine(allRows, p.machineValue) : null
+  const rows = chosenRow ? [chosenRow] : allRows
   if (rows.length === 0) { await note(`Store ${p.storeCode} has no active row in the ${label} sheet, so the ticket was not sent to the vendor automatically. Please send it to them yourself.`); return }
-  const pool = rows.flatMap((r) => r.emails)
+  const pool = chosenRow && chosenRow.emails.length === 0 ? allRows.flatMap((r) => r.emails) : rows.flatMap((r) => r.emails)
   const target = splitRecipients(pool)
 
   // The rows the ticket belongs to are saved FIRST, so the vendor portal, the quote / PO approval and a later reopen work from them even when the mail cannot be sent.

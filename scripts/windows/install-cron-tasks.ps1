@@ -5,6 +5,7 @@
 #   CitykartDesk-Cron-EmailReplySync every 1 min   (poll IMAP for replies to outbound emails)
 #   CitykartDesk-Cron-Csat           every 30 min  (auto-close resolved tickets past their reopen window + the one CSAT reminder)
 #   CitykartDesk-Cron-SystemLogArchive every 6 hours (moves old System Log records to the archive; never deletes)
+#   CitykartDesk-Cron-AutomationRetry every 15 min (finishes the automatic steps of new tickets that did not happen: mail to the OEM, rules, CVM approval; 3 tries at most)
 #   CitykartDesk-Cron-ApprovalReminders every day at 10:00 (one e-mail per approver listing everything still waiting for their decision)
 #   CitykartDesk-LogShipper          every 2 min   (copies problems from the PostgREST / auth / storage logs into the System Log)
 $runner = Join-Path $PSScriptRoot 'run-cron-tick.ps1'
@@ -22,6 +23,7 @@ Install-Job 'CitykartDesk-Cron-BusinessRules' 'business-rules' 15
 Install-Job 'CitykartDesk-Cron-EmailReplySync' 'email-reply-sync' 1
 Install-Job 'CitykartDesk-Cron-Csat' 'csat' 30
 Install-Job 'CitykartDesk-Cron-SystemLogArchive' 'system-log-archive' 360
+Install-Job 'CitykartDesk-Cron-AutomationRetry' 'automation-retry' 15
 
 # the log shipper has its own runner
 $shipRunner = Join-Path $PSScriptRoot 'run-log-shipper.ps1'

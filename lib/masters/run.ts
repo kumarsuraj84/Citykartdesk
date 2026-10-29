@@ -8,6 +8,7 @@ import { syncMasters, type SyncReport } from './sync'
 import { resetCcBookCache } from '@/lib/requests/cc-recipients'
 import type { MasterKind } from './types'
 import { createDuePmsTickets } from '@/lib/pms/tickets'
+import { createDueProgramPmsTicketsForOrg } from '@/lib/programs/pms'
 import { runProgramsSync } from '@/lib/programs/run'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -70,5 +71,7 @@ export async function runMastersSyncForOrg(orgId: string, opts: { force?: boolea
   try { await runProgramsSync({ db, orgId, source, tellAdmins }) } catch (e) { console.error('[programs] sheet copy failed', e) }
   // AC PMS: the tickets of the PMS dates that are due now (from 09:00 on the day; nothing happens when the PMS sheet is not set up)
   await createDuePmsTickets(db, orgId)
+  // the same for every Vendor Program that has its own (optional) PMS sheet and is switched on
+  try { await createDueProgramPmsTicketsForOrg(db, orgId) } catch (e) { console.error('[programs] PMS tickets failed', e) }
   return report
 }

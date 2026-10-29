@@ -17,7 +17,7 @@ export const DEFAULT_HEADINGS: Record<ProgramField, readonly string[]> = {
   store: ['Store Code', 'Store'],
   mail: ['Ticket Mail To', 'Mail To', 'OEM Ticket Mail To', 'Mail ID', 'Vendor Mail To'],
   vendor: ['Vendor', 'Vendor Name'],
-  machine: ['Machine No', 'Machine Number', 'Asset No', 'Asset Number'],
+  machine: ['Machine No', 'Machine Number', 'Asset No', 'Asset Number', 'AC CKDESK SERIAL NO'],
   serial: ['Serial No', 'Serial Number', 'Serial', 'Genset Serial No', 'AC Serial No'],
   poMail: ['PO Mail To', 'OEM PO Mail To', 'Email for PO detail'],
   approverMail: ['Quote Approver Mail To', 'Quote Approval Mail To', 'PO Approver Mail To', 'CK PO Approver Mail To'],
@@ -54,6 +54,14 @@ export type ProgramRecord = {
   default_approver_ids?: string[] | null
   /** how one row (machine) of the store is written in {{details}}, for example "{{extra_gensetbrand}} {{extra_gensetkva}} KVA, serial {{serial}}"; empty = the usual short wording */
   details_template?: string | null
+  /** the program's own PMS (preventive maintenance) sheet: Store Code + PMS Date; empty = this program has no PMS tickets */
+  pms_spreadsheet_id?: string | null
+  pms_tab_name?: string | null
+  pms_content_hash?: string | null
+  pms_last_checked_at?: string | null
+  pms_last_status?: 'ok' | 'error' | null
+  pms_last_error?: string | null
+  pms_row_count?: number | null
 }
 
 export type ProgramIssue = { severity: 'error' | 'warning'; code: string; storeCode: string | null; sheetRow: number | null; message: string; token?: string }

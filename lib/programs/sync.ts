@@ -5,6 +5,7 @@ import { claimSync, differs, inChunks, must } from '@/lib/masters/sync'
 import { fetchAllPages } from '@/lib/queries/paging'
 import { matchProgramRows } from './match'
 import { parseProgramSheet } from './parse'
+import { syncProgramPms, type ProgramPmsSyncReport } from './pms-sync'
 import type { ParsedProgramRow, ProgramIssue, ProgramRecord, StoredProgramRow } from './types'
 
 // Copies each program's Google sheet into CK Desk's database (read only: nothing is ever written to a sheet), on the same schedule and with the same safety rules as the
@@ -14,7 +15,7 @@ import type { ParsedProgramRow, ProgramIssue, ProgramRecord, StoredProgramRow } 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (t: string) => any }
 
-export type ProgramSyncReport = { programId: string; name: string; status: 'ok' | 'unchanged' | 'error' | 'unconfigured'; message?: string; added?: number; changed?: number; removed?: number; waiting?: number }
+export type ProgramSyncReport = { programId: string; name: string; status: 'ok' | 'unchanged' | 'error' | 'unconfigured'; message?: string; added?: number; changed?: number; removed?: number; waiting?: number; /** the program's optional PMS sheet (absent when the program has none) */ pms?: ProgramPmsSyncReport }
 
 const FULL_PASS_MINUTES = 15
 
@@ -81,7 +82,7 @@ async function unknownStoreIssues(db: Db, orgId: string, codes: string[]): Promi
 }
 
 async function replaceIssues(db: Db, orgId: string, programId: string, issues: ProgramIssue[]) {
-  must(await db.from('program_issues').delete().eq('org_id', orgId).eq('program_id', programId), 'clear program issues')
+  must(await db.from('program_issues').delete().eq('org_id', orgId).eq('program_id', programId).not('code', 'like', 'pms_%'), 'clear program issues')   // the PMS problems (codes pms_...) belong to the PMS sheet and are kept
   const rows = issues.slice(0, 500).map((i) => ({ org_id: orgId, program_id: programId, severity: i.severity, code: i.code, store_code: i.storeCode, sheet_row: i.sheetRow, message: i.message }))
   await inChunks(rows, async (c) => must(await db.from('program_issues').insert(c), 'save program issues'))
 }
@@ -129,13 +130,20 @@ export async function syncProgram(p: { db: Db; orgId: string; program: ProgramRe
 /** Every program that has a sheet (switched on or not: the copy is how the administrator sees the check list turn green). */
 export async function syncPrograms(p: { db: Db; orgId: string; source: SheetsSource; now?: Date; force?: boolean; programId?: string }): Promise<ProgramSyncReport[]> {
   const now = p.now ?? new Date()
-  let q = p.db.from('vendor_programs').select('*').eq('org_id', p.orgId).not('spreadsheet_id', 'is', null)
+  let q = p.db.from('vendor_programs').select('*').eq('org_id', p.orgId).or('spreadsheet_id.not.is.null,pms_spreadsheet_id.not.is.null')
   if (p.programId) q = q.eq('id', p.programId)
   const { data } = await q.order('created_at', { ascending: true })
   const out: ProgramSyncReport[] = []
   for (const program of (data ?? []) as ProgramRecord[]) {
-    try { out.push(await syncProgram({ db: p.db, orgId: p.orgId, program, source: p.source, now, force: p.force ?? false })) }
-    catch (e) { out.push({ programId: program.id, name: program.name, status: 'error', message: e instanceof Error ? e.message : 'Unexpected error.' }) }
+    let report: ProgramSyncReport
+    try { report = await syncProgram({ db: p.db, orgId: p.orgId, program, source: p.source, now, force: p.force ?? false }) }
+    catch (e) { report = { programId: program.id, name: program.name, status: 'error', message: e instanceof Error ? e.message : 'Unexpected error.' } }
+    // the program's OPTIONAL PMS sheet (Store Code + PMS Date); a program without one is not touched. A failure here never stops the rest.
+    if (program.pms_spreadsheet_id) {
+      try { report.pms = await syncProgramPms({ db: p.db, orgId: p.orgId, program, source: p.source, now, force: p.force ?? false }) }
+      catch (e) { report.pms = { status: 'error', message: e instanceof Error ? e.message : 'Unexpected error.' } }
+    }
+    out.push(report)
   }
   return out
 }

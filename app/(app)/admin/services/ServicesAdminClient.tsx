@@ -445,16 +445,20 @@ function ServiceModal({
             </div>
           </div>
 
-          {/* Visible to Locations — restricts which Requesters (by their own
-              profile.location_id) see this service in the catalog. Empty =
-              visible to everyone, same as every service today. Agents/
-              managers/admins always see every service regardless of this. */}
+          {/* Visible to Locations — which Requesters (by their own profile.location_id)
+              see this service in the catalog. Head Office / Stores / both; nothing
+              ticked = only administrators and platform owners see it. */}
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">Visible to Locations</label>
             <p className="mb-2 text-[11px] text-muted-foreground">
-              Leave all unchecked to show this service to every Requester. Check one or more to restrict it — only
-              Requesters at a checked Location will see it in their Service Catalog. Agents/managers/admins always see it.
+              Only people at a checked Location see this service when logging a ticket. Check Head Office for head office users, Stores for store users, or both.
+              If nothing is checked, only administrators and platform owners see it. Technicians, vendor technicians and managers still get and work the tickets of this service through Business Rules.
             </p>
+            {locations.length > 0 && locationIds.length === 0 && (
+              <p className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+                No location is checked: only administrators and platform owners see this service.
+              </p>
+            )}
             <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-lg border border-border p-3">
               {locations.length === 0 ? (
                 <p className="text-xs italic text-muted-foreground/60">No locations yet — manage them under Admin → Org Structure.</p>

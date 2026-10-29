@@ -29,11 +29,20 @@ export type PmsSetup = { categoryId: string; subCategoryId: string; serviceId: s
 const MAX_PER_RUN = 150
 const SKIP_CODE = 'pms_no_ticket'
 
-/** The category marked "AC PMS" in Admin, its sub-category and the active service that sub-category is tagged to. */
-export async function findPmsSetup(db: Db, orgId: string): Promise<{ setup: PmsSetup } | { problem: string }> {
-  const { data: cats } = await db.from('service_categories').select('id, name').eq('org_id', orgId).eq('is_pms', true).eq('is_active', true).order('name')
+/**
+ * The category marked "AC PMS" in Admin, its sub-category and the active service that sub-category is tagged to. `programId` null = the old, built-in AC PMS (a category of NO program);
+ * a program id = that Vendor Program's own PMS category (a category of that program that is ticked "AC PMS category").
+ */
+export async function findPmsSetup(db: Db, orgId: string, programId: string | null = null): Promise<{ setup: PmsSetup } | { problem: string }> {
+  let catQuery = db.from('service_categories').select('id, name').eq('org_id', orgId).eq('is_pms', true).eq('is_active', true)
+  catQuery = programId ? catQuery.eq('program_id', programId) : catQuery.is('program_id', null)
+  const { data: cats } = await catQuery.order('name')
   const catIds = ((cats ?? []) as { id: string }[]).map((c) => c.id)
-  if (catIds.length === 0) return { problem: 'No category is marked as the AC PMS category. In Admin > Categories, edit the AC PMS category and tick "AC PMS category".' }
+  if (catIds.length === 0) {
+    return { problem: programId
+      ? 'This program has no PMS category. Make a category for the PMS tickets, tick "AC PMS category" on it (Admin > Categories), and add it to this program.'
+      : 'No category is marked as the AC PMS category. In Admin > Categories, edit the AC PMS category and tick "AC PMS category".' }
+  }
   const { data: subs } = await db.from('service_sub_categories').select('id, category_id, name').in('category_id', catIds).eq('is_active', true).order('name')
   const subList = (subs ?? []) as { id: string; category_id: string }[]
   if (subList.length === 0) return { problem: 'The AC PMS category has no active sub-category.' }
@@ -50,7 +59,7 @@ export async function findPmsSetup(db: Db, orgId: string): Promise<{ setup: PmsS
 }
 
 /** The boxes of the service's form that the ticket fills itself: the subject and the description (found by their names; any other box is left for people). */
-function textFields(sections: ReturnType<typeof resolveServiceFormSections>): { subject?: FormField; description?: FormField } {
+export function textFields(sections: ReturnType<typeof resolveServiceFormSections>): { subject?: FormField; description?: FormField } {
   const all = sections.flatMap((s) => s.fields ?? [])
   const subject = all.find((f) => /^(subject|title)$/i.test(f.label.trim()) && (f.type === 'text' || f.type === 'textarea')) ?? all.find((f) => f.type === 'text')
   const description = all.find((f) => /^description$/i.test(f.label.trim()) && f.type === 'textarea') ?? all.find((f) => f.type === 'textarea')

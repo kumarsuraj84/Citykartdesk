@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { isLocationRuleExempt, isServiceVisibleToLocation } from '@/lib/services/location-visibility'
 import type {
   AllowedSubCategory,
   ServiceCategory,
@@ -55,11 +56,11 @@ const SERVICE_CARD_SELECT = `
 `
 
 // ── Location-scoped visibility ────────────────────────────────────────────────
-// A service tagged to one or more Locations (service_location_tags) is only
-// shown to a plain Requester whose own profile.location_id matches one of
-// those tags; a service with NO location tags stays visible to everyone —
-// today's behavior for every pre-existing service. Agents/managers/admins
-// always see every service regardless of their own location, so staff can
+// A service is shown to a plain Requester only when one of the Locations ticked on it
+// (service_location_tags) is the person's own profile.location_id (Head Office, Stores,
+// or both). A service with NO location ticked is shown only to administrators and platform
+// owners (see lib/services/location-visibility.ts); technicians, managers and requesters
+// all follow the ticked locations. Staff can
 // still raise or help with any request "on behalf of" someone at a
 // different location. Filtered in application code (not the SQL query)
 // since it's a small join table and Supabase's query builder can't express
@@ -70,21 +71,19 @@ async function filterServicesByLocation<T extends { id: string }>(
 ): Promise<T[]> {
   if (services.length === 0) return services
   const profile = await getCurrentProfile()
-  if (!profile || profile.role !== 'user') return services
+  if (!profile || isLocationRuleExempt(profile.role)) return services
 
   const { data: tags } = await supabase
     .from('service_location_tags')
     .select('service_id, location_id')
     .in('service_id', services.map((s) => s.id))
 
-  const restricted = new Set<string>()
-  const allowedForMe = new Set<string>()
+  const byService = new Map<string, string[]>()
   for (const t of (tags ?? []) as { service_id: string; location_id: string }[]) {
-    restricted.add(t.service_id)
-    if (profile.location_id && t.location_id === profile.location_id) allowedForMe.add(t.service_id)
+    byService.set(t.service_id, [...(byService.get(t.service_id) ?? []), t.location_id])
   }
 
-  return services.filter((s) => !restricted.has(s.id) || allowedForMe.has(s.id))
+  return services.filter((s) => isServiceVisibleToLocation(byService.get(s.id) ?? [], profile.location_id))
 }
 
 /**

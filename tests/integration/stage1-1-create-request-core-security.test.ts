@@ -322,7 +322,8 @@ describe('Stage 1.1 Task 2 — createRequestCore() cross-tenant hardening', () =
     expect(result.requestId).toBeTruthy()
   })
 
-  it('2F (control) — agent-tier acting user is exempt from the location restriction even when not at the location', async () => {
+  it('2F — agent-tier acting user is NOT exempt from the location restriction: refused when not at the location (only admin / platform_owner are exempt)', async () => {
+    const before = await requestCount(fx.locationRestrictedServiceAId)
     const result = await createRequestCore({
       client: admin,
       orgId: fx.orgAId,
@@ -335,8 +336,28 @@ describe('Stage 1.1 Task 2 — createRequestCore() cross-tenant hardening', () =
       actingUserRoleForLocationCheck: 'agent',
       actingUserLocationId: null,
     })
-    expect(result.error).toBeUndefined()
-    expect(result.requestId).toBeTruthy()
+    expect(result.requestId).toBeUndefined()
+    expect(result.error).toBe('Service not found.')
+    expect(await requestCount(fx.locationRestrictedServiceAId)).toBe(before)
+  })
+
+  it('2F (control) — admin and platform_owner are exempt from the location restriction even with no location', async () => {
+    for (const role of ['admin', 'platform_owner'] as const) {
+      const result = await createRequestCore({
+        client: admin,
+        orgId: fx.orgAId,
+        requesterId: fx.requesterA.id,
+        actingUserId: fx.requesterA.id,
+        serviceId: fx.locationRestrictedServiceAId,
+        formData: {},
+        source: 'web',
+        useAdminForWrites: true,
+        actingUserRoleForLocationCheck: role,
+        actingUserLocationId: null,
+      })
+      expect(result.error, role).toBeUndefined()
+      expect(result.requestId, role).toBeTruthy()
+    }
   })
 
   it('control — a genuinely valid, same-org creation still succeeds (the hardening above didn\'t break the happy path)', async () => {

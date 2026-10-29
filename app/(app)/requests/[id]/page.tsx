@@ -40,6 +40,8 @@ import { RequestActionBar } from '@/components/requests/RequestActionBar'
 import { ApprovalRejectedReopenBanner } from '@/components/requests/ApprovalRejectedReopenBanner'
 import { ResolvedReopenBanner } from '@/components/requests/ResolvedReopenBanner'
 import { VendorNote } from '@/components/requests/VendorNote'
+import { AutomationPanel } from '@/components/requests/AutomationPanel'
+import { diagnoseTickets } from '@/lib/automation/diagnose'
 import { getResolvedReopenWindowHours } from '@/lib/settings/reopenWindow'
 import { MarkRequestNotificationsRead } from '@/components/requests/MarkRequestNotificationsRead'
 import { getActiveTimer } from '@/lib/actions/requests'
@@ -371,6 +373,10 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
   if (!profile) redirect('/login')
   // an OEM engineer (vendor login) works the ticket on his own page
   if (isVendor(profile)) redirect(`/vendor/tickets/${id}`)
+  // what the automation did on this ticket: read only for administrators and platform owners (nobody else gets it)
+  const automationDiagnosis = profile.role === 'admin' || profile.role === 'platform_owner'
+    ? (await diagnoseTickets(createAdminClient() as never, [id]).catch(() => []))[0] ?? null
+    : null
 
   // Sends the breadcrumb back to wherever the ticket was opened from (e.g.
   // Agent Requests vs. My Requests) instead of always defaulting to My
@@ -989,6 +995,9 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
           windowHours={resolvedReopenWindowHours}
         />
       )}
+
+      {/* Administrators and platform owners only: the automatic steps of this ticket that did not happen, and the one button that runs only those */}
+      {automationDiagnosis && automationDiagnosis.eligible && automationDiagnosis.kind !== 'ok' && <AutomationPanel diagnosis={automationDiagnosis} />}
 
       {/* The ticket is with an OEM engineer (vendor): who, and what he is waiting for */}
       <VendorNote requestId={request.id} assignedTo={request.assigned_to} />

@@ -90,7 +90,7 @@ export async function saveProgramCategories(id: string, categoryIds: string[]): 
     if (!c) return { error: 'One of the categories was not found.' }
     if (c.program_id && c.program_id !== id) return { error: `"${c.name}" already belongs to another program.` }
     if (c.auto_oem_kind) return { error: `"${c.name}" already sends to the ${c.auto_oem_kind === 'ac' ? 'AC' : 'Genset'} OEM. Switch that off in Admin > Categories first.` }
-    if (c.is_pms) return { error: `"${c.name}" is the AC PMS category and cannot be in a program.` }
+    // a PMS category (ticked "AC PMS category") MAY be in a program: it is that program's PMS category (the program's optional PMS sheet makes its tickets)
   }
   const current = all.filter((c) => c.program_id === id).map((c) => c.id)
   const remove = current.filter((c) => !wanted.includes(c))
@@ -116,6 +116,33 @@ export async function saveProgramSheet(id: string, linkOrId: string, tabName: st
   }).eq('id', id).eq('org_id', guard.orgId)
   if (error) return { error: 'Could not save the sheet.' }
   await logAdminAudit({ orgId: guard.orgId, actorId: guard.profile.id, entityType: 'vendor_program', entityId: id, action: 'vendor_program.sheet_saved' })
+  revalidatePath(`/admin/programs/${id}`)
+  return {}
+}
+
+/**
+ * The program's OPTIONAL PMS sheet (Store Code + PMS Date). Leave the link empty to remove it: the program then has no PMS tickets. Nothing happens for a program that has none.
+ */
+export async function saveProgramPmsSheet(id: string, linkOrId: string, tabName: string): Promise<ActionResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return { error: guard.error }
+  if (!(await ownProgram(guard.orgId, id))) return { error: 'Program not found.' }
+  const text = linkOrId.trim()
+  let sheetId: string | null = null
+  if (text) {
+    sheetId = spreadsheetIdFrom(text)
+    if (!sheetId) return { error: 'That does not look like a Google Sheet link. Paste the address of the sheet (docs.google.com/spreadsheets/d/...).' }
+  }
+  const { error } = await db().from('vendor_programs').update({
+    pms_spreadsheet_id: sheetId, pms_tab_name: sheetId ? tabName.trim().slice(0, 100) || null : null, pms_content_hash: null, pms_last_status: null, pms_last_error: null, pms_last_checked_at: null, pms_row_count: null, ...touch(guard),
+  }).eq('id', id).eq('org_id', guard.orgId)
+  if (error) return { error: 'Could not save the PMS sheet.' }
+  if (!sheetId) {
+    // no PMS for this program any more: its copied dates and PMS problems go away (tickets already made stay: they are ordinary tickets)
+    await db().from('program_pms_dates').delete().eq('program_id', id)
+    await db().from('program_issues').delete().eq('program_id', id).like('code', 'pms_%')
+  }
+  await logAdminAudit({ orgId: guard.orgId, actorId: guard.profile.id, entityType: 'vendor_program', entityId: id, action: sheetId ? 'vendor_program.pms_sheet_saved' : 'vendor_program.pms_sheet_removed' })
   revalidatePath(`/admin/programs/${id}`)
   return {}
 }
@@ -179,7 +206,9 @@ export async function updateProgramNow(id: string): Promise<ActionResult & { sum
   revalidatePath(`/admin/programs/${id}`); revalidatePath('/admin/programs')
   if ('error' in report) return { error: report.error }
   if (report.status === 'error') return { error: report.message ?? 'The sheet could not be read.' }
-  return { summary: report.status === 'unchanged' ? 'The sheet is up to date (nothing changed).' : `The sheet is up to date: ${report.added ?? 0} added, ${report.changed ?? 0} changed, ${report.removed ?? 0} removed.` }
+  const base = report.status === 'unchanged' ? 'The sheet is up to date (nothing changed).' : `The sheet is up to date: ${report.added ?? 0} added, ${report.changed ?? 0} changed, ${report.removed ?? 0} removed.`
+  const pms = report.pms ? (report.pms.status === 'error' ? ` The PMS sheet could not be read: ${report.pms.message ?? 'unknown problem'}.` : ` The PMS sheet was read (${report.pms.rows ?? 0} dates).`) : ''
+  return { summary: base + pms }
 }
 
 /** Switches the program on or off. Switching ON is refused while a blocking item of "Check my set-up" is red. */

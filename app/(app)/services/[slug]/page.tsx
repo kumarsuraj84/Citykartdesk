@@ -7,6 +7,7 @@ import { getRequesterServiceShortcuts } from '@/lib/queries/requests'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadAcOptionsForStoreCode } from '@/lib/masters/resolve'
+import { loadMachineOptionsForStore } from '@/lib/programs/machines'
 import { ServiceRequestWorkspace } from '@/components/requests/ServiceRequestWorkspace'
 import { CategoryIcon } from '@/components/admin/CategoryIcon'
 
@@ -28,6 +29,8 @@ export default async function ServiceDetailPage({ params }: PageProps) {
   let currentUserStoreAddress: string | null = null
   // The AC numbers this user's store may pick (Active ACs of the AC master sheet); stays undefined for a user with no store, so the old typed list is used.
   let acUnitOptions: { value: string; label: string }[] | undefined
+  // The machines of this store for every category of an active machine program (the machine box of the form); undefined for a user with no store
+  let programMachineOptions: Record<string, { value: string; label: string }[]> | undefined
   if (profile?.store_id) {
     const supabase = await createClient()
     const { data: store } = await supabase.from('stores').select('address, code').eq('id', profile.store_id).maybeSingle()
@@ -35,6 +38,7 @@ export default async function ServiceDetailPage({ params }: PageProps) {
     if (store?.code && profile.org_id) {
       const options = await loadAcOptionsForStoreCode(createAdminClient() as never, profile.org_id, store.code)
       acUnitOptions = options.map((o) => ({ value: o.value, label: o.label }))
+      programMachineOptions = await loadMachineOptionsForStore(createAdminClient() as never, profile.org_id, store.code)
     }
   }
 
@@ -109,6 +113,7 @@ export default async function ServiceDetailPage({ params }: PageProps) {
         allowedSubCategories={allowedSubCategories}
         currentUserStoreAddress={currentUserStoreAddress}
         acUnitOptions={acUnitOptions}
+        programMachineOptions={programMachineOptions}
         description={service.description}
         slaConfig={service.sla_policy?.config ?? null}
         recent={shortcuts.recent}

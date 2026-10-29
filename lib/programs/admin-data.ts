@@ -59,8 +59,7 @@ export async function loadProgramEditor(orgId: string, id: string): Promise<Prog
     name: c.name,
     in_program: c.program_id === id,
     blocked: c.program_id && c.program_id !== id ? `Already in "${programName.get(c.program_id) ?? 'another program'}"`
-      : c.auto_oem_kind ? `Already sends to the ${c.auto_oem_kind === 'ac' ? 'AC' : 'Genset'} OEM`
-        : c.is_pms ? 'This is the AC PMS category' : null,
+      : c.auto_oem_kind ? `Already sends to the ${c.auto_oem_kind === 'ac' ? 'AC' : 'Genset'} OEM` : null,
     old_kind: !c.program_id && !c.is_pms && (c.auto_oem_kind === 'ac' || c.auto_oem_kind === 'genset') ? c.auto_oem_kind : null,
   }))
   const extra = new Set<string>()

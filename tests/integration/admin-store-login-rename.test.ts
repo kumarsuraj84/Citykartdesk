@@ -28,9 +28,11 @@ describe('a store login renamed from NLD to NEG, with its e-mail', () => {
   const admin = getAdmin()
   const stamp = Date.now()
   const code = `NLD${String(stamp).slice(-6)}`
+  // the new code is unique per run: the shared local database already holds the real store NEG, and a rename onto an existing code is refused
+  const NEG = `NEG${String(stamp).slice(-6)}`
   const OLD = `sm.nld.${stamp}@example.test`
   const NEW = `sm.neg.${stamp}@example.test`
-  const made = { stores: [] as string[], oem: '', report: '', rule: '', thread: '' }
+  const made = { stores: [] as string[], oem: '', report: '', rule: '', thread: '', channel: '' }
 
   beforeAll(async () => {
     fx = await setupD03Fixtures()
@@ -51,8 +53,10 @@ describe('a store login renamed from NLD to NEG, with its e-mail', () => {
     made.report = report.data!.id
     const rule = await admin.from('business_rules').insert({ org_id: fx.orgId, name: `rule${stamp}`, trigger: ['created'], conditions: [], actions: [{ type: 'notify', params: { email: OLD } }] } as never).select('id').single()
     made.rule = rule.data!.id
-    const channel = (await admin.from('intake_channels').select('id').limit(1).single()).data!.id
-    const thread = await admin.from('intake_threads').insert({ org_id: fx.orgId, channel_id: channel, participant_emails: ['a@example.test', OLD] } as never).select('id').single()
+    // its own channel, so the test does not depend on a channel already existing in the database
+    const channel = await admin.from('intake_channels').insert({ org_id: fx.orgId, type: 'email', name: `rename-test-${stamp}`, status: 'paused' } as never).select('id').single()
+    made.channel = channel.data!.id
+    const thread = await admin.from('intake_threads').insert({ org_id: fx.orgId, channel_id: made.channel, participant_emails: ['a@example.test', OLD] } as never).select('id').single()
     made.thread = thread.data!.id
   }, 120_000)
 
@@ -60,6 +64,7 @@ describe('a store login renamed from NLD to NEG, with its e-mail', () => {
     await admin.from('business_rules').delete().eq('id', made.rule)
     await admin.from('scheduled_reports').delete().eq('id', made.report)
     await admin.from('intake_threads').delete().eq('id', made.thread)
+    if (made.channel) await admin.from('intake_channels').delete().eq('id', made.channel)
     await admin.from('oems').delete().eq('id', made.oem)
     await admin.from('teams').update({ notification_email: null }).eq('id', fx.teamA.id)
     await admin.from('requests').delete().eq('service_id', fx.teamA.serviceId)
@@ -78,15 +83,15 @@ describe('a store login renamed from NLD to NEG, with its e-mail', () => {
   it('the new name shows on the previous tickets and in the store lists, because the store is renamed with its login', async () => {
     expect(await tickets()).toEqual([[code, code]])
 
-    const res = await updateUserProfile(fx.requesterA.id, { full_name: 'NEG' })
+    const res = await updateUserProfile(fx.requesterA.id, { full_name: NEG })
     expect(res.error).toBeUndefined()
-    expect(res.note).toBe(`The store ${code} was renamed NEG, so its tickets and reports show NEG.`)
-    expect(await store()).toEqual({ code: 'NEG', name: 'NEG' })
-    expect((await admin.from('profiles').select('full_name').eq('id', fx.requesterA.id).single()).data!.full_name).toBe('NEG')
+    expect(res.note).toBe(`The store ${code} was renamed ${NEG}, so its tickets and reports show ${NEG}.`)
+    expect(await store()).toEqual({ code: NEG, name: NEG })
+    expect((await admin.from('profiles').select('full_name').eq('id', fx.requesterA.id).single()).data!.full_name).toBe(NEG)
     // the ticket it raised before now shows requester NEG and store NEG
-    expect(await tickets()).toEqual([['NEG', 'NEG']])
+    expect(await tickets()).toEqual([[NEG, NEG]])
     // the sign-in account's own copy of the name follows
-    expect((await admin.auth.admin.getUserById(fx.requesterA.id)).data.user?.user_metadata?.full_name).toBe('NEG')
+    expect((await admin.auth.admin.getUserById(fx.requesterA.id)).data.user?.user_metadata?.full_name).toBe(NEG)
   })
 
   it('the new e-mail signs in, the old one does not, and the old address is replaced everywhere it was kept', async () => {
@@ -127,7 +132,7 @@ describe('a store login renamed from NLD to NEG, with its e-mail', () => {
     const res = await updateUserProfile(fx.requesterA.id, { full_name: 'NEW9' })
     expect(res.error).toBeUndefined()
     expect(res.warning).toMatch(/another store already has the code NEW9/)
-    expect((await store()).code).toBe('NEG')
+    expect((await store()).code).toBe(NEG)
     expect((await admin.from('profiles').select('full_name').eq('id', fx.requesterA.id).single()).data!.full_name).toBe('NEW9')
   })
 
@@ -135,12 +140,12 @@ describe('a store login renamed from NLD to NEG, with its e-mail', () => {
     await admin.from('profiles').update({ full_name: 'Some Person' }).eq('id', fx.requesterA.id)
     const res = await updateUserProfile(fx.requesterA.id, { full_name: 'Some Other Name' })
     expect(res).toEqual({})
-    expect((await store()).code).toBe('NEG')
+    expect((await store()).code).toBe(NEG)
   })
 
   it('a name that stays the same changes nothing', async () => {
-    await admin.from('profiles').update({ full_name: 'NEG' }).eq('id', fx.requesterA.id)
-    expect(await updateUserProfile(fx.requesterA.id, { full_name: 'neg' })).toEqual({})
-    expect((await store()).code).toBe('NEG')
+    await admin.from('profiles').update({ full_name: NEG }).eq('id', fx.requesterA.id)
+    expect(await updateUserProfile(fx.requesterA.id, { full_name: NEG.toLowerCase() })).toEqual({})
+    expect((await store()).code).toBe(NEG)
   })
 })

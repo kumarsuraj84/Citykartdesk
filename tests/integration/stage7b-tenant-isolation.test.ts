@@ -16,7 +16,7 @@
  * layer, not at processConversationInbound()'s.
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
-import { getAdmin, createTestUser, type TestUser } from '../setup/fixtures-d03'
+import { getAdmin, createTestUser, ensureTestLocation, type TestUser } from '../setup/fixtures-d03'
 import { deleteTestOrg } from '../setup/cleanup-org'
 import { setupConversationFixture, type ConversationFixture } from '../setup/conversation-fixtures'
 import { setupWhatsAppChannelFixture, signPayload, buildTextMessagePayload, buildInteractivePayload, createMockGraphFetch, type WhatsAppChannelFixture } from '../setup/whatsapp-fixtures'
@@ -67,7 +67,7 @@ describe('Stage 7B — UAT-28/UAT-29: WhatsApp tenant isolation (same mobile num
     requesterB = await createTestUser('uat7b-tenant-req-b', 'UAT7B Tenant Requester B')
     // The SAME mobile number, deliberately, on two profiles in two different orgs.
     await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true }).eq('id', requesterA.id)
-    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true, org_id: orgBId }).eq('id', requesterB.id)
+    await admin.from('profiles').update({ whatsapp_enabled: true, is_active: true, org_id: orgBId, location_id: await ensureTestLocation(orgBId) }).eq('id', requesterB.id)
     await admin.from('profile_mobile_numbers').insert({ profile_id: requesterA.id, org_id: fxA.orgId, mobile_number: SHARED_MOBILE })
     await admin.from('profile_mobile_numbers').insert({ profile_id: requesterB.id, org_id: orgBId, mobile_number: SHARED_MOBILE })
 

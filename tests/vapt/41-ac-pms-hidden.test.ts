@@ -60,7 +60,7 @@ describe('the AC PMS service is hidden from everybody', () => {
       const r = await createRequest(f)
       if (r.requestId) made.push(r.requestId)
       expect(r.requestId).toBeUndefined()
-      expect(r.error).toMatch(/made automatically|cannot be raised by hand/i)
+      expect(r.error).toMatch(/made automatically|cannot be raised by hand|Service not found/i)
     })
   }
 

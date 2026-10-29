@@ -9,6 +9,8 @@ import { pickTitleField, subjectToTitle } from '@/lib/requests/title-field'
 import { notifyRequesterTicketLogged } from '@/lib/requests/notify-requester'
 import { isOemKind, type OemKind } from '@/lib/oems/kinds'
 import { loadProgram, runProgramRouting } from '@/lib/programs/routing'
+import { findSelectedMachine, machineValueOf } from '@/lib/programs/machines'
+import type { ProgramRowRecord } from '@/lib/programs/mail'
 import type { ProgramRecord } from '@/lib/programs/types'
 import { runAutoCvmApproval } from '@/lib/cvm/auto-approval'
 import { runMasterOemRouting, saveMasterSnapshot } from '@/lib/requests/master-routing'
@@ -16,6 +18,8 @@ import { findSelectedUnit, loadActiveAcUnits, loadCvmEmail, type AcUnitRecord } 
 import { loadCvmCandidates } from '@/lib/cvm/load'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import type { FormField, RequestPriority } from '@/types'
+import { isLocationRuleExempt, isServiceVisibleToLocation } from '@/lib/services/location-visibility'
+import { markAutomationFinished, markAutomationStarted, markRulesRan } from '@/lib/automation/rerun'
 import type { Json } from '@/types/database'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -189,13 +193,14 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   if (!service) return { error: 'Service not found.' }
 
   // Location-scoped visibility — see actingUserRoleForLocationCheck's doc comment.
-  if (actingUserRoleForLocationCheck === 'user') {
+  if (actingUserRoleForLocationCheck && !isLocationRuleExempt(actingUserRoleForLocationCheck)) {
     const { data: locationTags } = await client
       .from('service_location_tags')
       .select('location_id')
       .eq('service_id', serviceId)
     const restrictedTo = (locationTags ?? []).map((t: { location_id: string }) => t.location_id)
-    if (restrictedTo.length > 0 && !restrictedTo.includes(actingUserLocationId ?? '')) {
+    // a service with no location ticked is for administrators and platform owners only (lib/services/location-visibility.ts)
+    if (!isServiceVisibleToLocation(restrictedTo, actingUserLocationId)) {
       return { error: 'Service not found.' }
     }
   }
@@ -297,6 +302,33 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     const activeUnits = await loadActiveAcUnits(admin, orgId, requesterStoreCode)
     if (activeUnits.length > 0 && !findSelectedUnit(activeUnits, chosenAcValue)) {
       return { error: `The AC "${chosenAcValue}" is not an active AC of your store. Please choose one from the list.` }
+    }
+  }
+
+  // A box "machines of a Vendor Program" (one row per machine): for a category of such a program the machine chosen must be one of the store's active machines of that program (checked
+  // here, not only in the browser), and it is compulsory when the store has machines. Other channels have no list to choose from, so their value is kept as given.
+  let chosenMachineValue = ''
+  const machineField = allFields.find((f) => f.options_source === 'program_machines')
+  if (machineField && subCategoryResolution.categoryId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pdb = admin as unknown as { from: (t: string) => any }   // the program tables are read through the untyped client, as everywhere else
+    const { data: mc } = await admin.from('service_categories').select('program_id').eq('id', subCategoryResolution.categoryId).eq('org_id', orgId).maybeSingle()
+    const machineProgramId = (mc as { program_id?: string | null } | null)?.program_id ?? null
+    if (machineProgramId) {
+      const { data: mp } = await pdb.from('vendor_programs').select('is_active, row_type').eq('id', machineProgramId).eq('org_id', orgId).maybeSingle()
+      const prog = mp as { is_active: boolean; row_type: string } | null
+      if (prog?.is_active && prog.row_type === 'machine') {
+        chosenMachineValue = String(parsedFormData[machineField.id] ?? '').trim()
+        if (requesterStoreCode && source === 'web') {
+          const { data: mrows } = await pdb.from('program_rows').select('id, machine_no, serial').eq('program_id', machineProgramId).eq('store_code', requesterStoreCode.toUpperCase()).eq('is_active', true).is('removed_at', null)
+          const machines = (mrows ?? []) as ProgramRowRecord[]
+          if (machines.length > 0 && !chosenMachineValue) return { error: `Please choose the machine (${machineField.label}).` }
+          if (machines.length > 0 && chosenMachineValue && !findSelectedMachine(machines, chosenMachineValue)) {
+            return { error: `The machine "${chosenMachineValue}" is not an active machine of your store. Please choose one from the list.` }
+          }
+          if (chosenMachineValue && machines.length > 0) chosenMachineValue = machineValueOf(findSelectedMachine(machines, chosenMachineValue)!)
+        }
+      }
     }
   }
 
@@ -428,6 +460,10 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     return { error: sanitizeError(insertError, { route: 'create-request-core.ts#createRequestCore', fallback: 'Failed to create request.' }) }
   }
 
+  // Remember that the automatic steps of this ticket have started (and, below, how far they got): if the server stops now, the ticket shows as interrupted and can be finished
+  // from the ticket ("Run automation again") or by the 15-minute retry. Never fails the ticket.
+  await markAutomationStarted(admin as never, orgId, request.id)
+
   if (responseDueAt || resolutionDueAt) {
     const { error: slaError } = await admin
       .from('requests')
@@ -457,6 +493,7 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   try {
     const { runRulesForTrigger } = await import('@/lib/rules/run')
     await runRulesForTrigger('created', request.id)
+    await markRulesRan(admin as never, request.id)
   } catch (e) {
     console.error('[createRequestCore] Business rules (created) failed', e)
   }
@@ -497,6 +534,7 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
       await runProgramRouting({
         admin, actorId: actingUserId, orgId, request, program, storeCode: requesterStoreCode, categoryName, title, description: oemDescription,
         requesterName: requesterProfile?.full_name ?? '', requesterEmail: formRequesterEmail || authUser?.user?.email || '', requesterPhone, storeAddress: requesterStoreAddress,
+        machineValue: chosenMachineValue || undefined,
       })
     } catch (e) {
       console.error('[createRequestCore] program routing failed', e)
@@ -599,5 +637,6 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   // (or, for Email Intake's 'approval' payload type, as an explicit
   // follow-up step in lib/actions/intake/work.ts) — never auto-created here.
 
+  await markAutomationFinished(admin as never, request.id)
   return { requestId: request.id, requestNo: request.request_no }
 }

@@ -10,7 +10,7 @@
  * this fixture mirrors).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { getAdmin } from '../setup/fixtures-d03'
+import { getAdmin, ensureTestLocation } from '../setup/fixtures-d03'
 import { deleteTestOrg } from '../setup/cleanup-org'
 import { createTestDepartment, deleteTestDepartment } from '../setup/test-department'
 import { listQuestionnaireServices, searchSubCategories } from '@/lib/requests/questionnaire/catalog'
@@ -28,6 +28,7 @@ type Fx = {
   inactiveServiceAId: string
   locationRestrictedServiceAId: string
   locationAId: string
+  testLocationAId: string
   subCategoryAHardwareId: string
   subCategoryAPrinterId: string
   subCategoryAArchivedId: string
@@ -109,6 +110,17 @@ async function setup(): Promise<Fx> {
     .insert({ service_id: locationRestrictedServiceA.id, location_id: location.id })
   if (locTagError) throw new Error(`[stage3 catalog security fixtures] location tag: ${locTagError.message}`)
 
+  // a service shows only to people at a Location ticked on it (nothing ticked = nobody): tick the permanent test Location on the services that must be visible (org A's three, org B's own)
+  const testLocationAId = await ensureTestLocation(ORG_A_ID)
+  const testLocationBId = await ensureTestLocation(orgB.id)
+  const { error: testTagError } = await admin.from('service_location_tags').insert([
+    { service_id: serviceA.id, location_id: testLocationAId },
+    { service_id: draftServiceA.id, location_id: testLocationAId },
+    { service_id: inactiveServiceA.id, location_id: testLocationAId },
+    { service_id: serviceB.id, location_id: testLocationBId },
+  ])
+  if (testTagError) throw new Error(`[stage3 catalog security fixtures] test location tags: ${testTagError.message}`)
+
   const { data: categoryA, error: categoryAError } = await admin
     .from('service_categories')
     .insert({ name: `Stage3 Cat Sec Category A ${RUN_TAG}`, slug: `stage3-cat-sec-category-a-${RUN_TAG}`, org_id: ORG_A_ID })
@@ -154,6 +166,7 @@ async function setup(): Promise<Fx> {
     inactiveServiceAId: inactiveServiceA.id,
     locationRestrictedServiceAId: locationRestrictedServiceA.id,
     locationAId: location.id,
+    testLocationAId,
     subCategoryAHardwareId: subA1.id,
     subCategoryAPrinterId: subA2.id,
     subCategoryAArchivedId: subA3.id,
@@ -191,18 +204,18 @@ describe('Stage 3, Step 18 — questionnaire catalog/subcategory security matrix
 
   describe('listQuestionnaireServices()', () => {
     it('never returns another org\'s services', async () => {
-      const services = await listQuestionnaireServices({ client: admin, orgId: fx.orgAId })
+      const services = await listQuestionnaireServices({ client: admin, orgId: fx.orgAId, requesterLocationId: fx.testLocationAId })
       expect(services.some((s) => s.id === fx.serviceBId)).toBe(false)
       expect(services.some((s) => s.id === fx.serviceAId)).toBe(true)
     })
 
     it('excludes non-published (draft/review) services — self-serve only ever sees published', async () => {
-      const services = await listQuestionnaireServices({ client: admin, orgId: fx.orgAId })
+      const services = await listQuestionnaireServices({ client: admin, orgId: fx.orgAId, requesterLocationId: fx.testLocationAId })
       expect(services.some((s) => s.id === fx.draftServiceAId)).toBe(false)
     })
 
     it('excludes inactive services', async () => {
-      const services = await listQuestionnaireServices({ client: admin, orgId: fx.orgAId })
+      const services = await listQuestionnaireServices({ client: admin, orgId: fx.orgAId, requesterLocationId: fx.testLocationAId })
       expect(services.some((s) => s.id === fx.inactiveServiceAId)).toBe(false)
     })
 

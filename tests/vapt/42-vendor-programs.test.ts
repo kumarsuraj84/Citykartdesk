@@ -99,12 +99,13 @@ describe('the program sheet is copied into the database', () => {
     const good = sheets[SHEET]
     sheets[SHEET] = [['Store Code', 'Vendor'], [A, 'x']]
     const rep = await sync()
-    expect(rep[0].status).toBe('error')
-    expect(rep[0].message).toMatch(/missing the column/)
+    const mine = rep.find((r) => r.programId === ids.program)!   // other tests' programs may be in the same organisation at the same time
+    expect(mine.status).toBe('error')
+    expect(mine.message).toMatch(/missing the column/)
     expect(((await db().from('program_rows').select('id').eq('program_id', ids.program).is('removed_at', null)).data ?? []).length).toBe(2)
     expect((await db().from('vendor_programs').select('last_status, last_error').eq('id', ids.program).single()).data.last_status).toBe('error')
     sheets[SHEET] = good
-    expect((await sync())[0].status).toBe('ok')
+    expect((await sync()).find((r) => r.programId === ids.program)!.status).toBe('ok')
   })
 })
 
@@ -252,9 +253,10 @@ describe('what a program may not do', () => {
       expect(res.error || (res.data ?? []).length === 0, table).toBeTruthy()
     }
   })
-  it('a category cannot be in a program and also have an AC / Genset OEM type or be the AC PMS category', async () => {
+  it('a category cannot be in a program and also have an AC / Genset OEM type; it MAY be the PMS category of the program', async () => {
     expect((await db().from('service_categories').update({ auto_oem_kind: 'ac' }).eq('id', ids.cat)).error).toBeTruthy()
-    expect((await db().from('service_categories').update({ is_pms: true }).eq('id', ids.cat)).error).toBeTruthy()
+    expect((await db().from('service_categories').update({ is_pms: true }).eq('id', ids.cat)).error).toBeFalsy()      // the program's PMS category
+    await db().from('service_categories').update({ is_pms: false }).eq('id', ids.cat)
   })
   it('a mistake in the sheet never loses the rows already copied: rows that leave the sheet are kept as removed', async () => {
     const keep = sheets[SHEET]

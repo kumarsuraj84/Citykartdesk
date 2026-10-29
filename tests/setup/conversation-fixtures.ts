@@ -2,7 +2,7 @@
 // tests. Creates a team + service (+ optional SLA policy) + sub-category
 // tagged to it, all within a caller-supplied org (the real seed org unless
 // the test specifically needs a second org for tenant-isolation checks).
-import { getAdmin } from './fixtures-d03'
+import { getAdmin, ensureTestLocation } from './fixtures-d03'
 import type { FormField } from '@/types'
 
 const EXISTING_ORG_ID = '00000000-0000-0000-0000-000000000001'
@@ -81,6 +81,10 @@ export async function setupConversationFixture(params: {
     .insert({ name: `Printer Issue ${params.runTag}`, slug: `conv-fixture-subcat-${params.runTag}`, category_id: category.id, is_active: true, sla_priority: params.subCategoryPriority ?? 'urgent' })
     .select('id').single()
   if (subCategoryError || !subCategory) throw new Error(`[conversation fixtures] sub-category: ${subCategoryError?.message}`)
+
+  // the service is ticked for the test Location (every test user sits in it): a service with no location ticked is shown to no requester
+  const { error: locationTagError } = await admin.from('service_location_tags').insert({ service_id: service.id, location_id: await ensureTestLocation(orgId) })
+  if (locationTagError) throw new Error(`[conversation fixtures] location tag: ${locationTagError.message}`)
 
   const { error: tagError } = await admin.from('service_sub_category_tags').insert({ service_id: service.id, sub_category_id: subCategory.id })
   if (tagError) throw new Error(`[conversation fixtures] tag: ${tagError.message}`)
