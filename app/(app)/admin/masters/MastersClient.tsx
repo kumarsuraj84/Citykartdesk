@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { CheckCircle2, AlertTriangle, XCircle, Link2, Unplug } from 'lucide-react'
 import { cn, formatDateTime } from '@/lib/utils'
 import { saveMasterSource, saveMasterTemplate, resetMasterTemplate, disconnectGoogleSheets, updateMastersNow } from '@/lib/actions/admin/masters'
@@ -30,7 +31,7 @@ export type CountsView = { acActive: number; acInactive: number; acRemoved: numb
 export type PmsView = { upcoming: number; log: { store_code: string; pms_date: string; status: 'creating' | 'created' | 'skipped' | 'failed'; note: string | null; request_no: string | null }[] }
 type Connection = { account_email: string | null; status: 'connected' | 'broken'; last_error: string | null; connected_at: string } | null
 
-const SHEETS: { kind: 'ac' | 'genset' | 'cvm' | 'pms'; title: string; hint: string }[] = [
+export const SHEETS: { kind: 'ac' | 'genset' | 'cvm' | 'pms'; title: string; hint: string }[] = [
   { kind: 'ac', title: 'AC DETAILS MASTER SHEET-ADMIN', hint: 'One row per AC. Gives the AC choices in the ticket form, the OEM e-mail addresses, and the store address and opening date.' },
   { kind: 'genset', title: 'GENSET Detail MASTER SHEET-ADMIN', hint: 'One row per genset. Gives the OEM e-mail addresses for genset tickets.' },
   { kind: 'cvm', title: 'CVM Detail MASTER SHEET-ADMIN (for Approval)', hint: 'One row per store with its CVM e-mail. The approval goes to that person.' },
@@ -46,7 +47,7 @@ const GOOGLE_MESSAGE: Record<string, { ok: boolean; text: string }> = {
   forbidden: { ok: false, text: 'Only an administrator can connect Google Sheets.' },
 }
 
-function ago(iso: string | null): string {
+export function ago(iso: string | null): string {
   if (!iso) return 'not yet'
   const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000))
   if (s < 90) return 'just now'
@@ -54,7 +55,7 @@ function ago(iso: string | null): string {
   return formatDateTime(iso)
 }
 
-function Card({ title, children, right }: { title: string; children: React.ReactNode; right?: React.ReactNode }) {
+export function Card({ title, children, right }: { title: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <section className="rounded-xl border border-border bg-card p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -66,7 +67,7 @@ function Card({ title, children, right }: { title: string; children: React.React
   )
 }
 
-function SourceCard({ source, spec, issueCount }: { source: SourceView | undefined; spec: (typeof SHEETS)[number]; issueCount: { errors: number; warnings: number } }) {
+export function SourceCard({ source, spec, issueCount }: { source: SourceView | undefined; spec: (typeof SHEETS)[number]; issueCount: { errors: number; warnings: number } }) {
   const [link, setLink] = useState(source ? `https://docs.google.com/spreadsheets/d/${source.spreadsheet_id}/edit` : '')
   const [tab, setTab] = useState(source?.tab_name ?? '')
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -116,7 +117,7 @@ function SourceCard({ source, spec, issueCount }: { source: SourceView | undefin
   )
 }
 
-function TemplateCard({ t }: { t: TemplateView }) {
+export function TemplateCard({ t }: { t: TemplateView }) {
   const [subject, setSubject] = useState(t.subject)
   const [body, setBody] = useState(t.body)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -153,12 +154,11 @@ function TemplateCard({ t }: { t: TemplateView }) {
   )
 }
 
-export function MastersClient({ googleResult, connection, sources, issues, templates, counts, pms = { upcoming: 0, log: [] } }: {
+export function MastersClient({ googleResult, connection, sources, issues, counts, pms = { upcoming: 0, log: [] } }: {
   googleResult: string | null
   connection: Connection
   sources: SourceView[]
   issues: IssueView[]
-  templates: TemplateView[]
   counts: CountsView
   pms?: PmsView
 }) {
@@ -232,7 +232,14 @@ export function MastersClient({ googleResult, connection, sources, issues, templ
         ))}
       </div>
 
-      {SHEETS.map((s) => <SourceCard key={s.kind} source={sources.find((x) => x.kind === s.kind)} spec={s} issueCount={issueCount(s.kind)} />)}
+      <Card title="AC and Genset">
+        <p className="text-sm text-muted-foreground">
+          The AC and Genset sheets, their categories and their OEM e-mail wording are set up in <Link href="/admin/programs" className="font-medium text-primary underline">Admin &gt; Vendor Programs</Link>, together with every other vendor line.
+          This page keeps the Google connection, the update button, the CVM and AC PMS sheets, and the health list of all sheets.
+        </p>
+      </Card>
+
+      {SHEETS.filter((s) => s.kind === 'cvm' || s.kind === 'pms').map((s) => <SourceCard key={s.kind} source={sources.find((x) => x.kind === s.kind)} spec={s} issueCount={issueCount(s.kind)} />)}
 
       {sources.some((x) => x.kind === 'pms') && (
         <Card title={`AC PMS tickets (${pms.upcoming} PMS date${pms.upcoming === 1 ? '' : 's'} still to come in the sheet)`}>
@@ -282,8 +289,6 @@ export function MastersClient({ googleResult, connection, sources, issues, templ
           </ul>
         )}
       </Card>
-
-      {templates.map((t) => <TemplateCard key={t.kind} t={t} />)}
     </div>
   )
 }

@@ -6,13 +6,14 @@ import { useRouter } from 'next/navigation'
 import { cn, formatDateTime } from '@/lib/utils'
 import { createProgram } from '@/lib/actions/admin/programs'
 import type { ProgramListItem } from '@/lib/programs/admin-data'
+import type { BuiltInListItem } from '@/lib/programs/builtin'
 
 function StatusPill({ p }: { p: ProgramListItem }) {
   const text = p.is_active ? 'On' : 'Off'
   return <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', p.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-muted text-muted-foreground')}>{text}</span>
 }
 
-export function ProgramsClient({ programs }: { programs: ProgramListItem[] }) {
+export function ProgramsClient({ programs, builtIn = [] }: { programs: ProgramListItem[]; builtIn?: BuiltInListItem[] }) {
   const router = useRouter()
   const [name, setName] = useState('')
   const [rowType, setRowType] = useState<'store' | 'machine'>('store')
@@ -55,10 +56,26 @@ export function ProgramsClient({ programs }: { programs: ProgramListItem[] }) {
 
       <section className="rounded-xl border border-border bg-card">
         <h2 className="border-b border-border px-4 py-2.5 text-sm font-semibold text-foreground">Programs</h2>
+        <ul className="divide-y divide-border">
+          {builtIn.map((b) => (
+            <li key={b.kind}>
+              <Link href={`/admin/programs/built-in/${b.kind}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-muted/40">
+                <span className="min-w-[10rem] flex-1 text-sm font-medium text-foreground">{b.name} <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-normal text-muted-foreground">built in</span></span>
+                <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', b.categories > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-muted text-muted-foreground')}>{b.categories > 0 ? 'On' : 'Off'}</span>
+                <span className="text-xs text-muted-foreground">{b.categories} categor{b.categories === 1 ? 'y' : 'ies'}</span>
+                <span className="text-xs text-muted-foreground">{b.rows} {b.rowType === 'machine' ? 'machine' : 'genset'}{b.rows === 1 ? '' : 's'} in the sheet</span>
+                <span className={cn('text-xs', b.last_status === 'error' ? 'text-red-600' : 'text-muted-foreground')}>
+                  {b.last_status === 'error' ? 'Sheet problem' : b.last_checked_at ? `Checked ${formatDateTime(b.last_checked_at)}` : 'Sheet not read yet'}
+                </span>
+                {b.problems > 0 && <span className="text-xs text-amber-700">{b.problems} to look at</span>}
+              </Link>
+            </li>
+          ))}
+        </ul>
         {programs.length === 0 ? (
-          <p className="px-4 py-6 text-center text-sm text-muted-foreground">No program yet. AC and Genset are built in and do not appear here.</p>
+          <p className="border-t border-border px-4 py-6 text-center text-sm text-muted-foreground">No other program yet. Create one above (for example RO Water Purifier).</p>
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className="divide-y divide-border border-t border-border">
             {programs.map((p) => (
               <li key={p.id}>
                 <Link href={`/admin/programs/${p.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-muted/40">

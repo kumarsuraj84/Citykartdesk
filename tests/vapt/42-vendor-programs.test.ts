@@ -181,6 +181,45 @@ describe('a ticket in a category of an active program', () => {
   })
 })
 
+describe('the built-in AC / Genset line is set up from the same screen', () => {
+  const cats: string[] = []
+  const mk = async (n: string, extra: Record<string, unknown> = {}) => {
+    const id = (await db().from('service_categories').insert({ org_id: fx.orgId, name: `${tag} bi-${n}`, slug: `${tag}-bi-${n}`, ...extra }).select('id').single()).data.id as string
+    cats.push(id)
+    return id
+  }
+  const kindOf = async (id: string) => (await db().from('service_categories').select('auto_oem_kind').eq('id', id).single()).data.auto_oem_kind as string | null
+  afterAll(async () => { if (cats.length) await db().from('service_categories').delete().in('id', cats) })
+
+  it('only an administrator can change it; the Genset categories are set and unset with the same switch as Admin > Categories', async () => {
+    const { saveBuiltInCategories } = await import('@/lib/actions/admin/programs')
+    const g1 = await mk('g1'), g2 = await mk('g2')
+    actAs(fx.requesterA)
+    expect((await saveBuiltInCategories('genset', [g1])).error).toMatch(/Administrator/)
+    expect(await kindOf(g1)).toBeNull()
+    actAs(fx.admin)
+    expect((await saveBuiltInCategories('genset', [g1, g2])).error).toBeUndefined()
+    expect([await kindOf(g1), await kindOf(g2)]).toEqual(['genset', 'genset'])
+    expect((await saveBuiltInCategories('genset', [g1])).error).toBeUndefined()
+    expect([await kindOf(g1), await kindOf(g2)]).toEqual(['genset', null])
+    const audit = ((await db().from('admin_audit_log').select('action, metadata').eq('entity_id', g2)).data ?? []) as { action: string }[]
+    expect(audit.filter((a) => a.action === 'category_oem_routing_changed').length).toBeGreaterThanOrEqual(2)
+  })
+  it('refuses a category of a Vendor Program, the other OEM type, and the AC PMS category', async () => {
+    const { saveBuiltInCategories } = await import('@/lib/actions/admin/programs')
+    const ac1 = await mk('ac1', { auto_oem_kind: 'ac' }), pms = await mk('pms', { is_pms: true })
+    actAs(fx.admin)
+    expect((await saveBuiltInCategories('genset', [ids.cat])).error).toMatch(/Vendor Program/)
+    expect((await saveBuiltInCategories('genset', [ac1])).error).toMatch(/AC OEM/)
+    expect((await saveBuiltInCategories('ac', [pms])).error).toMatch(/PMS/)
+    expect((await saveBuiltInCategories('nope', [])).error).toBeTruthy()
+    expect(await kindOf(ac1)).toBe('ac')
+    // clearing the AC list clears only AC categories of this org: the one made above goes back to none
+    expect((await saveBuiltInCategories('ac', [])).error).toBeUndefined()
+    expect(await kindOf(ac1)).toBeNull()
+  })
+})
+
 describe('what a program may not do', () => {
   it('its data cannot be read by a signed-in user (server only)', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

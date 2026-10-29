@@ -201,6 +201,40 @@ export async function setProgramActive(id: string, on: boolean): Promise<ActionR
   return {}
 }
 
+/**
+ * The categories of the built-in AC or Genset line (the categories that send to that OEM). Same switch as Admin > Categories ("send to the AC / Genset OEM"), written
+ * here so the whole line is set up on one screen. A category of a Vendor Program, the AC PMS category or a category of the other OEM type cannot be taken.
+ */
+export async function saveBuiltInCategories(kind: string, categoryIds: string[]): Promise<ActionResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return { error: guard.error }
+  if (kind !== 'ac' && kind !== 'genset') return { error: 'Unknown line.' }
+  const label = kind === 'ac' ? 'AC' : 'Genset'
+  const wanted = [...new Set(categoryIds)]
+  const { data: cats } = await db().from('service_categories').select('id, name, program_id, auto_oem_kind, is_pms').eq('org_id', guard.orgId)
+  const all = (cats ?? []) as { id: string; name: string; program_id: string | null; auto_oem_kind: string | null; is_pms: boolean }[]
+  for (const cid of wanted) {
+    const c = all.find((x) => x.id === cid)
+    if (!c) return { error: 'One of the categories was not found.' }
+    if (c.program_id) return { error: `"${c.name}" belongs to a Vendor Program.` }
+    if (c.auto_oem_kind && c.auto_oem_kind !== kind) return { error: `"${c.name}" already sends to the ${c.auto_oem_kind === 'ac' ? 'AC' : 'Genset'} OEM.` }
+    if (c.is_pms) return { error: `"${c.name}" is the AC PMS category and cannot send to the ${label} OEM.` }
+  }
+  const current = all.filter((c) => c.auto_oem_kind === kind).map((c) => c.id)
+  const remove = current.filter((c) => !wanted.includes(c))
+  const add = wanted.filter((c) => !current.includes(c))
+  if (remove.length) { const { error } = await db().from('service_categories').update({ auto_oem_kind: null }).in('id', remove).eq('org_id', guard.orgId); if (error) return { error: 'Could not save the categories.' } }
+  if (add.length) { const { error } = await db().from('service_categories').update({ auto_oem_kind: kind }).in('id', add).eq('org_id', guard.orgId); if (error) return { error: 'Could not save the categories.' } }
+  for (const [ids, to] of [[remove, 'none'], [add, kind]] as const) {
+    for (const id of ids) {
+      const c = all.find((x) => x.id === id)
+      await logAdminAudit({ orgId: guard.orgId, actorId: guard.profile.id, entityType: 'service_category', entityId: id, action: 'category_oem_routing_changed', metadata: { name: c?.name, from: to === 'none' ? kind : 'none', to } })
+    }
+  }
+  revalidatePath('/admin/programs'); revalidatePath(`/admin/programs/built-in/${kind}`); revalidatePath('/admin/categories')
+  return {}
+}
+
 /** A program can be deleted only while no ticket has been mailed through it; otherwise switch it off. */
 export async function deleteProgram(id: string): Promise<ActionResult> {
   const guard = await requireAdmin()

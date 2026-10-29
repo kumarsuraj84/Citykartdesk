@@ -1,0 +1,118 @@
+'use client'
+
+import { useState, useTransition } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { saveBuiltInCategories } from '@/lib/actions/admin/programs'
+import { updateMastersNow } from '@/lib/actions/admin/masters'
+import { SourceCard, TemplateCard, Card } from '@/app/(app)/admin/masters/MastersClient'
+import type { BuiltInEditorData, BuiltInKind } from '@/lib/programs/builtin'
+
+// The built-in AC / Genset line on the Vendor Programs screens. The sheet and the mail wording are the same parts the Sheet Masters page used; the categories are the
+// "send to the AC / Genset OEM" switch of Admin > Categories. Nothing about how tickets are handled changes.
+
+type Msg = { ok: boolean; text: string } | null
+const Note = ({ m }: { m: Msg }) => (m ? <span role={m.ok ? 'status' : 'alert'} className={cn('text-xs', m.ok ? 'text-emerald-700' : 'text-red-600')}>{m.text}</span> : null)
+const btn = 'rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50'
+
+export function BuiltInClient({ data, spec, rowType }: { data: BuiltInEditorData; spec: { kind: BuiltInKind; title: string; hint: string }; rowType: 'machine' | 'store' }) {
+  const router = useRouter()
+  const { readiness, categories, source, issues, template, connected } = data
+  const [pending, start] = useTransition()
+  const [picked, setPicked] = useState<string[]>(categories.filter((c) => c.selected).map((c) => c.id))
+  const [catMsg, setCatMsg] = useState<Msg>(null)
+  const [updMsg, setUpdMsg] = useState<Msg>(null)
+  const on = categories.some((c) => c.selected)
+  const errors = issues.filter((i) => i.severity === 'error').length
+  const warnings = issues.length - errors
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-xl border border-border bg-card p-4">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-foreground">Check my set-up</h2>
+          <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', on ? 'bg-emerald-50 text-emerald-700' : 'bg-muted text-muted-foreground')}>{on ? 'In use' : 'No category yet'}</span>
+        </div>
+        <ul className="space-y-1.5">
+          {readiness.items.map((i) => (
+            <li key={i.key} className="flex items-start gap-2 text-sm">
+              {i.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-label="done" /> : i.blocking ? <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" aria-label="missing" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-label="to look at" />}
+              <span className={i.ok ? 'text-foreground' : i.blocking ? 'text-red-700' : 'text-amber-800'}>{i.text}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-xs text-muted-foreground">
+          This line is always on while a category is ticked below. {rowType === 'machine' ? 'One row of the sheet is one machine (the requester picks the AC in the ticket form).' : 'One row of the sheet is one genset; a store with several gensets gets one mail that lists them all.'}
+        </p>
+      </section>
+
+      <Card title="Categories" right={<Link href="/admin/categories" className="text-[11px] text-muted-foreground underline">Admin &gt; Categories</Link>}>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Tickets of the ticked categories go to the store&apos;s {spec.kind === 'ac' ? 'AC' : 'Genset'} OEM. This is the same switch as &quot;send to the OEM&quot; in Admin &gt; Categories. A category that belongs to another line cannot be chosen.
+        </p>
+        <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+          {categories.map((c) => (
+            <label key={c.id} className={cn('flex items-start gap-2 rounded-lg border border-border px-2.5 py-1.5 text-sm', c.blocked && 'opacity-60')}>
+              <input type="checkbox" className="mt-0.5" disabled={!!c.blocked} checked={picked.includes(c.id)} onChange={(e) => setPicked((p) => (e.target.checked ? [...p, c.id] : p.filter((x) => x !== c.id)))} />
+              <span><span className="block">{c.name}</span>{c.blocked && <span className="block text-[11px] text-muted-foreground">{c.blocked}</span>}</span>
+            </label>
+          ))}
+        </div>
+        <div className="mt-3 flex items-center gap-3">
+          <button type="button" disabled={pending} className={btn} onClick={() => start(async () => { const r = await saveBuiltInCategories(spec.kind, picked); setCatMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'Saved.' }); if (!r.error) router.refresh() })}>Save categories</button>
+          <Note m={catMsg} />
+        </div>
+        {spec.kind === 'ac' && <p className="mt-3 text-[11px] text-muted-foreground">Keep &quot;Route to OEM&quot; ticked on the AC service (Admin &gt; Services): the reports use it to recognise AC tickets.</p>}
+      </Card>
+
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+          <h2 className="text-sm font-semibold text-foreground">Google Sheet</h2>
+          <div className="flex items-center gap-2">
+            <Note m={updMsg} />
+            <button
+              type="button"
+              disabled={pending || !connected}
+              title={!connected ? 'Connect Google Sheets first (Admin > Sheet Masters)' : undefined}
+              className={btn}
+              onClick={() => start(async () => { setUpdMsg(null); const r = await updateMastersNow(); setUpdMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: r.summary ?? 'Updated.' }); router.refresh() })}
+            >
+              Update from sheets now
+            </button>
+          </div>
+        </div>
+        <SourceCard source={source} spec={spec} issueCount={{ errors, warnings }} />
+        {!connected && <p className="px-1 text-xs text-amber-700">Google Sheets is not connected. Connect it in <Link href="/admin/masters" className="underline">Admin &gt; Sheet Masters</Link>.</p>}
+      </div>
+
+      <TemplateCard t={template} />
+
+      <Card title="What happens to the ticket">
+        <p className="text-sm text-muted-foreground">
+          The OEM is mailed when the ticket is raised and the ticket moves to In Progress by itself; the conversation shows who it was sent to.
+          {spec.kind === 'ac' ? ' The AC picker in the ticket form, the vendor portal, quote and PO approval and the AC PMS tickets follow the AC settings and the AC sheet columns Ticket Mail To, PO Mail To and Quote Approver Mail To.' : ' Genset tickets are mailed only; there is no vendor portal for Genset.'}
+        </p>
+      </Card>
+
+      <Card title={`Problems found in the sheet (${issues.length})`}>
+        {issues.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No problems found in the sheet.</p>
+        ) : (
+          <ul className="divide-y divide-border text-sm">
+            {issues.map((i, n) => (
+              <li key={n} className="flex items-start gap-2 py-2">
+                {i.severity === 'error' ? <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />}
+                <div className="min-w-0">
+                  <p className="text-foreground">{i.message}</p>
+                  {i.store_code && <p className="text-[11px] text-muted-foreground">Store {i.store_code}</p>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
+  )
+}

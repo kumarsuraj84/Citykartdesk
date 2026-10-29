@@ -88,3 +88,9 @@ The admin can type different heading names for any of these in the program (so a
 - The note "Ticket sent to the <program> OEM for servicing." is the same note AC / Genset write, so the ticket page shows it as a table and the e-mail reply check accepts the vendor's answer.
 - Phase 1 limits: `machine` programs mail every active machine of the store (no machine picker in the ticket form yet); the `portal` level can be stored and mails the vendor but the vendor-portal part is Phase 2.
 - Tests: `tests/unit/programs-engine.test.ts` (pure parts) and `tests/vapt/42-vendor-programs.test.ts` (database, mail, note, snapshot, reopen, privacy; runs through the isolation check).
+
+## 10. AC and Genset on the same screens (2026-10-29, local, not pushed)
+- Admin > Vendor Programs lists **AC (built in)** and **Genset (built in)** first. Each opens `/admin/programs/built-in/<ac|genset>` with the same sections as every other line: check list, categories, Google Sheet (link, tab, update, last check), the OEM mail wording, what happens to the ticket, and the problems found in the sheet.
+- Nothing about behaviour changes: the categories are the existing "send to the AC / Genset OEM" switch (`service_categories.auto_oem_kind`, written by `saveBuiltInCategories` with the same audit entry), the sheet and the mail wording are the existing `master_sources` / `master_mail_templates` rows. The ticket form, OEM mail, vendor portal, PO approval and PMS keep their own engines.
+- Admin > Sheet Masters keeps the Google connection, the update button, the CVM and AC PMS sheets and the health list; its AC and Genset cards are replaced by a pointer to Vendor Programs, so there is one place to set each line up.
+- Next phases (agreed order): machine list, vendor portal and PO approval per program (proved on RO Purifier and Sensor Machine), scheduled tickets (PMS) and reports per program, then AC and Genset onto the engine with a side-by-side test.
