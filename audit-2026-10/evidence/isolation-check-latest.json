@@ -1,5 +1,5 @@
 {
- "at": "2026-10-29T04:07:23.653Z",
+ "at": "2026-10-29T05:33:50.895Z",
  "pass": 21,
  "fail": 0,
  "results": [
@@ -127,7 +127,7 @@
    "id": "N1",
    "ok": true,
    "what": "no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10",
-   "detail": "none"
+   "detail": "only the user's own browser: chrome.exe(pid 28732) 182.72.84.10:3210 ESTABLISHED - NOT the audit; the audit never uses this browser"
   }
  ]
 }
