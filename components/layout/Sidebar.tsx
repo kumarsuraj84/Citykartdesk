@@ -169,6 +169,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
             { label: 'Settings',       href: '/admin/settings',       icon: Settings },
             ...(isAdmin ? [{ label: 'Master Data', href: '/admin/master-data', icon: Database }] : []),
             ...(isAdmin ? [{ label: 'Sheet Masters', href: '/admin/masters', icon: Database }] : []),
+            ...(isAdmin ? [{ label: 'Vendor Programs', href: '/admin/programs', icon: Wrench }] : []),
             ...(isAdmin ? [{ label: 'Vendors', href: '/admin/vendors', icon: Wrench }] : []),
             ...(isAdmin ? [{ label: 'AC master', href: '/admin/masters/ac', icon: Database }, { label: 'Genset master', href: '/admin/masters/genset', icon: Database }] : []),
             { label: 'Knowledge Base', href: '/admin/knowledge-base', icon: BookOpen  },

@@ -8,6 +8,8 @@ import { resolveSubCategoryForService } from '@/lib/requests/resolve-sub-categor
 import { pickTitleField, subjectToTitle } from '@/lib/requests/title-field'
 import { notifyRequesterTicketLogged } from '@/lib/requests/notify-requester'
 import { isOemKind, type OemKind } from '@/lib/oems/kinds'
+import { loadProgram, runProgramRouting } from '@/lib/programs/routing'
+import type { ProgramRecord } from '@/lib/programs/types'
 import { runAutoCvmApproval } from '@/lib/cvm/auto-approval'
 import { runMasterOemRouting, saveMasterSnapshot } from '@/lib/requests/master-routing'
 import { findSelectedUnit, loadActiveAcUnits, loadCvmEmail, type AcUnitRecord } from '@/lib/masters/resolve'
@@ -474,13 +476,32 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   let categoryOemKind: OemKind | null = null
   let categoryName: string | null = null
   let categoryCvmApproval = false
+  let categoryProgramId: string | null = null
   if (categoryId) {
-    const { data: cat } = await admin.from('service_categories').select('name, auto_oem_kind, auto_cvm_approval').eq('id', categoryId).eq('org_id', orgId).maybeSingle()
+    const { data: cat } = await admin.from('service_categories').select('name, auto_oem_kind, auto_cvm_approval, program_id').eq('id', categoryId).eq('org_id', orgId).maybeSingle()
     categoryName = cat?.name ?? null
     categoryOemKind = isOemKind(cat?.auto_oem_kind) ? cat.auto_oem_kind : null
     categoryCvmApproval = cat?.auto_cvm_approval === true
+    categoryProgramId = (cat as { program_id?: string | null } | null)?.program_id ?? null
   }
-  const oemKind: OemKind | null = categoryOemKind ?? (service.auto_oem_routing ? 'ac' : null)
+  // A Vendor Program (Admin -> Vendor Programs) takes over a category it covers: its own sheet, mail and status, instead of the AC service flag. A program that is switched off
+  // does nothing, and the ticket is a normal ticket.
+  let program: ProgramRecord | null = null
+  if (categoryProgramId) {
+    try { program = await loadProgram(admin as never, orgId, categoryProgramId) } catch (e) { console.error('[createRequestCore] program lookup failed', e) }
+  }
+  const oemKind: OemKind | null = categoryProgramId ? null : (categoryOemKind ?? (service.auto_oem_routing ? 'ac' : null))
+  if (program?.is_active) {
+    try {
+      const { data: authUser } = await admin.auth.admin.getUserById(requesterId)
+      await runProgramRouting({
+        admin, actorId: actingUserId, orgId, request, program, storeCode: requesterStoreCode, categoryName, title, description: oemDescription,
+        requesterName: requesterProfile?.full_name ?? '', requesterEmail: formRequesterEmail || authUser?.user?.email || '', requesterPhone, storeAddress: requesterStoreAddress,
+      })
+    } catch (e) {
+      console.error('[createRequestCore] program routing failed', e)
+    }
+  }
   if (oemKind) {
     try {
       const { data: authUser } = await admin.auth.admin.getUserById(requesterId)

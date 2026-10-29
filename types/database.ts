@@ -4438,6 +4438,7 @@ export type Database = {
           auto_cvm_approval: boolean
           show_approval_history: boolean
           is_pms: boolean
+          program_id: string | null
           org_id: string | null
           slug: string
           sort_order: number
@@ -4455,6 +4456,7 @@ export type Database = {
           auto_cvm_approval?: boolean
           show_approval_history?: boolean
           is_pms?: boolean
+          program_id?: string | null
           org_id?: string | null
           slug: string
           sort_order?: number
@@ -4472,6 +4474,7 @@ export type Database = {
           auto_cvm_approval?: boolean
           show_approval_history?: boolean
           is_pms?: boolean
+          program_id?: string | null
           org_id?: string | null
           slug?: string
           sort_order?: number

@@ -4,18 +4,18 @@ import type { AcRow, CvmRow, GensetRow, MasterIssue, MasterKind, ParseResult, Pm
 // Pure: turns the cells of a master sheet (as the Sheets API returns them) into typed rows plus a list of problems. No database, no network.
 // Columns are found by their heading (case, spaces and punctuation do not matter), so the team can move columns around or add new ones.
 
-const norm = (h: unknown) => String(h ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+export const norm = (h: unknown) => String(h ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
 
 /** A cell as trimmed text. Numbers keep their plain form (3 -> "3", 58.5 -> "58.5"). */
-function cell(v: unknown): string {
+export function cell(v: unknown): string {
   if (v === null || v === undefined) return ''
   if (typeof v === 'number') return Number.isFinite(v) ? String(v) : ''
   return String(v).replace(/ /g, ' ').trim()
 }
 
-type Grid = { header: Map<string, number>; body: { sheetRow: number; cells: unknown[] }[] }
+export type Grid = { header: Map<string, number>; body: { sheetRow: number; cells: unknown[] }[] }
 
-function toGrid(values: unknown[][]): Grid | null {
+export function toGrid(values: unknown[][]): Grid | null {
   let h = 0
   while (h < values.length && !(values[h] ?? []).some((c) => cell(c) !== '')) h++
   if (h >= values.length) return null
@@ -25,7 +25,7 @@ function toGrid(values: unknown[][]): Grid | null {
   return { header, body }
 }
 
-function reader(grid: Grid) {
+export function reader(grid: Grid) {
   return (cells: unknown[], ...names: string[]): string => {
     for (const n of names) {
       const i = grid.header.get(n)
@@ -35,7 +35,7 @@ function reader(grid: Grid) {
   }
 }
 
-const rowIsBlank = (cells: unknown[]) => !cells.some((c) => cell(c) !== '')
+export const rowIsBlank = (cells: unknown[]) => !cells.some((c) => cell(c) !== '')
 
 /** Excel / Sheets date number (days since 1899-12-30) or text (2026-08-17, 17/08/2026) -> yyyy-mm-dd, or null. */
 export function toIsoDate(raw: string): string | null {
@@ -66,18 +66,20 @@ function realDay(iso: string): boolean {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso
 }
 
-function missingColumns(grid: Grid, required: { label: string; keys: string[] }[]): string[] {
+export function missingColumns(grid: Grid, required: { label: string; keys: string[] }[]): string[] {
   return required.filter((r) => !r.keys.some((k) => grid.header.has(k))).map((r) => r.label)
 }
 
 /** The AC sheet headings, newest name first (the first one that exists in the sheet is used). Older names keep working so a sheet is never broken by the rename. */
-const AC_TICKET_MAIL = { label: 'OEM Ticket Mail To', keys: ['oemticketmailto', 'oememailticket', 'mailid'] }
-const AC_PO_MAIL = { label: 'OEM PO Mail To', keys: ['oempomailto', 'oememailpo', 'emailforpodetail'] }
-const AC_APPROVER_MAIL = { label: 'CK PO Approver Mail To', keys: ['ckpoapprovermailto', 'ckemailpoapprover', 'poapprovermailto'] }
+const AC_TICKET_MAIL = { label: 'Ticket Mail To', keys: ['ticketmailto', 'oemticketmailto', 'oememailticket', 'mailid'] }
+const AC_PO_MAIL = { label: 'PO Mail To', keys: ['pomailto', 'oempomailto', 'oememailpo', 'emailforpodetail'] }
+const AC_APPROVER_MAIL = { label: 'Quote Approver Mail To', keys: ['quoteapprovermailto', 'ckpoapprovermailto', 'ckemailpoapprover', 'poapprovermailto'] }
+/** The Genset sheet's ticket address column: "Ticket Mail To" now, "Mail ID" before. */
+const GENSET_TICKET_MAIL = { label: 'Ticket Mail To', keys: ['ticketmailto', 'mailid'] }
 const present = (grid: Grid, keys: string[]) => keys.some((k) => grid.header.has(k))
 
 function addEmailIssues(
-  issues: MasterIssue[], kind: MasterKind, storeCode: string, sheetRow: number, raw: string, e: ReturnType<typeof parseEmails>, wantAny: boolean, column = 'Mail ID',
+  issues: MasterIssue[], kind: MasterKind, storeCode: string, sheetRow: number, raw: string, e: ReturnType<typeof parseEmails>, wantAny: boolean, column = 'Ticket Mail To',
 ) {
   const at = (code: string, message: string, severity: 'error' | 'warning' = 'warning') => issues.push({ kind, severity, code, storeCode, sheetRow, message })
   for (const bad of e.invalid) { at('bad_email', `Row ${sheetRow} (${storeCode}): "${bad}" in the ${column} is not an e-mail address and is skipped. The other addresses are still used.`); issues[issues.length - 1].token = bad }
@@ -107,7 +109,7 @@ export function groupEmailIssues(issues: MasterIssue[]): MasterIssue[] {
     out.push({
       ...first,
       message: first.code === 'bad_email'
-        ? `"${first.token}" in the ${first.kind === 'ac' ? AC_TICKET_MAIL.label : 'Mail ID'} is not an e-mail address and is skipped, on ${list.length} rows (rows ${rows.slice(0, 8).join(', ')}${more(rows.length, 8)}; stores ${stores.slice(0, 6).join(', ')}${more(stores.length, 6)}). The other addresses are still used.`
+        ? `"${first.token}" in the ${first.kind === 'ac' ? AC_TICKET_MAIL.label : GENSET_TICKET_MAIL.label} is not an e-mail address and is skipped, on ${list.length} rows (rows ${rows.slice(0, 8).join(', ')}${more(rows.length, 8)}; stores ${stores.slice(0, 6).join(', ')}${more(stores.length, 6)}). The other addresses are still used.`
         : `${first.token} looks like a misspelt company address, on ${list.length} rows (rows ${rows.slice(0, 8).join(', ')}${more(rows.length, 8)}; stores ${stores.slice(0, 6).join(', ')}${more(stores.length, 6)}). It is still used, but the mail to it will bounce.`,
     })
   }
@@ -120,6 +122,8 @@ export function parseAcSheet(values: unknown[][]): ParseResult<AcRow> {
   const missing = missingColumns(grid, [
     { label: 'Store Code', keys: ['storecode'] },
     { label: 'AC CKDESK SERIAL NO', keys: ['acckdeskserialno', 'ckdeskserialno'] },
+    // without the address column every OEM address would be wiped on the next copy, so such a sheet is not applied (the last good copy stays in use)
+    { label: AC_TICKET_MAIL.label, keys: AC_TICKET_MAIL.keys },
   ])
   if (missing.length) return { rows: [], issues: [], fatal: `The AC sheet is missing the column(s): ${missing.join(', ')}.` }
 
@@ -205,7 +209,7 @@ export function parseGensetSheet(values: unknown[][]): ParseResult<GensetRow> {
   if (!grid) return { rows: [], issues: [], fatal: 'The Genset sheet is empty.' }
   const missing = missingColumns(grid, [
     { label: 'Store Code', keys: ['storecode'] },
-    { label: 'Mail ID', keys: ['mailid'] },
+    { label: GENSET_TICKET_MAIL.label, keys: GENSET_TICKET_MAIL.keys },
   ])
   if (missing.length) return { rows: [], issues: [], fatal: `The Genset sheet is missing the column(s): ${missing.join(', ')}.` }
 
@@ -217,9 +221,9 @@ export function parseGensetSheet(values: unknown[][]): ParseResult<GensetRow> {
     if (rowIsBlank(cells)) continue
     const storeCode = get(cells, 'storecode').toUpperCase()
     if (!storeCode) { issues.push({ kind: 'genset', severity: 'error', code: 'blank_store', storeCode: null, sheetRow, message: `Row ${sheetRow}: the Store Code is empty, the row is skipped.` }); continue }
-    const mailRaw = get(cells, 'mailid')
+    const mailRaw = get(cells, ...GENSET_TICKET_MAIL.keys)
     const emails = parseEmails(mailRaw)
-    addEmailIssues(issues, 'genset', storeCode, sheetRow, mailRaw, emails, true)
+    addEmailIssues(issues, 'genset', storeCode, sheetRow, mailRaw, emails, true, GENSET_TICKET_MAIL.label)
     const serial = get(cells, 'gensetserialno', 'serialno')
     if (!serial) issues.push({ kind: 'genset', severity: 'warning', code: 'no_serial', storeCode, sheetRow, message: `Row ${sheetRow} (${storeCode}): the Genset Serial No is empty.` })
     perStore.set(storeCode, [...(perStore.get(storeCode) ?? []), sheetRow])

@@ -29,7 +29,7 @@ export type OemCommentView = {
   blocks: OemCommentBlock[]
 }
 
-const HEADING = /^Ticket sent to the (?:AC|Genset) OEM for servicing\.$/
+const HEADING = /^Ticket sent to the .{1,100} OEM for servicing\.$/
 const META = /^(Subject|To|CC): ?(.*)$/
 const ROW = /^(\S[^|\n]{0,60}?) \|(?: (.*))?$/
 

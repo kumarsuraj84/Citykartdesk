@@ -108,6 +108,13 @@ describe('parseGensetSheet', () => {
     expect(r.rows[0].emails).toEqual(['spc@jakson.test', 'ep.singh1@jakson.test', 'raushan.kumar@citylartstores.com'])
     expect(r.issues.map((i) => i.code)).toEqual(expect.arrayContaining(['bad_email', 'probable_typo_domain']))
   })
+  it('reads the 2026-10-29 headings (Ticket Mail To, with empty PO Mail To / Quote Approval Mail To) and does not apply a sheet without an address column', () => {
+    const NEW = ['Store Code', 'Genset Brand', 'Genset KVA', 'Genset Serial No', 'CPCB Group', 'Ticket Mail To', 'PO Mail To', 'Quote Approval Mail To']
+    const r = parseGensetSheet([NEW, ['BTA', 'CUMMINS', 160, 'CJGS19093340/84897376', 'CPCB-II', 'spc@garudapower.com,singh.r@cummins.com', '', '']])
+    expect(r.fatal).toBeUndefined()
+    expect(r.rows[0]).toMatchObject({ storeCode: 'BTA', emails: ['spc@garudapower.com', 'singh.r@cummins.com'] })
+    expect(parseGensetSheet([['Store Code', 'Genset Serial No', 'Anything'], ['BTA', '1', 'x@y.test']]).fatal).toContain('Ticket Mail To')
+  })
   it('reports a store with two genset rows (and keeps both)', () => {
     const r = parseGensetSheet([HEAD, ['MCR', 'MAHINDRA', 125, 'SJMZA10569', 'CPCB-II', 'a@oem.test'], ['MCR', 'MAHINDRA', 125, 'NDJZB11872', 'CPCB-II', 'b@oem.test']])
     expect(r.rows).toHaveLength(2)

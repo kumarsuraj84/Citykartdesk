@@ -187,8 +187,16 @@ describe('the AC sheet columns OEM Ticket Mail To / OEM PO Mail To / CK PO Appro
     const r = parseAcSheet([head, ['ALC', 1, 'Active', '', '', 'not-an-address;good@citykartstores.com']])
     expect(r.rows[0].approverEmails).toEqual(['good@citykartstores.com'])
     const bad = r.issues.find((i) => i.code === 'bad_approver_email')
-    expect(bad?.message).toContain('CK PO Approver Mail To')
-    expect(r.issues.find((i) => i.code === 'no_email')?.message).toContain('OEM Ticket Mail To')
+    expect(bad?.message).toContain('CK PO Approver Mail To'.replace('CK PO Approver', 'Quote Approver'))
+    expect(r.issues.find((i) => i.code === 'no_email')?.message).toContain('Ticket Mail To')
+  })
+  it('reads the headings of the 2026-10-29 sheets (Ticket Mail To / PO Mail To / Quote Approver Mail To) and does not apply an AC sheet that has no ticket address column', () => {
+    const r = parseAcSheet([['Store Code', 'AC CKDESK SERIAL NO', 'Status', 'Ticket Mail To', 'PO Mail To', 'Quote Approver Mail To'], ['LAM', 1, 'Active', 'serviceka@daikinindia.com, ankur.gupta@daikinindia.com', 'dilbag.singh@daikinindia.com', 'krishan.patel@citykartstores.com']])
+    expect(r.fatal).toBeUndefined()
+    expect(r.rows[0]).toMatchObject({ emails: ['serviceka@daikinindia.com', 'ankur.gupta@daikinindia.com'], poEmails: ['dilbag.singh@daikinindia.com'], approverEmails: ['krishan.patel@citykartstores.com'] })
+    const none = parseAcSheet([['Store Code', 'AC CKDESK SERIAL NO', 'Status', 'Some Other Name'], ['LAM', 1, 'Active', 'x@y.test']])
+    expect(none.fatal).toContain('Ticket Mail To')
+    expect(none.rows).toEqual([])
   })
   it('the approval mail tells several approvers that any one can decide', () => {
     const base = { requestNo: 'CKSD-1', storeLabel: 'ALC', acLabel: '1', vendorName: 'Voltas', lines: [{ item_name: 'Fan', qty: 1, price_excl_gst: 10 }] }

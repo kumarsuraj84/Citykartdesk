@@ -64,7 +64,7 @@ export function VendorsClient({ companies, people, staff, approverId }: { compan
 
       <section className="rounded-xl border border-border p-4">
         <h2 className="text-sm font-semibold">Default PO approver</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Used when the AC sheet names nobody for an AC. The PO approvers of each AC are written in the AC sheet, column &ldquo;CK PO Approver Mail To&rdquo; (one or several addresses): the quote goes to all of them and any one can decide. The approver enters the PO number, date and document. Krishan is the default.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Used when the AC sheet names nobody for an AC. The PO approvers of each AC are written in the AC sheet, column &ldquo;Quote Approver Mail To&rdquo; (one or several addresses): the quote goes to all of them and any one can decide. The approver enters the PO number, date and document. Krishan is the default.</p>
         <select aria-label="Default PO approver" className={`${inputCls} mt-2 max-w-sm`} value={approverId} disabled={pending}
           onChange={(e) => run(() => setPoApprover(e.target.value), 'PO approver changed.')}>
           {!approverId && <option value="">Not set - choose a person</option>}

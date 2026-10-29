@@ -20,7 +20,7 @@ export type SyncReport = Record<MasterKind, KindReport>
 const FULL_PASS_MINUTES = 15
 const CHUNK = 200
 
-function must<T>(res: { data?: T; error?: { message: string } | null }, what: string): T {
+export function must<T>(res: { data?: T; error?: { message: string } | null }, what: string): T {
   if (res.error) throw new Error(`${what}: ${res.error.message}`)
   return res.data as T
 }
@@ -29,7 +29,7 @@ function must<T>(res: { data?: T; error?: { message: string } | null }, what: st
  * Reads every row of a master table of one organisation. QA-D021: the data service cuts ONE answer at 1,000 rows without any error, so reading the stored units in a single
  * request showed the copy only the first 1,000 of 2,316 units; every other sheet row looked new and was added again at every update. Read in pages, in a fixed order.
  */
-async function readAll(db: Db, table: string, columns: string, orgId: string, order: string[]): Promise<Record<string, unknown>[]> {
+export async function readAll(db: Db, table: string, columns: string, orgId: string, order: string[]): Promise<Record<string, unknown>[]> {
   const { rows } = await fetchAllPages<Record<string, unknown>>((from, to) => {
     let q = db.from(table).select(columns).eq('org_id', orgId)
     for (const o of order) q = q.order(o, { ascending: true })
@@ -38,12 +38,12 @@ async function readAll(db: Db, table: string, columns: string, orgId: string, or
   return rows
 }
 
-async function inChunks<T>(items: T[], fn: (chunk: T[]) => Promise<unknown>) {
+export async function inChunks<T>(items: T[], fn: (chunk: T[]) => Promise<unknown>) {
   for (let i = 0; i < items.length; i += CHUNK) await fn(items.slice(i, i + CHUNK))
 }
 
 const sameList = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
-function differs(old: Record<string, unknown>, next: Record<string, unknown>): boolean {
+export function differs(old: Record<string, unknown>, next: Record<string, unknown>): boolean {
   return Object.keys(next).some((k) => !sameList(old[k], next[k]))
 }
 
@@ -235,7 +235,7 @@ async function pendingCount(db: Db, orgId: string, kind: MasterKind): Promise<nu
 // both found the units missing and both inserted them, so every AC / genset appeared twice or three times. The run that comes second is told to wait for the next update.
 // The claim is one row in app_settings (the key is unique); a claim older than STALE_LOCK_MINUTES belongs to a run that died and is taken over.
 const STALE_LOCK_MINUTES = 10
-async function claimSync(db: Db, orgId: string, kind: MasterKind, now: Date): Promise<{ claimed: boolean; release: () => Promise<void> }> {
+export async function claimSync(db: Db, orgId: string, kind: string, now: Date): Promise<{ claimed: boolean; release: () => Promise<void> }> {
   const key = `masters_sync_lock:${orgId}:${kind}`
   const mine = now.toISOString()
   const release = async () => { await db.from('app_settings').delete().eq('key', key).eq('value', mine) }

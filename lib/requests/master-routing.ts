@@ -5,6 +5,7 @@ import {
   acMailTarget, findSelectedUnit, gensetMailTarget, loadActiveAcUnits, loadGensetsForStore, type AcUnitRecord, type GensetRecord, type MailTarget,
 } from '@/lib/masters/resolve'
 import { isAssignedToVendor } from '@/lib/vendor/ticket-fields'
+import { loadProgram, runProgramRouting } from '@/lib/programs/routing'
 import { acVars, gensetVars, masterSentComment, renderMasterMail, resolveTemplate, type MailKind } from '@/lib/masters/mail'
 
 // Sends a ticket to the OEM using the AC / Genset sheet (replaces the old "OEM bucket" routing). Fires once, right after the ticket is created.
@@ -137,12 +138,13 @@ export async function resendOemOnReopen(p: { requestId: string; actorId: string;
       .eq('id', p.requestId).maybeSingle()
     if (!r) return
     const [{ data: cat }, { data: svc }, { data: snaps }] = await Promise.all([
-      r.category_id ? db.from('service_categories').select('name, auto_oem_kind').eq('id', r.category_id).maybeSingle() : Promise.resolve({ data: null }),
+      r.category_id ? db.from('service_categories').select('name, auto_oem_kind, program_id').eq('id', r.category_id).maybeSingle() : Promise.resolve({ data: null }),
       r.service_id ? db.from('services').select('auto_oem_routing').eq('id', r.service_id).maybeSingle() : Promise.resolve({ data: null }),
       db.from('request_master_snapshots').select('kind, snapshot').eq('request_id', r.id),
     ])
-    const kind: MailKind | null = cat?.auto_oem_kind === 'ac' || cat?.auto_oem_kind === 'genset' ? cat.auto_oem_kind : svc?.auto_oem_routing ? 'ac' : null
-    if (!kind) return
+    const programId: string | null = cat?.program_id ?? null
+    const kind: MailKind | null = programId ? null : cat?.auto_oem_kind === 'ac' || cat?.auto_oem_kind === 'genset' ? cat.auto_oem_kind : svc?.auto_oem_routing ? 'ac' : null
+    if (!kind && !programId) return
     const { data: prof } = await db.from('profiles').select('full_name, store_id').eq('id', r.requester_id).maybeSingle()
     let storeCode: string | null = null
     let storeAddress: string | null = null
@@ -158,6 +160,20 @@ export async function resendOemOnReopen(p: { requestId: string; actorId: string;
     const data = (r.form_data ?? {}) as Record<string, unknown>
     const textarea = fields.find((f) => f.type === 'textarea')
     const phone = fields.find((f) => f.type === 'phone')
+    const reopenDescription = r.description || (textarea ? String(data[textarea.id] ?? '').trim() : '')
+    if (programId) {
+      // a ticket of a Vendor Program is mailed to the program's vendor again, marked REOPENED (nothing happens when the program is gone or switched off)
+      const program = await loadProgram(db, r.org_id, programId)
+      if (program?.is_active) {
+        await runProgramRouting({
+          admin, actorId: p.actorId, orgId: r.org_id, request: { id: r.id, request_no: r.request_no }, program, storeCode, categoryName: cat?.name ?? null,
+          title: r.title, description: reopenDescription, requesterName: prof?.full_name ?? '', requesterEmail: authUser?.user?.email ?? '',
+          requesterPhone: phone ? String(data[phone.id] ?? '').trim() : '', storeAddress, reopen: { reason: p.reason },
+        })
+      }
+      return
+    }
+    if (!kind) return
     const unit = kind === 'ac' ? ((snaps ?? []).find((s: { kind: string }) => s.kind === 'ac')?.snapshot as AcUnitRecord[] | undefined)?.[0] ?? null : null
     await runMasterOemRouting({
       admin, actorId: p.actorId, orgId: r.org_id, request: { id: r.id, request_no: r.request_no }, kind, storeCode,

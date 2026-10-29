@@ -3,12 +3,12 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { loadCvmCandidates } from '@/lib/cvm/load'
 import { sendEmail } from '@/lib/email/send'
 import { escapeHtml } from '@/lib/email/escape'
-import { googleSheetsSource, type SheetsSource } from './google'
-import { csvDirSource, demoSheetsDir } from './demo'
+import { sheetsSourceForOrg } from './source'
 import { syncMasters, type SyncReport } from './sync'
 import { resetCcBookCache } from '@/lib/requests/cc-recipients'
 import type { MasterKind } from './types'
 import { createDuePmsTickets } from '@/lib/pms/tickets'
+import { runProgramsSync } from '@/lib/programs/run'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (t: string) => any; rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: any; error: { message: string } | null }> }
@@ -39,21 +39,9 @@ async function tellAdmins(db: Db, orgId: string, subject: string, message: strin
 /** One check of the three sheets for an organisation: reads the saved Google connection, syncs, and tells the admins when something stops working. */
 export async function runMastersSyncForOrg(orgId: string, opts: { force?: boolean } = {}): Promise<SyncReport | { error: string }> {
   const db = createAdminClient() as unknown as Db
-  // (local demo only: with MASTERS_DEMO_DIR set the sheets are CSV files and no Google connection is needed; never active in a production build)
-  const demoDir = demoSheetsDir()
-  let source: SheetsSource
-  let conn: { status?: string } | null = null
-  if (demoDir) source = csvDirSource(demoDir)
-  else {
-    const { data } = await db.from('master_google_connection').select('secret_ref, status').eq('org_id', orgId).maybeSingle()
-    conn = data
-    if (!data?.secret_ref) return { error: 'not connected' }
-    const { data: secret } = await db.rpc('masters_read_credential', { p_ref: data.secret_ref })
-    if (!secret) return { error: 'saved Google connection not found' }
-    let refreshToken: string
-    try { refreshToken = (JSON.parse(String(secret)) as { refresh_token: string }).refresh_token } catch { return { error: 'saved Google connection is unreadable' } }
-    source = googleSheetsSource(refreshToken)
-  }
+  const resolved = await sheetsSourceForOrg(db, orgId)
+  if ('error' in resolved) return { error: resolved.error }
+  const { source, conn } = resolved
 
   const before = new Map<string, string | null>()
   const { data: srcs } = await db.from('master_sources').select('kind, last_status').eq('org_id', orgId)
@@ -78,6 +66,8 @@ export async function runMastersSyncForOrg(orgId: string, opts: { force?: boolea
     await db.from('master_google_connection').update({ status: 'broken', last_error: authFailure.message ?? null }).eq('org_id', orgId)
     await tellAdmins(db, orgId, 'CK Desk lost its Google Sheets connection', authFailure.message ?? 'Connect Google Sheets again.')
   }
+  // the Vendor Programs' sheets (Admin -> Vendor Programs) are copied in the same pass, with the same safety rules; a failure here never stops the rest
+  try { await runProgramsSync({ db, orgId, source, tellAdmins }) } catch (e) { console.error('[programs] sheet copy failed', e) }
   // AC PMS: the tickets of the PMS dates that are due now (from 09:00 on the day; nothing happens when the PMS sheet is not set up)
   await createDuePmsTickets(db, orgId)
   return report
