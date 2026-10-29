@@ -1,4 +1,5 @@
-import { isHtmlTemplate, plainToHtml, renderHtmlEmail } from '@/lib/email/oem-template'
+import { htmlToCommentText, isHtmlTemplate, plainToHtml, renderHtmlEmail } from '@/lib/email/oem-template'
+import { OEM_COMMENT_MARKER } from './comment-view'
 import { sanitizeTemplateHtml } from '@/lib/email/sanitize-template'
 import { DEFAULT_MASTER_BODY, DEFAULT_MASTER_SUBJECT, type MailKind } from './mail-constants'
 import type { AcUnitRecord, GensetRecord } from './resolve'
@@ -38,8 +39,11 @@ export function renderMasterMail(tpl: { subject: string; body: string }, vars: R
   return { subject, html, text }
 }
 
-/** What the ticket's conversation shows when the ticket was e-mailed to the OEM (plain text, shown as written). */
-export function masterSentComment(p: { label: string; to: string[]; cc: string[]; subject: string; body: string }): string {
+/**
+ * What the ticket's conversation keeps when the ticket was e-mailed to the OEM: who it went to and the mail's text. It is stored as plain text; the table rows of the
+ * mail are written as "Label | value" lines so the ticket page can show them as a table again (lib/masters/comment-view.ts reads this shape back).
+ */
+export function masterSentComment(p: { label: string; to: string[]; cc: string[]; subject: string; html: string }): string {
   return [
     `Ticket sent to the ${p.label} OEM for servicing.`,
     '',
@@ -47,7 +51,8 @@ export function masterSentComment(p: { label: string; to: string[]; cc: string[]
     `To: ${p.to.join(', ')}`,
     ...(p.cc.length ? [`CC: ${p.cc.join(', ')}`] : []),
     '',
-    p.body.trim(),
+    OEM_COMMENT_MARKER,
+    htmlToCommentText(p.html),
   ].join('\n')
 }
 

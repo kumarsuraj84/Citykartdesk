@@ -45,6 +45,8 @@ import { MarkRequestNotificationsRead } from '@/components/requests/MarkRequestN
 import { getActiveTimer } from '@/lib/actions/requests'
 import { filterFieldsForRequester, filterFlatFieldsForRequester, filterSectionsForCategory, fieldAppliesToCategory } from '@/lib/forms/sections'
 import { formatRelativeTime, formatDateTime } from '@/lib/utils'
+import { parseOemComment } from '@/lib/masters/comment-view'
+import { OemSentComment } from '@/components/requests/OemSentComment'
 import { STATUS_LABELS, TERMINAL_STATUSES } from '@/lib/constants/requests'
 import type {
   RequestStatus,
@@ -160,6 +162,7 @@ function CommentBubble({
   const displayName = comment.author?.full_name ?? comment.external_name ?? comment.external_email ?? 'Unknown'
   const initial = displayName.charAt(0).toUpperCase()
   const isFromEmail = comment.source === 'email'
+  const oemView = parseOemComment(comment.body)   // the note "Ticket sent to the AC / Genset OEM": its mail table is shown as a table
   return (
     <div
       className={`rounded-xl p-4 ${
@@ -213,7 +216,8 @@ function CommentBubble({
               {formatRelativeTime(comment.created_at)}
             </span>
           </div>
-          {comment.body.trim() && (
+          {oemView && <OemSentComment view={oemView} />}
+          {!oemView && comment.body.trim() && (
             <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
               {comment.body.split(/(@\w+)/g).map((part, i) =>
                 /^@\w+$/.test(part) ? (

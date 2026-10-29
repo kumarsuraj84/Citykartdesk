@@ -106,6 +106,27 @@ export function renderHtmlEmail(templateHtml: string, vars: Record<string, strin
 const NAMED_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
 
 /**
+ * The text of the OEM mail for the ticket's conversation. Table rows become "Label | value" lines; the further lines of a value are indented by two spaces so the
+ * ticket page can show the rows as a table again (see lib/masters/comment-view.ts). Everything else becomes plain paragraphs, like htmlToPlainText.
+ */
+export function htmlToCommentText(html: string): string {
+  const rows: string[] = []
+  const withoutRows = html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, '')
+    .replace(/<tr[^>]*>([\s\S]*?)<\/tr>/gi, (_m, inner: string) => {
+      const cells = [...inner.matchAll(/<(?:th|td)[^>]*>([\s\S]*?)<\/(?:th|td)>/gi)].map((c) => htmlToPlainText(c[1]))
+      if (cells.length === 0) return ''
+      const [label, ...values] = cells
+      const lines = values.join(' | ').split('\n')
+      const first = (lines[0] ?? '').trimEnd()
+      const more = lines.slice(1).map((l) => '  ' + l.trimEnd())
+      rows.push([`${label.replace(/\s*\n\s*/g, ' ').trim()} |${first ? ' ' + first : ''}`, ...more].join('\n'))
+      return `\n\u0000ROW${rows.length - 1}\u0000`
+    })
+  return htmlToPlainText(withoutRows).replace(/\u0000ROW(\d+)\u0000/g, (_m, n: string) => rows[Number(n)] ?? '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/**
  * The readable text of an HTML e-mail, for showing what was sent in the ticket's conversation. Table rows become "Label: value" lines, paragraphs
  * and line breaks become line breaks, every other tag is dropped, and entities are decoded. The result is only ever displayed as plain text.
  */

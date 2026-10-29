@@ -15,6 +15,8 @@ import { AttachmentChips } from '@/components/requests/AttachmentChips'
 import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
 import { filterFieldsForRequester, filterSectionsForCategory } from '@/lib/forms/sections'
 import { formatDateTime } from '@/lib/utils'
+import { parseOemComment } from '@/lib/masters/comment-view'
+import { OemSentComment } from '@/components/requests/OemSentComment'
 import { isPmsRequest } from '@/lib/pms/is-pms'
 import type { FormSection } from '@/types'
 
@@ -137,7 +139,7 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
                     <span className="font-medium text-foreground">{c.author?.full_name ?? 'Someone outside'}</span>
                     <span>{formatDateTime(c.created_at)}</span>
                   </div>
-                  <p className="mt-1 whitespace-pre-wrap break-words text-sm">{c.body}</p>
+                  {(() => { const oem = parseOemComment(c.body); return oem ? <OemSentComment view={oem} /> : <p className="mt-1 whitespace-pre-wrap break-words text-sm">{c.body}</p> })()}
                   {(filesByComment.get(c.id) ?? []).length > 0 && (
                     <div className="mt-2"><AttachmentChips attachments={filesByComment.get(c.id) ?? []} currentUserId={profile.id} canManageAll={false} /></div>
                   )}

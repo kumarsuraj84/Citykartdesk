@@ -107,7 +107,7 @@ Original issue: ${p.description || '(no description provided)'}`
 
   await admin.from('request_comments').insert({
     request_id: request.id, author_id: p.actorId, is_internal: false,
-    body: masterSentComment({ label, to: target.to, cc: target.cc, subject: mail.subject, body: mail.text }),
+    body: masterSentComment({ label, to: target.to, cc: target.cc, subject: mail.subject, html: mail.html }),
   })
 
   // A ticket a Business Rule gave to a vendor technician stays Open: the vendor starts it himself (with the OEM ticket number).
