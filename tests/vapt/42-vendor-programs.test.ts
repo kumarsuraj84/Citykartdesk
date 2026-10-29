@@ -227,11 +227,12 @@ describe('the built-in AC / Genset line is set up from the same screen', () => {
     const audit = ((await db().from('admin_audit_log').select('action, metadata').eq('entity_id', g2)).data ?? []) as { action: string }[]
     expect(audit.filter((a) => a.action === 'category_oem_routing_changed').length).toBeGreaterThanOrEqual(2)
   })
-  it('refuses a category of a Vendor Program, the other OEM type, and the AC PMS category', async () => {
+  it('a category of a Vendor Program moves BACK to the old setting (program cleared in the same step); the other OEM type and the AC PMS category are refused', async () => {
     const { saveBuiltInCategories } = await import('@/lib/actions/admin/programs')
-    const ac1 = await mk('ac1', { auto_oem_kind: 'ac' }), pms = await mk('pms', { is_pms: true })
+    const ac1 = await mk('ac1', { auto_oem_kind: 'ac' }), pms = await mk('pms', { is_pms: true }), inProgram = await mk('inprog', { program_id: ids.program })
     actAs(fx.admin)
-    expect((await saveBuiltInCategories('genset', [ids.cat])).error).toMatch(/Vendor Program/)
+    expect((await saveBuiltInCategories('genset', [inProgram])).error).toBeUndefined()
+    expect((await db().from('service_categories').select('auto_oem_kind, program_id').eq('id', inProgram).single()).data).toEqual({ auto_oem_kind: 'genset', program_id: null })
     expect((await saveBuiltInCategories('genset', [ac1])).error).toMatch(/AC OEM/)
     expect((await saveBuiltInCategories('ac', [pms])).error).toMatch(/PMS/)
     expect((await saveBuiltInCategories('nope', [])).error).toBeTruthy()

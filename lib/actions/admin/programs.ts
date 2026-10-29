@@ -8,7 +8,7 @@ import { isHtmlTemplate, plainToHtml } from '@/lib/email/oem-template'
 import { sendEmail } from '@/lib/email/send'
 import { spreadsheetIdFrom } from '@/lib/masters/google'
 import { renderMasterMail } from '@/lib/masters/mail'
-import { allowedFields, programTemplate, PROGRAM_SAMPLE_VALUES, unknownFields } from '@/lib/programs/mail'
+import { allowedFields, programTemplate, PROGRAM_SAMPLE_VALUES, rowFieldNames, unknownFields } from '@/lib/programs/mail'
 import { loadProgramEditor } from '@/lib/programs/admin-data'
 import { PROGRAM_FIELDS, slugify, type ProgramColumns, type ProgramField, type ProgramRowType } from '@/lib/programs/types'
 import { logAdminAudit } from './audit'
@@ -216,15 +216,14 @@ export async function saveBuiltInCategories(kind: string, categoryIds: string[])
   for (const cid of wanted) {
     const c = all.find((x) => x.id === cid)
     if (!c) return { error: 'One of the categories was not found.' }
-    if (c.program_id) return { error: `"${c.name}" belongs to a Vendor Program.` }
     if (c.auto_oem_kind && c.auto_oem_kind !== kind) return { error: `"${c.name}" already sends to the ${c.auto_oem_kind === 'ac' ? 'AC' : 'Genset'} OEM.` }
     if (c.is_pms) return { error: `"${c.name}" is the AC PMS category and cannot send to the ${label} OEM.` }
   }
   const current = all.filter((c) => c.auto_oem_kind === kind).map((c) => c.id)
   const remove = current.filter((c) => !wanted.includes(c))
-  const add = wanted.filter((c) => !current.includes(c))
+  const add = wanted.filter((c) => !current.includes(c))   // a category that is in a Vendor Program moves BACK to the old setting (program_id cleared in the same step)
   if (remove.length) { const { error } = await db().from('service_categories').update({ auto_oem_kind: null }).in('id', remove).eq('org_id', guard.orgId); if (error) return { error: 'Could not save the categories.' } }
-  if (add.length) { const { error } = await db().from('service_categories').update({ auto_oem_kind: kind }).in('id', add).eq('org_id', guard.orgId); if (error) return { error: 'Could not save the categories.' } }
+  if (add.length) { const { error } = await db().from('service_categories').update({ auto_oem_kind: kind, program_id: null }).in('id', add).eq('org_id', guard.orgId); if (error) return { error: 'Could not save the categories.' } }
   for (const [ids, to] of [[remove, 'none'], [add, kind]] as const) {
     for (const id of ids) {
       const c = all.find((x) => x.id === id)
@@ -248,6 +247,56 @@ export async function setProgramLevel(id: string, level: string): Promise<Action
   if (error) return { error: 'Could not save.' }
   await logAdminAudit({ orgId: guard.orgId, actorId: guard.profile.id, entityType: 'vendor_program', entityId: id, action: 'vendor_program.level_changed', metadata: { name: prog.name, from: prog.level, to: level } })
   revalidatePath('/admin/programs'); revalidatePath(`/admin/programs/${id}`)
+  return {}
+}
+
+/** How one row (machine) of the store is written in {{details}}: a text with {{machine_no}}, {{serial}}, {{vendor}} and the extra sheet columns. Empty = the usual wording. */
+export async function saveProgramDetailsTemplate(id: string, text: string): Promise<ActionResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return { error: guard.error }
+  const data = await loadProgramEditor(guard.orgId, id)
+  if (!data) return { error: 'Program not found.' }
+  const clean = (text ?? '').replace(/\r?\n/g, ' ').trim().slice(0, 300)
+  const bad = unknownFields(clean, rowFieldNames(data.extraHeadings))
+  if (bad.length) return { error: `These fields do not exist and would be empty: ${bad.map((f) => '{{' + f + '}}').join(', ')}. Use the field buttons.` }
+  const { error } = await db().from('vendor_programs').update({ details_template: clean || null, ...touch(guard) }).eq('id', id).eq('org_id', guard.orgId)
+  if (error) return { error: 'Could not save.' }
+  await logAdminAudit({ orgId: guard.orgId, actorId: guard.profile.id, entityType: 'vendor_program', entityId: id, action: 'vendor_program.details_template_saved', metadata: { name: data.program.name } })
+  revalidatePath(`/admin/programs/${id}`)
+  return {}
+}
+
+/**
+ * Moves categories from the OLD AC / Genset setting ("send to the AC / Genset OEM") to this program and switches the program on, in one step, so no ticket is ever left without
+ * its mail. Refused unless everything else on the program's check list is green. The categories can be moved back from the built-in AC / Genset screen.
+ */
+export async function moveCategoriesToProgram(id: string, categoryIds: string[]): Promise<ActionResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return { error: guard.error }
+  const data = await loadProgramEditor(guard.orgId, id)
+  if (!data) return { error: 'Program not found.' }
+  const wanted = [...new Set(categoryIds ?? [])]
+  if (wanted.length === 0) return { error: 'Choose at least one category to move.' }
+  const { data: cats } = await db().from('service_categories').select('id, name, program_id, auto_oem_kind, is_pms').eq('org_id', guard.orgId).in('id', wanted)
+  const found = (cats ?? []) as { id: string; name: string; program_id: string | null; auto_oem_kind: string | null; is_pms: boolean }[]
+  if (found.length !== wanted.length) return { error: 'One of the categories was not found.' }
+  for (const c of found) {
+    if (!c.auto_oem_kind) return { error: `"${c.name}" does not send to the AC / Genset OEM, so there is nothing to move.` }
+    if (c.program_id || c.is_pms) return { error: `"${c.name}" cannot be moved.` }
+  }
+  const red = data.readiness.items.filter((i) => !i.ok && i.blocking && i.key !== 'categories')
+  if (red.length) return { error: `Not ready yet: ${red[0].text}` }
+  const { error } = await db().from('service_categories').update({ auto_oem_kind: null, program_id: id }).in('id', wanted).eq('org_id', guard.orgId)
+  if (error) return { error: 'Could not move the categories.' }
+  if (!data.program.is_active) {
+    const { error: onErr } = await db().from('vendor_programs').update({ is_active: true, ...touch(guard) }).eq('id', id).eq('org_id', guard.orgId)
+    if (onErr) {
+      await db().from('service_categories').update({ auto_oem_kind: found[0].auto_oem_kind, program_id: null }).in('id', wanted).eq('org_id', guard.orgId)   // put them back: never leave a category without its mail
+      return { error: 'Could not switch the program on, so nothing was moved.' }
+    }
+  }
+  for (const c of found) await logAdminAudit({ orgId: guard.orgId, actorId: guard.profile.id, entityType: 'service_category', entityId: c.id, action: 'category_moved_to_program', metadata: { name: c.name, from: c.auto_oem_kind, program: data.program.name } })
+  revalidatePath('/admin/programs'); revalidatePath(`/admin/programs/${id}`); revalidatePath('/admin/categories')
   return {}
 }
 

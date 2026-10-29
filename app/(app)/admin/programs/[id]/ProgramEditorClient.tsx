@@ -6,9 +6,9 @@ import { useRouter } from 'next/navigation'
 import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
 import { cn, formatDateTime } from '@/lib/utils'
 import {
-  deleteProgram, resetProgramTemplate, saveProgramBasics, saveProgramApprovers, saveProgramCategories, saveProgramPortalOptions, saveProgramResolutions, saveProgramSheet, saveProgramTemplate, sendProgramTestMail, setProgramActive, setProgramLevel, updateProgramNow,
+  deleteProgram, resetProgramTemplate, saveProgramBasics, moveCategoriesToProgram, saveProgramApprovers, saveProgramCategories, saveProgramDetailsTemplate, saveProgramPortalOptions, saveProgramResolutions, saveProgramSheet, saveProgramTemplate, sendProgramTestMail, setProgramActive, setProgramLevel, updateProgramNow,
 } from '@/lib/actions/admin/programs'
-import { allowedFields, DEFAULT_PROGRAM_BODY, PROGRAM_SAMPLE_VALUES } from '@/lib/programs/mail'
+import { allowedFields, DEFAULT_PROGRAM_BODY, PROGRAM_SAMPLE_VALUES, rowFieldNames } from '@/lib/programs/mail'
 import { DEFAULT_HEADINGS, FIELD_LABEL, PROGRAM_FIELDS, type ProgramColumns, type ProgramField } from '@/lib/programs/types'
 import type { ProgramEditorData } from '@/lib/programs/admin-data'
 
@@ -45,6 +45,7 @@ export function ProgramEditorClient({ data, subject: subject0, body: body0, cust
 
   const [picked, setPicked] = useState<string[]>(categories.filter((c) => c.in_program).map((c) => c.id))
   const [catMsg, setCatMsg] = useState<Msg>(null)
+  const [catFilter, setCatFilter] = useState('')
 
   const [link, setLink] = useState(program.spreadsheet_id ? `https://docs.google.com/spreadsheets/d/${program.spreadsheet_id}/edit` : '')
   const [tab, setTab] = useState(program.tab_name ?? '')
@@ -61,6 +62,10 @@ export function ProgramEditorClient({ data, subject: subject0, body: body0, cust
   const [levelMsg, setLevelMsg] = useState<Msg>(null)
   const [oemRequired, setOemRequired] = useState(program.oem_number_required === true)
   const [optMsg, setOptMsg] = useState<Msg>(null)
+  const [detailsText, setDetailsText] = useState(program.details_template ?? '')
+  const [detailsMsg, setDetailsMsg] = useState<Msg>(null)
+  const [moveIds, setMoveIds] = useState<string[]>([])
+  const [moveMsg, setMoveMsg] = useState<Msg>(null)
   const [approvers, setApprovers] = useState<string[]>(program.default_approver_ids ?? [])
   const [approverFilter, setApproverFilter] = useState('')
   const [apprMsg, setApprMsg] = useState<Msg>(null)
@@ -115,8 +120,10 @@ export function ProgramEditorClient({ data, subject: subject0, body: body0, cust
       </Card>
 
       <Card n={2} title="Categories" hint="Tickets of the ticked categories go to this program's vendor. A category can be in one program only. Categories that already send to the AC or Genset OEM cannot be chosen.">
+        <input value={catFilter} onChange={(e) => setCatFilter(e.target.value)} placeholder="Search a category" aria-label="Search a category" className="mb-2 w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm sm:w-80" />
+        <p className="mb-2 text-[11px] text-muted-foreground">{picked.length} ticked. Ticked categories always stay in the list.</p>
         <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-          {categories.map((c) => (
+          {categories.filter((c) => picked.includes(c.id) || c.name.toLowerCase().includes(catFilter.trim().toLowerCase())).map((c) => (
             <label key={c.id} className={cn('flex items-start gap-2 rounded-lg border border-border px-2.5 py-1.5 text-sm', c.blocked && 'opacity-60')}>
               <input type="checkbox" className="mt-0.5" disabled={!!c.blocked} checked={picked.includes(c.id)} onChange={(e) => setPicked((p) => (e.target.checked ? [...p, c.id] : p.filter((x) => x !== c.id)))} />
               <span><span className="block">{c.name}</span>{c.blocked && <span className="block text-[11px] text-muted-foreground">{c.blocked}</span>}</span>
@@ -128,6 +135,23 @@ export function ProgramEditorClient({ data, subject: subject0, body: body0, cust
           <Note m={catMsg} />
         </div>
       </Card>
+
+      {categories.some((c) => c.old_kind) && (
+        <Card n={2} title="Move categories from the old AC / Genset setting" hint="These categories still send their tickets with the OLD AC / Genset setting. Moving them here makes this program do it instead, and switches the program on in the same step (so no ticket is left without its mail). The program must be ready first: sheet read, mail wording written. You can move a category back from the AC / Genset (built in) screen.">
+          <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+            {categories.filter((c) => c.old_kind).map((c) => (
+              <label key={c.id} className="flex items-start gap-2 rounded-lg border border-border px-2.5 py-1.5 text-sm">
+                <input type="checkbox" className="mt-0.5" checked={moveIds.includes(c.id)} onChange={(e) => setMoveIds((p) => (e.target.checked ? [...p, c.id] : p.filter((x) => x !== c.id)))} />
+                <span><span className="block">{c.name}</span><span className="block text-[11px] text-muted-foreground">Old setting: {c.old_kind === 'ac' ? 'AC' : 'Genset'} OEM</span></span>
+              </label>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <button type="button" disabled={pending || moveIds.length === 0} className={btnPrimary} onClick={() => run(async () => { const r = await moveCategoriesToProgram(program.id, moveIds); setMoveMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'Moved. The program is on: new tickets of these categories now use it.' }); if (!r.error) setMoveIds([]) })}>Move to this program and switch it on</button>
+            <Note m={moveMsg} />
+          </div>
+        </Card>
+      )}
 
       <Card n={3} title="Google Sheet" hint="The sheet is the master list. CK Desk copies it at 11:00, 15:00 and 19:00 and never changes it. Needed columns: Store Code and Ticket Mail To (and Machine No for one row per machine). Only when the vendor portal is switched on for this program are PO Mail To (the mail to the vendor when the PO is approved) and Quote Approval Mail To (who approves the vendor's quote) used too; for a mail-only program they are ignored. Any other column is kept and can be used in the mail.">
         <div className="flex flex-wrap gap-2">
@@ -176,6 +200,17 @@ export function ProgramEditorClient({ data, subject: subject0, body: body0, cust
           <button type="button" disabled={pending} className={btn} onClick={() => run(async () => { const r = await sendProgramTestMail(program.id); setTplMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: `A test mail was sent to ${r.sentTo} only.` }) })}>Send a test to me</button>
           {customTemplate && <button type="button" disabled={pending} className={btn} onClick={() => run(async () => { const r = await resetProgramTemplate(program.id); setTplMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'Back to the standard wording.' }) })}>Use the standard wording</button>}
           <Note m={tplMsg} />
+        </div>
+      </Card>
+
+      <Card n={4} title="How one machine is written in the mail (optional)" hint="The mail line {{details}} lists every machine of the store, one line each. Write here how ONE machine is written, using the buttons below. Example for a genset: {{extra_gensetbrand}} {{extra_gensetkva}} KVA, serial {{serial}}, {{extra_cpcbgroup}}. Leave it empty for the usual short wording.">
+        <input value={detailsText} onChange={(e) => setDetailsText(e.target.value)} maxLength={300} aria-label="How one machine is written" placeholder="{{extra_gensetbrand}} {{extra_gensetkva}} KVA, serial {{serial}}" className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm" />
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {rowFieldNames(extraHeadings).map((f) => <button key={f} type="button" className="rounded border border-border bg-muted/40 px-2 py-0.5 font-mono text-[11px]" onClick={() => setDetailsText((t) => `${t}${t && !t.endsWith(' ') ? ' ' : ''}{{${f}}}`)}>{`{{${f}}}`}</button>)}
+        </div>
+        <div className="mt-3 flex items-center gap-3">
+          <button type="button" disabled={pending} className={btn} onClick={() => run(async () => { const r = await saveProgramDetailsTemplate(program.id, detailsText); setDetailsMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'Saved.' }) })}>Save</button>
+          <Note m={detailsMsg} />
         </div>
       </Card>
 

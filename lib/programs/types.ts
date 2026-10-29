@@ -18,7 +18,7 @@ export const DEFAULT_HEADINGS: Record<ProgramField, readonly string[]> = {
   mail: ['Ticket Mail To', 'Mail To', 'OEM Ticket Mail To', 'Mail ID', 'Vendor Mail To'],
   vendor: ['Vendor', 'Vendor Name'],
   machine: ['Machine No', 'Machine Number', 'Asset No', 'Asset Number'],
-  serial: ['Serial No', 'Serial Number', 'Serial'],
+  serial: ['Serial No', 'Serial Number', 'Serial', 'Genset Serial No', 'AC Serial No'],
   poMail: ['PO Mail To', 'OEM PO Mail To', 'Email for PO detail'],
   approverMail: ['Quote Approver Mail To', 'Quote Approval Mail To', 'PO Approver Mail To', 'CK PO Approver Mail To'],
   active: ['Active', 'Is Active'],
@@ -52,6 +52,8 @@ export type ProgramRecord = {
   oem_number_required?: boolean | null
   /** portal level: the program's own default PO approvers, used when the sheet row names no active approver (any one decides) */
   default_approver_ids?: string[] | null
+  /** how one row (machine) of the store is written in {{details}}, for example "{{extra_gensetbrand}} {{extra_gensetkva}} KVA, serial {{serial}}"; empty = the usual short wording */
+  details_template?: string | null
 }
 
 export type ProgramIssue = { severity: 'error' | 'warning'; code: string; storeCode: string | null; sheetRow: number | null; message: string; token?: string }

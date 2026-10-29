@@ -2,6 +2,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveTemplate } from '@/lib/masters/mail'
 import { programReadiness, type ReadinessItem } from './readiness'
+import { resolvePoApprover } from '@/lib/vendor/po'
 import type { IssueView, SourceView, TemplateView } from '@/app/(app)/admin/masters/MastersClient'
 
 // AC and Genset on the Vendor Programs screens. They keep their own engines (sheet tables, OEM mail, vendor portal, PO approval, PMS): this only reads their settings
@@ -34,7 +35,7 @@ export async function listBuiltInPrograms(orgId: string): Promise<BuiltInListIte
   return out
 }
 
-export type BuiltInCategoryChoice = { id: string; name: string; selected: boolean; blocked: string | null }
+export type BuiltInCategoryChoice = { id: string; name: string; selected: boolean; blocked: string | null; /** the Vendor Program this category is in now (it can be moved back to the old setting) */ inProgram: string | null }
 export type BuiltInEditorData = {
   kind: BuiltInKind
   name: string
@@ -45,26 +46,31 @@ export type BuiltInEditorData = {
   activeRows: number
   readiness: { items: ReadinessItem[]; ready: boolean }
   connected: boolean
+  /** AC only: the people who may be the default PO approver and the one now in use (the AC sheet's approvers come first; this one decides when the sheet names nobody) */
+  staff: { id: string; full_name: string; role: string }[]
+  approverId: string
 }
 
 export async function loadBuiltInEditor(orgId: string, kind: BuiltInKind): Promise<BuiltInEditorData> {
   const db = createAdminClient() as unknown as Db
   const spec = BUILT_IN[kind]
   const activeQuery = db.from(spec.table).select('id', { count: 'exact', head: true }).eq('org_id', orgId).is('removed_at', null)
-  const [cats, src, issues, tpl, active, conn] = await Promise.all([
+  const [cats, src, issues, tpl, active, conn, progs] = await Promise.all([
     db.from('service_categories').select('id, name, program_id, auto_oem_kind, is_pms').eq('org_id', orgId).order('name', { ascending: true }),
     db.from('master_sources').select('kind, spreadsheet_id, tab_name, last_checked_at, last_applied_at, last_status, last_error, row_count').eq('org_id', orgId).eq('kind', kind).maybeSingle(),
     db.from('master_issues').select('kind, severity, code, store_code, sheet_row, message').eq('org_id', orgId).eq('kind', kind).order('severity').limit(300),
     db.from('master_mail_templates').select('kind, subject, body_html').eq('org_id', orgId).eq('kind', kind).maybeSingle(),
     kind === 'ac' ? activeQuery.eq('is_active', true) : activeQuery,
     db.from('master_google_connection').select('status').eq('org_id', orgId).maybeSingle(),
+    db.from('vendor_programs').select('id, name').eq('org_id', orgId),
   ])
+  const programNames = new Map<string, string>(((progs.data ?? []) as { id: string; name: string }[]).map((p) => [p.id, p.name]))
   const categories: BuiltInCategoryChoice[] = ((cats.data ?? []) as { id: string; name: string; program_id: string | null; auto_oem_kind: string | null; is_pms: boolean }[]).map((c) => ({
     id: c.id,
     name: c.name,
     selected: c.auto_oem_kind === kind,
-    blocked: c.program_id ? 'Already in a Vendor Program'
-      : c.auto_oem_kind && c.auto_oem_kind !== kind ? `Already sends to the ${c.auto_oem_kind === 'ac' ? 'AC' : 'Genset'} OEM`
+    inProgram: c.program_id ? programNames.get(c.program_id) ?? 'a Vendor Program' : null,
+    blocked: c.auto_oem_kind && c.auto_oem_kind !== kind ? `Already sends to the ${c.auto_oem_kind === 'ac' ? 'AC' : 'Genset'} OEM`
         : c.is_pms ? 'This is the AC PMS category' : null,
   }))
   const source = (src.data ?? undefined) as SourceView | undefined
@@ -82,5 +88,15 @@ export async function loadBuiltInEditor(orgId: string, kind: BuiltInKind): Promi
     unknownStores: 0,
     unknownFields: [],
   })
-  return { kind, name: spec.name, categories, source, issues: issueList, template, activeRows: active.count ?? 0, readiness, connected: conn.data?.status === 'connected' }
+  let staff: { id: string; full_name: string; role: string }[] = []
+  let approverId = ''
+  if (kind === 'ac') {
+    const [{ data: s }, current] = await Promise.all([
+      db.from('profiles').select('id, full_name, role').eq('org_id', orgId).eq('is_active', true).is('vendor_company_id', null).in('role', ['agent', 'manager', 'admin', 'platform_owner']).order('full_name', { ascending: true }),
+      resolvePoApprover(orgId),
+    ])
+    staff = (s ?? []) as typeof staff
+    approverId = current?.id ?? ''
+  }
+  return { kind, name: spec.name, categories, source, issues: issueList, template, activeRows: active.count ?? 0, readiness, connected: conn.data?.status === 'connected', staff, approverId }
 }

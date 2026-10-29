@@ -38,9 +38,23 @@ export const PROGRAM_SAMPLE_VALUES: Record<string, string> = {
 
 const unique = (list: (string | null | undefined)[]) => [...new Set(list.map((v) => (v ?? '').trim()).filter(Boolean))]
 
+/** The fields a row (one machine) offers to the details template: machine_no, serial, vendor and every extra sheet column. */
+export function rowFieldNames(extraHeadings: string[]): string[] {
+  return ['machine_no', 'serial', 'vendor', ...extraHeadings.map(extraKey)]
+}
+
+/** One row written with the program's details template ({{field}} of the row; an empty field leaves nothing but a tidy gap). */
+export function renderRowDetails(template: string, row: ProgramRowRecord): string {
+  const values: Record<string, string> = { machine_no: row.machine_no ?? '', serial: row.serial ?? '', vendor: row.vendor ?? '' }
+  for (const [h, v] of Object.entries(row.extra ?? {})) values[extraKey(h)] = v
+  return template.replace(/\{\{(\w+)\}\}/g, (_m, k: string) => (values[k] ?? '').trim()).replace(/\s+/g, ' ').replace(/\s+,/g, ',').replace(/(^|,)\s*,/g, '$1').trim().replace(/^,\s*|,\s*$/g, '')
+}
+
 /** The values a program adds to the mail for the store's rows (one mail covers every active row of the store). */
-export function programVars(program: Pick<ProgramRecord, 'name' | 'row_type'>, rows: ProgramRowRecord[]): Record<string, string> {
+export function programVars(program: Pick<ProgramRecord, 'name' | 'row_type' | 'details_template'>, rows: ProgramRowRecord[]): Record<string, string> {
+  const custom = (program.details_template ?? '').trim()
   const details = rows.map((r) => {
+    if (custom) return renderRowDetails(custom, r)
     const bits = program.row_type === 'machine'
       ? [r.machine_no ? `Machine ${r.machine_no}` : '', r.serial ? `serial ${r.serial}` : '', r.vendor ?? '']
       : [r.vendor ?? '', r.serial ? `serial ${r.serial}` : '']

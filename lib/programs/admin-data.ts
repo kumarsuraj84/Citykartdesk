@@ -25,7 +25,7 @@ export async function listPrograms(orgId: string): Promise<ProgramListItem[]> {
   return out
 }
 
-export type CategoryChoice = { id: string; name: string; in_program: boolean; blocked: string | null }
+export type CategoryChoice = { id: string; name: string; in_program: boolean; blocked: string | null; /** the old AC / Genset setting this category has now (it can be moved to the program) */ old_kind: 'ac' | 'genset' | null }
 export type ProgramIssueView = { severity: 'error' | 'warning'; code: string; store_code: string | null; sheet_row: number | null; message: string }
 export type StaffChoice = { id: string; full_name: string; role: string }
 export type ProgramEditorData = {
@@ -61,6 +61,7 @@ export async function loadProgramEditor(orgId: string, id: string): Promise<Prog
     blocked: c.program_id && c.program_id !== id ? `Already in "${programName.get(c.program_id) ?? 'another program'}"`
       : c.auto_oem_kind ? `Already sends to the ${c.auto_oem_kind === 'ac' ? 'AC' : 'Genset'} OEM`
         : c.is_pms ? 'This is the AC PMS category' : null,
+    old_kind: !c.program_id && !c.is_pms && (c.auto_oem_kind === 'ac' || c.auto_oem_kind === 'genset') ? c.auto_oem_kind : null,
   }))
   const extra = new Set<string>()
   for (const r of (rows.data ?? []) as { extra: Record<string, string> | null }[]) for (const k of Object.keys(r.extra ?? {})) extra.add(k)

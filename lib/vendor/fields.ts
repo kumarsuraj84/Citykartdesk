@@ -13,11 +13,18 @@ export const AC_RESOLUTION_LABEL = 'AC resolution'
 export const BG_OEM_NUMBER_KEY = '_oem_ticket_no'
 export const BG_OEM_DATE_KEY = '_oem_ticket_date'
 
-/** The OEM boxes of a PROGRAM ticket's form: a box whose label ends with "OEM Ticket Number" (for example "RO OEM Ticket Number") and one that ends with "OEM Ticket Creation Date". */
+/**
+ * The OEM boxes of a PROGRAM ticket's form: a box whose label ends with "OEM Ticket Number" or "Vendor Ticket Number" (for example "RO OEM Ticket Number", "VENDOR TICKET NUMBER"),
+ * and one that ends with "OEM Ticket Creation Date" or "Vendor Ticket Creation Date". Vendor and OEM mean the same for Citykart.
+ */
 export function findProgramOemBoxes(sections: FormSection[] | null | undefined): { number: FormField | null; date: FormField | null } {
   const fields = flattenSections(sections)
   const endsWith = (f: FormField, tail: string) => { const l = norm(f.label); return l === tail || l.endsWith(` ${tail}`) }
-  return { number: fields.find((f) => endsWith(f, 'oem ticket number')) ?? null, date: fields.find((f) => endsWith(f, 'oem ticket creation date')) ?? null }
+  const any = (f: FormField, tails: string[]) => tails.some((t) => endsWith(f, t))
+  return {
+    number: fields.find((f) => any(f, ['oem ticket number', 'vendor ticket number'])) ?? null,
+    date: fields.find((f) => any(f, ['oem ticket creation date', 'vendor ticket creation date'])) ?? null,
+  }
 }
 
 export type VendorTicketFields = {

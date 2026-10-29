@@ -4,16 +4,15 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Loader2, Plus } from 'lucide-react'
-import { createVendorCompany, inviteVendorPerson, setPoApprover, setVendorCompanyActive, updateVendorPerson } from '@/lib/actions/admin/vendors'
+import { createVendorCompany, inviteVendorPerson, setVendorCompanyActive, updateVendorPerson } from '@/lib/actions/admin/vendors'
 
 export type VendorCompanyRow = { id: string; name: string; is_active: boolean; technicians: number; managers: number }
-export type StaffOption = { id: string; full_name: string; role: string }
 export type VendorPersonRow = { id: string; full_name: string; is_active: boolean; vendor_company_id: string; vendor_role: 'technician' | 'manager' }
 
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20'
 const btn = 'inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60'
 
-export function VendorsClient({ companies, people, staff, approverId }: { companies: VendorCompanyRow[]; people: VendorPersonRow[]; staff: StaffOption[]; approverId: string }) {
+export function VendorsClient({ companies, people }: { companies: VendorCompanyRow[]; people: VendorPersonRow[] }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [companyName, setCompanyName] = useState('')
@@ -60,16 +59,6 @@ export function VendorsClient({ companies, people, staff, approverId }: { compan
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add
           </button>
         </div>
-      </section>
-
-      <section className="rounded-xl border border-border p-4">
-        <h2 className="text-sm font-semibold">Default PO approver (AC)</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Used for AC only, when the AC sheet names nobody for an AC. Every Vendor Program has its own default approvers (on its program screen, Admin &gt; Vendor Programs). The PO approvers of each AC are written in the AC sheet, column &ldquo;Quote Approver Mail To&rdquo; (one or several addresses): the quote goes to all of them and any one can decide. The approver enters the PO number, date and document. Krishan is the default.</p>
-        <select aria-label="Default PO approver" className={`${inputCls} mt-2 max-w-sm`} value={approverId} disabled={pending}
-          onChange={(e) => run(() => setPoApprover(e.target.value), 'PO approver changed.')}>
-          {!approverId && <option value="">Not set - choose a person</option>}
-          {staff.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
-        </select>
       </section>
 
       <section className="rounded-xl border border-border p-4">

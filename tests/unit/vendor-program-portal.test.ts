@@ -32,6 +32,8 @@ describe('the OEM ticket number boxes of a program ticket\'s form', () => {
     expect(b.number?.id).toBe('f1')
     expect(b.date?.id).toBe('f2')
     expect(findProgramOemBoxes(sec(['OEM Ticket Number'])).number?.id).toBe('f0')
+    const v = findProgramOemBoxes(sec(['VENDOR TICKET NUMBER', 'VENDOR TICKET CREATION DATE']))
+    expect([v.number?.id, v.date?.id]).toEqual(['f0', 'f1'])   // the boxes of the ADMIN REPAIR form
     expect(findProgramOemBoxes(sec(['Ticket number of the OEM', 'Number'])).number).toBeNull()
     expect(findProgramOemBoxes(null)).toEqual({ number: null, date: null })
   })
@@ -93,5 +95,21 @@ describe('the Business Rule conditions for vendor programs and vendor technician
     expect(matchesConditions(r, cond('is_with_vendor', 'true'))).toBe(true)
     expect(matchesConditions(req({ vendor_line: '', is_with_vendor: false }), cond('is_with_vendor', 'true'))).toBe(false)
     expect(matchesConditions(req({ vendor_line: 'ac' }), cond('vendor_line', 'ac'))).toBe(true)
+  })
+})
+
+describe('how one machine is written in {{details}} (the Genset way)', () => {
+  const row = (o: Record<string, unknown>) => ({ id: 'r', store_code: 'MCR', machine_no: null, serial: 'NDJZB11872', vendor: null, emails: [], po_emails: [], approver_emails: [], extra: { 'Genset Brand': 'MAHINDRA', 'Genset KVA': '125', 'CPCB Group': 'CPCB-II' }, is_active: true, sheet_row: 2, ...o }) as never
+  const T = '{{extra_gensetbrand}} {{extra_gensetkva}} KVA, serial {{serial}}, {{extra_cpcbgroup}}'
+  it('writes every machine of the store as the built-in Genset mail does, one line each', async () => {
+    const { programVars, renderRowDetails } = await import('@/lib/programs/mail')
+    expect(renderRowDetails(T, row({}))).toBe('MAHINDRA 125 KVA, serial NDJZB11872, CPCB-II')
+    const vars = programVars({ name: 'Genset', row_type: 'store', details_template: T }, [row({}), row({ serial: 'CJGS1', extra: { 'Genset Brand': 'CUMMINS', 'Genset KVA': '160', 'CPCB Group': 'CPCB-IV' } })])
+    expect(vars.details).toBe('MAHINDRA 125 KVA, serial NDJZB11872, CPCB-II\nCUMMINS 160 KVA, serial CJGS1, CPCB-IV')
+  })
+  it('an empty column leaves a tidy line, and no template keeps the usual short wording', async () => {
+    const { programVars, renderRowDetails } = await import('@/lib/programs/mail')
+    expect(renderRowDetails(T, row({ extra: { 'Genset Brand': 'MAHINDRA' } }))).toBe('MAHINDRA KVA, serial NDJZB11872')
+    expect(programVars({ name: 'RO', row_type: 'store' }, [row({ vendor: 'Aqua' })]).details).toBe('Aqua, serial NDJZB11872')
   })
 })

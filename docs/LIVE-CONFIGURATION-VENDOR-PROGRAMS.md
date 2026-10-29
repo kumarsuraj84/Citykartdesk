@@ -3,11 +3,14 @@
 Servers: app 10.0.1.98, database 10.0.0.205 (`ckdesk`). Vendor and OEM mean the same thing in CK Desk and in the sheets.
 Rule for everybody: no test, UAT or false entries on live. Every step below is either a setting or a real ticket. Mail checks use "Send a test to me" (it makes no ticket and mails only you).
 
-## A. What is already on live (read-only check, 2026-10-29)
-- Programs **RO PURIFIER** (231 rows, sheet 2) and **SENSOMATIC** (3 placeholder rows, sheet 3) exist, switched OFF, level "mail", one row per store.
-- Categories `RO-PURIFIER ISSUE` and `SENSOR MACHINE ISSUE` are in them; their sub-categories are in the active service **ADMIN REPAIR**.
-- `Ticket Mail To`, `PO Mail To`, `Quote Approval Mail To` are empty in both sheets; the RO sheet shows 2 store codes not in CK Desk (KGP, NLD) and CK Desk has 2 stores missing in the sheet (MKG, NEG).
-- Both mail wordings have a fixed "Contact Person: Mohd. Shuaib" and no Warranty row.
+## A. What is on live now (read-only check after the push, 2026-10-30)
+- Programs **RO PURIFIER** and **SENSOMATIC** exist, both switched OFF, level "mail", one row per store.
+- **RO PURIFIER**: 234 active rows; `Ticket Mail To`, `PO Mail To` and `Quote Approval Mail To` are filled on all 234; the vendor written in the rows is "Radhey Water solution". Ready for the portal set-up below.
+- **SENSOMATIC**: 231 active rows with the vendors BNR ELECTRO, CHECKPOINT, ENTHASIS, SECUREMATE; the address columns are still EMPTY (your formulas are pending). Do not switch it on before they are filled.
+- **Vendor companies: none yet. Vendor logins: none yet.** (Section D is a must.)
+- The default PO approver of AC (Admin > Vendors) is not set (Krishan is used for AC). Programs do not use it.
+- Service **ADMIN REPAIR** is active and "Route to OEM" is OFF (correct, keep it so). Its form template already has the boxes **Vendor Ticket Number** and **Vendor Ticket Creation Date**: when a vendor starts a ticket of a program, the OEM ticket number and the date are written into those boxes (G2).
+- Business Rules: one active rule touches ADMIN REPAIR: **"ADMIN REPAIR TICKET RULE_MOHD SHUAIB"** (order 0, created + edited, assigns to a Citykart technician). Your vendor rules work with it: when a vendor rule assigns a vendor technician, that ticket goes to the vendor technician and this rule can never take it back (a rule never takes a ticket from a vendor technician). It stays the fallback for every ticket no vendor rule matches.
 
 ## B. Before the push (sheets, 15 minutes)
 What the sheet is used for, and nothing more: the **e-mail addresses**. `Ticket Mail To` = the first mail when a ticket is raised (always used). `PO Mail To` = the mail to the vendor when the approver attaches the PO, and `Quote Approval Mail To` = the approvers who get the mail when the vendor sends a quote: **these two are used ONLY when the vendor portal is switched on for that program** (a vendor technician sends the quote). For a mail-only program (the mail goes to the OEM and your own technicians do the work) they are ignored, so you may leave them empty. Which vendor TECHNICIAN gets a ticket is never taken from the sheet: it is set in CK Desk (Business Rules). `Store Code` finds the store's row; `Vendor` and every other column (Warranty, helpers) are only shown / usable in the mail wording.
@@ -29,7 +32,7 @@ What the sheet is used for, and nothing more: the **e-mail addresses**. `Ticket 
 1. **Create each vendor company** (for example "Radhey Water solution").
 2. (the company name is only a label for your own screens, mails and reports: the sheet is not matched to it)
 3. **Add the logins**: as many technicians as you want per company, and one or more managers (a manager only VIEWS the tickets of his company's technicians). A login is created by name + e-mail; the person gets the "set your password" mail. Check that the mail arrives. A technician sees only the tickets given to him.
-4. The **default PO approver on this page is for AC only**. Every Vendor Program has its OWN default approvers on its program screen (E5). There is no global default for programs.
+4. There is **no default PO approver on the Vendors page any more**. Every line has its own on its own screen: a Vendor Program on its program screen (E5), AC on the AC (built in) screen in Admin > Vendor Programs. Genset has no quote / PO flow.
 5. A company needs at least one active technician for a Business Rule to be able to assign tickets to it.
 
 ## E. Admin > Vendor Programs > RO PURIFIER and SENSOMATIC (each one)
@@ -62,7 +65,7 @@ What the sheet is used for, and nothing more: the **e-mail addresses**. `Ticket 
 4. Service **ADMIN REPAIR**: "Route to OEM" stays UNTICKED (only the AC service has it ticked; reports use it to recognise AC tickets).
 
 ## H. Routing and staff (check once)
-1. **Business Rules (needed)**: create the rules that assign RO / Sensomatic tickets to the vendor technicians (see E5). If a rule of the service assigns the ticket to a Citykart technician first, a later rule that assigns a vendor technician takes over, and nothing takes a ticket back from a vendor technician. Put the vendor rules BEFORE the general rules (a lower execution order number).
+1. **Business Rules (needed)**: create the rules that assign RO / Sensomatic tickets to the vendor technicians (see E5). On live the rule "ADMIN REPAIR TICKET RULE_MOHD SHUAIB" assigns to a Citykart technician first; a vendor rule after it takes over, and nothing takes a ticket back from a vendor technician. The order of the rules does not matter for this: a vendor rule that runs after the general rule takes the ticket over, and one that runs first cannot be undone.
 2. Keep the Citykart technician group of ADMIN REPAIR: it handles every ticket the program could not give to a vendor.
 3. PO approvers: the people named in the sheets and the default approver must be active staff logins.
 
@@ -78,3 +81,15 @@ Resolution list for AC and Genset as their own program lists; AC and Genset onto
 - The mail sent to the vendor: as a table (like the mail itself).
 - The vendor's e-mail reply: only the new words (the old quoted thread is cut), with its files under it.
 - A vendor's parts list ("Part required") and quote ("PO required from Citykart", revised quote, PO approved, quote not approved, parts list updated): as a table with Item and Qty, and Price (without GST), Line total and the Total when the vendor gave prices. Older messages of this kind (AC too) are shown the same way.
+
+## L. Moving Genset onto the new mechanism (live cut-over, about 15 minutes, reversible)
+Live has four Genset categories under ADMIN REPAIR: **GENSET-CUMMINS** and **GENSET-MAHINDRA** (they send to the Genset OEM today) and **GENSET-EICHER** and **GENSET-KILOSKAR** (no mail today; they will start mailing the OEM once they are in the program).
+Checked on the real Genset sheet (214 stores, 5 of them with several gensets): the old and the new way give the same recipients (OEM in To, company people in CC) and the same genset lines.
+1. Admin > Vendor Programs > create **Genset**, "one row per store".
+2. Google Sheet: paste the Genset sheet link, "Save sheet", "Update from sheet now". The column "Genset Serial No" and "Ticket Mail To" are found by themselves. Read "Problems found" (stores with several gensets are only a note).
+3. **How one machine is written in the mail**: paste `{{extra_gensetbrand}} {{extra_gensetkva}} KVA, serial {{serial}}, {{extra_cpcbgroup}}` (or use the buttons) and Save. In the mail wording keep the row "Genset Details" with `{{details}}`.
+4. **The mail**: write the same wording as your Genset mail today, "Send a test to me", read it.
+5. **Move**: the card "Move categories from the old AC / Genset setting": tick GENSET-CUMMINS and GENSET-MAHINDRA, press "Move to this program and switch it on" (one step; refused if something is not ready). Then in Categories (use the search box) tick GENSET-EICHER and GENSET-KILOSKAR and save. Leave "the vendor works in the portal" OFF (Genset has no portal).
+6. Watch the first real ticket (mail + the table in the conversation + In Progress).
+7. **Back out** if needed: Admin > Vendor Programs > Genset (built in) > tick the categories again, "Save categories": they move back to the old setting in one step.
+8. After about a week of stable use I remove the old Genset setting (the old tick, screens and code).
