@@ -49,7 +49,7 @@ export function resolveKnownSender(
 // trusted for replies about our tickets. A shared mail domain (gmail.com ...) is never trusted this way, and neither is a domain two different
 // OEMs list. Without the confirmation nothing changes: only exactly listed addresses are accepted.
 
-const SHARED_MAIL_DOMAINS = new Set([
+export const SHARED_MAIL_DOMAINS = new Set([
   'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.in', 'yahoo.co.in', 'ymail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
   'rediffmail.com', 'icloud.com', 'me.com', 'aol.com', 'proton.me', 'protonmail.com', 'zoho.com', 'mail.com',
 ])

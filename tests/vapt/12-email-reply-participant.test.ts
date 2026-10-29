@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { setupD03Fixtures, getAdmin, type D03Fixtures } from '../setup/fixtures-d03'
 import { senderMayReply } from '@/lib/email/inbound-participant'
+import { noteUnaddedReply } from '@/lib/email/inbound-note'
 
 let fx: D03Fixtures
 beforeAll(async () => { fx = await setupD03Fixtures() }, 180_000)
@@ -32,5 +33,25 @@ describe('who may reply to a ticket by e-mail', () => {
     expect(await senderMayReply(getAdmin(), t, { kind: 'oem', name: 'Acme Cooling' })).toBe(true)
     expect(await senderMayReply(getAdmin(), t, { kind: 'oem', name: 'Other Vendor' })).toBe(false)
     expect(await senderMayReply(getAdmin(), t, { kind: 'oem', name: '%' })).toBe(false)            // a wildcard in the name matches nothing special
+  })
+  it('an OEM that the sheet-based mail went to may answer: the note lists the addresses, and the answer comes from one of them or the same company', async () => {
+    const t = await ticket()
+    const note = 'Ticket sent to the AC OEM for servicing.\n\nSubject: New AC Issue Ticket - X\nTo: service@sheetoem.test, two@sheetoem.test\nCC: desk@citykartstores.com\n\nMessage sent:\nDear Team,\nTicket No | X'
+    await getAdmin().from('request_comments').insert({ request_id: t.id, author_id: fx.agentA.id, body: note, is_internal: false })
+    expect(await senderMayReply(getAdmin(), t, { kind: 'oem', name: 'AC OEM (SHEET)', email: 'Service@SheetOEM.test' })).toBe(true)
+    expect(await senderMayReply(getAdmin(), t, { kind: 'oem', name: 'AC OEM (SHEET)', email: 'new.person@sheetoem.test' })).toBe(true)
+    expect(await senderMayReply(getAdmin(), t, { kind: 'oem', name: 'AC OEM (OTHER)', email: 'service@otheroem.test' })).toBe(false)
+  })
+})
+
+describe('a reply that is not added leaves a note a technician can see', () => {
+  it('the note is saved (an author or an external address is required) and is internal', async () => {
+    const t = await ticket()
+    const ok = await noteUnaddedReply(getAdmin(), t.id, 'someone@oem.test', 'the sender takes no part in this ticket')
+    expect(ok).toBe(true)
+    const rows = ((await getAdmin().from('request_comments').select('body, is_internal, external_email').eq('request_id', t.id).ilike('body', '%was not added to the conversation%')).data ?? []) as { body: string; is_internal: boolean; external_email: string }[]
+    expect(rows.length).toBeGreaterThan(0)
+    expect(rows[0].is_internal).toBe(true)
+    expect(rows[0].external_email).toBe('someone@oem.test')
   })
 })

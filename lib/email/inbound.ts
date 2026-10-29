@@ -1,4 +1,5 @@
 import { senderMayReply } from '@/lib/email/inbound-participant'
+import { noteUnaddedReply } from '@/lib/email/inbound-note'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadDbSmtpConfig } from './mailbox'
 import { isGmailHost } from './thread-tag'
@@ -66,19 +67,6 @@ async function orgIdentityMaps(admin: AnyClient, orgId: string) {
   }
 
   return { profilesByEmail, oemNameByEmail, oemNameByDomain: oemNameByDomain(oemNameByEmail) }
-}
-
-/**
- * A reply that was NOT added to the conversation leaves a short internal note on the ticket (staff only), so a technician can see that an answer
- * arrived and why it is not shown, instead of it vanishing silently. Only for senders at a company we actually deal with.
- */
-async function noteUnaddedReply(admin: AnyClient, requestId: string, fromAddress: string, reason: string) {
-  try {
-    await admin.from('request_comments').insert({
-      request_id: requestId, author_id: null, external_name: 'Citykart Desk', is_internal: true,
-      body: `An e-mail reply to this ticket from ${fromAddress} was not added to the conversation: ${reason}. If it is genuine, copy the message in by hand.`,
-    })
-  } catch { /* a note must never break the sync */ }
 }
 
 function addressText(value: unknown): string {
@@ -246,7 +234,7 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
 
           // VAPT VA-INT-02: the sender must take part in this ticket (requester, assignee, collaborator, its technician group, a manager, or the OEM it was
           // sent to). A subject line with a guessed ticket number is not enough to write on somebody else's ticket.
-          if (!(await senderMayReply(admin, request, sender.kind === 'profile' ? { kind: 'profile', profileId: sender.profileId } : { kind: 'oem', name: sender.name }))) {
+          if (!(await senderMayReply(admin, request, sender.kind === 'profile' ? { kind: 'profile', profileId: sender.profileId } : { kind: 'oem', name: sender.name, email: fromAddress }))) {
             result.senderNotRecognized++
             await noteUnaddedReply(admin, request.id, fromAddress, 'the sender takes no part in this ticket')
             await admin.from('processed_inbound_emails').insert({ message_id: messageId, request_id: request.id, outcome: 'sender_not_recognized', from_address: fromAddress })

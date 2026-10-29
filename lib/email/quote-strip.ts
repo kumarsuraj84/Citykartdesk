@@ -32,11 +32,16 @@ function stripTrailingQuoteLines(text: string): string {
   return lines.slice(0, cut).join('\n')
 }
 
-/** Written between the lines of the quoted message (an inline reply): after quoted ">" lines come the person's own, unquoted, words. */
+/** The usual start of a signature after the message: the "-- " line, or the footer a phone app adds. Nothing after it is an answer to the quoted text. */
+const SIGNATURE_START = /^\s*(?:--\s*|_{5,}\s*|Sent from my [^\n]*|Get Outlook for [^\n]*|Sent from (?:Mail|Outlook) for [^\n]*)$/i
+
+/** Written between the lines of the quoted message (an inline reply): after quoted ">" lines come the person's own, unquoted, words. A signature that a
+ *  mail program puts after the quoted message is not an answer (it used to make the whole thread stay in the conversation). */
 function hasInlineReply(rest: string): boolean {
   let seenQuoted = false
   for (const line of rest.split('\n')) {
     if (/^\s*>/.test(line)) { seenQuoted = true; continue }
+    if (seenQuoted && SIGNATURE_START.test(line)) return false
     if (seenQuoted && line.trim() !== '') return true
   }
   return false

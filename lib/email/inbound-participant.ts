@@ -6,19 +6,37 @@
 
 
 // the e-mail sync passes its own minimal client type, so the helper only needs .from()
+import { domainOfAddress, SHARED_MAIL_DOMAINS } from '@/lib/email/inbound-match'
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (table: string) => any }
 
-export type ReplySender = { kind: 'profile'; profileId: string } | { kind: 'oem'; name: string }
+export type ReplySender = { kind: 'profile'; profileId: string } | { kind: 'oem'; name: string; email?: string }
 export type ReplyTicket = { id: string; requester_id: string | null; assigned_to: string | null; team_id: string | null }
 
 const STAFF_WIDE = new Set(['manager', 'admin', 'platform_owner'])
 
+/** The addresses in the "To:" line of the note "Ticket sent to the AC / Genset OEM for servicing." (lower case). */
+export function oemNoteRecipients(body: string): string[] {
+  const line = /^To: ?(.*)$/m.exec(body ?? '')
+  if (!line) return []
+  return (line[1].match(/[^\s,;<>"']+@[^\s,;<>"']+/g) ?? []).map((a) => a.toLowerCase())
+}
+
 export async function senderMayReply(admin: AnyClient, ticket: ReplyTicket, sender: ReplySender): Promise<boolean> {
   if (sender.kind === 'oem') {
-    // the portal records "Ticket sent to <OEM name> (...)" on the ticket when it is sent to the OEM
+    // an older note reads "Ticket sent to <OEM name> (...)"
     const { data } = await admin.from('request_comments').select('id').eq('request_id', ticket.id).ilike('body', `%Ticket sent to ${escapeLike(sender.name)}%`).limit(1)
-    return (data ?? []).length > 0
+    if ((data ?? []).length > 0) return true
+    // the note written for the AC / Genset sheets reads "Ticket sent to the AC OEM for servicing." and lists the addresses it went to: an OEM that was mailed
+    // may answer, from that address or from another address of the same company (a shared mail domain such as gmail.com never counts as one company)
+    const email = (sender.email ?? '').trim().toLowerCase()
+    if (!email) return false
+    const { data: notes } = await admin.from('request_comments').select('body').eq('request_id', ticket.id).ilike('body', 'Ticket sent to the % OEM for servicing.%').limit(10)
+    const to = ((notes ?? []) as { body: string }[]).flatMap((n) => oemNoteRecipients(n.body))
+    if (to.includes(email)) return true
+    const domain = domainOfAddress(email)
+    return !!domain && !SHARED_MAIL_DOMAINS.has(domain) && to.some((a) => domainOfAddress(a) === domain)
   }
   const id = sender.profileId
   if (id === ticket.requester_id || id === ticket.assigned_to) return true
