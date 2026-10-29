@@ -105,3 +105,44 @@ describe('a reply with a signature under the quoted thread', () => {
     expect(stripQuotedReply(phone)).toBe('Done, thanks.')
   })
 })
+
+describe('an Outlook reply (an OEM mail program) with the quoted thread under an underscore line', () => {
+  const outlook = [
+    'Dear Sir/Ma\'am,',
+    'Thank you for writing to DAIKIN India Key Account Helpdesk.',
+    'We have raised a service request vide reference number IND2810202653657308 & our team will contact you.',
+    'Email : serviceKA@daikinindia.com<mailto:serviceKA@daikinindia.com>',
+    'WhatsApp: Say Hi  https://wa.me/9871409300<https://secure-web.example.test/abc>',
+    '________________________________',
+    'From: CitykartDesk <citykartdesk@citykartstores.com>',
+    'Sent: Tuesday, October 27, 2026 22:07',
+    'To: Service Key Account <serviceka@daikinindia.com>; Ankur Kumar Gupta <ankur.gupta@daikinindia.com>',
+    'Cc: krishan.patel@citykartstores.com <krishan.patel@citykartstores.com>; raushan.kumar@citykartstores.com <raushan.kumar@citykartstores.com>',
+    'Subject: [CKSD-000520] New AC Issue Ticket - CKSD-000520 - SDH',
+    '',
+    '** EXTERNAL EMAIL. **',
+    'Dear Team,',
+    'Ticket No',
+    'CKSD-000520',
+  ].join('\n')
+
+  it('cuts the quoted thread (the "Cc:" line in its header no longer stops the cut) and keeps the OEM\'s own message', () => {
+    const out = stripQuotedReply(outlook)
+    expect(out).toContain('reference number IND2810202653657308')
+    expect(out).not.toContain('From: CitykartDesk')
+    expect(out).not.toContain('Ticket No')
+    expect(out).not.toContain('________')
+  })
+  it('drops the repeated "<mailto:...>" and "<https://...>" that Outlook writes straight after a link, and keeps the link itself', () => {
+    const out = stripQuotedReply(outlook)
+    expect(out).toContain('serviceKA@daikinindia.com')
+    expect(out).not.toContain('<mailto:')
+    expect(out).toContain('https://wa.me/9871409300')
+    expect(out).not.toContain('secure-web.example.test')
+  })
+  it('a header block without a Cc: line is still cut, and an angle-bracket address after a space stays', () => {
+    const plain = ['Done.', '', 'From: A <a@x.test>', 'Sent: Monday', 'To: B <b@x.test>', 'Subject: Re: t', '', 'old text'].join('\n')
+    expect(stripQuotedReply(plain)).toBe('Done.')
+    expect(stripQuotedReply('Write to Krishan <krishan@x.test> please.')).toBe('Write to Krishan <krishan@x.test> please.')
+  })
+})

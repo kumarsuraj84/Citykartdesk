@@ -15,7 +15,10 @@ const BOUNDARY_PATTERNS: RegExp[] = [
   // Outlook web / mobile: a "From: ... Sent: ... To: ... Subject: ..." header block.
   // The labels are sometimes wrapped in "*" (e.g. "*From:*") when Outlook renders
   // its bold field labels down to plain text, hence the optional `\*?` around each.
-  /^\s*\*?From:\*?\s.+\n\s*\*?Sent:\*?\s.+\n\s*\*?To:\*?\s.+\n\s*\*?Subject:\*?\s.+$/im,
+  // A "Cc:" line (one or more) may sit between "To:" and "Subject:" (Outlook adds it when the earlier message had copies).
+  /^\s*\*?From:\*?\s.+\n\s*\*?Sent:\*?\s.+\n\s*\*?To:\*?\s.+\n(?:\s*\*?Cc:\*?\s.+\n)*\s*\*?Subject:\*?\s.+$/im,
+  // Outlook's plain-text line of underscores that opens the quoted message, followed by its "From:" line
+  /^\s*_{8,}\s*\n\s*\*?From:\*?\s.+$/im,
   // Generic mailing-list style
   /^\s*-{3,}\s*$/m,
 ]
@@ -47,7 +50,16 @@ function hasInlineReply(rest: string): boolean {
   return false
 }
 
+/** Outlook's plain text writes "<mailto:a@b.com>" and "<https://...>" straight after a link's text: the same address or link twice. Only that attached form is removed. */
+function dropLinkDuplicates(text: string): string {
+  return text.replace(/(?<=\S)<(?:mailto:[^>\s]+|https?:\/\/[^>\s]+)>/gi, '')
+}
+
 export function stripQuotedReply(rawText: string): string {
+  return dropLinkDuplicates(stripQuoted(rawText))
+}
+
+function stripQuoted(rawText: string): string {
   const text = (rawText ?? '').replace(/\r\n/g, '\n')
   if (!text.trim()) return text
 
