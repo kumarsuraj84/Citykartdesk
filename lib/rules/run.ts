@@ -63,7 +63,7 @@ type RawRequest = {
 }
 
 const SELECT =
-  'id, request_no, title, description, priority, status, service_id, team_id, project_id, requester_id, assigned_to, org_id, created_at, resolved_at, closed_at, source_metadata, form_data, waiting_since, response_due_at, resolution_due_at, category_id, sub_category_id, reopen_count, responded_at, paused_ms_total, service:services(template_id, sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections)), requester:profiles!requester_id(role, department_id, location_id, designation_id, function_id)'
+  'id, request_no, title, description, priority, status, service_id, team_id, project_id, requester_id, assigned_to, org_id, created_at, resolved_at, closed_at, source_metadata, form_data, waiting_since, response_due_at, resolution_due_at, category_id, sub_category_id, reopen_count, responded_at, paused_ms_total, service:services(template_id, sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections)), requester:profiles!requester_id(role, department_id, location_id, designation_id, function_id, store_id)'
 
 async function fetchRequest(admin: AnyClient, requestId: string): Promise<RawRequest | null> {
   const { data } = await admin.from('requests').select(SELECT).eq('id', requestId).single()
@@ -100,9 +100,26 @@ async function acFacts(admin: AnyClient, requestId: string) {
   return { ac_amc_vendor: s(unit?.amc_vendor), ac_brand: s(unit?.brand), store_region: s(unit?.region), store_state: s(unit?.state), store_cluster: s(unit?.cluster) }
 }
 
+/** The Vendor Program / vendor facts of a ticket, from CK Desk's own settings: its category's program (or the built-in AC / Genset line) and the company of the vendor technician who has it. */
+async function vendorFacts(admin: AnyClient, request: { category_id: string | null; assigned_to: string | null }) {
+  let vendor_line = ''
+  if (request.category_id) {
+    const { data } = await admin.from('service_categories').select('program_id, auto_oem_kind').eq('id', request.category_id).maybeSingle()
+    vendor_line = (data?.program_id as string | null) ?? (data?.auto_oem_kind as string | null) ?? ''
+  }
+  let vendor_company_id = ''
+  if (request.assigned_to) {
+    const { data: p } = await admin.from('profiles').select('vendor_company_id, vendor_role').eq('id', request.assigned_to).maybeSingle()
+    if (p?.vendor_company_id && p.vendor_role === 'technician') vendor_company_id = p.vendor_company_id as string
+  }
+  return { vendor_line, vendor_company_id, is_with_vendor: vendor_company_id !== '' }
+}
+
 async function toEvalRequest(admin: AnyClient, request: RawRequest): Promise<RuleEvaluationRequest> {
   return {
     ...(await acFacts(admin, request.id)),
+    ...(await vendorFacts(admin, request)),
+    requester_store_id: (request.requester as { store_id?: string | null } | null)?.store_id ?? '',
     priority: request.priority,
     status: request.status,
     service_id: request.service_id,

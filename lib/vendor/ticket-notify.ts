@@ -5,6 +5,7 @@ import { absoluteAppUrl } from '@/lib/email/notify-email'
 import { userEmail } from './po'
 import { buildStorePartsUpdatedMail, buildVendorHoldEndedMail, buildVendorReopenedMail, type PoMailBase } from './po-mail'
 import type { RequestLine } from './lines'
+import { loadProgramAsset } from './asset'
 
 // Mails and bell messages about a vendor's ticket that are not about a PO decision: the store told of a corrected parts list, the vendor told that Citykart ended
 // the hold or that the ticket was reopened. Server only. Nothing here throws: a failed mail never undoes the ticket change that caused it.
@@ -30,10 +31,12 @@ async function ticketFacts(requestId: string): Promise<Facts | null> {
   ])
   const unit = (Array.isArray(snap?.snapshot) ? snap.snapshot[0] : null) as { ckdesk_no?: string; brand?: string; tonnage?: string } | null
   const storeLabel = store ? `${store.name} (${store.code})` : '(store not known)'
-  const acLabel = unit ? [unit.ckdesk_no, [unit.brand, unit.tonnage].filter(Boolean).join(' ')].filter(Boolean).join(' - ') || '(AC)' : '(AC not recorded)'
+  // no AC row: a ticket of a Vendor Program is described by its program and saved sheet row
+  const asset = snap ? null : await loadProgramAsset(d, requestId)
+  const acLabel = asset ? asset.label : unit ? [unit.ckdesk_no, [unit.brand, unit.tonnage].filter(Boolean).join(' ')].filter(Boolean).join(' - ') || '(AC)' : '(AC not recorded)'
   return {
     requestNo: req.request_no,
-    mailBase: { requestNo: req.request_no, storeLabel, acLabel, vendorName: company?.name ?? person?.full_name ?? 'Vendor', lines: [] },
+    mailBase: { requestNo: req.request_no, storeLabel, acLabel, ...(asset ? { assetKind: asset.programName } : {}), vendorName: company?.name ?? person?.full_name ?? 'Vendor', lines: [] },
     vendorPerson: person?.vendor_company_id ? { id: person.id, full_name: person.full_name } : null,
     requester: requester ? { id: requester.id, full_name: requester.full_name } : null,
   }

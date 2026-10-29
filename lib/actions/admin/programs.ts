@@ -235,6 +235,77 @@ export async function saveBuiltInCategories(kind: string, categoryIds: string[])
   return {}
 }
 
+/** What happens to a ticket: "mail" (mail the vendor, then In Progress) or "portal" (mail the vendor and give the ticket to a technician of the vendor, who works it in the vendor portal). */
+export async function setProgramLevel(id: string, level: string): Promise<ActionResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return { error: guard.error }
+  if (level !== 'mail' && level !== 'portal') return { error: 'Unknown choice.' }
+  const { data: prog } = await db().from('vendor_programs').select('id, name, is_active, level, resolution_options').eq('org_id', guard.orgId).eq('id', id).maybeSingle()
+  if (!prog) return { error: 'Program not found.' }
+  if (prog.level === level) return {}
+  if (level === 'portal' && prog.is_active && ((prog.resolution_options ?? []) as string[]).length === 0) return { error: 'Write the list of resolutions first (below), then choose the vendor portal.' }
+  const { error } = await db().from('vendor_programs').update({ level, ...touch(guard) }).eq('id', id).eq('org_id', guard.orgId)
+  if (error) return { error: 'Could not save.' }
+  await logAdminAudit({ orgId: guard.orgId, actorId: guard.profile.id, entityType: 'vendor_program', entityId: id, action: 'vendor_program.level_changed', metadata: { name: prog.name, from: prog.level, to: level } })
+  revalidatePath('/admin/programs'); revalidatePath(`/admin/programs/${id}`)
+  return {}
+}
+
+/** The program's own default PO approvers (used when the sheet row names no active approver; any one of them can decide). Only active Citykart technicians, managers and administrators. */
+export async function saveProgramApprovers(id: string, approverIds: string[]): Promise<ActionResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return { error: guard.error }
+  const { data: prog } = await db().from('vendor_programs').select('id, name').eq('org_id', guard.orgId).eq('id', id).maybeSingle()
+  if (!prog) return { error: 'Program not found.' }
+  const wanted = [...new Set((approverIds ?? []).filter((x) => typeof x === 'string'))].slice(0, 20)
+  if (wanted.length > 0) {
+    const { data: people } = await db().from('profiles').select('id, role, is_active, vendor_company_id').eq('org_id', guard.orgId).in('id', wanted)
+    const ok = new Set(((people ?? []) as { id: string; role: string; is_active: boolean; vendor_company_id: string | null }[]).filter((p) => p.is_active !== false && !p.vendor_company_id && ['agent', 'manager', 'admin', 'platform_owner'].includes(p.role)).map((p) => p.id))
+    if (wanted.some((w) => !ok.has(w))) return { error: 'Choose only active Citykart technicians, managers or administrators.' }
+  }
+  const { error } = await db().from('vendor_programs').update({ default_approver_ids: wanted, ...touch(guard) }).eq('id', id).eq('org_id', guard.orgId)
+  if (error) return { error: 'Could not save.' }
+  await logAdminAudit({ orgId: guard.orgId, actorId: guard.profile.id, entityType: 'vendor_program', entityId: id, action: 'vendor_program.approvers_saved', metadata: { name: prog.name, count: wanted.length } })
+  revalidatePath(`/admin/programs/${id}`)
+  return {}
+}
+
+/** The switch of a program that works in the vendor portal: the OEM ticket number being compulsory to start (AC always needs it; a program decides for itself). */
+export async function saveProgramPortalOptions(id: string, opts: { oemRequired: boolean }): Promise<ActionResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return { error: guard.error }
+  const { data: prog } = await db().from('vendor_programs').select('id, name').eq('org_id', guard.orgId).eq('id', id).maybeSingle()
+  if (!prog) return { error: 'Program not found.' }
+  const { error } = await db().from('vendor_programs').update({ oem_number_required: !!opts.oemRequired, ...touch(guard) }).eq('id', id).eq('org_id', guard.orgId)
+  if (error) return { error: 'Could not save.' }
+  await logAdminAudit({ orgId: guard.orgId, actorId: guard.profile.id, entityType: 'vendor_program', entityId: id, action: 'vendor_program.portal_options_saved', metadata: { name: prog.name, oemRequired: !!opts.oemRequired } })
+  revalidatePath(`/admin/programs/${id}`)
+  return {}
+}
+
+/** The fixed list of resolutions the vendor chooses from (one per line). "Other" is always offered by the screen and is not part of the list. */
+export async function saveProgramResolutions(id: string, text: string): Promise<ActionResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return { error: guard.error }
+  const { data: prog } = await db().from('vendor_programs').select('id, name, is_active, level').eq('org_id', guard.orgId).eq('id', id).maybeSingle()
+  if (!prog) return { error: 'Program not found.' }
+  const seen = new Set<string>()
+  const list: string[] = []
+  for (const line of (text ?? '').split(/\r?\n/)) {
+    const v = line.replace(/\s+/g, ' ').trim().slice(0, 120)
+    const k = v.toLowerCase()
+    if (!v || k === 'other' || seen.has(k)) continue
+    seen.add(k); list.push(v)
+  }
+  if (list.length > 30) return { error: 'At most 30 resolutions.' }
+  if (list.length === 0 && prog.is_active && prog.level === 'portal') return { error: 'A program that is switched on in the vendor portal needs at least one resolution. Switch it off first.' }
+  const { error } = await db().from('vendor_programs').update({ resolution_options: list, ...touch(guard) }).eq('id', id).eq('org_id', guard.orgId)
+  if (error) return { error: 'Could not save.' }
+  await logAdminAudit({ orgId: guard.orgId, actorId: guard.profile.id, entityType: 'vendor_program', entityId: id, action: 'vendor_program.resolutions_saved', metadata: { name: prog.name, count: list.length } })
+  revalidatePath(`/admin/programs/${id}`)
+  return {}
+}
+
 /** A program can be deleted only while no ticket has been mailed through it; otherwise switch it off. */
 export async function deleteProgram(id: string): Promise<ActionResult> {
   const guard = await requireAdmin()

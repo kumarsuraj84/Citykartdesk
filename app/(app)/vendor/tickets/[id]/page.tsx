@@ -6,7 +6,8 @@ import { getRequestById, getRequestComments } from '@/lib/queries/requests'
 import { getRequestAttachments } from '@/lib/queries/attachments'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isVendor, vendorBoxOf, vendorRoleOf, VENDOR_BOX_LABELS } from '@/lib/vendor/access'
-import { displayAnswer, findVendorFields, resolutionChoices } from '@/lib/vendor/fields'
+import { BG_OEM_DATE_KEY, BG_OEM_NUMBER_KEY, displayAnswer, findProgramOemBoxes, findVendorFields, programResolutionChoices, resolutionChoices } from '@/lib/vendor/fields'
+import { loadProgramAsset } from '@/lib/vendor/asset'
 import { loadLiveResolutionField } from '@/lib/vendor/live-form'
 import { VendorTicketActions, type OpenRequestView } from '@/components/vendor/VendorTicketActions'
 import { listRequestsWithItems } from '@/lib/vendor/requests'
@@ -17,6 +18,8 @@ import { filterFieldsForRequester, filterSectionsForCategory } from '@/lib/forms
 import { formatDateTime } from '@/lib/utils'
 import { parseOemComment } from '@/lib/masters/comment-view'
 import { OemSentComment } from '@/components/requests/OemSentComment'
+import { LinesComment } from '@/components/requests/LinesComment'
+import { parseLinesComment } from '@/lib/vendor/lines-comment'
 import { isPmsRequest } from '@/lib/pms/is-pms'
 import type { FormSection } from '@/types'
 
@@ -59,6 +62,8 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
   ])
   const acs = (Array.isArray(snapRes.data?.snapshot) ? snapRes.data.snapshot : []) as Record<string, string | null>[]
   const ac = acs[0] ?? null
+  // a ticket of a Vendor Program has no AC row: its saved sheet row and the program's own resolution list are used instead
+  const programAsset = ac ? null : await loadProgramAsset(admin, id)
   const store = storeRes.data as { code: string; name: string; address: string | null; city: string | null; state: string | null } | null
 
   const sections = (Array.isArray(request.form_sections_snapshot) ? request.form_sections_snapshot : []) as unknown as FormSection[]
@@ -80,7 +85,9 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
     if (cid) filesByComment.set(cid, [...(filesByComment.get(cid) ?? []), att])
     else otherFiles.push(att)
   }
-  const vendorFieldIds = new Set([vf.oemNumber?.id, vf.oemDate?.id, vf.resolution?.id].filter(Boolean) as string[])
+  const programBoxes = findProgramOemBoxes(sections)
+  const vendorFieldIds = new Set([vf.oemNumber?.id, vf.oemDate?.id, vf.resolution?.id, programBoxes.number?.id, programBoxes.date?.id].filter(Boolean) as string[])
+  const bgText = (k: string) => String(formData[k] ?? '').trim()
   // what the store filled in (the technician-only boxes are shown separately below)
   const storeSections = filterFieldsForRequester(filterSectionsForCategory(sections, request.category_id))
     .map((s) => ({ ...s, fields: s.fields.filter((f) => !vendorFieldIds.has(f.id) && f.type !== 'store_address') }))
@@ -112,9 +119,11 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
         requestId={request.id}
         status={request.status}
         canAct={isTech}
-        resolutionChoices={resolutionChoices(liveResolution)}
+        resolutionChoices={programAsset ? programResolutionChoices(programAsset.resolutionOptions) : resolutionChoices(liveResolution)}
         openRequest={openRequest}
         pms={pms}
+        programName={programAsset?.programName ?? null}
+        oemRequired={programAsset ? programAsset.oemNumberRequired : true}
       />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
@@ -139,7 +148,7 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
                     <span className="font-medium text-foreground">{c.author?.full_name ?? 'Someone outside'}</span>
                     <span>{formatDateTime(c.created_at)}</span>
                   </div>
-                  {(() => { const oem = parseOemComment(c.body); return oem ? <OemSentComment view={oem} /> : <p className="mt-1 whitespace-pre-wrap break-words text-sm">{c.body}</p> })()}
+                  {(() => { const oem = parseOemComment(c.body); if (oem) return <OemSentComment view={oem} />; const lines = parseLinesComment(c.body); return lines ? <LinesComment view={lines} /> : <p className="mt-1 whitespace-pre-wrap break-words text-sm">{c.body}</p> })()}
                   {(filesByComment.get(c.id) ?? []).length > 0 && (
                     <div className="mt-2"><AttachmentChips attachments={filesByComment.get(c.id) ?? []} currentUserId={profile.id} canManageAll={false} /></div>
                   )}
@@ -206,6 +215,16 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
                 </ul>
               )}
             </section>
+          ) : programAsset ? (
+          <section className="rounded-xl border border-border">
+            <h2 className="border-b border-border px-4 py-2 text-sm font-semibold">{programAsset.programName}</h2>
+            <dl className="divide-y divide-border">
+              <Row label="Vendor" value={programAsset.row?.vendor} />
+              <Row label="Machine no." value={programAsset.row?.machine_no} />
+              <Row label="Serial no." value={programAsset.row?.serial} />
+              {Object.entries(programAsset.row?.extra ?? {}).map(([k, v]) => <Row key={k} label={k} value={v} />)}
+            </dl>
+          </section>
           ) : (
           <section className="rounded-xl border border-border">
             <h2 className="border-b border-border px-4 py-2 text-sm font-semibold">AC</h2>
@@ -220,6 +239,16 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
           </section>
           )}
 
+          {programAsset && (
+          <section className="rounded-xl border border-border">
+            <h2 className="border-b border-border px-4 py-2 text-sm font-semibold">OEM details</h2>
+            <dl className="divide-y divide-border">
+              <Row label="OEM ticket number" value={(programBoxes.number ? String(formData[programBoxes.number.id] ?? '') : '') || bgText(BG_OEM_NUMBER_KEY)} />
+              <Row label="OEM ticket date" value={(programBoxes.date ? String(formData[programBoxes.date.id] ?? '') : '') || bgText(BG_OEM_DATE_KEY)} />
+            </dl>
+          </section>
+          )}
+          {!programAsset && (
           <section className="rounded-xl border border-border">
             <h2 className="border-b border-border px-4 py-2 text-sm font-semibold">OEM details</h2>
             <dl className="divide-y divide-border">
@@ -228,6 +257,7 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
               <Row label="Resolution" value={vf.resolution ? String(formData[vf.resolution.id] ?? '') : null} />
             </dl>
           </section>
+          )}
         </aside>
       </div>
     </div>

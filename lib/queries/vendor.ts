@@ -53,30 +53,39 @@ export async function getVendorTickets(): Promise<VendorTicketRow[]> {
   const storeIds = [...new Set(rows.map((r) => r.requester?.store_id).filter((s): s is string => !!s))]
   const ids = rows.map((r) => r.id)
   const categoryIds = [...new Set(rows.map((r) => r.category_id).filter((c): c is string => !!c))]
-  const [{ data: stores }, { data: snaps }, holdKinds, { data: pmsCats }] = await Promise.all([
+  const [{ data: stores }, { data: snaps }, holdKinds, { data: pmsCats }, { data: progSnaps }] = await Promise.all([
     storeIds.length ? admin.from('stores').select('id, code, name').in('id', storeIds) : Promise.resolve({ data: [] }),
     admin.from('request_master_snapshots').select('request_id, snapshot').eq('kind', 'ac').in('request_id', ids),
     holdKindsFor(ids),
     categoryIds.length ? admin.from('service_categories').select('id').eq('is_pms', true).in('id', categoryIds) : Promise.resolve({ data: [] }),
+    admin.from('request_program_snapshots').select('request_id, snapshot, program:vendor_programs(name)').in('request_id', ids),
   ])
+  // a ticket of a Vendor Program has no AC row: its "machine" is the program (with the machine / serial of the sheet row when there is one)
+  const programLabelByRequest = new Map(((progSnaps ?? []) as { request_id: string; snapshot: Array<{ machine_no?: string | null; serial?: string | null }> | null; program: { name: string } | { name: string }[] | null }[])
+    .map((s) => {
+      const name = (Array.isArray(s.program) ? s.program[0] : s.program)?.name ?? 'Program'
+      const row = Array.isArray(s.snapshot) ? s.snapshot[0] : null
+      const id = [row?.machine_no, row?.serial].map((v) => (v ?? '').trim()).filter(Boolean).join(' / ')
+      return [s.request_id, id ? name + ' - ' + id : name] as const
+    }))
   const pmsCategoryIds = new Set(((pmsCats ?? []) as { id: string }[]).map((c) => c.id))
   const storeById = new Map(((stores ?? []) as { id: string; code: string; name: string }[]).map((s) => [s.id, s]))
   const acByRequest = new Map(((snaps ?? []) as { request_id: string; snapshot: Array<{ ckdesk_no?: string; brand?: string; tonnage?: string }> }[])
     .map((s) => [s.request_id, s.snapshot?.[0] ?? null]))
 
-  const { findVendorFields } = await import('@/lib/vendor/fields')
+  const { findVendorFields, findProgramOemBoxes, BG_OEM_NUMBER_KEY } = await import('@/lib/vendor/fields')
   return rows.map((r) => {
     const store = r.requester?.store_id ? storeById.get(r.requester.store_id) : undefined
     const ac = acByRequest.get(r.id)
     const sections = Array.isArray(r.form_sections_snapshot) ? (r.form_sections_snapshot as never) : []
-    const oemField = findVendorFields(sections).oemNumber
-    const oem = oemField ? String((r.form_data ?? {})[oemField.id] ?? '').trim() : ''
+    const oemField = findVendorFields(sections).oemNumber ?? findProgramOemBoxes(sections).number
+    const oem = (oemField ? String((r.form_data ?? {})[oemField.id] ?? '').trim() : '') || String((r.form_data ?? {})[BG_OEM_NUMBER_KEY] ?? '').trim()
     const hold_kind = holdKinds.get(r.id) ?? null
     return {
       id: r.id, request_no: r.request_no, title: r.title, status: r.status, priority: r.priority,
       created_at: r.created_at, updated_at: r.updated_at, assigned_to: r.assigned_to, assignee_name: r.assignee?.full_name ?? null,
       store_code: store?.code ?? null, store_name: store?.name ?? null,
-      ac_label: ac ? [ac.ckdesk_no, [ac.brand, ac.tonnage].filter(Boolean).join(' ')].filter(Boolean).join(' - ') : null,
+      ac_label: ac ? [ac.ckdesk_no, [ac.brand, ac.tonnage].filter(Boolean).join(' ')].filter(Boolean).join(' - ') : (programLabelByRequest.get(r.id) ?? null),
       oem_ticket_no: oem || null, reopen_count: r.reopen_count ?? 0,
       box: vendorBoxOf(r.status, hold_kind), hold_kind, is_pms: !!r.category_id && pmsCategoryIds.has(r.category_id),
     }

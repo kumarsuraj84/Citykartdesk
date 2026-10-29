@@ -9,6 +9,17 @@ export const OEM_NUMBER_LABEL = 'AC OEM Ticket Number'
 export const OEM_DATE_LABEL = 'AC OEM Ticket Creation Date'
 export const AC_RESOLUTION_LABEL = 'AC resolution'
 
+/** Where a program ticket keeps the OEM ticket number when its form has no box for it: in the ticket's own data, not shown as a form box. */
+export const BG_OEM_NUMBER_KEY = '_oem_ticket_no'
+export const BG_OEM_DATE_KEY = '_oem_ticket_date'
+
+/** The OEM boxes of a PROGRAM ticket's form: a box whose label ends with "OEM Ticket Number" (for example "RO OEM Ticket Number") and one that ends with "OEM Ticket Creation Date". */
+export function findProgramOemBoxes(sections: FormSection[] | null | undefined): { number: FormField | null; date: FormField | null } {
+  const fields = flattenSections(sections)
+  const endsWith = (f: FormField, tail: string) => { const l = norm(f.label); return l === tail || l.endsWith(` ${tail}`) }
+  return { number: fields.find((f) => endsWith(f, 'oem ticket number')) ?? null, date: fields.find((f) => endsWith(f, 'oem ticket creation date')) ?? null }
+}
+
 export type VendorTicketFields = {
   oemNumber: FormField | null
   oemDate: FormField | null
@@ -42,6 +53,13 @@ export type ResolutionChoice = { value: string; label: string }
 export function resolutionChoices(field: FormField | null): ResolutionChoice[] {
   const base = (field?.options ?? []).map((o) => ({ value: String(o.value), label: String(o.label ?? o.value) }))
   const hasOther = base.some((o) => norm(o.value) === norm(RESOLUTION_OTHER) || norm(o.label) === norm(RESOLUTION_OTHER))
+  return hasOther ? base : [...base, { value: RESOLUTION_OTHER, label: RESOLUTION_OTHER }]
+}
+
+/** The resolutions of a Vendor Program: the program's own fixed list, with "Other" at the end. */
+export function programResolutionChoices(options: string[]): ResolutionChoice[] {
+  const base = options.map((o) => ({ value: o, label: o }))
+  const hasOther = base.some((o) => norm(o.value) === norm(RESOLUTION_OTHER))
   return hasOther ? base : [...base, { value: RESOLUTION_OTHER, label: RESOLUTION_OTHER }]
 }
 

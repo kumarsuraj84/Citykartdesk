@@ -27,6 +27,11 @@ export type RuleConditionField =
   | 'store_region'
   | 'store_state'
   | 'store_cluster'
+  // Vendor Programs and vendor technicians - all set up in CK Desk
+  | 'vendor_line'         // the Vendor Program (its id) of the ticket's category, or 'ac' / 'genset' for the built-in lines
+  | 'vendor_company_id'   // the vendor company of the vendor technician who has the ticket
+  | 'is_with_vendor'      // the ticket is with a vendor technician
+  | 'requester_store_id'  // the store of the requester
 
 export type RuleConditionOperator =
   | 'equals'
@@ -100,6 +105,10 @@ export type RuleEvaluationRequest = {
   store_region?: string
   store_state?: string
   store_cluster?: string
+  vendor_line?: string
+  vendor_company_id?: string
+  is_with_vendor?: boolean
+  requester_store_id?: string
   form_data?: Record<string, unknown> | null
   /** The request's answers keyed by Field Library field id — see libraryFieldValues(). */
   library_field_values?: Record<string, unknown> | null

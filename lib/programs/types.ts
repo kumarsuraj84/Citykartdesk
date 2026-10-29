@@ -46,6 +46,12 @@ export type ProgramRecord = {
   last_error: string | null
   row_count: number | null
   content_hash: string | null
+  /** the fixed list of resolutions a vendor chooses from when resolving a ticket of this program ("Other" is always offered too) */
+  resolution_options?: string[] | null
+  /** portal level: the vendor must enter the OEM ticket number to start work (default off; AC always needs it) */
+  oem_number_required?: boolean | null
+  /** portal level: the program's own default PO approvers, used when the sheet row names no active approver (any one decides) */
+  default_approver_ids?: string[] | null
 }
 
 export type ProgramIssue = { severity: 'error' | 'warning'; code: string; storeCode: string | null; sheetRow: number | null; message: string; token?: string }

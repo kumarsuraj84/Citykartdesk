@@ -65,6 +65,10 @@ interface BusinessRulesClientProps {
   formFields: RuleFormFieldRef[]
   /** Every active Field Library field — offered as one condition covering all templates. */
   libraryFields: LibraryFieldDef[]
+  /** the Vendor Programs (and the built-in AC / Genset lines), the vendor companies and the stores: for the vendor conditions and the vendor-company assign action */
+  programs?: Ref[]
+  vendorCompanies?: Ref[]
+  stores?: Ref[]
   legacyRulesAvailable: boolean
 }
 
@@ -98,6 +102,13 @@ const REQUEST_FIELD_OPTIONS: { value: RuleConditionField; label: string }[] = [
   { value: 'store_region', label: 'Store region (from the AC sheet)' },
   { value: 'store_state', label: 'Store state (from the AC sheet)' },
   { value: 'store_cluster', label: 'Store cluster (from the AC sheet)' },
+]
+
+const VENDOR_FIELD_OPTIONS: { value: RuleConditionField; label: string }[] = [
+  { value: 'vendor_line', label: 'Vendor Program (RO Purifier, Sensomatic, AC, Genset ...)' },
+  { value: 'vendor_company_id', label: 'Vendor company (of the vendor technician who has the ticket)' },
+  { value: 'is_with_vendor', label: 'Ticket is with a vendor technician' },
+  { value: 'requester_store_id', label: 'Store of the requester' },
 ]
 
 const REQUESTER_FIELD_OPTIONS: { value: RuleConditionField; label: string }[] = [
@@ -195,7 +206,10 @@ function conditionValueOptions(field: RuleConditionField, refs: BusinessRulesCli
   if (field === 'requester_designation_id') return refs.designations.map((d) => ({ value: d.id, label: d.name }))
   if (field === 'requester_function_id') return refs.functions.map((f) => ({ value: f.id, label: f.name }))
   if (field === 'source_channel') return SOURCE_CHANNEL_OPTIONS
-  if (field === 'is_sla_breached' || field === 'has_attachment') return YES_NO_OPTIONS
+  if (field === 'vendor_line') return (refs.programs ?? []).map((p) => ({ value: p.id, label: p.name }))
+  if (field === 'vendor_company_id') return (refs.vendorCompanies ?? []).map((c) => ({ value: c.id, label: c.name }))
+  if (field === 'requester_store_id') return (refs.stores ?? []).map((s) => ({ value: s.id, label: s.name }))
+  if (field === 'is_sla_breached' || field === 'has_attachment' || field === 'is_with_vendor') return YES_NO_OPTIONS
   return null // title/description/age_days — free text/number input
 }
 
@@ -296,6 +310,7 @@ function ConditionRow({
   // (SearchableSelect renders those as disabled section labels).
   const fieldOptions: FormFieldOption[] = [
     { value: 'group:request', label: 'Request', children: REQUEST_FIELD_OPTIONS.map((f) => ({ value: f.value, label: f.label })) },
+    { value: 'group:vendor', label: 'Vendor Programs and vendors', children: VENDOR_FIELD_OPTIONS.map((f) => ({ value: f.value, label: f.label })) },
     { value: 'group:requester', label: 'Requester', children: REQUESTER_FIELD_OPTIONS.map((f) => ({ value: f.value, label: f.label })) },
     ...(refs.libraryFields.length > 0
       ? [{
@@ -443,13 +458,38 @@ function ActionRow({
             <option value="round_robin">Round-robin</option>
             <option value="load_balanced">Load-balanced (fewest open)</option>
           </select>
-          <SearchableSelect
-            multiple
-            options={refs.agents.map((p) => ({ value: p.id, label: `${p.full_name} (${ROLE_LABELS[p.role]})` }))}
-            value={action.params.assigneeIds}
-            onChange={(next) => onChange({ type: 'assign', params: { ...action.params, assigneeIds: next } })}
-            placeholder="Search agents…"
-          />
+          <select
+            aria-label="Who gets the ticket"
+            value={action.params.vendorCompanyId !== undefined ? 'vendor' : 'people'}
+            onChange={(e) => {
+              const { vendorCompanyId: _drop, ...rest } = action.params
+              void _drop
+              onChange({ type: 'assign', params: e.target.value === 'vendor' ? { ...rest, assigneeIds: [], vendorCompanyId: '' } : { ...rest, assigneeIds: [] } })
+            }}
+            className={selectCls}
+          >
+            <option value="people">Chosen people</option>
+            <option value="vendor">All the active technicians of a vendor company</option>
+          </select>
+          {action.params.vendorCompanyId !== undefined ? (
+            <select
+              aria-label="Vendor company"
+              value={action.params.vendorCompanyId}
+              onChange={(e) => onChange({ type: 'assign', params: { ...action.params, assigneeIds: [], vendorCompanyId: e.target.value } })}
+              className={selectCls}
+            >
+              <option value="">Choose the vendor company…</option>
+              {(refs.vendorCompanies ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          ) : (
+            <SearchableSelect
+              multiple
+              options={refs.agents.map((p) => ({ value: p.id, label: `${p.full_name} (${ROLE_LABELS[p.role]})` }))}
+              value={action.params.assigneeIds}
+              onChange={(next) => onChange({ type: 'assign', params: { ...action.params, assigneeIds: next } })}
+              placeholder="Search agents…"
+            />
+          )}
         </div>
       )}
 

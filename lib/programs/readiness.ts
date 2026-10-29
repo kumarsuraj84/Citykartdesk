@@ -11,6 +11,8 @@ export type ReadinessInput = {
   rowsWithoutMail: number
   unknownStores: number
   unknownFields: string[]
+  /** only for a program that works in the vendor portal */
+  portal?: { resolutions: number; defaultApprovers?: number; rowsWithoutApprover?: number }
 }
 
 export function programReadiness(i: ReadinessInput): { items: ReadinessItem[]; ready: boolean } {
@@ -41,5 +43,20 @@ export function programReadiness(i: ReadinessInput): { items: ReadinessItem[]; r
       text: i.unknownStores === 0 ? 'Every store in the sheet exists in CK Desk.' : `${i.unknownStores} store(s) in the sheet do not exist in CK Desk yet; nobody can raise a ticket for them until they do.`,
     },
   ]
+  if (i.portal) {
+    const p = i.portal
+    items.push(
+      { key: 'resolutions', ok: p.resolutions > 0, blocking: true, text: p.resolutions > 0 ? `The vendor chooses from ${p.resolutions} resolution${p.resolutions === 1 ? '' : 's'} (and Other).` : 'The list of resolutions is empty. Write the resolutions the vendor may choose from.' },
+    )
+    if (p.defaultApprovers !== undefined) {
+      const none = p.rowsWithoutApprover ?? 0
+      items.push({
+        key: 'approvers', ok: p.defaultApprovers > 0 || none === 0, blocking: true,
+        text: p.defaultApprovers > 0 ? `${p.defaultApprovers} default approver${p.defaultApprovers === 1 ? '' : 's'} of this program decide a quote when the sheet names nobody.`
+          : none === 0 ? 'Every row of the sheet names its approvers (Quote Approval Mail To).'
+            : `${none} row${none === 1 ? '' : 's'} of the sheet name no approver and this program has no default approver. Choose the default approvers of this program.`,
+      })
+    }
+  }
   return { items, ready: items.every((x) => x.ok || !x.blocking) }
 }

@@ -175,7 +175,7 @@ export async function rejectVendorPo(input: { vendorRequestId: string; reason: s
   }
 
   const supabase = await createClient()
-  const res = await applyStatusChange({ supabase, profile }, po.request.id, 'cancelled', `Cancelled because the cost of the repair was not approved (${profile.full_name}). Reason: ${check.reason}\nIf the AC is still not working, you can reopen the request within 48 hours.`, { poDecision: 'reject' })
+  const res = await applyStatusChange({ supabase, profile }, po.request.id, 'cancelled', `Cancelled because the cost of the repair was not approved (${profile.full_name}). Reason: ${check.reason}\nIf the ${po.assetKind} is still not working, you can reopen the request within 48 hours.`, { poDecision: 'reject' })
   if (res.error) return res
   await settleRequest(po.vendorRequest.id, 'rejected', profile.id, check.reason, undefined, OPEN_STATUSES)
 

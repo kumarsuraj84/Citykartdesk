@@ -11,7 +11,8 @@ export function headingKeys(field: ProgramField, columns: ProgramColumns | null 
   return [...new Set([...(typed ? [norm(typed)] : []), ...DEFAULT_HEADINGS[field].map(norm)])].filter(Boolean)
 }
 
-const FALSE_WORDS = new Set(['no', 'n', 'false', '0', 'inactive', 'off', 'closed'])
+// compared after removing spaces and punctuation, so "Not Active", "Non-Active" and "In active" all count as off
+const FALSE_WORDS = new Set(['no', 'n', 'false', '0', 'inactive', 'nonactive', 'notactive', 'off', 'closed', 'removed', 'scrap', 'scrapped'])
 
 export function parseProgramSheet(values: unknown[][], opts: { name: string; rowType: ProgramRowType; columns?: ProgramColumns | null }): ProgramParseResult {
   const grid: Grid | null = toGrid(values)
@@ -67,7 +68,7 @@ export function parseProgramSheet(values: unknown[][], opts: { name: string; row
     rows.push({
       sheetRow, storeCode, machineNo, serial, vendor: get(cells, ...keys('vendor')),
       emails: mail.valid, poEmails: parseEmails(get(cells, ...keys('poMail'))).valid, approverEmails: parseEmails(get(cells, ...keys('approverMail'))).valid,
-      isActive: !FALSE_WORDS.has(activeRaw), extra,
+      isActive: !FALSE_WORDS.has(activeRaw.replace(/[^a-z0-9]/g, '')), extra,
     })
   }
   if (opts.rowType === 'store') {

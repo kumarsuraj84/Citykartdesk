@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { FormSection } from '@/types'
-import { findVendorFields } from './fields'
+import { BG_OEM_DATE_KEY, BG_OEM_NUMBER_KEY, findProgramOemBoxes, findVendorFields } from './fields'
 
 // Server-side helpers that read and write the vendor's three boxes on a ticket (OEM ticket number, OEM ticket date, AC resolution).
 // They use the server's own key: the callers have already checked who the person is and that the ticket is theirs.
@@ -45,6 +45,11 @@ export async function clearOemTicketOnReopen(requestId: string): Promise<void> {
     const patch: Record<string, unknown> = {}
     if (form.fields.oemNumber) patch[form.fields.oemNumber.id] = ''
     if (form.fields.oemDate) patch[form.fields.oemDate.id] = ''
+    // a program ticket: the OEM boxes of its form (if any) and the number kept in the background are emptied too
+    const boxes = findProgramOemBoxes(form.sections)
+    if (boxes.number) patch[boxes.number.id] = ''
+    if (boxes.date) patch[boxes.date.id] = ''
+    if (BG_OEM_NUMBER_KEY in form.formData) { patch[BG_OEM_NUMBER_KEY] = ''; patch[BG_OEM_DATE_KEY] = '' }
     await mergeFormData(requestId, patch)
   } catch (e) {
     console.error('[clearOemTicketOnReopen] failed', e)

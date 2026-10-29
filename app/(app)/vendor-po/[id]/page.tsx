@@ -40,7 +40,7 @@ export default async function VendorPoApprovalPage({ params }: { params: Promise
       <PageHeader title="PO approval" description={`${po.vendorName} needs a purchase order for ticket ${po.request.request_no}.`} />
       <section className="rounded-xl border border-border">
         <dl className="divide-y divide-border text-sm">
-          {[['Ticket', po.request.request_no], ['Quote version', String(vr.version)], ['Store', po.storeLabel], ['AC', po.acLabel], ['Vendor', po.vendorName], ['Requested by', po.vendorPerson?.full_name ?? '—'], ['Requested on', formatDateTime(vr.created_at)], ...(sentTo ? [['Sent to', sentTo]] : []), ['Status', STATUS_TEXT[vr.status] ?? vr.status]].map(([k, v]) => (
+          {[['Ticket', po.request.request_no], ['Quote version', String(vr.version)], ['Store', po.storeLabel], [po.assetKind, po.acLabel], ['Vendor', po.vendorName], ['Requested by', po.vendorPerson?.full_name ?? '—'], ['Requested on', formatDateTime(vr.created_at)], ...(sentTo ? [['Sent to', sentTo]] : []), ['Status', STATUS_TEXT[vr.status] ?? vr.status]].map(([k, v]) => (
             <div key={k} className="flex items-start justify-between gap-4 px-4 py-2"><dt className="text-xs text-muted-foreground">{k}</dt><dd className="text-right font-medium">{v}</dd></div>
           ))}
         </dl>

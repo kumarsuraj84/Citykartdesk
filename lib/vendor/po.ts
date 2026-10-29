@@ -5,6 +5,7 @@ import { splitRecipients } from '@/lib/masters/emails'
 import type { PoMailBase } from './po-mail'
 import { getRequestItems, type VendorRequestItemRow, type VendorRequestRow } from './requests'
 import { totalOf, type RequestLine } from './lines'
+import { liveApproverEmails, loadProgramAsset, type ProgramAsset } from './asset'
 
 // The PO side of the vendor module that needs the database: who approves, what a PO is about, and the e-mail to the OEM. Server only.
 
@@ -57,9 +58,14 @@ export async function resolveApproversFor(orgId: string, requestId: string): Pro
   const { data: snap } = await d.from('request_master_snapshots').select('snapshot').eq('request_id', requestId).eq('kind', 'ac').maybeSingle()
   const saved = (Array.isArray(snap?.snapshot) ? snap.snapshot[0] : null) as { id?: string; approver_emails?: string[] } | null
   let emails: string[] = saved?.approver_emails ?? []
+  let programAsset: ProgramAsset | null = null
   if (saved?.id) {
     const { data: live } = await d.from('master_ac_units').select('approver_emails').eq('id', saved.id).is('removed_at', null).maybeSingle()
     if (live) emails = (live.approver_emails as string[] | null) ?? []
+  } else if (!snap) {
+    // a ticket of a Vendor Program: the approvers are the program row's "Quote Approval Mail To"
+    programAsset = await loadProgramAsset(d, requestId)
+    if (programAsset) emails = await liveApproverEmails(d, programAsset)
   }
   if (emails.length) {
     const candidates = await loadCvmCandidates(orgId)
@@ -69,6 +75,12 @@ export async function resolveApproversFor(orgId: string, requestId: string): Pro
       for (const id of ids) { const ok = await approverIfValid(orgId, id); if (ok) people.push(ok) }
       if (people.length) return { people, fromSheet: true }
     }
+  }
+  // a Vendor Program has its OWN default approvers (set on the program); the one global default (Admin > Vendors) belongs to AC only
+  if (programAsset) {
+    const people: PoApprover[] = []
+    for (const id of programAsset.defaultApproverIds) { const ok = await approverIfValid(orgId, id); if (ok) people.push(ok) }
+    return { people, fromSheet: false }
   }
   const fallback = await resolvePoApprover(orgId)
   return { people: fallback ? [fallback] : [], fromSheet: false }
@@ -106,6 +118,8 @@ export type PoContext = {
   vendorPerson: { id: string; full_name: string } | null
   storeLabel: string
   acLabel: string
+  /** what the machine is called in screens and mails: "AC" for an AC ticket, the program name for a Vendor Program ticket */
+  assetKind: string
   unit: Unit
   mailBase: PoMailBase
   /** the quote file(s) the vendor attached to this version */
@@ -138,15 +152,19 @@ export async function loadPoContext(vendorRequestId: string): Promise<PoContext 
     requester?.store_id ? d.from('stores').select('code, name').eq('id', requester.store_id).maybeSingle() : Promise.resolve({ data: null }),
     person?.vendor_company_id ? d.from('vendor_companies').select('name').eq('id', person.vendor_company_id).maybeSingle() : Promise.resolve({ data: null }),
   ])
-  const unit = (Array.isArray(snap?.snapshot) ? snap.snapshot[0] : null) as Unit
+  let unit = (Array.isArray(snap?.snapshot) ? snap.snapshot[0] : null) as Unit
+  // no AC row: a ticket of a Vendor Program uses its saved sheet row (vendor, ticket / PO / approver addresses)
+  const asset = snap ? null : await loadProgramAsset(d, vendorRequest.request_id)
+  if (asset?.row) unit = { emails: asset.row.emails, po_emails: asset.row.po_emails, approver_emails: asset.row.approver_emails }
+  const assetKind = asset ? asset.programName : 'AC'
   const lines: RequestLine[] = items.map((i) => ({ item_name: i.item_name, qty: i.qty, price_excl_gst: i.price_excl_gst }))
   const storeLabel = store ? `${store.name} (${store.code})` : '(store not known)'
-  const acLabel = unit ? [unit.ckdesk_no, [unit.brand, unit.tonnage].filter(Boolean).join(' ')].filter(Boolean).join(' - ') || '(AC)' : '(AC not recorded)'
+  const acLabel = asset ? asset.label : unit ? [unit.ckdesk_no, [unit.brand, unit.tonnage].filter(Boolean).join(' ')].filter(Boolean).join(' - ') || '(AC)' : '(AC not recorded)'
   const vendorName = company?.name ?? person?.full_name ?? 'Vendor'
   return {
     vendorRequest, items, lines, request: req, vendorName, vendorPerson: person ? { id: person.id, full_name: person.full_name } : null,
-    storeLabel, acLabel, unit,
-    mailBase: { requestNo: req.request_no, storeLabel, acLabel, vendorName, lines },
+    storeLabel, acLabel, assetKind, unit,
+    mailBase: { requestNo: req.request_no, storeLabel, acLabel, vendorName, lines, ...(asset ? { assetKind } : {}) },
     quoteFiles: (quotes ?? []) as { id: string; file_name: string }[],
     previousTotal: previousItems ? totalOf(previousItems.map((i) => ({ qty: i.qty, price_excl_gst: i.price_excl_gst }))) : null,
   }
@@ -163,7 +181,7 @@ export function poRecipients(unit: Unit): { to: string[]; cc: string[] } | null 
 export async function sendPoMailToOem(ctx: PoContext, mail: { subject: string; html: string; text: string }, attachmentId?: string | null): Promise<{ error?: string }> {
   try {
     const rec = poRecipients(ctx.unit)
-    if (!rec) return { error: 'The AC sheet has no e-mail address for PO details (and no OEM address) for this AC.' }
+    if (!rec) return { error: ctx.assetKind === 'AC' ? 'The AC sheet has no e-mail address for PO details (and no OEM address) for this AC.' : `The ${ctx.assetKind} sheet has no e-mail address for PO details (and no vendor address) for this store.` }
     let attachments: { filename: string; content: string }[] | undefined
     if (attachmentId) {
       const d = db()

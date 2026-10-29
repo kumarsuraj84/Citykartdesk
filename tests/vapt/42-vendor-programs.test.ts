@@ -181,6 +181,28 @@ describe('a ticket in a category of an active program', () => {
   })
 })
 
+describe('a reopened ticket goes to the same vendor as the first time', () => {
+  it('even when the sheet now names another vendor for the store (for example the warranty ended)', async () => {
+    await setStore(ids.storeA)
+    const r = await raise('warranty changes')
+    expect(mails().filter((c) => /RO ticket/.test(String(c[0].subject)) && !/REOPENED/.test(String(c[0].subject))).length).toBeGreaterThan(0)
+    const keep = sheets[SHEET]
+    sheets[SHEET] = [HEAD, [A, 'newvendor@other.test', 'Other Co', 'LIVPURE'], [C, '', 'Aqua Care', 'PUREIT']]
+    await sync()
+    await db().from('requests').update({ status: 'resolved', resolved_at: new Date().toISOString(), reopen_deadline_at: new Date(Date.now() + 3_600_000).toISOString() }).eq('id', r.requestId!)
+    vi.mocked(sendEmail).mockClear()
+    actAs(fx.requesterA)
+    const res = await updateRequestStatus(r.requestId!, 'open', 'Water is leaking again')
+    expect(res.error, JSON.stringify(res)).toBeUndefined()
+    const sent = mails().filter((c) => /REOPENED/.test(String(c[0].subject)))
+    expect(sent).toHaveLength(1)
+    expect(sent[0][0].to).toEqual(['svc@aqua.test'])
+    expect(JSON.stringify(sent[0][0])).not.toContain('newvendor@other.test')
+    sheets[SHEET] = keep
+    await sync()
+  })
+})
+
 describe('the built-in AC / Genset line is set up from the same screen', () => {
   const cats: string[] = []
   const mk = async (n: string, extra: Record<string, unknown> = {}) => {

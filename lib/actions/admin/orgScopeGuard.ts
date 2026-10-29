@@ -38,12 +38,15 @@ export async function assertRuleActionsInOrg(
 ): Promise<string | null> {
   const teams = new Set<string>()
   const people = new Set<string>()
+  const companies = new Set<string>()
   for (const a of actions ?? []) {
     if (a.type === 'set_team' && typeof a.params?.teamId === 'string' && a.params.teamId) teams.add(a.params.teamId)
     if (a.type === 'assign' && Array.isArray(a.params?.assigneeIds)) for (const id of a.params.assigneeIds) if (typeof id === 'string' && id) people.add(id)
+    if (a.type === 'assign' && typeof a.params?.vendorCompanyId === 'string' && a.params.vendorCompanyId) companies.add(a.params.vendorCompanyId)
   }
   return assertRefsInOrg(admin, orgId, [
     ...[...teams].map((id) => ({ table: 'teams', id, label: 'technician group' })),
     ...[...people].map((id) => ({ table: 'profiles', id, label: 'technician' })),
+    ...[...companies].map((id) => ({ table: 'vendor_companies', id, label: 'vendor company' })),
   ])
 }

@@ -11,6 +11,7 @@ import { senderAddress } from './inbound-sender'
 import { senderAuthenticity } from './inbound-auth'
 import { postReplyOnce } from './inbound-claim'
 import { appendEmailReplyComment } from '@/lib/requests/email-reply-comment'
+import { addReplyFiles, pickReplyAttachments } from './inbound-files'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: { admin: { listUsers: (opts: { page: number; perPage: number }) => any } } }
@@ -249,7 +250,10 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
           }
 
           const rawBody = parsed.text || (parsed.html ? htmlToPlainText(String(parsed.html)) : '')
-          const body = stripQuotedReply(rawBody)
+          let body = stripQuotedReply(rawBody)
+          // the files that came with the reply (an FSR, a quote, photos) are kept under it; a reply that is only a file is still a reply
+          const files = pickReplyAttachments(parsed.attachments as never)
+          if (!body.trim() && files.keep.length > 0) body = `(No message text - see the attached file${files.keep.length === 1 ? '' : 's'}.)`
           if (!body.trim()) {
             result.noMatch++
             await admin.from('processed_inbound_emails').insert({ message_id: messageId, request_id: request.id, outcome: 'no_match', from_address: fromAddress })
@@ -262,7 +266,14 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
               : { kind: 'oem' as const, name: sender.name, email: fromAddress }
 
           // D-020: claim the e-mail first, then post; a failed post releases the claim so the next run tries again
-          const posted = await postReplyOnce(admin, { message_id: messageId, request_id: request.id, from_address: fromAddress }, () => appendEmailReplyComment({ requestId: request.id, body, author }))
+          const posted = await postReplyOnce(admin, { message_id: messageId, request_id: request.id, from_address: fromAddress }, async () => {
+            const done = await appendEmailReplyComment({ requestId: request.id, body, author })
+            if (done.error || !done.commentId) return done
+            if (files.keep.length > 0 || files.dropped.length > 0) {
+              await addReplyFiles({ admin, requestId: request.id, commentId: done.commentId, uploadedBy: sender.kind === 'profile' ? sender.profileId : (request.assigned_to ?? request.requester_id), fromAddress, files: files.keep, dropped: files.dropped })
+            }
+            return done
+          })
           if (posted.outcome === 'posted') result.matched++
           else if (posted.outcome === 'failed' && posted.error) result.errors.push(posted.error)
         } catch (e) {

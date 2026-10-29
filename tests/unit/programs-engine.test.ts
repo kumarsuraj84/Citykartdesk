@@ -38,6 +38,11 @@ describe('reading a program sheet (one row per store)', () => {
     const r = parseProgramSheet(sheet(head, ['A', 'a@v.test', 'V', '', '', 'No'], ['B', 'b@v.test', 'V', '', '', ''], ['C', 'c@v.test', 'V', '', '', '0']), { name: 'RO', rowType: 'store' })
     expect(r.rows.map((x) => x.isActive)).toEqual([false, true, false])
   })
+  it('the Active column also understands Active / Not Active / Non-Active / Inactive, and a "Status" column is only an extra detail', () => {
+    const r = parseProgramSheet(sheet(['Store Code', 'Ticket Mail To', 'Vendor', 'Active', 'Warranty'], ['A', 'a@v.test', 'V', 'Active', 'Under Warranty'], ['B', 'b@v.test', 'V', 'Not Active', 'Out of Warranty'], ['C', 'c@v.test', 'V', 'Non-Active', ''], ['D', 'd@v.test', 'V', 'Inactive', ''], ['E', 'e@v.test', 'V', '', '']), { name: 'RO', rowType: 'store' })
+    expect(r.rows.map((x) => x.isActive)).toEqual([true, false, false, false, true])
+    expect(r.rows[0].extra).toMatchObject({ Warranty: 'Under Warranty' })
+  })
   it('a store with several rows is a warning (all of them are mailed together)', () => {
     const r = parseProgramSheet(sheet(head, ['A', 'a@v.test', 'V1', '', '', ''], ['A', 'b@v.test', 'V2', '', '', '']), { name: 'RO', rowType: 'store' })
     expect(r.issues.some((i) => i.code === 'store_has_several_rows')).toBe(true)
@@ -113,5 +118,13 @@ describe('the mail of a program', () => {
   })
   it('a program name makes a clean web name', () => {
     expect(slugify('RO Water Purifier (Kent)!')).toBe('ro-water-purifier-kent')
+  })
+})
+
+describe('a sheet with a "Status" column', () => {
+  it('keeps it as an extra detail and does not take any store out of use', () => {
+    const r = parseProgramSheet([['Store Code', 'Ticket Mail To', 'Vendor', 'Status'], ['A', 'a@v.test', 'V', 'Not Active']], { name: 'RO', rowType: 'store' })
+    expect(r.rows[0].isActive).toBe(true)
+    expect(r.rows[0].extra).toMatchObject({ Status: 'Not Active' })
   })
 })

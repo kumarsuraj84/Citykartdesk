@@ -4,7 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { applyStatusChange } from '@/lib/requests/status-change'
 import { logActivity } from '@/lib/activity'
 import { notify } from '@/lib/notifications'
-import { buildPmsResolutionText, buildResolutionText, checkVendorResolve, checkVendorResolvePms, checkVendorStart, resolutionChoices, todayIstDate } from '@/lib/vendor/fields'
+import { BG_OEM_DATE_KEY, BG_OEM_NUMBER_KEY, buildPmsResolutionText, buildResolutionText, checkVendorResolve, checkVendorResolvePms, checkVendorStart, findProgramOemBoxes, programResolutionChoices, resolutionChoices, todayIstDate } from '@/lib/vendor/fields'
+import { loadProgramAsset } from '@/lib/vendor/asset'
 import { isPmsRequest } from '@/lib/pms/is-pms'
 import { loadLiveResolutionField } from '@/lib/vendor/live-form'
 import { linkFilesToComment, ownFiles } from '@/lib/vendor/requests'
@@ -28,9 +29,30 @@ export async function vendorStartWorking(requestId: string, oemNumberRaw: string
 
   // an AC PMS visit has no OEM ticket number: starting it needs nothing but the button
   const pms = await isPmsRequest(createAdminClient() as never, requestId)
+    const asset = pms ? null : await loadProgramAsset(createAdminClient() as never, requestId)
   let message: string
   if (pms) {
     message = `${profile.full_name} (vendor) started the AC PMS visit.`
+  } else if (asset) {
+    // a ticket of a Vendor Program: the OEM ticket number is compulsory only when the program says so (a vendor who has none writes any reference, for example NA); when given it
+    // goes into the form's OEM box if the ticket's form has one, otherwise it is kept with the ticket in the background, and it is written in the conversation.
+    const given = (oemNumberRaw ?? '').trim()
+    if (asset.oemNumberRequired || given) {
+      const check = checkVendorStart(given)
+      if (!check.ok) return { error: check.error }
+    }
+    if (given) {
+      const form = await loadTicketForm(requestId)
+      if (!form) return { error: 'Request not found.' }
+      const boxes = findProgramOemBoxes(form.sections)
+      const today = todayIstDate()
+      const patch: Record<string, unknown> = { [BG_OEM_NUMBER_KEY]: given, [BG_OEM_DATE_KEY]: today }
+      if (boxes.number) patch[boxes.number.id] = given
+      if (boxes.date) patch[boxes.date.id] = today
+      const saved = await mergeFormData(requestId, patch)
+      if (saved.error) return saved
+    }
+    message = `${profile.full_name} (vendor) started work on this ticket.${given ? ` OEM ticket number: ${given}.` : ''}`
   } else {
     const check = checkVendorStart(oemNumberRaw)
     if (!check.ok) return { error: check.error }
@@ -75,15 +97,17 @@ export async function vendorResolve(input: { requestId: string; choice: string; 
 
   const form = await loadTicketForm(input.requestId)
   if (!form) return { error: 'Request not found.' }
+  // a ticket of a Vendor Program: the choices are the program's own fixed list (the AC form box does not apply)
+  const asset = await loadProgramAsset(createAdminClient() as never, input.requestId)
   // the choice must be one of the administrator's CURRENT list (or "Other"); what is saved is the list's own value, what is written to the conversation is its words
-  const picked = resolutionChoices(await loadLiveResolutionField(form.serviceId, form.sections)).find((c) => c.value === choiceValue)
+  const picked = (asset ? programResolutionChoices(asset.resolutionOptions) : resolutionChoices(await loadLiveResolutionField(form.serviceId, form.sections))).find((c) => c.value === choiceValue)
   if (choiceValue && !picked) return { error: 'Please choose the resolution from the list.' }
   const fsrIds = await ownFiles(input.requestId, profile.id, (input.attachmentIds ?? []).slice(0, 20))
   const fsrCount = fsrIds.length
   const check = checkVendorResolve({ choice: picked?.label ?? '', remarks, fsrCount })
   if (!check.ok) return { error: check.error }
 
-  if (form.fields.resolution) {
+  if (!asset && form.fields.resolution) {
     const saved = await mergeFormData(input.requestId, { [form.fields.resolution.id]: picked!.value })
     if (saved.error) return saved
   }

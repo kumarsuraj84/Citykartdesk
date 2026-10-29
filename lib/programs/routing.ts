@@ -6,6 +6,7 @@ import { isHtmlTemplate, plainToHtml } from '@/lib/email/oem-template'
 import { masterSentComment, renderMasterMail } from '@/lib/masters/mail'
 import { programTemplate, programVars, type ProgramRowRecord } from './mail'
 import { programNoteLabel, type ProgramRecord } from './types'
+import { isAssignedToVendor } from '@/lib/vendor/ticket-fields'
 
 // Sends a ticket to the vendor / OEM of a program, right after the ticket is created (and again, marked REOPENED, when the store reopens it). Same rules as the AC /
 // Genset routing (lib/requests/master-routing.ts):
@@ -31,6 +32,13 @@ export async function loadActiveProgramRows(db: Db, orgId: string, programId: st
   return (data ?? []) as ProgramRowRecord[]
 }
 
+/** The rows a ticket was first mailed for (saved with the ticket); empty when there is no saved copy or it holds no address. */
+export async function loadSnapshotRows(db: Db, requestId: string, programId: string): Promise<ProgramRowRecord[]> {
+  const { data } = await db.from('request_program_snapshots').select('snapshot').eq('request_id', requestId).eq('program_id', programId).maybeSingle()
+  const rows = (Array.isArray(data?.snapshot) ? data.snapshot : []) as ProgramRowRecord[]
+  return rows.some((r) => (r.emails ?? []).length > 0) ? rows : []
+}
+
 export async function runProgramRouting(p: {
   admin: Admin
   actorId: string
@@ -53,13 +61,28 @@ export async function runProgramRouting(p: {
   const db = admin as unknown as Db
   const label = programNoteLabel(program.name)
   const note = async (body: string) => { await admin.from('request_comments').insert({ request_id: request.id, author_id: p.actorId, body, is_internal: true }) }
-  if (!p.storeCode) { await note(`This requester is not linked to a store, so the ticket was not sent to the ${label} vendor automatically. Please send it to them yourself.`); return }
+  // a reopened ticket goes to the SAME vendor as the first time (the rows saved with the ticket), even when the sheet has changed since (for example the warranty ended)
+  const saved = p.reopen ? await loadSnapshotRows(db, request.id, program.id) : []
+  if (!p.storeCode && saved.length === 0) { await note(`This requester is not linked to a store, so the ticket was not sent to the ${label} vendor automatically. Please send it to them yourself.`); return }
 
-  const rows = await loadActiveProgramRows(db, orgId, program.id, p.storeCode)
+  const rows = saved.length > 0 ? saved : await loadActiveProgramRows(db, orgId, program.id, p.storeCode ?? '')
   if (rows.length === 0) { await note(`Store ${p.storeCode} has no active row in the ${label} sheet, so the ticket was not sent to the vendor automatically. Please send it to them yourself.`); return }
   const pool = rows.flatMap((r) => r.emails)
-  if (pool.length === 0) { await note(`The ${label} sheet has no e-mail address for store ${p.storeCode}, so the ticket was not sent to the vendor automatically. Please send it to them yourself.`); return }
   const target = splitRecipients(pool)
+
+  // The rows the ticket belongs to are saved FIRST, so the vendor portal, the quote / PO approval and a later reopen work from them even when the mail cannot be sent.
+  if (!p.reopen) {
+    await db.from('request_program_snapshots').upsert(
+      { request_id: request.id, program_id: program.id, row_ids: rows.map((r) => r.id), snapshot: rows as unknown, mailed_to: target.to, mailed_cc: target.cc },
+      { onConflict: 'request_id,program_id' },
+    )
+    // level "portal": who gets the ticket is decided in CK Desk only (Business Rules assign a vendor technician, as they do for Citykart technicians, or Citykart staff assign it by
+    // hand): nothing in the sheet routes a ticket. The Business Rules have already run when the ticket was created, so a ticket still without a vendor technician says so.
+    if (program.level === 'portal' && !(await isAssignedToVendor(request.id))) {
+      await note(`The ${label} ticket is for the vendor portal but no vendor technician has it yet. Assign it to a vendor technician (or create a Business Rule that does it for tickets like this).`)
+    }
+  }
+  if (pool.length === 0) { await note(`The ${label} sheet has no e-mail address for store ${p.storeCode}, so the ticket was not sent to the vendor automatically. Please send it to them yourself.`); return }
 
   const tpl = programTemplate(program)
   const rendered = renderMasterMail({ subject: tpl.subject, body: isHtmlTemplate(tpl.body) ? tpl.body : plainToHtml(tpl.body) }, {
@@ -72,7 +95,7 @@ export async function runProgramRouting(p: {
     requester_email: p.requesterEmail,
     requester_phone: p.requesterPhone || '(not provided)',
     store_address: p.storeAddress || '(no address on file)',
-    store_code: p.storeCode,
+    store_code: p.storeCode ?? rows[0]?.store_code ?? '',
     category: p.categoryName || '(no category)',
     ...programVars(program, rows),
   })
@@ -80,18 +103,12 @@ export async function runProgramRouting(p: {
 
   const sent = await sendEmail({ to: target.to, cc: target.cc, subject: mail.subject, html: mail.html, text: mail.text, threadRequestNo: request.request_no })
   if (sent.error) { await note(`The automatic e-mail to the ${label} vendor could not be sent. Please send this ticket to them yourself.`); return }
-  if (!p.reopen) {
-    await db.from('request_program_snapshots').upsert(
-      { request_id: request.id, program_id: program.id, row_ids: rows.map((r) => r.id), snapshot: rows as unknown, mailed_to: target.to, mailed_cc: target.cc },
-      { onConflict: 'request_id,program_id' },
-    )
-  }
   await admin.from('request_comments').insert({
     request_id: request.id, author_id: p.actorId, is_internal: false,
     body: masterSentComment({ label, to: target.to, cc: target.cc, subject: mail.subject, html: mail.html }),
   })
 
-  if (program.level !== 'mail') return   // "portal": the ticket stays Open for the vendor's own technician (Phase 2)
+  if (program.level !== 'mail') return   // "portal": the ticket stays Open for the vendor technician it was given to
   const { data: moved } = await admin
     .from('requests')
     .update(p.reopen ? { status: 'in_progress' } : { status: 'in_progress', responded_at: new Date().toISOString() })

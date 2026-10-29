@@ -17,7 +17,8 @@ import { isServerTransitionAllowed } from '@/lib/constants/request-transitions'
 type AnyClient = { from: (t: string) => any; auth: { admin: { getUserById: (id: string) => any } } }
 
 export type RuleAction =
-  | { type: 'assign'; params: { strategy: 'direct' | 'round_robin' | 'load_balanced'; assigneeIds: string[] } }
+  // vendorCompanyId: instead of a fixed list of people, ALL the active technicians of that vendor company (so a technician added later takes part without editing the rule)
+  | { type: 'assign'; params: { strategy: 'direct' | 'round_robin' | 'load_balanced'; assigneeIds: string[]; vendorCompanyId?: string } }
   | { type: 'set_priority'; params: { priority: string } }
   | { type: 'set_status'; params: { status: string } }
   // Re-routes the ticket to a different Team without changing its Service —
@@ -88,7 +89,12 @@ async function runAssign(
   params: Extract<RuleAction, { type: 'assign' }>['params'],
   ctx: RuleActionContext
 ): Promise<void> {
-  const { strategy, assigneeIds } = params
+  const { strategy } = params
+  let assigneeIds = params.assigneeIds
+  if (params.vendorCompanyId) {
+    const { data: techs } = await admin.from('profiles').select('id').eq('org_id', request.org_id).eq('vendor_company_id', params.vendorCompanyId).eq('vendor_role', 'technician').eq('is_active', true).order('full_name', { ascending: true }).order('id', { ascending: true })
+    assigneeIds = ((techs ?? []) as { id: string }[]).map((t) => t.id)
+  }
   if (!assigneeIds || assigneeIds.length === 0) return
 
   // A ticket that is with a vendor technician (an OEM engineer) is never taken away by a rule - not by an "edited" rule that re-runs after he starts work, and not by

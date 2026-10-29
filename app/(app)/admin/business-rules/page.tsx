@@ -67,6 +67,11 @@ export default async function BusinessRulesPage() {
     admin.from('profiles').select('id, full_name, role, vendor_company_id').eq('org_id', orgId).eq('vendor_role', 'technician').eq('is_active', true).order('full_name', { ascending: true }),
     admin.from('vendor_companies').select('id, name').eq('org_id', orgId),
   ])
+  // for the vendor conditions and the "technicians of a vendor company" action
+  const [{ data: programs }, { data: stores }] = await Promise.all([
+    admin.from('vendor_programs').select('id, name').eq('org_id', orgId).order('name', { ascending: true }),
+    admin.from('stores').select('id, code, name').eq('org_id', orgId).order('code', { ascending: true }),
+  ])
   const companyName = new Map(((vendorCompanies ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]))
   const vendorAgents = ((vendorTechs ?? []) as { id: string; full_name: string; role: string; vendor_company_id: string }[]).map((v) => ({ id: v.id, role: v.role, full_name: `${v.full_name} (vendor: ${companyName.get(v.vendor_company_id) ?? '?'})` }))
 
@@ -92,6 +97,9 @@ export default async function BusinessRulesPage() {
         templates={templatesResult.data ?? []}
         formFields={formFields}
         libraryFields={libraryFields}
+        programs={[...((programs ?? []) as { id: string; name: string }[]), { id: 'ac', name: 'AC (built in)' }, { id: 'genset', name: 'Genset (built in)' }]}
+        vendorCompanies={(vendorCompanies ?? []) as { id: string; name: string }[]}
+        stores={((stores ?? []) as { id: string; code: string; name: string }[]).map((s) => ({ id: s.id, name: `${s.name} (${s.code})` }))}
         legacyRulesAvailable={(assignmentRulesCount.count ?? 0) + (escalationRulesCount.count ?? 0) > 0}
       />
     </div>

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
 import { cn, formatDateTime } from '@/lib/utils'
 import {
-  deleteProgram, resetProgramTemplate, saveProgramBasics, saveProgramCategories, saveProgramSheet, saveProgramTemplate, sendProgramTestMail, setProgramActive, updateProgramNow,
+  deleteProgram, resetProgramTemplate, saveProgramBasics, saveProgramApprovers, saveProgramCategories, saveProgramPortalOptions, saveProgramResolutions, saveProgramSheet, saveProgramTemplate, sendProgramTestMail, setProgramActive, setProgramLevel, updateProgramNow,
 } from '@/lib/actions/admin/programs'
 import { allowedFields, DEFAULT_PROGRAM_BODY, PROGRAM_SAMPLE_VALUES } from '@/lib/programs/mail'
 import { DEFAULT_HEADINGS, FIELD_LABEL, PROGRAM_FIELDS, type ProgramColumns, type ProgramField } from '@/lib/programs/types'
@@ -36,7 +36,7 @@ const btnPrimary = 'rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-p
 
 export function ProgramEditorClient({ data, subject: subject0, body: body0, customTemplate }: { data: ProgramEditorData; subject: string; body: string; customTemplate: boolean }) {
   const router = useRouter()
-  const { program, categories, issues, extraHeadings, readiness } = data
+  const { program, categories, issues, extraHeadings, readiness, staff } = data
   const [pending, start] = useTransition()
 
   const [name, setName] = useState(program.name)
@@ -56,6 +56,14 @@ export function ProgramEditorClient({ data, subject: subject0, body: body0, cust
   const [tplMsg, setTplMsg] = useState<Msg>(null)
 
   const [activeMsg, setActiveMsg] = useState<Msg>(null)
+  const [resText, setResText] = useState((program.resolution_options ?? []).join('\n'))
+  const [resMsg, setResMsg] = useState<Msg>(null)
+  const [levelMsg, setLevelMsg] = useState<Msg>(null)
+  const [oemRequired, setOemRequired] = useState(program.oem_number_required === true)
+  const [optMsg, setOptMsg] = useState<Msg>(null)
+  const [approvers, setApprovers] = useState<string[]>(program.default_approver_ids ?? [])
+  const [approverFilter, setApproverFilter] = useState('')
+  const [apprMsg, setApprMsg] = useState<Msg>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const run = (fn: () => Promise<void>) => start(async () => { await fn(); router.refresh() })
@@ -121,7 +129,7 @@ export function ProgramEditorClient({ data, subject: subject0, body: body0, cust
         </div>
       </Card>
 
-      <Card n={3} title="Google Sheet" hint="The sheet is the master list. CK Desk copies it at 11:00, 15:00 and 19:00 and never changes it. Needed columns: Store Code and Ticket Mail To (and Machine No for one row per machine). Any other column is kept and can be used in the mail.">
+      <Card n={3} title="Google Sheet" hint="The sheet is the master list. CK Desk copies it at 11:00, 15:00 and 19:00 and never changes it. Needed columns: Store Code and Ticket Mail To (and Machine No for one row per machine). Only when the vendor portal is switched on for this program are PO Mail To (the mail to the vendor when the PO is approved) and Quote Approval Mail To (who approves the vendor's quote) used too; for a mail-only program they are ignored. Any other column is kept and can be used in the mail.">
         <div className="flex flex-wrap gap-2">
           <input value={link} onChange={(e) => setLink(e.target.value)} aria-label="Google Sheet link" placeholder="Paste the Google Sheet link" className="min-w-[16rem] flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-sm" />
           <input value={tab} onChange={(e) => setTab(e.target.value)} aria-label="Tab name (optional)" placeholder="Tab name (optional)" className="w-44 rounded-lg border border-border bg-background px-3 py-1.5 text-sm" />
@@ -174,13 +182,52 @@ export function ProgramEditorClient({ data, subject: subject0, body: body0, cust
       <Card n={5} title="What happens to the ticket">
         <div className="space-y-2 text-sm">
           <label className="flex items-start gap-2 rounded-lg border border-border px-3 py-2">
-            <input type="radio" checked readOnly className="mt-1" />
+            <input type="radio" name="program-level" checked={program.level === 'mail'} disabled={pending} onChange={() => run(async () => { const r = await setProgramLevel(program.id, 'mail'); setLevelMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'Saved.' }) })} className="mt-1" />
             <span><span className="block font-medium">Mail the vendor, then In Progress</span><span className="text-xs text-muted-foreground">The mail goes out when the ticket is raised and the ticket moves to In Progress by itself. A note in the conversation shows who it was sent to.</span></span>
           </label>
-          <label className="flex items-start gap-2 rounded-lg border border-dashed border-border px-3 py-2 opacity-60">
-            <input type="radio" disabled className="mt-1" />
-            <span><span className="block font-medium">The vendor works the ticket in the vendor portal (coming next)</span><span className="text-xs text-muted-foreground">The mail goes out, the ticket stays Open, and the vendor&apos;s own technician takes it from there.</span></span>
+          <label className="flex items-start gap-2 rounded-lg border border-border px-3 py-2">
+            <input type="radio" name="program-level" checked={program.level === 'portal'} disabled={pending} onChange={() => run(async () => { const r = await setProgramLevel(program.id, 'portal'); setLevelMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'Saved.' }) })} className="mt-1" />
+            <span><span className="block font-medium">The vendor works the ticket in the vendor portal</span><span className="text-xs text-muted-foreground">The mail goes out and the ticket stays Open for the vendor technician it is given to (by your Business Rules). He starts it, asks for parts, sends the quote (the approvers are in the sheet column Quote Approval Mail To), and resolves with the FSR.</span></span>
           </label>
+          <Note m={levelMsg} />
+          {program.level === 'portal' && (
+            <div className="rounded-lg border border-border px-3 py-2">
+              <p className="text-xs font-medium">How the ticket reaches a vendor technician</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">In CK Desk only, nothing in the sheet decides it: create Business Rules (Admin &gt; Business Rules) that assign the tickets of this category to particular vendor technicians, just as you do for Citykart technicians (direct, round robin or load balanced; conditions such as the category, the store or its location). A ticket no rule gave to a vendor technician stays with Citykart staff, with a note, to assign by hand. The vendor companies, their technicians and their managers (view only) are created in Admin &gt; Vendors.</p>
+              <label className="mt-2 flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={oemRequired} onChange={(e) => setOemRequired(e.target.checked)} /><span>The vendor must enter the OEM ticket number to start work (AC always needs it; here it is optional until you switch this on)</span></label>
+              <div className="mt-2 flex items-center gap-3">
+                <button type="button" disabled={pending} className={btn} onClick={() => run(async () => { const r = await saveProgramPortalOptions(program.id, { oemRequired }); setOptMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'Saved.' }) })}>Save this choice</button>
+                <Note m={optMsg} />
+              </div>
+            </div>
+          )}
+          {program.level === 'portal' && (
+            <div className="rounded-lg border border-border px-3 py-2">
+              <p className="text-xs font-medium">Default PO approvers of this program</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">When a vendor sends a quote, it goes to the approvers named in the sheet column Quote Approval Mail To (if they are active CK Desk logins). If the sheet names nobody for the store, it goes to the people chosen here (any one of them can decide). Each program has its own; the default approver on the Vendors page is for AC only.</p>
+              <input value={approverFilter} onChange={(e) => setApproverFilter(e.target.value)} placeholder="Find a person" aria-label="Find a person" className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm sm:w-72" />
+              <div className="mt-2 grid max-h-48 gap-1 overflow-y-auto sm:grid-cols-2">
+                {staff.filter((s) => approvers.includes(s.id) || s.full_name.toLowerCase().includes(approverFilter.trim().toLowerCase())).map((s) => (
+                  <label key={s.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={approvers.includes(s.id)} onChange={(e) => setApprovers((a) => (e.target.checked ? [...a, s.id] : a.filter((x) => x !== s.id)))} />{s.full_name} <span className="text-[11px] text-muted-foreground">{s.role}</span></label>
+                ))}
+              </div>
+              <div className="mt-2 flex items-center gap-3">
+                <button type="button" disabled={pending} className={btn} onClick={() => run(async () => { const r = await saveProgramApprovers(program.id, approvers); setApprMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'Saved.' }) })}>Save the approvers</button>
+                <Note m={apprMsg} />
+              </div>
+            </div>
+          )}
+          {program.level === 'portal' && (
+            <div className="rounded-lg border border-border px-3 py-2">
+              <label htmlFor="program-resolutions" className="block text-xs font-medium">Resolutions the vendor chooses from (one per line)</label>
+              <textarea id="program-resolutions" rows={6} value={resText} onChange={(e) => setResText(e.target.value)} placeholder={'Cartridge replaced\nPump replaced\nTDS adjusted'} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm" />
+              <p className="mt-1 text-[11px] text-muted-foreground">&quot;Other&quot; is always offered in addition (the vendor then writes what he did). Each line of the AC, Genset and every other line has its own list.</p>
+              <div className="mt-2 flex items-center gap-3">
+                <button type="button" disabled={pending} className={btn} onClick={() => run(async () => { const r = await saveProgramResolutions(program.id, resText); setResMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'Saved.' }) })}>Save the resolutions</button>
+                <Note m={resMsg} />
+              </div>
+            </div>
+          )}
         </div>
       </Card>
 

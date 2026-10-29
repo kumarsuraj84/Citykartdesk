@@ -111,11 +111,15 @@ export interface VendorTicketActionsProps {
   openRequest?: OpenRequestView | null
   /** an AC PMS ticket: starting needs no OEM ticket number, and resolving needs the PMS report and no resolution choice */
   pms?: boolean
+  /** a ticket of a Vendor Program (its name): the vendor's own ticket number is optional */
+  programName?: string | null
+  /** the OEM ticket number is compulsory to start (always for AC; for a program it is the program's own switch) */
+  oemRequired?: boolean
 }
 
 type Modal = null | 'start' | 'resolve' | 'parts' | 'received' | 'po' | 'editParts' | 'revise' | 'withdraw'
 
-export function VendorTicketActions({ requestId, status, canAct, resolutionChoices, openRequest = null, pms = false }: VendorTicketActionsProps) {
+export function VendorTicketActions({ requestId, status, canAct, resolutionChoices, openRequest = null, pms = false, programName = null, oemRequired = true }: VendorTicketActionsProps) {
   const router = useRouter()
   const [modal, setModal] = useState<Modal>(null)
   const [pending, startTransition] = useTransition()
@@ -267,15 +271,15 @@ export function VendorTicketActions({ requestId, status, canAct, resolutionChoic
             <p className="mb-3 text-sm text-muted-foreground">The ticket moves to In process. When the visit is done, press Resolve and attach the PMS report.</p>
           ) : (
             <>
-              <p className="mb-3 text-sm text-muted-foreground">Enter the ticket number of the OEM (your company) for this job. The ticket does not move without it.</p>
-              <label className="mb-1 block text-xs font-medium" htmlFor="oem-no">OEM ticket number *</label>
+              <p className="mb-3 text-sm text-muted-foreground">{!oemRequired ? 'Enter the ticket number of the OEM (your company) for this job if you have one (optional).' : programName ? 'Enter the ticket number of the OEM (your company) for this job. If you do not have one, write any reference (for example NA). The ticket does not move without it.' : 'Enter the ticket number of the OEM (your company) for this job. The ticket does not move without it.'}</p>
+              <label className="mb-1 block text-xs font-medium" htmlFor="oem-no">{oemRequired ? 'OEM ticket number *' : 'OEM ticket number (optional)'}</label>
               <input id="oem-no" autoFocus value={oem} onChange={(e) => setOem(e.target.value)} maxLength={60} className={inputCls} placeholder="For example VT-2026-004512" />
             </>
           )}
           {error && <p className="mt-2 text-sm text-destructive" role="alert">{error}</p>}
           <div className="mt-4 flex justify-end gap-2">
             <button type="button" className={ghostBtn} onClick={close}>Cancel</button>
-            <button type="button" className={primaryBtn} disabled={pending || (!pms && !oem.trim())} onClick={start}>{pending && <Loader2 className="h-4 w-4 animate-spin" />} {pms ? 'Start PMS visit' : 'Start working'}</button>
+            <button type="button" className={primaryBtn} disabled={pending || (!pms && oemRequired && !oem.trim())} onClick={start}>{pending && <Loader2 className="h-4 w-4 animate-spin" />} {pms ? 'Start PMS visit' : 'Start working'}</button>
           </div>
         </Modal>
       )}

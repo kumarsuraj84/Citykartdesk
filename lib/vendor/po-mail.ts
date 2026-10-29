@@ -7,6 +7,8 @@ export type PoMailBase = {
   requestNo: string
   storeLabel: string
   acLabel: string
+  /** what the machine is called: "AC" (the default) or the name of a Vendor Program */
+  assetKind?: string
   vendorName: string
   lines: RequestLine[]
 }
@@ -21,7 +23,8 @@ const itemsTable = (lines: RequestLine[]) =>
 const itemsText = (lines: RequestLine[]) =>
   lines.map((l, i) => `${i + 1}. ${l.item_name} | qty ${l.qty}${l.price_excl_gst === null ? '' : ` | ${formatMoney(l.price_excl_gst)} (without GST) | ${formatMoney(l.qty * l.price_excl_gst)}`}`).join('\n')
 
-const details = (m: PoMailBase) => [['Ticket', m.requestNo], ['Store', m.storeLabel], ['AC', m.acLabel], ['Vendor', m.vendorName]]
+const kindOf = (m: PoMailBase) => m.assetKind ?? 'AC'
+const details = (m: PoMailBase) => [['Ticket', m.requestNo], ['Store', m.storeLabel], [kindOf(m), m.acLabel], ['Vendor', m.vendorName]]
 const detailsHtml = (m: PoMailBase) => `<table style="font-size:13px;margin:8px 0;">${details(m).map(([k, v]) => `<tr><td style="padding:2px 12px 2px 0;color:#6b7280;">${k}</td><td style="padding:2px 0;">${escapeHtml(v)}</td></tr>`).join('')}</table>`
 
 /** To the OEM: the PO has been approved, with its number, date, items and (attached) document. */
@@ -36,8 +39,8 @@ export function buildPoApprovedMail(m: PoMailBase & { poNumber: string; poDate: 
 /** To the OEM: the PO request was rejected and the ticket is cancelled (short note). */
 export function buildPoRejectedMail(m: PoMailBase & { reason: string }): Mail {
   const subject = `PO request rejected - ${m.requestNo} - ${m.storeLabel}`
-  const html = `<p>Dear Team,</p><p>Citykart will <strong>not issue a purchase order</strong> for the AC repair on the ticket below, so the ticket is <strong>cancelled</strong>. Please do not do any further work on it.</p>${detailsHtml(m)}<p><strong>Reason:</strong> ${escapeHtml(m.reason)}</p><p>Thanks and Regards,<br>Citykart Team</p>`
-  const text = `Dear Team,\n\nCitykart will not issue a purchase order for the AC repair on the ticket below, so the ticket is cancelled. Please do not do any further work on it.\n\n${details(m).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\nReason: ${m.reason}\n\nThanks and Regards,\nCitykart Team`
+  const html = `<p>Dear Team,</p><p>Citykart will <strong>not issue a purchase order</strong> for the ${kindOf(m)} repair on the ticket below, so the ticket is <strong>cancelled</strong>. Please do not do any further work on it.</p>${detailsHtml(m)}<p><strong>Reason:</strong> ${escapeHtml(m.reason)}</p><p>Thanks and Regards,<br>Citykart Team</p>`
+  const text = `Dear Team,\n\nCitykart will not issue a purchase order for the ${kindOf(m)} repair on the ticket below, so the ticket is cancelled. Please do not do any further work on it.\n\n${details(m).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\nReason: ${m.reason}\n\nThanks and Regards,\nCitykart Team`
   return { subject, html, text }
 }
 
@@ -46,8 +49,8 @@ export function buildPoApprovalRequestMail(m: PoMailBase & { link: string; appro
   const total = totalOf(m.lines.map((l) => ({ qty: l.qty, price_excl_gst: l.price_excl_gst })))
   const revised = (m.version ?? 1) > 1
   const subject = `${revised ? `Revised quote (version ${m.version}) - PO approval needed` : 'PO approval needed'} - ${m.requestNo} - ${m.vendorName}`
-  const html = `<p>Dear ${escapeHtml(m.approverName)},</p><p>${escapeHtml(m.vendorName)} ${revised ? `sent a <strong>revised quote (version ${m.version})</strong>${m.previousTotal != null ? ` - the earlier total was ${formatMoney(m.previousTotal)}` : ''} - for` : 'needs a purchase order to repair'} the AC on the ticket below.</p>${detailsHtml(m)}${itemsTable(m.lines)}<p><strong>Total (without GST):</strong> ${formatMoney(total)}</p><p><a href="${escapeHtml(m.link)}" style="display:inline-block;background:#1e4a8a;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;">Open and approve / reject</a></p><p style="color:#6b7280;font-size:12px;">${m.anyOneCanDecide ? 'This mail went to all the approvers of this AC. Any one of you can decide; the first decision is final and the others are told. ' : ''}You will be asked to sign in to Citykart Desk. To approve you enter the PO number, the PO date and attach the PO document.</p>`
-  const text = `Dear ${m.approverName},\n\n${m.vendorName} ${revised ? `sent a revised quote (version ${m.version})${m.previousTotal != null ? `, the earlier total was ${formatMoney(m.previousTotal)},` : ''} for` : 'needs a purchase order to repair'} the AC on the ticket below.\n\n${details(m).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\n${itemsText(m.lines)}\n\nTotal (without GST): ${formatMoney(total)}\n\n${m.anyOneCanDecide ? 'This mail went to all the approvers of this AC. Any one of you can decide; the first decision is final.\n\n' : ''}Open and approve / reject (sign-in needed): ${m.link}`
+  const html = `<p>Dear ${escapeHtml(m.approverName)},</p><p>${escapeHtml(m.vendorName)} ${revised ? `sent a <strong>revised quote (version ${m.version})</strong>${m.previousTotal != null ? ` - the earlier total was ${formatMoney(m.previousTotal)}` : ''} - for` : 'needs a purchase order to repair'} the ${kindOf(m)} on the ticket below.</p>${detailsHtml(m)}${itemsTable(m.lines)}<p><strong>Total (without GST):</strong> ${formatMoney(total)}</p><p><a href="${escapeHtml(m.link)}" style="display:inline-block;background:#1e4a8a;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;">Open and approve / reject</a></p><p style="color:#6b7280;font-size:12px;">${m.anyOneCanDecide ? `This mail went to all the approvers of this ${kindOf(m)}. Any one of you can decide; the first decision is final and the others are told. ` : ''}You will be asked to sign in to Citykart Desk. To approve you enter the PO number, the PO date and attach the PO document.</p>`
+  const text = `Dear ${m.approverName},\n\n${m.vendorName} ${revised ? `sent a revised quote (version ${m.version})${m.previousTotal != null ? `, the earlier total was ${formatMoney(m.previousTotal)},` : ''} for` : 'needs a purchase order to repair'} the ${kindOf(m)} on the ticket below.\n\n${details(m).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\n${itemsText(m.lines)}\n\nTotal (without GST): ${formatMoney(total)}\n\n${m.anyOneCanDecide ? `This mail went to all the approvers of this ${kindOf(m)}. Any one of you can decide; the first decision is final.\n\n` : ''}Open and approve / reject (sign-in needed): ${m.link}`
   return { subject, html, text }
 }
 

@@ -132,7 +132,7 @@ export async function vendorRequestPo(input: { requestId: string; lines: Request
   if (noQuote) return { error: noQuote }
   if (await getOpenRequest(input.requestId)) return { error: 'This ticket already has an open request.' }
   const approvers = (await resolveApproversFor(profile.org_id as string, input.requestId)).people
-  if (approvers.length === 0) return { error: 'No PO approver is set up yet. Please ask Citykart to set one (Admin > Vendors).' }
+  if (approvers.length === 0) return { error: 'No PO approver is set up yet. Please ask Citykart to set one (Admin > Vendors, or the default approvers of this program).' }
 
   const made = await createVendorRequest({
     orgId: profile.org_id as string, requestId: input.requestId, kind: 'po', createdBy: profile.id, lines: checked.lines, quoteAttachmentIds: quoteIds,
@@ -169,7 +169,7 @@ export async function vendorRevisePo(input: { requestId: string; lines: RequestL
   // the revised quote goes to the same approvers as the quote it replaces
   let approvers = await approversOf(open)
   if (approvers.length === 0) approvers = (await resolveApproversFor(profile.org_id as string, input.requestId)).people
-  if (approvers.length === 0) return { error: 'No PO approver is set up yet. Please ask Citykart to set one (Admin > Vendors).' }
+  if (approvers.length === 0) return { error: 'No PO approver is set up yet. Please ask Citykart to set one (Admin > Vendors, or the default approvers of this program).' }
 
   const before = totalOf((await getRequestItems(open.id)).map((i) => ({ qty: i.qty, price_excl_gst: i.price_excl_gst })))
   const made = await createNextVersion(open, {
