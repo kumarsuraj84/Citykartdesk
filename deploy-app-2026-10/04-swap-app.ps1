@@ -56,11 +56,12 @@ try {
   $svcKey = Get-EnvValue $envFile 'SUPABASE_SERVICE_ROLE_KEY'
   $base = Get-EnvValue $envFile 'SUPABASE_URL'
   if (-not $svcKey -or -not $base) { throw 'SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not found in .env.local.' }
-  foreach ($tbl in 'master_sources', 'vendor_companies', 'master_pms_dates') {
+  # tables / the view from the newest migrations (192-195): alert_claims (193), request_automation_state (190, 194), intake_inbox_v (195), and one older one
+  foreach ($tbl in 'master_sources', 'program_pms_dates', 'alert_claims', 'request_automation_state', 'intake_inbox_v') {
     try {
       $r = Invoke-WebRequest -UseBasicParsing -Uri "$base/rest/v1/${tbl}?select=*&limit=1" -Headers @{ apikey = $svcKey; Authorization = "Bearer $svcKey" } -TimeoutSec 15
       "table $tbl visible to PostgREST: HTTP $($r.StatusCode)"
-    } catch { throw "PostgREST cannot see the table $tbl ($($_.Exception.Message)). The database migrations (175-185) are NOT in place - do not continue." }
+    } catch { throw "PostgREST cannot see $tbl ($($_.Exception.Message)). The database migrations (up to 195) are NOT in place - do not continue." }
   }
   $svcKey = $null
 
