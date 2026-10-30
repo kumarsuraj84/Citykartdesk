@@ -11,6 +11,8 @@ export type ReadinessInput = {
   rowsWithoutMail: number
   unknownStores: number
   unknownFields: string[]
+  /** only for the built-in AC line: whether the PO approver (Admin > Vendors) is set. Without one a vendor cannot ask for a PO. */
+  poApprover?: { set: boolean }
   /** only for a program that works in the vendor portal */
   portal?: { resolutions: number; defaultApprovers?: number; rowsWithoutApprover?: number }
 }
@@ -43,6 +45,12 @@ export function programReadiness(i: ReadinessInput): { items: ReadinessItem[]; r
       text: i.unknownStores === 0 ? 'Every store in the sheet exists in CK Desk.' : `${i.unknownStores} store(s) in the sheet do not exist in CK Desk yet; nobody can raise a ticket for them until they do.`,
     },
   ]
+  if (i.poApprover) {
+    items.push({
+      key: 'po_approver', ok: i.poApprover.set, blocking: false,
+      text: i.poApprover.set ? 'The PO approver is set (Admin > Vendors).' : 'No PO approver is set. Until an administrator chooses one (Admin > Vendors), a vendor cannot ask for a PO on a ticket whose AC row names no approver.',
+    })
+  }
   if (i.portal) {
     const p = i.portal
     items.push(

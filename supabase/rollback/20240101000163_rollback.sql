@@ -1,3 +1,4 @@
+BEGIN;
 -- ROLLBACK for migration 163: puts back the migration-157 version of the request guard (number and creation time only) and removes the transition
 -- function. LOCAL; NOT run on production.
 CREATE OR REPLACE FUNCTION public.guard_request_client_write()
@@ -27,3 +28,5 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.request_status_transition_allowed(text, text);
 NOTIFY pgrst, 'reload schema';
+DELETE FROM auth.schema_migrations WHERE version = '20240101000163';
+COMMIT;

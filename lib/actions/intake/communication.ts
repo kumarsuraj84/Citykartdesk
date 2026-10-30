@@ -4,10 +4,13 @@ import { fetchWithTimeout } from '@/lib/http/fetch-timeout'
 import { revalidatePath } from 'next/cache'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { canReview, logIntakeAudit } from './_shared'
+import { canReview, logIntakeAudit, loggedWriteError } from './_shared'
 import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
 import { getSecret } from '@/lib/secrets'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { logger } from '@/lib/observability/logger'
+import { cleanSendPayload, type SendAction } from '@/lib/intake/send-payload'
+import { loadCcBook } from '@/lib/requests/cc-recipients'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -112,7 +115,7 @@ export async function deleteNote(noteId: string): Promise<{ error?: string }> {
 
 // ── Reply / Reply-All / Forward ───────────────────────────────────────────────
 
-export type SendAction = 'reply' | 'reply_all' | 'forward'
+export type { SendAction }
 
 export interface SendPayload {
   action: SendAction
@@ -143,7 +146,7 @@ export async function closeWithoutWork(messageId: string): Promise<{ error?: str
     .maybeSingle()
   if (!msg) return { error: 'Message not found.' }
 
-  await admin.from('intake_messages').update({ is_read: true, status: 'actioned' }).eq('id', messageId)
+  if (loggedWriteError('communication.ts#closeWithoutWork', await admin.from('intake_messages').update({ is_read: true, status: 'actioned' }).eq('id', messageId))) return { error: 'Could not close the message. Please try again.' }
 
   // Approve any still-open review as 'informational' (handled, no work needed).
   const { data: review } = await admin
@@ -153,12 +156,12 @@ export async function closeWithoutWork(messageId: string): Promise<{ error?: str
     .maybeSingle()
 
   if (review && (review.state === 'pending' || review.state === 'in_review')) {
-    await admin.from('intake_reviews').update({
+    loggedWriteError('communication.ts#closeReview', await admin.from('intake_reviews').update({
       state: 'approved',
       final_type: 'informational',
       reviewed_by: profile.id,
       reviewed_at: new Date().toISOString(),
-    }).eq('id', review.id)
+    }).eq('id', review.id))
     await logIntakeAudit({
       orgId: msg.org_id, actorId: profile.id, entityId: review.id,
       action: 'review_closed', metadata: { final_type: 'informational' },
@@ -167,6 +170,39 @@ export async function closeWithoutWork(messageId: string): Promise<{ error?: str
 
   revalidatePath('/intake/inbox'); revalidatePath('/intake/queue')
   return {}
+}
+
+const SEND_ANYWHERE_ROLES = ['admin', 'platform_owner']
+/** The addresses a non-admin may write to from this message: everybody on its conversation, plus Citykart Desk's own users and OEM contacts. */
+async function knownRecipients(
+  admin: AnyClient,
+  msg: { id: string; thread_id: string | null; from_address: string | null; to_addresses: string[] | null; cc_addresses: string[] | null },
+  orgId: string,
+): Promise<Set<string>> {
+  const known = new Set<string>()
+  const add = (a: string | null | undefined) => { if (a) known.add(a.trim().toLowerCase()) }
+  const addRow = (m: { from_address: string | null; to_addresses: string[] | null; cc_addresses: string[] | null }) => {
+    add(m.from_address)
+    for (const a of m.to_addresses ?? []) add(a)
+    for (const a of m.cc_addresses ?? []) add(a)
+  }
+  addRow(msg)
+  if (msg.thread_id) {
+    const { data: siblings } = await admin
+      .from('intake_messages')
+      .select('from_address, to_addresses, cc_addresses')
+      .eq('thread_id', msg.thread_id)
+      .eq('org_id', orgId)
+      .limit(200)
+    for (const m of siblings ?? []) addRow(m)
+  }
+  try {
+    for (const email of (await loadCcBook(orgId)).keys()) known.add(email)
+  } catch (e) {
+    // the address book is an extra; the conversation's own people still work without it
+    logger.warn({ event: 'intake.send_address_book_failed', message: 'The Citykart Desk address book could not be read for an intake send.', orgId, error: e })
+  }
+  return known
 }
 
 export async function sendFromMessage(
@@ -181,11 +217,27 @@ export async function sendFromMessage(
   const admin = createAdminClient() as unknown as AnyClient
   const { data: msg } = await admin
     .from('intake_messages')
-    .select('id')
+    .select('id, org_id, thread_id, from_address, to_addresses, cc_addresses')
     .eq('id', messageId)
     .eq('org_id', profile.org_id)
     .maybeSingle()
   if (!msg) return { ok: false, error: 'Message not found.' }
+
+  // Everything that comes from the browser is checked and copied field by field. The payload used to be spread into the request to the worker AFTER the
+  // trusted ids, so a forged `messageId` or `senderId` inside it replaced the organisation-checked ones (sending from another organisation's mailbox,
+  // under someone else's name).
+  const clean = cleanSendPayload(payload)
+  if ('error' in clean) return { ok: false, error: clean.error }
+
+  // Reply, reply-all and forward may only go to people already on the conversation or known to Citykart Desk (users and OEM contacts). Admins may write to
+  // anybody. Without this any reviewer could use the company mailbox to mail arbitrary outsiders.
+  if (!SEND_ANYWHERE_ROLES.includes(profile.role)) {
+    const known = await knownRecipients(admin, msg, profile.org_id as string)
+    const outsiders = [...clean.toAddresses, ...clean.ccAddresses].filter((a) => !known.has(a))
+    if (outsiders.length > 0) {
+      return { ok: false, error: `You can only write to people on this conversation or known to Citykart Desk. Not allowed: ${outsiders.slice(0, 5).join(', ')}. Ask an admin to send to a new address.` }
+    }
+  }
 
   const rawUrl  = process.env.INTAKE_WORKER_URL
   const secret  = getSecret('intake_worker')
@@ -196,7 +248,8 @@ export async function sendFromMessage(
     const res = await fetchWithTimeout(`${workerUrl}/intake/send`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-intake-worker-secret': secret },
-      body: JSON.stringify({ messageId, senderId: profile.id, ...payload }),
+      // the trusted ids are written LAST, so nothing above can override them
+      body: JSON.stringify({ ...clean, messageId: msg.id, senderId: profile.id }),
     })
     const data = (await res.json()) as { ok: boolean; error?: string }
     return data

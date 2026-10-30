@@ -1,5 +1,6 @@
 'use client'
 
+import { formatDate } from '@/lib/ui/formatDate'
 import { useState, useTransition, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -470,9 +471,18 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
     ? allowedSubCategories.filter((sc) => sc.category_id === pendingCategoryId)
     : []
 
+  // A technician types a few letters to find the right Category / Sub Category instead of scrolling a long list (the same list can run to 60+ names).
+  const [catQuery, setCatQuery] = useState('')
+  const [subQuery, setSubQuery] = useState('')
+  const matches = (name: string, query: string) => name.toLowerCase().includes(query.trim().toLowerCase())
+  const visibleCategories = categories.filter((c) => matches(c.name, catQuery))
+  const visibleSubCategories = subCategoriesInPendingCategory.filter((sc) => matches(sc.name, subQuery))
+
   function pickCategory(catId: string) {
     setPendingCategoryId(catId)
     setCatOpen(false)
+    setCatQuery('')
+    setSubQuery('')
     setSubOpen(true)
   }
 
@@ -518,7 +528,7 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
       <PropRow label="Category" copyValue={pendingCategoryName}>
         <div ref={catRef} className="relative">
           <button
-            onClick={() => canEdit && !isPending && setCatOpen((v) => !v)}
+            onClick={() => { if (canEdit && !isPending) { setCatQuery(''); setCatOpen((v) => !v) } }}
             disabled={isPending}
             className={`flex items-center gap-1 ${canEdit && !isPending ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
             title={error ?? undefined}
@@ -528,16 +538,29 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
             {isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
           </button>
           {catOpen && (
-            <div className="absolute right-0 top-full z-50 mt-1 w-52 max-h-72 space-y-0.5 overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow-xl">
-              {categories.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => pickCategory(c.id)}
-                  className={`flex w-full items-center rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted transition-colors ${c.id === pendingCategoryId ? 'bg-muted/60 font-medium' : ''}`}
-                >
-                  {c.name}
-                </button>
-              ))}
+            <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-xl border border-border bg-card shadow-xl">
+              <div className="border-b border-border px-2 py-1.5">
+                <input
+                  autoFocus
+                  value={catQuery}
+                  onChange={(e) => setCatQuery(e.target.value)}
+                  placeholder="Search category…"
+                  aria-label="Search category"
+                  className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+                />
+              </div>
+              <div className="max-h-64 space-y-0.5 overflow-y-auto p-1.5">
+                {visibleCategories.length === 0 && <p className="px-2 py-1.5 text-xs text-muted-foreground">No matches</p>}
+                {visibleCategories.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => pickCategory(c.id)}
+                    className={`flex w-full items-center rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted transition-colors ${c.id === pendingCategoryId ? 'bg-muted/60 font-medium' : ''}`}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -546,7 +569,7 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
         <PropRow label="Sub Category" copyValue={cur.name}>
           <div ref={subRef} className="relative">
             <button
-              onClick={() => canEdit && !isPending && setSubOpen((v) => !v)}
+              onClick={() => { if (canEdit && !isPending) { setSubQuery(''); setSubOpen((v) => !v) } }}
               disabled={isPending}
               className={`flex items-center gap-1 ${canEdit && !isPending ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
             >
@@ -555,16 +578,29 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
               {isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
             </button>
             {subOpen && (
-              <div className="absolute right-0 top-full z-50 mt-1 w-52 max-h-72 space-y-0.5 overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow-xl">
-                {subCategoriesInPendingCategory.map((sc) => (
-                  <button
-                    key={sc.id}
-                    onClick={() => pickSubCategory(sc)}
-                    className={`flex w-full items-center rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted transition-colors ${sc.id === cur.id ? 'bg-muted/60 font-medium' : ''}`}
-                  >
-                    {sc.name}
-                  </button>
-                ))}
+              <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-xl border border-border bg-card shadow-xl">
+                <div className="border-b border-border px-2 py-1.5">
+                  <input
+                    autoFocus
+                    value={subQuery}
+                    onChange={(e) => setSubQuery(e.target.value)}
+                    placeholder="Search sub category…"
+                    aria-label="Search sub category"
+                    className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  />
+                </div>
+                <div className="max-h-64 space-y-0.5 overflow-y-auto p-1.5">
+                  {visibleSubCategories.length === 0 && <p className="px-2 py-1.5 text-xs text-muted-foreground">No matches</p>}
+                  {visibleSubCategories.map((sc) => (
+                    <button
+                      key={sc.id}
+                      onClick={() => { setSubQuery(''); pickSubCategory(sc) }}
+                      className={`flex w-full items-center rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted transition-colors ${sc.id === cur.id ? 'bg-muted/60 font-medium' : ''}`}
+                    >
+                      {sc.name}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {pendingPick && (
@@ -865,7 +901,7 @@ export function RequestSidebarPanel({
         {resolutionDueAt && (
           <PropRow label="Due">
             <span className={`text-xs font-semibold ${isOverdue ? 'text-red-600' : 'text-foreground'}`}>
-              {new Date(resolutionDueAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              {formatDate(resolutionDueAt)}
             </span>
           </PropRow>
         )}

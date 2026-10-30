@@ -794,7 +794,9 @@ function WhatsAppConnectForm({
   // Registered once in Meta Business Manager (App > WhatsApp > Configuration)
   // against this exact route, alongside the verify token entered below —
   // shown here purely for operator convenience, never guessed at or auto-registered.
-  const webhookUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/intake/webhook/whatsapp` : '/api/intake/webhook/whatsapp'
+  // The address Meta must call is the public one (NEXT_PUBLIC_APP_URL), not whatever address the admin happens to have the page open on (a local or internal address would be registered by mistake).
+  const publicBase = (process.env.NEXT_PUBLIC_APP_URL ?? '').trim().replace(/\/+$/, '')
+  const webhookUrl = `${publicBase || (typeof window !== 'undefined' ? window.location.origin : '')}/api/intake/webhook/whatsapp`
 
   return (
     <div className="mt-2 rounded-lg border border-border bg-muted/20 p-3 space-y-3">

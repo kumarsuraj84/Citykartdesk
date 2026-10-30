@@ -51,6 +51,11 @@ export function AiBrief({ subject, bodyText, fromAddress }: AiBriefProps) {
         else setHidden(true)
       }
       setLoading(false)
+    }).catch(() => {
+      // the summary is optional: if it cannot be fetched, hide the box instead of showing a spinner forever
+      if (cancelled) return
+      setHidden(true)
+      setLoading(false)
     })
 
     return () => { cancelled = true }

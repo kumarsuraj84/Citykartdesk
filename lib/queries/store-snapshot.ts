@@ -4,6 +4,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fetchAllPages } from '@/lib/queries/paging'
 import { isCurrentlyBreached } from '@/lib/sla/breach'
+import { isSlaPausedStatus } from '@/lib/constants/requests'
 import { loadStoreDims } from '@/lib/queries/store-dims'
 import { RED_FLAG } from '@/lib/reporting/executive/engine'
 import type { ReportViewerScope } from '@/lib/reporting/access'
@@ -63,7 +64,8 @@ export async function getStoreSnapshot(orgId: string, scope: ReportViewerScope, 
     storesWithOpen.set(d.code, d)
     const row = regions.get(d.region) ?? { name: d.region, open: 0, breached: 0 }
     row.open++
-    if (isCurrentlyBreached(r, now)) row.breached++
+    // (a ticket waiting for somebody else has its clock stopped: not breached while it waits)
+    if (!isSlaPausedStatus(r.status) && isCurrentlyBreached(r, now)) row.breached++
     regions.set(d.region, row)
   }
   const red = [...storesWithOpen.values()].filter((d) => d.ac === RED_FLAG).sort((a, b) => (b.acPct ?? 0) - (a.acPct ?? 0) || a.code.localeCompare(b.code))

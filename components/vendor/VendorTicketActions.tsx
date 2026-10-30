@@ -132,31 +132,44 @@ export function VendorTicketActions({ requestId, status, canAct, resolutionChoic
   const [note, setNote] = useState('')
   const [message, setMessage] = useState('')
 
-  const close = () => { setModal(null); setError(null); setFiles([]); setNote('') }
+  // The ids of the files already uploaded in THIS window, by file. A second press of the button (after the server refused, or the connection dropped) reuses them instead of
+  // uploading the same file again, which left duplicate FSR / quote attachments and orphan files on the ticket.
+  const uploaded = useRef(new Map<string, string>())
+  const fileKey = (f: File) => `${f.name}|${f.size}|${f.lastModified}`
+  // A server action that throws (the connection dropped, the server restarted) must show a message in the window, never reach the error page.
+  const run = (fn: () => Promise<void>) => startTransition(async () => {
+    try { await fn() } catch (e) { console.error('[vendor ticket] action failed', e); setError('Something went wrong, nothing was lost. Please try again in a moment.') }
+  })
+
+  const close = () => { setModal(null); setError(null); setFiles([]); setNote(''); uploaded.current = new Map() }
   const done = (text: string) => { toast.success(text); close(); router.refresh() }
-  const open = (m: Modal, startLines?: RequestLineInput[]) => { setError(null); setFiles([]); setNote(''); if (startLines) setLines(startLines); setModal(m) }
+  const open = (m: Modal, startLines?: RequestLineInput[]) => { setError(null); setFiles([]); setNote(''); uploaded.current = new Map(); if (startLines) setLines(startLines); setModal(m) }
   const fileProps = { files, onAdd: (f: File[]) => setFiles((cur) => [...cur, ...f]), onRemove: (i: number) => setFiles((cur) => cur.filter((_, j) => j !== i)), setError }
 
   /** Uploads the picked files to the ticket one by one; returns their ids, or null after showing why not. */
   const uploadAll = async (): Promise<string[] | null> => {
     const ids: string[] = []
     for (const f of files) {
+      const key = fileKey(f)
+      const already = uploaded.current.get(key)
+      if (already) { ids.push(already); continue }
       const fd = new FormData(); fd.append('file', f)
       const up = await uploadAttachment(requestId, fd)
       if (up.error || !up.attachmentId) { setError(up.error ?? 'Upload failed.'); return null }
+      uploaded.current.set(key, up.attachmentId)
       ids.push(up.attachmentId)
     }
     return ids
   }
 
-  const start = () => startTransition(async () => {
+  const start = () => run(async () => {
     setError(null)
     const res = await vendorStartWorking(requestId, oem)
     if (res.error) { setError(res.error); return }
     setOem(''); done('Work started.')
   })
 
-  const resolve = () => startTransition(async () => {
+  const resolve = () => run(async () => {
     setError(null)
     if (!pms && !choice) { setError('Please choose the resolution.'); return }
     if (!pms && isOtherChoice(resolutionChoices.find((c) => c.value === choice)?.label) && remarks.trim().length < 10) { setError('Please describe what you did (at least 10 characters), because you chose "Other".'); return }
@@ -168,28 +181,28 @@ export function VendorTicketActions({ requestId, status, canAct, resolutionChoic
     done('Ticket resolved.')
   })
 
-  const askParts = () => startTransition(async () => {
+  const askParts = () => run(async () => {
     setError(null)
     const res = await vendorRequestParts({ requestId, lines })
     if (res.error) { setError(res.error); return }
     setLines(emptyLines()); done('The ticket is on hold until the parts arrive.')
   })
 
-  const saveParts = () => startTransition(async () => {
+  const saveParts = () => run(async () => {
     setError(null)
     const res = await vendorUpdateParts({ requestId, lines })
     if (res.error) { setError(res.error); return }
     done('Parts list updated.')
   })
 
-  const partsReceived = () => startTransition(async () => {
+  const partsReceived = () => run(async () => {
     setError(null)
     const res = await vendorPartsReceived(requestId, note)
     if (res.error) { setError(res.error); return }
     done('Back in progress.')
   })
 
-  const sendQuote = (revised: boolean) => startTransition(async () => {
+  const sendQuote = (revised: boolean) => run(async () => {
     setError(null)
     if (files.length === 0) { setError(revised ? 'Please attach the revised quote.' : 'Please attach the quote before you send it.'); return }
     const ids = await uploadAll(); if (!ids) return
@@ -198,7 +211,7 @@ export function VendorTicketActions({ requestId, status, canAct, resolutionChoic
     setLines(emptyLines()); done(revised ? 'Revised quote sent to Citykart.' : 'Quote sent. The ticket is on hold until Citykart decides.')
   })
 
-  const withdraw = () => startTransition(async () => {
+  const withdraw = () => run(async () => {
     setError(null)
     const res = await vendorWithdrawRequest({ requestId, reason: note })
     if (res.error) { setError(res.error); return }
@@ -206,9 +219,14 @@ export function VendorTicketActions({ requestId, status, canAct, resolutionChoic
   })
 
   const send = () => startTransition(async () => {
-    const res = await vendorAddComment(requestId, message)
-    if (res.error) { toast.error(res.error); return }
-    setMessage(''); router.refresh()
+    try {
+      const res = await vendorAddComment(requestId, message)
+      if (res.error) { toast.error(res.error); return }
+      setMessage(''); router.refresh()
+    } catch (e) {
+      console.error('[vendor ticket] message failed', e)
+      toast.error('The message could not be sent. Please try again in a moment.')
+    }
   })
 
   const canStart = canAct && (status === 'open' || status === 'assigned')

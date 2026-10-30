@@ -6,11 +6,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { applyStatusChange } from '@/lib/requests/status-change'
 import { notify } from '@/lib/notifications'
-import { sendEmail } from '@/lib/email/send'
 import { absoluteAppUrl } from '@/lib/email/notify-email'
 import { saveTicketFile } from '@/lib/attachments/save'
-import { createVendorRequest, linkFilesToComment, markRevisionRequested, OPEN_STATUSES, settleRequest, unsettleRequest, type VendorRequestStatus } from '@/lib/vendor/requests'
-import { attachmentForMail, internalNote, isApproverOf, loadPoContext, sendPoMailToOem, userEmail, type PoContext } from '@/lib/vendor/po'
+import { createVendorRequest, linkFilesToComment, markRevisionRequested, OPEN_STATUSES, settleRequest, unsettleApproved, unsettleRequest, type VendorRequestStatus } from '@/lib/vendor/requests'
+import { attachmentForMail, internalNote, isApproverOf, loadPoContext, sendMailOrNote, sendPoMailToOem, userEmail, type PoContext } from '@/lib/vendor/po'
 import { buildPoApprovedMail, buildPoRejectedMail, buildPoRevisionAskedMail, buildQuoteNotApprovedMail, buildVendorPoApprovedMail, buildVendorTicketCancelledMail } from '@/lib/vendor/po-mail'
 import { checkPoApproval, checkPoRejection, checkPoRevision } from '@/lib/vendor/po-rules'
 import { postPublicComment } from '@/lib/vendor/ticket-fields'
@@ -74,14 +73,23 @@ export async function approveVendorPo(formData: FormData): Promise<Result> {
 
   const total = totalOf(po.lines)
   const comment = `PO approved by ${profile.full_name} on quote version ${po.vendorRequest.version}. PO number: ${check.poNumber}. PO date: ${check.poDate}.\n${linesAsText(po.lines)}\nTotal (without GST): ${formatMoney(total)}\nThe PO document is attached to this message.`
+  const attachmentId = saved.attachmentId
+  const dropFile = () => createAdminClient().from('request_attachments').update({ deleted_at: new Date().toISOString() }).eq('id', attachmentId)
+  // The decision is taken FIRST, with one conditional update (pending -> approved): of two approvers (or two clicks) only one gets through, and the ticket is only moved after this
+  // succeeded. If the ticket then cannot be moved, the decision is undone, so a quote is never left "approved" on a ticket that is still on hold.
+  const settled = await settleRequest(po.vendorRequest.id, 'approved', profile.id, null, { po_number: check.poNumber, po_date: check.poDate, po_attachment_id: saved.attachmentId })
+  if (!settled) {
+    await dropFile()
+    return { error: 'This PO request was just decided by someone else. Please refresh.' }
+  }
   const supabase = await createClient()
   const res = await applyStatusChange({ supabase, profile }, po.request.id, 'in_progress', comment, { poDecision: 'approve' })
   if (res.error) {
-    await createAdminClient().from('request_attachments').update({ deleted_at: new Date().toISOString() }).eq('id', saved.attachmentId)
+    await unsettleApproved(po.vendorRequest.id)
+    await dropFile()
     return res
   }
   await linkFilesToComment(po.request.id, res.commentId, [saved.attachmentId])
-  await settleRequest(po.vendorRequest.id, 'approved', profile.id, null, { po_number: check.poNumber, po_date: check.poDate, po_attachment_id: saved.attachmentId })
 
   // one mail to the OEM's PO-details address, with the PO document attached
   const mail = buildPoApprovedMail({ ...po.mailBase, poNumber: check.poNumber, poDate: check.poDate, hasDocument: true })
@@ -94,7 +102,7 @@ export async function approveVendorPo(formData: FormData): Promise<Result> {
     if (vTo) {
       const doc = await attachmentForMail(saved.attachmentId)
       const vm = buildVendorPoApprovedMail({ ...po.mailBase, link: absoluteAppUrl(`/vendor/tickets/${po.request.id}`), poNumber: check.poNumber, poDate: check.poDate, approverName: profile.full_name, vendorPersonName: po.vendorPerson.full_name, hasDocument: !!doc })
-      await sendEmail({ to: vTo, subject: vm.subject, html: vm.html, text: vm.text, attachments: doc ? [doc] : undefined, threadRequestNo: po.request.request_no }).catch(() => ({}))
+      await sendMailOrNote({ to: vTo, mail: vm, attachments: doc ? [doc] : undefined, request: po.request, noteAuthorId: profile.id, whom: 'the vendor technician (PO approved)' })
     }
     notify({
       recipientId: po.vendorPerson.id, actorId: profile.id, type: 'status_changed', title: `PO approved: ${po.request.request_no}`,
@@ -122,7 +130,7 @@ export async function requestPoRevision(input: { vendorRequestId: string; note: 
     const to = await userEmail(po.vendorPerson.id)
     if (to) {
       const mail = buildPoRevisionAskedMail({ ...po.mailBase, link, note: check.note, approverName: profile.full_name, vendorPersonName: po.vendorPerson.full_name })
-      await sendEmail({ to, subject: mail.subject, html: mail.html, text: mail.text, threadRequestNo: po.request.request_no }).catch(() => ({}))
+      await sendMailOrNote({ to, mail, request: po.request, noteAuthorId: profile.id, whom: 'the vendor technician (revised price asked)' })
     }
     notify({
       recipientId: po.vendorPerson.id, actorId: profile.id, type: 'status_changed', title: `Revised price needed: ${po.request.request_no}`,
@@ -163,7 +171,7 @@ export async function rejectVendorPo(input: { vendorRequestId: string; reason: s
       const to = await userEmail(po.vendorPerson.id)
       if (to) {
         const mail = buildQuoteNotApprovedMail({ ...po.mailBase, link, reason: check.reason, approverName: profile.full_name, vendorPersonName: po.vendorPerson.full_name })
-        await sendEmail({ to, subject: mail.subject, html: mail.html, text: mail.text, threadRequestNo: po.request.request_no }).catch(() => ({}))
+        await sendMailOrNote({ to, mail, request: po.request, noteAuthorId: profile.id, whom: 'the vendor technician (quote not approved)' })
       }
       notify({
         recipientId: po.vendorPerson.id, actorId: profile.id, type: 'status_changed', title: `Quote not approved - arrange the parts: ${po.request.request_no}`,
@@ -186,7 +194,7 @@ export async function rejectVendorPo(input: { vendorRequestId: string; reason: s
     const vTo = await userEmail(po.vendorPerson.id)
     if (vTo) {
       const vm = buildVendorTicketCancelledMail({ ...po.mailBase, link: absoluteAppUrl(`/vendor/tickets/${po.request.id}`), reason: check.reason, approverName: profile.full_name, vendorPersonName: po.vendorPerson.full_name })
-      await sendEmail({ to: vTo, subject: vm.subject, html: vm.html, text: vm.text, threadRequestNo: po.request.request_no }).catch(() => ({}))
+      await sendMailOrNote({ to: vTo, mail: vm, request: po.request, noteAuthorId: profile.id, whom: 'the vendor technician (ticket cancelled)' })
     }
     notify({
       recipientId: po.vendorPerson.id, actorId: profile.id, type: 'status_changed', title: `PO rejected: ${po.request.request_no}`,

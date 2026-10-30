@@ -1,7 +1,8 @@
 import { createHash } from 'crypto'
 import type { SheetsSource } from '@/lib/masters/google'
 import { planRemovals, REMOVAL_WAIT_MINUTES } from '@/lib/masters/diff'
-import { claimSync, differs, inChunks, must } from '@/lib/masters/sync'
+import { claimSync, differs, inChunks, must, recipientChangeIssues } from '@/lib/masters/sync'
+import { fetchDisplaySafe } from '@/lib/masters/display'
 import { fetchAllPages } from '@/lib/queries/paging'
 import { matchProgramRows } from './match'
 import { parseProgramSheet } from './parse'
@@ -11,6 +12,9 @@ import type { ParsedProgramRow, ProgramIssue, ProgramRecord, StoredProgramRow } 
 // Copies each program's Google sheet into CK Desk's database (read only: nothing is ever written to a sheet), on the same schedule and with the same safety rules as the
 // AC / Genset / CVM sheets (lib/masters/sync.ts): one copy at a time, a sheet that cannot be read or lost a required column is NOT applied (the last good copy stays in
 // use), rows that leave the sheet are kept and only removed later, a big disappearance waits at least 30 minutes. Everything else reads the database copy, never Google.
+// The real wait of a big disappearance is "the next copy that is at least 30 minutes later" (it is worked out again on each run from the rows still missing then). A sheet with
+// headings but NO data rows is refused while the program holds rows (for a program of 4 rows or fewer the "big change" rule would hold nothing back), and a change of the
+// ticket / PO / quote-approval mail addresses of a row is shown as a warning in the problem list.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (t: string) => any }
@@ -31,13 +35,15 @@ async function readRows(db: Db, orgId: string, programId: string): Promise<Recor
 }
 
 async function applyRows(p: { db: Db; orgId: string; program: ProgramRecord; rows: ParsedProgramRow[]; now: Date }) {
+  const recipientChanges: { storeCode: string; label: string; before: string[]; after: string[] }[] = []
+  const lowerSorted = (v: unknown) => [...((v as string[] | null) ?? [])].map((e) => String(e).toLowerCase()).sort()
   const { db, orgId, program, rows, now } = p
   const nowIso = now.toISOString()
   const stored = await readRows(db, orgId, program.id)
   const byId = new Map(stored.map((s) => [String(s.id), s]))
   const m = matchProgramRows(rows, stored.map((s): StoredProgramRow => ({
     id: String(s.id), storeCode: String(s.store_code), machineNo: (s.machine_no as string | null) ?? null, serial: (s.serial as string | null) ?? null,
-    vendor: (s.vendor as string | null) ?? null, removedAt: (s.removed_at as string | null) ?? null, missingSince: (s.missing_since as string | null) ?? null,
+    vendor: (s.vendor as string | null) ?? null, sheetRow: (s.sheet_row as number | null) ?? null, removedAt: (s.removed_at as string | null) ?? null, missingSince: (s.missing_since as string | null) ?? null,
   })), program.row_type)
 
   const upserts: Record<string, unknown>[] = []
@@ -45,6 +51,12 @@ async function applyRows(p: { db: Db; orgId: string; program: ProgramRecord; row
     const old = byId.get(unitId)!
     const next = columnsOf(rows[rowIndex])
     const revived = !!old.removed_at || !!old.missing_since
+    if (!revived) {
+      for (const rc of [{ column: 'emails', label: 'Ticket Mail To' }, { column: 'po_emails', label: 'PO Mail To' }, { column: 'approver_emails', label: 'Quote Approval Mail To' }]) {
+        const before = lowerSorted(old[rc.column]); const after = lowerSorted((next as Record<string, unknown>)[rc.column])
+        if (JSON.stringify(before) !== JSON.stringify(after)) recipientChanges.push({ storeCode: next.store_code, label: rc.label, before, after })
+      }
+    }
     if (!revived && !differs(old, next)) continue
     const prev = (old.previous_serials as string[] | null) ?? []
     const oldSerial = (old.serial as string | null) ?? null
@@ -65,7 +77,8 @@ async function applyRows(p: { db: Db; orgId: string; program: ProgramRecord; row
     ? { severity: 'warning', code: 'big_change_waiting', storeCode: null, sheetRow: null,
       message: `${plan.markMissing.length} row(s) disappeared from the sheet at once. This looks like a mistake, so they stay in CK Desk and are removed at the next update only if they are still missing then (at least ${REMOVAL_WAIT_MINUTES} minutes later). Undo the change in the sheet if it was not intended.` }
     : null
-  return { added: inserts.length, changed: upserts.length, removed: plan.removeNow.length, waiting: plan.markMissing.length, waitingIssue }
+  const recipientIssues: ProgramIssue[] = recipientChangeIssues('ac', recipientChanges).map((i) => ({ severity: i.severity, code: i.code, storeCode: i.storeCode, sheetRow: i.sheetRow, message: i.message }))
+  return { added: inserts.length, changed: upserts.length, removed: plan.removeNow.length, waiting: plan.markMissing.length, waitingIssue, recipientIssues }
 }
 
 async function unknownStoreIssues(db: Db, orgId: string, codes: string[]): Promise<ProgramIssue[]> {
@@ -101,8 +114,10 @@ export async function syncProgram(p: { db: Db; orgId: string; program: ProgramRe
     }
     let values: unknown[][]
     try { values = await p.source.fetchValues(program.spreadsheet_id, program.tab_name ?? null) } catch (e) { return await fail(e instanceof Error ? e.message : 'The sheet could not be read.') }
+    // the extra details, machine number and serial are read as the sheet SHOWS them (a date as a date, '007' as '007'); the raw values are the fallback
+    const display = await fetchDisplaySafe(p.source, program.spreadsheet_id, program.tab_name ?? null)
 
-    const hash = createHash('sha1').update(JSON.stringify([values, program.row_type, program.columns ?? {}])).digest('hex')
+    const hash = createHash('sha1').update(JSON.stringify([values, display ?? null, program.row_type, program.columns ?? {}])).digest('hex')
     const { count } = await db.from('program_rows').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('program_id', program.id).is('removed_at', null).not('missing_since', 'is', null)
     const fresh = program.last_applied_at && now.getTime() - new Date(program.last_applied_at).getTime() < FULL_PASS_MINUTES * 60_000
     if (!p.force && program.content_hash === hash && program.last_status === 'ok' && (count ?? 0) === 0 && fresh) {
@@ -111,11 +126,18 @@ export async function syncProgram(p: { db: Db; orgId: string; program: ProgramRe
     }
 
     try {
-      const parsed = parseProgramSheet(values, { name: program.name, rowType: program.row_type, columns: program.columns })
+      const parsed = parseProgramSheet(values, { name: program.name, rowType: program.row_type, columns: program.columns, display })
       if (parsed.fatal) return await fail(parsed.fatal)
+      // headings but no data rows while the program holds rows: refused (the last good copy stays), whatever the number of rows
+      if (parsed.rows.length === 0) {
+        const { count: current, error: countErr } = await db.from('program_rows').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('program_id', program.id).is('removed_at', null)
+        if (countErr) throw new Error(`count program rows: ${countErr.message}`)
+        if ((current ?? 0) > 0) return await fail(`The ${program.name} sheet has headings but no data rows, while CK Desk holds ${current} current row(s) for it. It was not applied, so the last good copy stays in use. If the sheet was emptied on purpose, please tell the CK Desk team.`)
+      }
       const result = await applyRows({ db, orgId, program, rows: parsed.rows, now })
       const issues = [...parsed.issues, ...(await unknownStoreIssues(db, orgId, parsed.rows.map((r) => r.storeCode)))]
       if (result.waitingIssue) issues.push(result.waitingIssue)
+      issues.push(...result.recipientIssues)
       await replaceIssues(db, orgId, program.id, issues)
       must(await db.from('vendor_programs').update({ last_checked_at: nowIso, last_applied_at: nowIso, last_status: 'ok', last_error: null, row_count: parsed.rows.length, content_hash: hash }).eq('id', program.id).eq('org_id', orgId), 'save status')
       return { ...base, status: 'ok', added: result.added, changed: result.changed, removed: result.removed, waiting: result.waiting }

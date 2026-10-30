@@ -27,6 +27,14 @@ function passThrough(request: NextRequest) {
   return res
 }
 
+/** A person's browser opening a link (page, download, preview), as opposed to a script calling the API: it says so in Sec-Fetch-Mode, or asks for HTML. */
+function looksLikeBrowserNavigation(request: NextRequest): boolean {
+  const mode = request.headers.get('sec-fetch-mode')
+  if (mode === 'navigate') return true
+  if (mode === 'cors' || mode === 'same-origin') return false
+  return (request.headers.get('accept') ?? '').includes('text/html')
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -44,7 +52,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // ── Fast path: cron/webhook/health API routes authenticate themselves ──────
-  // These are called by Railway's cron-tick.mjs, Google Pub/Sub, Microsoft
+  // These are called by the Windows cron runner (scripts/cron-tick.mjs), Google Pub/Sub, Microsoft
   // Graph, and Meta's WhatsApp Cloud API — none of which carry a Supabase
   // session cookie, so the default "no session → redirect to /login" rule
   // below would otherwise intercept them before their own x-cron-secret /
@@ -134,6 +142,11 @@ export async function proxy(request: NextRequest) {
 
   // Unauthenticated visitors to '/' or any non-auth route → /login
   if (!userId && !isAuthRoute) {
+    // A script (the 8-second notification poll, the version check) that calls an /api/ route with an expired session gets a plain 401 it can read,
+    // not the login page's HTML with status 200 after the redirect (G-22). A browser opening an /api/ link (a download, a file preview) is still sent to the login page.
+    if (pathname.startsWith('/api/') && !looksLikeBrowserNavigation(request)) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401, headers: { 'Cache-Control': 'no-store' } })
+    }
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     if (pathname !== '/') url.searchParams.set('next', pathname)

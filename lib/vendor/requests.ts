@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { VendorHoldKind } from './access'
 import type { RequestLine } from './lines'
+import { inBatches } from '@/lib/queries/in-batches'
 
 // The records of what a vendor asked for while a ticket is on hold (migrations 178-180). Server only: they are read and written with the server's key
 // after the caller has proven that the ticket is theirs (through row security on the ticket itself).
@@ -68,8 +69,10 @@ export async function listRequestsWithItems(requestId: string): Promise<(VendorR
 export async function holdKindsFor(ids: string[]): Promise<Map<string, VendorHoldKind>> {
   const out = new Map<string, VendorHoldKind>()
   if (ids.length === 0) return out
-  const { data } = await db().from('vendor_requests').select('request_id, kind, status').in('status', OPEN_STATUSES).in('request_id', ids)
-  for (const r of (data ?? []) as { request_id: string; kind: 'parts' | 'po'; status: VendorRequestStatus }[]) {
+  // in batches of 100 ids (a long list makes a request line the production proxy refuses); a failed batch throws instead of showing every ticket as "not on hold"
+  const res = await inBatches<{ request_id: string; kind: 'parts' | 'po'; status: VendorRequestStatus }>(ids, (b) => db().from('vendor_requests').select('request_id, kind, status').in('status', OPEN_STATUSES).in('request_id', b))
+  if (res.error) throw new Error(`holdKindsFor: ${res.error.message}`)
+  for (const r of res.data as { request_id: string; kind: 'parts' | 'po'; status: VendorRequestStatus }[]) {
     out.set(r.request_id, r.kind === 'parts' ? 'parts' : r.status === 'revision_requested' ? 'revise' : 'po')
   }
   return out
@@ -164,6 +167,17 @@ export async function ownFiles(requestId: string, uploadedBy: string, ids: strin
   if (ids.length === 0) return []
   const { data } = await db().from('request_attachments').select('id').eq('request_id', requestId).eq('uploaded_by', uploadedBy).is('deleted_at', null).in('id', ids)
   return ((data ?? []) as { id: string }[]).map((r) => r.id)
+}
+
+/** Undo an APPROVAL (used when the ticket could not be moved on after it): the quote goes back to waiting for the approver and the PO number, date and document are cleared. Never throws. */
+export async function unsettleApproved(vendorRequestId: string): Promise<void> {
+  try {
+    await db().from('vendor_requests')
+      .update({ status: 'pending', decided_by: null, decided_at: null, decision_reason: null, po_number: null, po_date: null, po_attachment_id: null })
+      .eq('id', vendorRequestId).eq('status', 'approved')
+  } catch (e) {
+    console.error('[unsettleApproved] failed', e)
+  }
 }
 
 /** Undo a settle (used when the follow-up step failed): a request that was just rejected goes back to the state it was in. Never throws. */

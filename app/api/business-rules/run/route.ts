@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyCronSecret } from '@/lib/cron-auth'
-import { computeElapsedBusinessMinutes } from '@/lib/sla/business-hours'
-import { resolveServiceFormSections } from '@/lib/forms/sections'
-import { libraryFieldValues } from '@/lib/forms/library'
-import { sourceChannelOf } from '@/lib/sources'
-import { matchesConditions, type RuleCondition, type RuleConditionsLogic, type RuleEvaluationRequest } from '@/lib/rules/evaluate'
-import { executeActions, type RuleAction, type ActionRequest } from '@/lib/rules/actions'
+import { computeElapsedBusinessMinutes, pauseCreditMs } from '@/lib/sla/business-hours'
+import { slaClockStart } from '@/lib/sla/resolve'
+import { matchesConditions, type RuleCondition, type RuleConditionsLogic } from '@/lib/rules/evaluate'
+import { executeActionsWithResult, type RuleAction } from '@/lib/rules/actions'
+import { buildRuleEvaluationRequest, toActionRequest, RULE_REQUEST_SELECT, type RawRequest } from '@/lib/rules/run'
+import { isSlaPausedStatus, CLOSED_LIKE_REQUEST_STATUSES } from '@/lib/constants/requests'
+import { fetchAllPages } from '@/lib/queries/paging'
 import { logger } from '@/lib/observability/logger'
 import { alertOperator } from '@/lib/observability/alert'
-import type { SLAConfig, FormSection, FormField } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: { admin: { getUserById: (id: string) => any } } }
@@ -45,11 +45,23 @@ export async function GET(req: NextRequest) {
   const now = new Date()
   let fired = 0
 
-  const { data: rules } = await admin
+  const { data: rules, error: rulesError } = await admin
     .from('business_rules')
     .select('id, name, org_id, schedule_check, schedule_threshold, conditions, conditions_logic, actions')
     .contains('trigger', ['schedule'])
     .eq('is_active', true)
+
+  // G-11: a failed read of the rules is a failure, not "there are no scheduled rules tonight" (it used to answer ok:true with nothing processed)
+  if (rulesError) {
+    logger.error({
+      event: 'cron.business_rules.rules_unreadable',
+      message: 'The scheduled Business Rules could not be read',
+      route: 'app/api/business-rules/run',
+      errorCode: 'business_rules_read_failed',
+      error: rulesError,
+    })
+    return NextResponse.json({ ok: false, error: 'The scheduled Business Rules could not be read.', fired: 0, processed: 0, succeeded: 0, failed: 0, failures: [] }, { status: 500 })
+  }
 
   // DESK-OBS-001 — same cron-health semantics as app/api/alerts/run: per-rule
   // isolation already existed (one rule's exception doesn't stop the loop),
@@ -100,194 +112,104 @@ export async function GET(req: NextRequest) {
   )
 }
 
-async function alreadyFired(admin: AnyClient, ruleId: string, requestId: string): Promise<boolean> {
-  const { data } = await admin
-    .from('business_rule_events')
-    .select('id')
-    .eq('rule_id', ruleId)
-    .eq('request_id', requestId)
-    .maybeSingle()
-  return !!data
+/** The tickets this rule has already acted on (one read per rule instead of one per ticket). The unique claim row below stays the real guard. */
+async function firedTickets(admin: AnyClient, ruleId: string): Promise<Set<string>> {
+  const { rows } = await fetchAllPages<{ request_id: string }>((from, to) =>
+    admin.from('business_rule_events').select('request_id').eq('rule_id', ruleId).order('request_id', { ascending: true }).range(from, to)
+  )
+  return new Set(rows.map((r) => r.request_id))
 }
 
+async function fireRule(admin: AnyClient, rule: BusinessRuleRow, request: RawRequest, fired: Set<string>): Promise<boolean> {
+  if (fired.has(request.id)) return false
 
-function isSlaBreached(request: RawRequest): boolean {
-  if (!request.resolution_due_at) return false
-  const closedLike = request.resolved_at ?? request.closed_at
-  const now = new Date().toISOString()
-  return closedLike ? closedLike > request.resolution_due_at : now > request.resolution_due_at
-}
-
-function ageDays(request: RawRequest): number {
-  return Math.round((Date.now() - new Date(request.created_at).getTime()) / 86_400_000)
-}
-
-async function hasAttachment(admin: AnyClient, requestId: string): Promise<boolean> {
-  const { data } = await admin
-    .from('request_attachments')
-    .select('id')
-    .eq('request_id', requestId)
-    .is('deleted_at', null)
-    .limit(1)
-  return (data?.length ?? 0) > 0
-}
-
-async function fireRule(admin: AnyClient, rule: BusinessRuleRow, request: RawRequest): Promise<boolean> {
-  if (await alreadyFired(admin, rule.id, request.id)) return false
-
-  const evalRequest: RuleEvaluationRequest = {
-    priority: request.priority,
-    status: request.status,
-    service_id: request.service_id,
-    category_id: request.category_id,
-    sub_category_id: request.sub_category_id,
-    template_id: request.service?.template_id ?? null,
-    team_id: request.team_id,
-    project_id: request.project_id,
-    assigned_to: request.assigned_to,
-    requester_id: request.requester_id,
-    requester_role: request.requester?.role ?? '',
-    requester_department_id: request.requester?.department_id ?? null,
-    requester_location_id: request.requester?.location_id ?? null,
-    requester_designation_id: request.requester?.designation_id ?? null,
-    requester_function_id: request.requester?.function_id ?? null,
-    title: request.title,
-    description: request.description,
-    source_channel: sourceChannelOf(request.source_metadata),
-    is_sla_breached: isSlaBreached(request),
-    has_attachment: await hasAttachment(admin, request.id),
-    age_days: ageDays(request),
-    form_data: request.form_data,
-    library_field_values: libraryFieldValues(resolveServiceFormSections(request.service ?? {}), request.form_data),
-  }
+  // B-25 / H-01: the very same facts the created/updated rules are checked against (AC, vendor, store ... included), from one shared builder
+  const evalRequest = await buildRuleEvaluationRequest(admin, request)
   if (!matchesConditions(evalRequest, rule.conditions ?? [], rule.conditions_logic)) return false
 
-  const actionRequest: ActionRequest = {
-    id: request.id,
-    request_no: request.request_no,
-    title: request.title,
-    requester_id: request.requester_id,
-    assigned_to: request.assigned_to,
-    org_id: request.org_id,
-    status: request.status,
-    priority: request.priority,
-    service_id: request.service_id,
-    team_id: request.team_id,
-    created_at: request.created_at,
-    form_data: request.form_data ?? {},
-    waiting_since: request.waiting_since,
-    response_due_at: request.response_due_at,
-    resolution_due_at: request.resolution_due_at,
-    reopen_count: request.reopen_count ?? 0,
-    responded_at: request.responded_at,
-    paused_ms_total: Number(request.paused_ms_total ?? 0),
-    service: {
-      sla_policy: request.service?.sla_policy ?? null,
-      form_sections: request.service?.form_sections ?? null,
-      form_fields: request.service?.form_fields ?? null,
-      template: request.service?.template ?? null,
-    },
-  }
+  const actionRequest = toActionRequest(request)
   // D-042 / D-063: the "already fired" record is written FIRST, as a claim (the table is unique on rule + ticket). Two overlapping runs can no
-  // longer both act: the one that loses the claim skips. If the actions throw, the claim is removed so the next run tries again.
+  // longer both act: the one that loses the claim skips.
   const { error: claimError } = await admin.from('business_rule_events').insert({ rule_id: rule.id, request_id: request.id })
   if (claimError) {
     if (claimError.code === '23505') return false
     throw new Error(`Could not record rule ${rule.id} as fired: ${claimError.message ?? 'unknown error'}`)
   }
+  fired.add(request.id)
+  // G-11: the claim is kept once any action has happened. Removing it after a partial success made the next run repeat the actions that already worked
+  // (a second assignment, a second e-mail). It is removed only when NOTHING worked, so the ticket is tried again.
+  let result: Awaited<ReturnType<typeof executeActionsWithResult>>
   try {
-    await executeActions(admin, actionRequest, rule.actions ?? [], { ruleId: rule.id, ruleName: rule.name })
+    result = await executeActionsWithResult(admin, actionRequest, rule.actions ?? [], { ruleId: rule.id, ruleName: rule.name, trigger: 'schedule' })
   } catch (e) {
-    await admin.from('business_rule_events').delete().eq('rule_id', rule.id).eq('request_id', request.id)
+    logger.error({
+      event: 'cron.business_rules.actions_threw',
+      message: `Rule ${rule.id} threw while running its actions; the "already fired" record is kept so nothing is repeated`,
+      route: 'app/api/business-rules/run',
+      requestId: request.id,
+      orgId: rule.org_id,
+      errorCode: 'business_rule_actions_threw',
+      error: e,
+    })
     throw e
+  }
+  if (result.attempted > 0 && result.succeeded === 0) {
+    const { error: releaseError } = await admin.from('business_rule_events').delete().eq('rule_id', rule.id).eq('request_id', request.id)
+    if (!releaseError) fired.delete(request.id)
   }
   return true
 }
 
-type RawRequest = {
-  id: string
-  request_no: string
-  title: string
-  description: string | null
-  priority: string
-  status: string
-  service_id: string
-  team_id: string
-  project_id: string | null
-  requester_id: string
-  assigned_to: string | null
-  org_id: string
-  created_at: string
-  resolved_at: string | null
-  closed_at: string | null
-  source_metadata: unknown
-  form_data: Record<string, unknown> | null
-  waiting_since: string | null
-  response_due_at: string | null
-  resolution_due_at: string | null
-  category_id: string | null
-  sub_category_id: string | null
-  reopen_count: number | null
-  responded_at: string | null
-  paused_ms_total: number | null
-  service: {
-    template_id: string | null
-    sla_policy: { config: SLAConfig | null } | null
-    form_sections: FormSection[] | null
-    form_fields: FormField[] | null
-    template: { form_sections: FormSection[] | null } | null
-  } | null
-  requester: {
-    role: string
-    department_id: string | null
-    location_id: string | null
-    designation_id: string | null
-    function_id: string | null
-  } | null
+const CLOSED_SQL_LIST = `(${CLOSED_LIKE_REQUEST_STATUSES.map((st) => `"${st}"`).join(',')})`
+
+/** Every open ticket of the organisation that matches the filter, page by page (a plain select stops at 1000 rows). A failed page throws. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function openTickets(admin: AnyClient, orgId: string, narrow: (q: any) => any): Promise<RawRequest[]> {
+  const { rows } = await fetchAllPages<RawRequest>((from, to) =>
+    narrow(
+      admin.from('requests').select(RULE_REQUEST_SELECT).eq('org_id', orgId).not('status', 'in', CLOSED_SQL_LIST)
+    ).order('id', { ascending: true }).range(from, to)
+  )
+  return rows
 }
 
-const REQUEST_SELECT =
-  'id, request_no, title, description, priority, status, service_id, team_id, project_id, requester_id, assigned_to, org_id, created_at, resolved_at, closed_at, source_metadata, form_data, waiting_since, response_due_at, resolution_due_at, category_id, sub_category_id, reopen_count, responded_at, paused_ms_total, service:services(template_id, sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections)), requester:profiles!requester_id(role, department_id, location_id, designation_id, function_id)'
-
 async function runSlaPctElapsed(admin: AnyClient, rule: BusinessRuleRow, now: Date): Promise<number> {
-  const { data: requests } = await admin
-    .from('requests')
-    .select(REQUEST_SELECT)
-    .eq('org_id', rule.org_id)
-    .not('resolution_due_at', 'is', null)
-    .not('status', 'in', '("resolved","cancelled","closed")')
+  const requests = await openTickets(admin, rule.org_id, (q) => q.not('resolution_due_at', 'is', null))
+  const fired = await firedTickets(admin, rule.id)
 
   let count = 0
-  for (const request of (requests ?? []) as RawRequest[]) {
-    const createdAt = new Date(request.created_at)
+  for (const request of requests) {
+    if (fired.has(request.id)) continue
+    // a reopened ticket's clock started when it was reopened, not when it was created (its deadline was counted from then)
+    const startedAt = await slaClockStart(admin, request)
     const deadlineAt = new Date(request.resolution_due_at!)
-    if (deadlineAt <= createdAt) continue
+    if (deadlineAt <= startedAt) continue
 
-    const totalBusinessMinutes = await computeElapsedBusinessMinutes(createdAt, deadlineAt)
+    // F-14: the deadline already includes the pauses that ended (paused_ms_total), so they come off the length; the elapsed side must not count paused time either,
+    // including a pause still going on (that one is added to the deadline only when it ends). Without this a paused ticket's percentage climbed past 100.
+    const creditMin = Number(request.paused_ms_total ?? 0) / 60_000
+    const livePauseMin = request.waiting_since && isSlaPausedStatus(request.status) ? (await pauseCreditMs(new Date(request.waiting_since), now)) / 60_000 : 0
+    const totalBusinessMinutes = await computeElapsedBusinessMinutes(startedAt, deadlineAt)
+    const slaLengthMinutes = totalBusinessMinutes - creditMin
     const pctElapsed =
-      totalBusinessMinutes > 0
-        ? ((await computeElapsedBusinessMinutes(createdAt, now)) / totalBusinessMinutes) * 100
-        : ((now.getTime() - createdAt.getTime()) / (deadlineAt.getTime() - createdAt.getTime())) * 100
+      slaLengthMinutes > 0
+        ? (Math.max(0, (await computeElapsedBusinessMinutes(startedAt, now)) - creditMin - livePauseMin) / slaLengthMinutes) * 100
+        : (Math.max(0, now.getTime() - startedAt.getTime() - creditMin * 60_000 - livePauseMin * 60_000) / Math.max(1, deadlineAt.getTime() - startedAt.getTime() - creditMin * 60_000)) * 100
 
     if (pctElapsed < rule.schedule_threshold) continue
-    if (await fireRule(admin, rule, request)) count++
+    if (await fireRule(admin, rule, request, fired)) count++
   }
   return count
 }
 
 async function runUnassignedMinutes(admin: AnyClient, rule: BusinessRuleRow, now: Date): Promise<number> {
   const cutoff = new Date(now.getTime() - rule.schedule_threshold * 60 * 1000)
-  const { data: requests } = await admin
-    .from('requests')
-    .select(REQUEST_SELECT)
-    .eq('org_id', rule.org_id)
-    .is('assigned_to', null)
-    .not('status', 'in', '("resolved","cancelled","closed")')
-    .lt('created_at', cutoff.toISOString())
+  const requests = await openTickets(admin, rule.org_id, (q) => q.is('assigned_to', null).lt('created_at', cutoff.toISOString()))
+  const fired = await firedTickets(admin, rule.id)
 
   let count = 0
-  for (const request of (requests ?? []) as RawRequest[]) {
-    if (await fireRule(admin, rule, request)) count++
+  for (const request of requests) {
+    if (await fireRule(admin, rule, request, fired)) count++
   }
   return count
 }

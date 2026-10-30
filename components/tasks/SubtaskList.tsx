@@ -394,8 +394,9 @@ export function SubtaskList({ parentTaskId, initialSubtasks, profiles = [] }: Su
                       </span>
                       <button
                         onClick={() => handleDelete(subtask.id)}
-                        className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-all"
+                        className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 rounded p-0.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-all"
                         title="Delete subtask"
+                        aria-label="Delete subtask"
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>

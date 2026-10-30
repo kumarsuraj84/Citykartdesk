@@ -1,13 +1,14 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Inbox, Mail, Search, ChevronLeft, ChevronRight,
   ClipboardList, CheckCircle2, ShieldCheck, CheckCheck, Archive,
-  Star, AlertTriangle, Flame, MessageSquare,
+  Star, AlertTriangle, Flame, MessageSquare, AlertCircle,
 } from 'lucide-react'
-import type { InboxMessage, IntakeChannel } from '@/lib/queries/intake'
+import type { InboxMessage, InboxPageResult, IntakeChannel } from '@/lib/queries/intake'
+import type { InboxFolderKey, InboxSort } from '@/lib/intake/inbox-filters'
 import { starReview } from '@/lib/actions/intake/flags'
 import { formatRelativeTime } from '@/lib/utils'
 
@@ -24,28 +25,24 @@ const STAGE_FILTERS: { key: string; label: string }[] = [
   { key: 'local_model', label: 'S2' },
   { key: 'premium_ai',  label: 'S3' },
 ]
-const PRIORITY_WEIGHT: Record<string, number> = { urgent: 4, high: 3, medium: 2, low: 1 }
+type Folder = { key: InboxFolderKey; label: string; icon: React.ReactNode }
 
-type SortKey = 'priority_smart' | 'date_desc' | 'date_asc' | 'confidence_desc' | 'confidence_asc'
-const PAGE_SIZE = 50
-
-type Folder = { key: string; label: string; icon: React.ReactNode; match: (m: InboxMessage) => boolean }
-
+// What each folder contains is decided by the database (lib/intake/inbox-filters.ts), so the label list is all that is needed here.
 const FOLDERS: Folder[] = [
-  { key: 'all',       label: 'All',          icon: <Inbox className="h-4 w-4" />,          match: (m) => !m.is_archived },
-  { key: 'urgent',    label: 'Urgent',        icon: <Flame className="h-4 w-4" />,          match: (m) => !m.is_archived && (m.review?.suggested_priority === 'urgent' || m.review?.is_escalated === true) },
-  { key: 'starred',   label: 'Starred',       icon: <Star className="h-4 w-4" />,           match: (m) => !m.is_archived && m.review?.is_starred === true },
-  { key: 'escalated', label: 'Escalated',     icon: <AlertTriangle className="h-4 w-4" />,  match: (m) => !m.is_archived && m.review?.is_escalated === true },
-  { key: 'unread',    label: 'Unread',        icon: <Mail className="h-4 w-4" />,           match: (m) => !m.is_archived && !m.is_read },
+  { key: 'all',       label: 'All',          icon: <Inbox className="h-4 w-4" /> },
+  { key: 'urgent',    label: 'Urgent',        icon: <Flame className="h-4 w-4" /> },
+  { key: 'starred',   label: 'Starred',       icon: <Star className="h-4 w-4" /> },
+  { key: 'escalated', label: 'Escalated',     icon: <AlertTriangle className="h-4 w-4" /> },
+  { key: 'unread',    label: 'Unread',        icon: <Mail className="h-4 w-4" /> },
   // ── by type (the primary actionable work) ──
-  { key: 'request',   label: 'Requests',      icon: <ClipboardList className="h-4 w-4" />,  match: (m) => !m.is_archived && m.review?.suggested_type === 'request' },
-  { key: 'task',      label: 'Tasks',         icon: <CheckCircle2 className="h-4 w-4" />,   match: (m) => !m.is_archived && m.review?.suggested_type === 'task' },
-  { key: 'approval',  label: 'Approvals',     icon: <ShieldCheck className="h-4 w-4" />,    match: (m) => !m.is_archived && m.review?.suggested_type === 'approval' },
+  { key: 'request',   label: 'Requests',      icon: <ClipboardList className="h-4 w-4" /> },
+  { key: 'task',      label: 'Tasks',         icon: <CheckCircle2 className="h-4 w-4" /> },
+  { key: 'approval',  label: 'Approvals',     icon: <ShieldCheck className="h-4 w-4" /> },
   // ── lifecycle ──
-  { key: 'converted', label: 'Converted',     icon: <CheckCheck className="h-4 w-4" />,     match: (m) => !m.is_archived && m.review?.state === 'converted' },
+  { key: 'converted', label: 'Converted',     icon: <CheckCheck className="h-4 w-4" /> },
   // Everything else — informational/junk FYI mail, archived, and not-yet-classified.
   // Folds the old Information + Archived buckets into one low-priority catch-all.
-  { key: 'rest',      label: 'Rest',          icon: <Archive className="h-4 w-4" />,        match: (m) => m.is_archived || m.review?.suggested_type === 'informational' || m.review?.suggested_type === 'ignore' || !m.review },
+  { key: 'rest',      label: 'Rest',          icon: <Archive className="h-4 w-4" /> },
 ]
 
 function senderLabel(addr: string | null): string {
@@ -92,35 +89,51 @@ function ageBadge(receivedAt: string | null, state: string | null) {
   return null
 }
 
-function priorityScore(m: InboxMessage, isEscalated: boolean): number {
-  const pw = PRIORITY_WEIGHT[m.review?.suggested_priority ?? 'medium'] ?? 2
-  return pw * 10 + (isEscalated ? 5 : 0) + (m.review?.is_starred ? 2 : 0)
-}
-
 export function InboxList({
-  messages, channels, initialFolder, initialChannel, onOpen, activeMessageId,
+  inbox, channels, query, onOpen, activeMessageId,
 }: {
-  messages: InboxMessage[]
+  /** one page of messages as the server read it, with totals, counts and any read error */
+  inbox: InboxPageResult
   channels: IntakeChannel[]
-  initialFolder?: string
-  initialChannel?: string
+  /** the filters in the address */
+  query: { folder: InboxFolderKey; channel: string | null; stage: string; q: string; sort: InboxSort }
   // Workspace (3-pane) mode: emit selection inline instead of navigating.
   onOpen?: (reviewId: string | null, messageId: string) => void
   activeMessageId?: string | null
 }) {
   const workspace = typeof onOpen === 'function'
   const router = useRouter()
-  const [, startTransition] = useTransition()
-  const [folder, setFolder] = useState(() => (FOLDERS.some(f => f.key === initialFolder) ? initialFolder! : 'all'))
-  const [selectedChannel, setSelectedChannel] = useState<string | null>(initialChannel ?? null)
-  const [search, setSearch] = useState('')
-  const [sort, setSort]     = useState<SortKey>('priority_smart')
-  const [stage, setStage]   = useState<string>('all')
-  const [page, setPage]     = useState(1)
+  const [pending, startTransition] = useTransition()
+  const { data: messages, counts, channelCounts, total, page, pageSize } = inbox
+  const folder = query.folder
+  const selectedChannel = query.channel
+  const stage = query.stage
+  const sort = query.sort
+  const [search, setSearch] = useState(query.q)
   // Optimistic star overrides — key: reviewId, value: starred state
   const [starOverrides, setStarOverrides] = useState<Map<string, boolean>>(new Map())
 
-  // Thread groups: thread_id → count of pending/in_review messages in the thread
+  // The filters live in the address: changing one asks the server for the matching page (it filters, sorts and pages in the database).
+  function go(patch: Partial<{ folder: string; channel: string | null; stage: string; q: string; sort: string; page: number }>, replace = false) {
+    const next = new URLSearchParams(window.location.search)
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null || v === undefined || v === '' || (k === 'page' && v === 1) || (k === 'stage' && v === 'all')) next.delete(k)
+      else next.set(k, String(v))
+    }
+    if (!('page' in patch)) next.delete('page')   // any other change starts again from the first page
+    const href = `${window.location.pathname}${next.toString() ? `?${next}` : ''}`
+    startTransition(() => { if (replace) router.replace(href); else router.push(href) })
+  }
+
+  // typing in the search box asks the server a moment after the last key
+  useEffect(() => {
+    if (search.trim() === query.q) return
+    const t = setTimeout(() => go({ q: search.trim() }, true), 350)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search])
+
+  // Thread groups: thread_id → count of pending/in_review messages in the thread (on this page)
   const threadPendingCount = useMemo(() => {
     const counts: Record<string, number> = {}
     for (const m of messages) {
@@ -141,68 +154,12 @@ export function InboxList({
     return m.review?.is_escalated ?? false
   }
 
-  // Live counts per folder
-  const counts = useMemo(() => {
-    const c: Record<string, number> = {}
-    for (const f of FOLDERS) c[f.key] = 0
-    for (const m of messages) for (const f of FOLDERS) if (f.match(m)) c[f.key]++
-    return c
-  }, [messages])
-
-  const activeFolder = FOLDERS.find(f => f.key === folder) ?? FOLDERS[0]
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    let rows = messages.filter((m) => {
-      if (!activeFolder.match(m)) return false
-      if (selectedChannel && m.channel?.id !== selectedChannel) return false
-      if (stage !== 'all' && m.review?.stage !== stage) return false
-      if (q) {
-        const hay = `${m.subject ?? ''} ${m.from_address ?? ''} ${m.review?.suggested_department ?? ''} ${m.channel?.name ?? ''}`.toLowerCase()
-        if (!hay.includes(q)) return false
-      }
-      return true
-    })
-    rows = [...rows].sort((a, b) => {
-      switch (sort) {
-        case 'priority_smart': {
-          const diff = priorityScore(b, effectiveEscalated(b)) - priorityScore(a, effectiveEscalated(a))
-          if (diff !== 0) return diff
-          return (b.received_at ?? '').localeCompare(a.received_at ?? '')
-        }
-        case 'date_asc':  return (a.received_at ?? '').localeCompare(b.received_at ?? '')
-        case 'date_desc': return (b.received_at ?? '').localeCompare(a.received_at ?? '')
-        case 'confidence_desc': return (b.review?.suggested_confidence ?? -1) - (a.review?.suggested_confidence ?? -1)
-        case 'confidence_asc':  return (a.review?.suggested_confidence ?? 999) - (b.review?.suggested_confidence ?? 999)
-      }
-    })
-    return rows
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, activeFolder, search, sort, stage, starOverrides, selectedChannel])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const safePage = Math.min(page, totalPages)
-  const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+  const pageRows = messages
 
-  const selectFolder = (key: string) => {
-    setFolder(key)
-    setPage(1)
-    const url = new URL(window.location.href)
-    url.searchParams.set('folder', key)
-    router.push(url.toString().replace(url.origin, ''))
-  }
-
-  const selectChannel = (channelId: string | null) => {
-    setSelectedChannel(channelId)
-    setPage(1)
-    const url = new URL(window.location.href)
-    if (channelId) {
-      url.searchParams.set('channel', channelId)
-    } else {
-      url.searchParams.delete('channel')
-    }
-    router.push(url.toString().replace(url.origin, ''))
-  }
+  const selectFolder = (key: string) => go({ folder: key === 'all' ? '' : key })
+  const selectChannel = (channelId: string | null) => go({ channel: channelId })
 
   function handleStar(e: React.MouseEvent, reviewId: string, current: boolean) {
     e.stopPropagation()
@@ -263,7 +220,7 @@ export function InboxList({
               </button>
               {channels.map((ch) => {
                 const active = selectedChannel === ch.id
-                const channelMessages = messages.filter(m => m.channel?.id === ch.id)
+                const channelTotal = channelCounts[ch.id] ?? 0
                 const statusColor = ch.status === 'error' ? 'text-rose-600' : ch.status === 'paused' ? 'text-amber-600' : 'text-emerald-600'
                 const statusLabel = ch.status === 'active' ? 'Connected' : ch.status === 'paused' ? 'Paused' : 'Error'
                 return (
@@ -280,9 +237,9 @@ export function InboxList({
                         <Mail className="h-4 w-4" />
                       </span>
                       <span className="flex-1 truncate text-left font-medium">{ch.name}</span>
-                      {channelMessages.length > 0 && (
+                      {channelTotal > 0 && (
                         <span className={`rounded-full px-1.5 text-[10px] font-semibold ${active ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>
-                          {channelMessages.length}
+                          {channelTotal}
                         </span>
                       )}
                     </div>
@@ -358,7 +315,7 @@ export function InboxList({
                 {STAGE_FILTERS.map((s) => (
                   <button
                     key={s.key}
-                    onClick={() => { setStage(s.key); setPage(1) }}
+                    onClick={() => go({ stage: s.key })}
                     title={s.key === 'rule' ? 'Stage 1 — rules' : s.key === 'local_model' ? 'Stage 2 — model' : s.key === 'premium_ai' ? 'Stage 3 — premium AI' : 'All stages'}
                     className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
                       stage === s.key ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'
@@ -377,16 +334,16 @@ export function InboxList({
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+              onChange={(e) => setSearch(e.target.value)}
               placeholder="Search subject, sender, dept…"
               className="w-full rounded-lg border border-border bg-background py-1.5 pl-8 pr-3 text-xs outline-none focus:border-primary"
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{filtered.length} message{filtered.length === 1 ? '' : 's'}</span>
+            <span className="text-xs text-muted-foreground">{total} message{total === 1 ? '' : 's'}{pending ? ' …' : ''}</span>
             <select
               value={sort}
-              onChange={(e) => { setSort(e.target.value as SortKey); setPage(1) }}
+              onChange={(e) => go({ sort: e.target.value === 'priority_smart' ? '' : e.target.value })}
               className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-muted-foreground outline-none focus:border-primary"
             >
               <option value="priority_smart">Priority (smart)</option>
@@ -398,12 +355,19 @@ export function InboxList({
           </div>
         </div>
 
-        {filtered.length === 0 ? (
+        {inbox.error ? (
+          <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 px-6 py-12 text-center">
+            <AlertCircle className="mx-auto h-8 w-8 text-destructive" />
+            <p className="mt-3 text-sm font-semibold text-foreground">The inbox could not be loaded</p>
+            <p className="mt-1 text-xs text-muted-foreground">{inbox.error}</p>
+            <button onClick={() => startTransition(() => router.refresh())} className="btn-soft mt-4">Try again</button>
+          </div>
+        ) : total === 0 ? (
           <div className="rounded-xl border border-dashed border-border bg-card px-6 py-16 text-center">
             <Inbox className="mx-auto h-8 w-8 text-muted-foreground/40" />
             <p className="mt-3 text-sm font-semibold text-foreground">Nothing here</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {messages.length === 0 ? 'Inbound messages appear here once ingested.' : 'No messages in this folder match your search.'}
+              {counts.all + counts.rest === 0 ? 'Inbound messages appear here once ingested.' : 'No messages in this folder match your search.'}
             </p>
           </div>
         ) : (
@@ -509,11 +473,11 @@ export function InboxList({
               <div className="flex items-center justify-between border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
                 <span>Page {safePage} of {totalPages}</span>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage <= 1}
+                  <button onClick={() => go({ page: Math.max(1, safePage - 1) })} disabled={safePage <= 1 || pending}
                     className="btn-soft disabled:opacity-40">
                     <ChevronLeft className="h-3.5 w-3.5" /> Prev
                   </button>
-                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}
+                  <button onClick={() => go({ page: Math.min(totalPages, safePage + 1) })} disabled={safePage >= totalPages || pending}
                     className="btn-soft disabled:opacity-40">
                     Next <ChevronRight className="h-3.5 w-3.5" />
                   </button>

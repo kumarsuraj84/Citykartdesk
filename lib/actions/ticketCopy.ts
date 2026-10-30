@@ -41,7 +41,9 @@ export async function copyCommentByEmail(requestId: string, commentId: string, e
   const profile = await getCurrentProfile()
   if (!profile?.org_id) return { ...none, error: 'Not authenticated.' }
   if (!Array.isArray(emails) || emails.length === 0) return { ...none, error: 'No e-mail address was chosen.' }
-  if (emails.length > 25) return { ...none, error: `At most ${MAX_CC} addresses can be copied on one comment.` }
+  // 25 is only a guard on how much the browser may send; the real limit (MAX_CC) is applied by validateCc below, which names each address it turns away.
+  // The message used to say "at most 5" for a list of 26, which is not what was being checked.
+  if (emails.length > 25) return { ...none, error: `Too many addresses were sent at once. Choose at most ${MAX_CC} to copy.` }
 
   const request = await getRequestById(requestId)
   if (!request) return { ...none, error: 'Request not found.' }

@@ -23,6 +23,30 @@ export async function sharedRateLimited(key: string, limit: number, windowSecond
   }
 }
 
+/**
+ * Adds `amount` (a size, in whatever unit the caller chose) to a running total kept in the database and says whether the total inside the window is now OVER the
+ * limit (migration 192, quota_add). If the database function is not there yet the in-memory totals below are used, so uploads do not stop working before the migration.
+ */
+const memoryTotals = new Map<string, { total: number; resetAt: number }>()
+export async function sharedQuotaExceeded(key: string, amount: number, limit: number, windowSeconds: number, client?: Rpc): Promise<boolean> {
+  amount = Math.max(0, Math.ceil(amount))
+  try {
+    const db = client ?? (createAdminClient() as unknown as Rpc)
+    const { data, error } = await db.rpc('quota_add', { p_key: key, p_amount: amount, p_limit: limit, p_window_seconds: windowSeconds })
+    if (error) throw new Error(error.message ?? error.code ?? 'quota_add failed')
+    return data === true
+  } catch (e) {
+    logger.warn({ event: 'security.shared_limit_fallback', message: 'The shared quota counter was not available; using the in-memory one', route: 'lib/security/shared-limits.ts', context: { error: e instanceof Error ? e.message : String(e) } })
+    const now = Date.now()
+    const cur = memoryTotals.get(key)
+    const entry = !cur || cur.resetAt < now ? { total: 0, resetAt: now + windowSeconds * 1000 } : cur
+    entry.total += amount
+    memoryTotals.set(key, entry)
+    if (memoryTotals.size > 20_000) for (const [k, v] of memoryTotals) if (v.resetAt < now) memoryTotals.delete(k)
+    return entry.total > limit
+  }
+}
+
 /** True the first time a delivery key is seen inside the window; false for a repeat (a replay). Lets the delivery through if the guard is unavailable. */
 export async function firstDelivery(key: string, windowSeconds: number, client?: Rpc): Promise<boolean> {
   try {

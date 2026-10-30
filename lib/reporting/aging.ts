@@ -36,3 +36,13 @@ export function ageBucketFor(days: number): AgeBucket {
 export function ageBucketLabel(days: number): string {
   return ageBucketFor(days).label
 }
+
+/**
+ * The ONE way a ticket's age is counted for these buckets: whole days that have fully passed (5 days 14 hours is 5, so "0–5 days"). The Report Builder,
+ * the fixed reports, the Analytics page and the Executive dashboard all used different roundings (floor, Math.round, fractional with <=), and the same ticket
+ * landed in "0–5" in one report and "6–10" in another (audit F-16). Pass any two moments; the end defaults to now.
+ */
+export function ageInDays(from: string | number | Date, to: string | number | Date = new Date()): number {
+  const days = Math.floor((new Date(to).getTime() - new Date(from).getTime()) / 86_400_000)
+  return Number.isFinite(days) ? Math.max(0, days) : 0
+}

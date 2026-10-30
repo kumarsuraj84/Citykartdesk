@@ -5,6 +5,8 @@ import { authorizeReportAccess, agentScopeOrFilter, reportsScopeOrFilter, type R
 import { getDirectReportIds } from '@/lib/queries/profiles'
 import { resolvePeriodParam, type PeriodParam } from '@/lib/queries/analytics'
 import { applyCurrentlyBreachedFilter } from '@/lib/sla/breach'
+import { PAUSED_SLA_STATUSES } from '@/lib/constants/requests'
+import { istToday } from '@/lib/reporting/ist'
 import { storeFilterCount, type StoreFilter } from '@/lib/analytics/store-filter'
 import { storeCodesMatching } from '@/lib/queries/store-dims'
 import type { Database } from '@/types/database'
@@ -31,6 +33,10 @@ export type DrawerFilter = {
   /** Store Master choices (region, cluster, ...) picked on the dashboard: only requests of the stores that pass are listed. */
   store?: StoreFilter
   assignedTo?: string
+  /** a person's team (the Dashboard of someone with people reporting to them): only tickets assigned to these (technician-wise) ... */
+  techIds?: string[]
+  /** ... and / or raised by these (requester-wise). They can only narrow the team, never widen it. */
+  requesterIds?: string[]
   slaBreached?: boolean
   frtBreached?: boolean
   resolvedInPeriod?: boolean
@@ -82,7 +88,11 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
   // a normal user who has people reporting to them sees those people's tickets (the Dashboard they get is about them)
   if (profile.role === 'user') {
     const reportIds = await getDirectReportIds(profile.id)
-    if (reportIds.length > 0) scope = { kind: 'reports', userId: profile.id, reportIds }
+    if (reportIds.length > 0) {
+      // the technicians / requesters picked on the team Dashboard narrow the list exactly as they narrow the numbers (only people who really report to this person can be picked)
+      const within = (ids?: string[]) => (ids ?? []).filter((id) => reportIds.includes(id))
+      scope = { kind: 'reports', userId: profile.id, reportIds, techIds: within(filter.techIds), requesterIds: within(filter.requesterIds) }
+    }
   }
 
   // Route to task query if module = tasks
@@ -142,31 +152,43 @@ export async function getFilteredRequests(filter: DrawerFilter): Promise<{
     // viewer's own resolved scope — a user/agent passing someone else's
     // teamId/assignedTo must not be able to see outside their own data.
     if (scope.kind === 'own')        q = q.eq('requester_id', scope.userId)
-    else if (scope.kind === 'agent') q = q.or(agentScopeOrFilter(scope))
+    else if (scope.kind === 'agent') {
+      const picked = filter.groupIds?.length ? scope.teamIds.filter((id) => filter.groupIds!.includes(id)) : scope.teamIds
+      q = q.or(agentScopeOrFilter({ ...scope, teamIds: picked }))
+    }
     else if (scope.kind === 'team')  q = q.in('team_id', scope.teamIds)
-    else if (scope.kind === 'reports') q = q.or(reportsScopeOrFilter(scope))
+    else if (scope.kind === 'reports') {
+      q = q.or(reportsScopeOrFilter(scope))
+      if (scope.techIds && scope.techIds.length > 0) q = q.in('assigned_to', scope.techIds)
+      if (scope.requesterIds && scope.requesterIds.length > 0) q = q.in('requester_id', scope.requesterIds)
+    }
 
     if (filter.status?.length)   q = q.in('status', filter.status as RequestStatus[])
     if (filter.priority)         q = q.eq('priority', filter.priority as RequestPriority)
     if (filter.teamId)           q = q.eq('team_id', filter.teamId)
-    if (filter.groupIds?.length) q = q.in('team_id', filter.groupIds)
+    // (a technician who picks some of their groups still sees their own tickets, as on the dashboard: the picked groups narrow the GROUPS part of their scope, not their own work)
+    if (filter.groupIds?.length && scope.kind !== 'agent') q = q.in('team_id', filter.groupIds)
     if (filter.assignedTo)       q = q.eq('assigned_to', filter.assignedTo)
 
     if (filter.slaBreached) {
       // "Currently Breached" (D-01, lib/sla/breach.ts) — same formula as
       // Home Dashboard/Monitoring/the Admin Analytics KPI card.
+      // (a ticket waiting for somebody else has its clock stopped: it is not breached while it waits, audit F-02)
       q = applyCurrentlyBreachedFilter(q.not('resolution_due_at', 'is', null), now)
+           .not('status', 'in', `(${PAUSED_SLA_STATUSES.join(',')})`)
     }
     if (filter.frtBreached) {
       q = q.is('responded_at', null)
            .not('status', 'in', '("resolved","closed","cancelled")')
+           .not('status', 'in', `(${PAUSED_SLA_STATUSES.join(',')})`)
     }
     if (filter.resolvedInPeriod && filter.period) {
       const { start, end } = resolvePeriodParam(filter.period)
       // same rule as the Resolved card: resolved_at, else closed_at, else (status says resolved/closed) the last update
       const a = start.toISOString()
       const b = end.toISOString()
-      q = q.or(`and(resolved_at.gte.${a},resolved_at.lte.${b}),and(resolved_at.is.null,closed_at.gte.${a},closed_at.lte.${b}),and(resolved_at.is.null,closed_at.is.null,status.in.(resolved,closed),updated_at.gte.${a},updated_at.lte.${b})`)
+      // (a ticket the approval flow cancelled was never resolved, audit F-12)
+      q = q.is('cancellation_reason', null).or(`and(resolved_at.gte.${a},resolved_at.lte.${b}),and(resolved_at.is.null,closed_at.gte.${a},closed_at.lte.${b}),and(resolved_at.is.null,closed_at.is.null,status.in.(resolved,closed),updated_at.gte.${a},updated_at.lte.${b})`)
     }
     if (filter.createdInPeriod && filter.period) {
       const { start, end } = resolvePeriodParam(filter.period)
@@ -263,7 +285,7 @@ async function getFilteredTasks(filter: DrawerFilter, profile: ProfileWithTeams)
 
   try {
     const admin = createAdminClient()
-    const now   = new Date().toISOString()
+    const today = istToday()
 
     let q = admin
       .from('tasks')
@@ -293,7 +315,8 @@ async function getFilteredTasks(filter: DrawerFilter, profile: ProfileWithTeams)
     if (filter.taskStandalone)      q = q.is('request_id', null)
 
     if (filter.taskOverdue) {
-      q = q.not('due_date', 'is', null).lt('due_date', now)
+      // overdue = the due DAY is before today in India (a task due today is not overdue); due_date is a date, so compare it with a date, not a UTC timestamp (audit F-11)
+      q = q.not('due_date', 'is', null).lt('due_date', today)
            .not('status', 'in', '("done","cancelled")')
     }
     if (filter.taskCompletedInPeriod && filter.period) {

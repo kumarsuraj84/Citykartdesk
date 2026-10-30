@@ -14,7 +14,7 @@
  * integration test — nothing here needs the local Supabase instance.
  */
 import { describe, it, expect } from 'vitest'
-import { isCurrentlyBreached, isEverBreached } from '@/lib/sla/breach'
+import { isCurrentlyBreached, isEverBreached, isEverResponseBreached, applyCurrentlyBreachedFilter } from '@/lib/sla/breach'
 
 const NOW = new Date('2026-09-10T12:00:00.000Z')
 const PAST = '2026-09-09T12:00:00.000Z'   // before NOW
@@ -72,5 +72,32 @@ describe('D-01: SLA breach formulas', () => {
     const ticket = { status: 'open', resolution_due_at: FUTURE, resolved_at: null, closed_at: null }
     expect(isCurrentlyBreached(ticket, NOW)).toBe(false)
     expect(isEverBreached(ticket, NOW)).toBe(false)
+  })
+})
+
+describe('F-02 / F-03: paused tickets are not breached; deadlines compare as instants', () => {
+  it.each(['waiting_user', 'hold_purchase_ho', 'pending_approval'])('a %s ticket past its deadline is not "currently breached"', (status) => {
+    expect(isCurrentlyBreached({ status, resolution_due_at: PAST }, NOW)).toBe(false)
+  })
+
+  it('an offset deadline: 10:00 at UTC-7 is 17:00 UTC, so at 12:00 UTC it has NOT passed (as text it looked passed)', () => {
+    const now = new Date('2026-09-10T12:00:00.000Z')
+    expect(isCurrentlyBreached({ status: 'in_progress', resolution_due_at: '2026-09-10T10:00:00-07:00' }, now)).toBe(false)
+    expect(isEverBreached({ resolution_due_at: '2026-09-10T10:00:00-07:00', resolved_at: null, closed_at: null }, now)).toBe(false)
+    expect(isCurrentlyBreached({ status: 'in_progress', resolution_due_at: '2026-09-10T10:00:00+05:30' }, now)).toBe(true)
+  })
+
+  it('resolved / responded timestamps are compared as instants too', () => {
+    expect(isEverBreached({ resolution_due_at: '2026-09-10T10:00:00-07:00', resolved_at: '2026-09-10T16:59:00.000Z', closed_at: null }, NOW)).toBe(false)
+    expect(isEverBreached({ resolution_due_at: '2026-09-10T10:00:00-07:00', resolved_at: '2026-09-10T17:01:00.000Z', closed_at: null }, NOW)).toBe(true)
+    expect(isEverResponseBreached({ response_due_at: '2026-09-10T10:00:00-07:00', responded_at: '2026-09-10T16:59:00.000Z' }, NOW)).toBe(false)
+  })
+
+  it('the database filter leaves out paused tickets too', () => {
+    const calls: string[] = []
+    const q = { lt: (...a: unknown[]) => { calls.push('lt' + a.join()); return q }, not: (...a: unknown[]) => { calls.push('not' + a.join()); return q } }
+    applyCurrentlyBreachedFilter(q, '2026-09-10T12:00:00.000Z')
+    const not = calls.find((c) => c.startsWith('not'))!
+    for (const st of ['resolved', 'closed', 'cancelled', 'waiting_user', 'hold_purchase_ho', 'pending_approval']) expect(not).toContain('"' + st + '"')
   })
 })

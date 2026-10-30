@@ -1,5 +1,6 @@
 'use client'
 
+import { formatDate } from '@/lib/ui/formatDate'
 import { useState, useTransition } from 'react'
 import { BookOpen, Plus, Eye, ThumbsUp, ThumbsDown, Pencil, Archive, CheckCircle } from 'lucide-react'
 import { createKbArticle, updateKbArticle, archiveKbArticle, getKbArticleContent } from '@/lib/actions/knowledge-base'
@@ -201,7 +202,7 @@ export function KnowledgeBaseClient({ articles: initial }: KnowledgeBaseClientPr
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{a.author?.full_name ?? '—'}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(a.updated_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(a.updated_at)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5 justify-end">
                       <button onClick={() => openEdit(a)} className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors" title="Edit">

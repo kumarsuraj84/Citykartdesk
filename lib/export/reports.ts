@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { toCSV } from './csv'
+import { istDayStartIso, istAddDays } from '@/lib/reporting/ist'
 import { fetchAllPages } from '@/lib/queries/paging'
 import { STATUS_LABELS as REQUEST_STATUS_LABELS } from '@/lib/constants/requests'
 
@@ -42,6 +43,14 @@ function labelPriority(v: string | null | undefined): string {
 // "Created", since they all come through this one shared formatter.
 function fmtDate(v: string | null | undefined): string {
   if (!v) return ''
+  // a date with no time (a task's due date, a project's start / target date) is a day, not a moment: no made-up time of day ("Oct 29, 2026, 05:30")
+  if (v.length <= 10) {
+    try {
+      return new Date(v).toLocaleDateString('en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' })
+    } catch {
+      return v
+    }
+  }
   try {
     return new Date(v).toLocaleString('en-US', {
       timeZone: 'Asia/Kolkata',
@@ -55,6 +64,16 @@ function fmtDate(v: string | null | undefined): string {
   } catch {
     return v
   }
+}
+
+// The filter days (from / to, "YYYY-MM-DD") are India days. Sent as bare dates the database reads them as midnight in ITS OWN zone (production: UTC-7 = 12:30 IST), shifting the whole
+// window by 12.5 hours. So: from = 00:00 IST of the first day, to = up to (not including) 00:00 IST of the day after the last day (audit F-15). A value that already has a time is used as it is.
+const isDay = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v)
+export function applyCreatedRange<Q extends { gte: (c: string, v: string) => Q; lt: (c: string, v: string) => Q; lte: (c: string, v: string) => Q }>(query: Q, f: { date_from?: string; date_to?: string } | undefined, column = 'created_at'): Q {
+  let q = query
+  if (f?.date_from) q = q.gte(column, isDay(f.date_from) ? istDayStartIso(f.date_from) : f.date_from)
+  if (f?.date_to) q = isDay(f.date_to) ? q.lt(column, istDayStartIso(istAddDays(f.date_to, 1))) : q.lte(column, f.date_to)
+  return q
 }
 
 export interface ExportFilters {
@@ -83,8 +102,7 @@ export async function exportRequestsCSV(orgId: string, f?: ExportFilters): Promi
     if (f?.priority)    query = query.eq('priority', f.priority)
     if (f?.assignee_id) query = query.eq('assigned_to', f.assignee_id)
     if (f?.teamId)      query = query.eq('team_id', f.teamId)
-    if (f?.date_from)   query = query.gte('created_at', f.date_from)
-    if (f?.date_to)     query = query.lte('created_at', f.date_to)
+    query = applyCreatedRange(query, f)
     return query.order('id', { ascending: true })
   }
 
@@ -157,8 +175,7 @@ export async function exportTasksCSV(orgId: string, f?: ExportFilters, teamIds?:
     if (f?.status)      query = query.eq('status', f.status)
     if (f?.priority)    query = query.eq('priority', f.priority)
     if (f?.assignee_id) query = query.eq('assignee_id', f.assignee_id)
-    if (f?.date_from)   query = query.gte('created_at', f.date_from)
-    if (f?.date_to)     query = query.lte('created_at', f.date_to)
+    query = applyCreatedRange(query, f)
     return query.order('id', { ascending: true })
   }
 
@@ -367,8 +384,7 @@ export async function exportApprovalsCSV(orgId: string, f?: ExportFilters): Prom
       )
       .eq('request.org_id', orgId)
     if (f?.status)    q = q.eq('status', f.status)
-    if (f?.date_from) q = q.gte('created_at', f.date_from)
-    if (f?.date_to)   q = q.lte('created_at', f.date_to)
+    q = applyCreatedRange(q, f)
     return q.order('id', { ascending: true })
   }
 

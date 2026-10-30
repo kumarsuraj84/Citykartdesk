@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useTransition, useEffect, useRef } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, Loader2, Plus } from 'lucide-react'
 import { createMilestone } from '@/lib/actions/projects'
+import { useModalA11y } from '@/components/ui/useModalA11y'
 
 export function NewMilestonePanel({ projectId }: { projectId: string }) {
   const router = useRouter()
@@ -16,22 +17,14 @@ export function NewMilestonePanel({ projectId }: { projectId: string }) {
 
   const nameRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    if (open) setTimeout(() => nameRef.current?.focus(), 50)
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open])
-
   function reset() {
     setName(''); setStartDate(''); setEndDate(''); setError(null)
   }
 
   function handleClose() { setOpen(false); reset() }
+
+  // Escape closes, Tab stays inside, the cursor starts in the name box (one shared helper)
+  const dialog = useModalA11y({ onClose: handleClose, label: 'New enhancement', enabled: open, initialFocus: nameRef })
 
   function handleSubmit() {
     if (!name.trim()) { setError('Enhancement name is required.'); return }
@@ -62,7 +55,7 @@ export function NewMilestonePanel({ projectId }: { projectId: string }) {
       {open && (
         <>
           <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={handleClose} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div {...dialog.props} className="fixed inset-0 z-50 flex items-center justify-center px-4">
             <div
               className="relative w-full max-w-[440px] rounded-2xl bg-card shadow-2xl border border-border"
               onMouseDown={(e) => e.stopPropagation()}
@@ -71,6 +64,7 @@ export function NewMilestonePanel({ projectId }: { projectId: string }) {
                 <h2 className="text-sm font-semibold text-foreground">New Enhancement</h2>
                 <button
                   onClick={handleClose}
+                  aria-label="Close"
                   className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 >
                   <X className="h-4 w-4" />

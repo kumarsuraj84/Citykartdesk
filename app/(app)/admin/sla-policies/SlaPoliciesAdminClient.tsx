@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { safely } from '@/lib/ui/safeAction'
+import { ModalFrame } from '@/components/ui/ModalFrame'
 import { Plus, Pencil, Copy, Archive, Trash2, Timer } from 'lucide-react'
 import {
   createSlaPolicy,
@@ -35,8 +37,8 @@ function PolicyModal({ mode, onClose }: { mode: Exclude<ModalMode, null>; onClos
 
     startTransition(async () => {
       const result = isEdit
-        ? await updateSlaPolicy(existing!.id, data)
-        : await createSlaPolicy(data)
+        ? await safely(() => updateSlaPolicy(existing!.id, data))
+        : await safely(() => createSlaPolicy(data))
 
       if (result.error) {
         setError(result.error)
@@ -47,7 +49,7 @@ function PolicyModal({ mode, onClose }: { mode: Exclude<ModalMode, null>; onClos
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <ModalFrame label="SLA policy" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="border-b border-border px-4 py-3 sticky top-0 bg-card z-10">
           <h2 className="text-base font-semibold text-foreground">
@@ -130,7 +132,7 @@ function PolicyModal({ mode, onClose }: { mode: Exclude<ModalMode, null>; onClos
           </div>
         </form>
       </div>
-    </div>
+    </ModalFrame>
   )
 }
 
@@ -149,7 +151,7 @@ export default function SlaPoliciesAdminClient({ policies }: { policies: SlaPoli
     if (!archiveTarget) return
     setArchiveError('')
     startArchive(async () => {
-      const result = await archiveSlaPolicy(archiveTarget.id)
+      const result = await safely(() => archiveSlaPolicy(archiveTarget.id))
       if (result.error) {
         setArchiveError(result.error)
       } else {
@@ -162,7 +164,7 @@ export default function SlaPoliciesAdminClient({ policies }: { policies: SlaPoli
     if (!deleteTarget) return
     setDeleteError('')
     startDelete(async () => {
-      const result = await deleteSlaPolicy(deleteTarget.id)
+      const result = await safely(() => deleteSlaPolicy(deleteTarget.id))
       if (result.error) {
         setDeleteError(result.error)
       } else {
@@ -260,7 +262,7 @@ export default function SlaPoliciesAdminClient({ policies }: { policies: SlaPoli
       {modal && <PolicyModal mode={modal} onClose={() => setModal(null)} />}
 
       {archiveTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <ModalFrame label="Archive SLA policy" onClose={() => setArchiveTarget(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl">
             <h2 className="text-sm font-semibold text-foreground">Archive &ldquo;{archiveTarget.name}&rdquo;?</h2>
             <p className="mt-1.5 text-xs text-muted-foreground">
@@ -283,11 +285,11 @@ export default function SlaPoliciesAdminClient({ policies }: { policies: SlaPoli
               </button>
             </div>
           </div>
-        </div>
+        </ModalFrame>
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <ModalFrame label="Delete SLA policy" onClose={() => setDeleteTarget(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl">
             <h2 className="text-sm font-semibold text-foreground">Delete &ldquo;{deleteTarget.name}&rdquo;?</h2>
             <p className="mt-1.5 text-xs text-muted-foreground">This cannot be undone.</p>
@@ -308,7 +310,7 @@ export default function SlaPoliciesAdminClient({ policies }: { policies: SlaPoli
               </button>
             </div>
           </div>
-        </div>
+        </ModalFrame>
       )}
     </div>
   )

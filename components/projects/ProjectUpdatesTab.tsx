@@ -1,6 +1,8 @@
 'use client'
 
+import { formatDateOnly } from '@/lib/ui/formatDate'
 import { useState, useTransition } from 'react'
+import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import { Send, Trash2 } from 'lucide-react'
 import { createProjectUpdate, deleteProjectUpdate } from '@/lib/actions/projects'
@@ -12,7 +14,7 @@ function todayISO(): string {
 }
 
 function fmtDate(iso: string): string {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return formatDateOnly(iso)
 }
 
 export function ProjectUpdatesTab({
@@ -60,7 +62,10 @@ export function ProjectUpdatesTab({
   function remove(id: string) {
     if (!confirm('Delete this update?')) return
     startTransition(async () => {
-      await deleteProjectUpdate(id, projectId)
+      try {
+        const result = await deleteProjectUpdate(id, projectId)
+        if (result?.error) { toast.error(result.error); return }
+      } catch { toast.error('Could not reach the server. Check your internet and try again.'); return }
       router.refresh()
     })
   }

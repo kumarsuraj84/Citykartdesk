@@ -20,8 +20,9 @@ export interface CsatTicket {
   requesterId: string
 }
 
-const fmtWhen = (iso: string) =>
-  new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+// India time, 24-hour, like the rest of the app: with no time zone the mail showed the SERVER's clock, which differs between a development machine and production.
+export const fmtWhen = (iso: string) =>
+  new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })
 
 /** The five star links, the reopen link and the ticket link, all tied to this survey by one signed token. */
 export function buildCsatLinks(surveyId: string, requestId: string, resolvedAtMs: number): { starUrls: string[]; reopenUrl: string; requestUrl: string } | null {

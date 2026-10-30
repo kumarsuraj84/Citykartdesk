@@ -4,4 +4,5 @@ DROP TRIGGER IF EXISTS trg_stores_cvm_guard ON public.stores;
 DROP FUNCTION IF EXISTS public.stores_cvm_guard();
 DROP INDEX IF EXISTS public.idx_stores_cvm;
 ALTER TABLE public.stores DROP COLUMN IF EXISTS cvm_id;
+DELETE FROM auth.schema_migrations WHERE version = '20240101000173';
 COMMIT;

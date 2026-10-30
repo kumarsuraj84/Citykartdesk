@@ -26,3 +26,43 @@ export function mailHostProblem(host: string): string | null {
   if (/^\d+$/.test(h) || /(^|\.)0x[0-9a-f]+(\.|$)/i.test(h)) return 'Enter the mail server by name or as a dotted address, e.g. smtp.gmail.com.'
   return null
 }
+
+// ── the name is looked up too (audit A-21) ──────────────────────────────────────────────────────────────────────────────────────────────────
+// A harmless-looking name can point at this computer or at the cloud metadata address (an attacker only needs a DNS entry of their own). So, once the written form
+// passes, the name is resolved and refused if ANY answer is loopback, "this host", link-local (169.254.x.x, fe80::/10, which includes the metadata address) or
+// an unspecified/multicast address. Private LAN answers (10.x, 172.16-31.x, 192.168.x) stay allowed, as for a typed address. A name that does not resolve at all is
+// not refused here (the mail test will say it cannot connect); this is a check at save time, not a guarantee against a name that changes later.
+
+/** True for an address of the kinds above. Accepts IPv4 dotted and IPv6 text (including IPv4-mapped ::ffff:a.b.c.d). */
+export function isForbiddenMailAddress(addr: string): boolean {
+  const a = addr.trim().toLowerCase().replace(/^\[|\]$/g, '')
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(a)
+  const v4 = mapped ? mapped[1] : a
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(v4)
+  if (m) {
+    const [o1, o2] = [Number(m[1]), Number(m[2])]
+    return o1 === 127 || o1 === 0 || (o1 === 169 && o2 === 254) || o1 >= 224
+  }
+  if (a === '::1' || a === '::' || a === '0:0:0:0:0:0:0:1' || a === '0:0:0:0:0:0:0:0') return true
+  if (/^fe[89ab][0-9a-f]:/.test(a)) return true                       // fe80::/10 link-local
+  if (a.startsWith('ff')) return true                                 // multicast
+  if (a === 'fd00:ec2::254') return true                              // AWS IPv6 metadata
+  return false
+}
+
+type Lookup = (host: string) => Promise<{ address: string }[]>
+
+/** mailHostProblem plus the DNS check. `lookup` is replaceable for tests. */
+export async function mailHostProblemResolved(host: string, lookup?: Lookup): Promise<string | null> {
+  const written = mailHostProblem(host)
+  if (written) return written
+  const h = host.trim().toLowerCase().replace(/\.$/, '')
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return null                   // a dotted address was already judged above
+  let answers: { address: string }[]
+  try {
+    const run: Lookup = lookup ?? (async (name) => (await import('node:dns')).promises.lookup(name, { all: true }))
+    answers = await run(h)
+  } catch { return null }
+  if (answers.some((x) => isForbiddenMailAddress(x.address))) return 'That name points at this computer or at a reserved network address, so it cannot be a mail server.'
+  return null
+}

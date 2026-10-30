@@ -10,7 +10,7 @@ import { invalidateMailboxCache } from '@/lib/email/mailbox'
 import { logAdminAudit } from './audit'
 import { LOG_RETENTION, checkLogRetentionDays, type LogKind } from '@/lib/syslog/retention'
 import { EMAIL_REGEX } from '@/lib/validation/formFields'
-import { mailHostProblem } from '@/lib/validation/mail-host'
+import { mailHostProblemResolved } from '@/lib/validation/mail-host'
 import { requireCapability } from '@/lib/permissions/policies'
 import { APP_SETTING_RULES } from '@/lib/permissions/matrix'
 import { rateLimit } from '@/lib/rate-limit'
@@ -63,6 +63,17 @@ export async function updateEmailFromSettings(name: string, address: string): Pr
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Unauthorized.' }
   { const denied = await requireCapability(profile, 'settings.global.write'); if (denied) return { error: denied } }
+  // The sender identity decides in whose name every e-mail of the company goes out, so it is an administrator's decision like the mailbox itself
+  // (a manager may hold "company settings" but not this) - audit A-06.
+  { const denied = await requireCapability(profile, 'mailbox.write'); if (denied) return { error: denied } }
+
+  // The same checks updateAppSetting applies (no line breaks or angle brackets in the name, a plain address, length caps): without them a crafted call could
+  // put header-breaking text into the From line of every mail.
+  name = String(name ?? '').trim()
+  address = String(address ?? '').trim()
+  // (blank is allowed for both, as before: the screen leaves them blank to use the mailbox's own name / address)
+  if (name !== '' && !APP_SETTING_RULES.email_from_name(name)) return { error: 'The sender name is not accepted (1-80 characters, no line breaks and no < or >).' }
+  if (address !== '' && !APP_SETTING_RULES.email_from_address(address)) return { error: 'The sender e-mail address is not accepted.' }
 
   const admin = createAdminClient() as unknown as AnyClient
   const { error } = await admin
@@ -130,7 +141,7 @@ export async function saveMailboxSettings(input: {
   const password = input.password ?? ''
   const port = Number(input.port)
 
-  const hostProblem = mailHostProblem(host)
+  const hostProblem = await mailHostProblemResolved(host)   // the written form AND where the name points (A-21)
   if (hostProblem) return { error: hostProblem }
   if (!Number.isInteger(port) || port < 1 || port > 65535) return { error: 'Enter a valid port number (587 for Gmail).' }
   if (username && !EMAIL_REGEX.test(username)) return { error: 'Enter the mailbox as an email address.' }

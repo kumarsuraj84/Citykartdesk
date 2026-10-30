@@ -161,7 +161,6 @@ export function TaskActivityFeed({
           const fd = new FormData()
           fd.append('file', submittedFile)
           const uploadResult = await uploadTaskAttachment(taskId, fd)
-          setUploading(false)
           if (uploadResult.error) {
             setError(uploadResult.error)
             setLocalComments(prev => prev.filter(c => c.id !== optimisticId))
@@ -184,6 +183,9 @@ export function TaskActivityFeed({
       } catch {
         setError('Something went wrong. Please try again.')
         setLocalComments(prev => prev.filter(c => c.id !== optimisticId))
+      } finally {
+        // (also when the upload threw: the "uploading" state must never stay on)
+        setUploading(false)
       }
     })
   }

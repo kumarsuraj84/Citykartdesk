@@ -1,3 +1,5 @@
+import { vendorCompanyIsActive } from '@/lib/vendor/ctx'
+import { VendorAccessOff } from '@/components/vendor/VendorAccessOff'
 import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { isVendor, vendorRoleOf } from '@/lib/vendor/access'
@@ -12,6 +14,7 @@ export default async function VendorPosPage({ searchParams }: { searchParams: Pr
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
   if (!isVendor(profile)) redirect('/home')
+  if (!(await vendorCompanyIsActive(profile.vendor_company_id))) return <VendorAccessOff />
   const sp = await searchParams
   const rows = filterPoRows(await loadPoRegister({ kind: 'vendor' }), sp)
   const manager = vendorRoleOf(profile) === 'manager'

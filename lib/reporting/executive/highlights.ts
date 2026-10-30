@@ -39,15 +39,17 @@ export function highlights(
 
   // 1 — SLA risk
   {
-    const created = measure(base, W, 'created') ?? 0
+    // Both numbers are about the SAME tickets: those still open at the end of the period (the backlog), and those of them already past their deadline. (It used to divide ALL
+    // past-due open tickets, of any age, by the tickets CREATED in the period, which could pass 100%, audit F-07.) The list behind the card is the same breached backlog.
+    const backlog = measure(base, W, 'backlog') ?? 0
     const breached = measure(base, W, 'breaches') ?? 0
-    if (created === 0) {
+    if (backlog === 0) {
       out.push({
-        id: 'sla', category: 'SLA RISK', severity: 'info', headline: 'No tickets in this period', keyStat: '-',
-        detail: 'Pick a longer period.', actionLabel: 'Open the breakdown', open: { metric: 'breaches', dims: [], stage: 1 },
+        id: 'sla', category: 'SLA RISK', severity: 'info', headline: 'No open tickets at the end of this period', keyStat: '-',
+        detail: 'Nothing is waiting to be resolved.', actionLabel: 'Open the breakdown', open: { metric: 'breaches', dims: [], stage: 1 },
       })
     } else {
-      const rate = pct(breached, created)
+      const rate = pct(breached, backlog)
       const byGroup = [...groupBy(base, (t) => t.group)]
         .map(([g, ts]) => ({ g, breaches: measure(ts, W, 'breaches') ?? 0 }))
         .filter((x) => x.breaches > 0)
@@ -55,9 +57,9 @@ export function highlights(
       const top = byGroup.slice(0, 2)
       out.push({
         id: 'sla', category: 'SLA RISK', severity: rate >= 40 ? 'critical' : rate >= 15 ? 'warning' : 'info',
-        headline: `${breached} of ${created} tickets breached SLA`,
-        keyStat: `${rate}% breach rate`,
-        detail: top.length === 0 ? 'No breaches in this period' : `Worst: ${top.map((x) => `${x.g} (${x.breaches})`).join(' · ')}`,
+        headline: `${breached} of ${backlog} open tickets are past their deadline`,
+        keyStat: `${rate}% of the open backlog`,
+        detail: top.length === 0 ? 'No open ticket is past its deadline' : `Worst: ${top.map((x) => `${x.g} (${x.breaches})`).join(' · ')}`,
         actionLabel: `Inspect ${breached} breached ticket${breached === 1 ? '' : 's'}`,
         open: { metric: 'breaches', dims: [], stage: 1 },
       })

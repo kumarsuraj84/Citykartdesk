@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Timer, CheckCircle2, PauseCircle } from 'lucide-react'
 import type { RequestStatus } from '@/types'
+import { isSlaPausedStatus } from '@/lib/constants/requests'
 
 interface SLACountdownClocksProps {
   responseDueAt: string | null
@@ -119,7 +120,8 @@ export function SLACountdownClocks({
   status,
   waitingSince,
 }: SLACountdownClocksProps) {
-  const isPaused = status === 'waiting_user' || status === 'pending_approval'
+  // the same list the server pauses on (waiting on the user, on a purchase from HO, on an approval)
+  const isPaused = isSlaPausedStatus(status)
   const pausedSinceMs = isPaused && waitingSince ? new Date(waitingSince).getTime() : null
 
   if (!responseDueAt && !resolutionDueAt) return null

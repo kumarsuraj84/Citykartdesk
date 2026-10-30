@@ -113,4 +113,5 @@ ALTER TABLE public.profiles DROP COLUMN IF EXISTS vendor_role;
 ALTER TABLE public.profiles DROP COLUMN IF EXISTS vendor_company_id;
 DROP TABLE IF EXISTS public.vendor_companies;
 
+DELETE FROM auth.schema_migrations WHERE version = '20240101000177';
 COMMIT;

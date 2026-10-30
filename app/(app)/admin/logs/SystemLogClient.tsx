@@ -1,5 +1,6 @@
 'use client'
 
+import { formatDateTimeSeconds } from '@/lib/ui/formatDate'
 import { Fragment, useCallback, useEffect, useState, useTransition } from 'react'
 import { ChevronDown, ChevronRight, Download, RefreshCw, ShieldCheck } from 'lucide-react'
 import {
@@ -41,7 +42,7 @@ function Json({ value }: { value: unknown }) {
 
 function Details({ r }: { r: SystemLogEntry }) {
   const rows: [string, React.ReactNode][] = [
-    ['Time', new Date(r.created_at).toLocaleString()],
+    ['Time', formatDateTimeSeconds(r.created_at)],
     ['Actor', r.actor_name || r.actor_role ? `${r.actor_name || '—'}${r.actor_role ? ` (${r.actor_role})` : ''}` : '—'],
     ['Entity', [r.entity_type, r.entity_label, r.entity_id].filter(Boolean).join(' · ') || '—'],
     ['Error code', r.error_code ?? '—'],
@@ -244,7 +245,7 @@ export function SystemLogClient({ users }: { users: { id: string; full_name: str
                           {open === r.id ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                         </button>
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap">{new Date(r.created_at).toLocaleString()}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{formatDateTimeSeconds(r.created_at)}</td>
                       <td className="px-3 py-2"><Badge text={r.category} cls={CATEGORY_STYLES[r.category] ?? ''} /></td>
                       <td className="px-3 py-2 whitespace-nowrap">{SOURCE_LABELS[r.source] ?? r.source}</td>
                       <td className="px-3 py-2"><Badge text={r.severity} cls={SEVERITY_STYLES[r.severity] ?? ''} /></td>
@@ -286,7 +287,7 @@ export function SystemLogClient({ users }: { users: { id: string; full_name: str
                     <td className="px-3 py-2 font-semibold">{g.count}</td>
                     <td className="px-3 py-2 max-w-[420px] break-words">{g.message}{g.errorCode ? <span className="ml-1 font-mono text-[11px] text-muted-foreground">({g.errorCode})</span> : null}</td>
                     <td className="px-3 py-2 font-mono text-[11px] break-all">{g.action}{g.paths.length ? ` · ${g.paths.join(', ')}` : ''}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{new Date(g.lastSeen).toLocaleString()}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{formatDateTimeSeconds(g.lastSeen)}</td>
                     <td className="px-3 py-2">{g.clickCount ? `${g.clickCount} of ${g.count}` : 'No'}</td>
                     <td className="px-3 py-2"><button type="button" className={btnCls} onClick={() => showGroup(g)}>Show records</button></td>
                   </tr>

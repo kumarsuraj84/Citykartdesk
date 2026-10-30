@@ -10,6 +10,7 @@ import { buildPublicStorageUrl } from '@/lib/storage/publicUrl'
 import { checkDisplayName, nameKey } from '@/lib/users/display-name'
 import { recordAudit } from '@/lib/syslog/audit'
 import { validateAttachmentServer } from '@/lib/attachments/validate-server'
+import { isOwnAvatarUrl } from '@/lib/storage/publicPath'
 
 export async function updateProfile(data: {
   full_name?: string
@@ -46,7 +47,12 @@ export async function updateProfile(data: {
 
   const updateData: Pick<TablesUpdate<'profiles'>, 'full_name' | 'avatar_url'> = {}
   if (trimmedName) updateData.full_name = trimmedName
-  if (data.avatar_url !== undefined) updateData.avatar_url = data.avatar_url
+  // The picture can only be one of THIS app's own avatar files in the signed-in person's own folder (what uploadAvatar writes). Any other text (an outside
+  // address, someone else's picture, a script link) is refused (audit A-15): the value is written with the server's key, so it is not checked by row security.
+  if (data.avatar_url !== undefined) {
+    if (!isOwnAvatarUrl(data.avatar_url, user.id)) return { error: 'That picture address is not accepted. Use the upload button to change your picture.' }
+    updateData.avatar_url = data.avatar_url
+  }
 
   if (Object.keys(updateData).length === 0) return {}
 

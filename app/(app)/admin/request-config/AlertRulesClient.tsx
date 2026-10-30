@@ -254,6 +254,8 @@ export function AlertRulesClient({ initialRules }: { initialRules: AlertRule[] }
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [, startTransition] = useTransition()
+  // the last thing the server refused in the list (switching a rule on/off, deleting it)
+  const [listError, setListError] = useState('')
 
   async function handleCreate(data: AlertRuleData) {
     const result = await createAlertRule(data)
@@ -275,28 +277,37 @@ export function AlertRulesClient({ initialRules }: { initialRules: AlertRule[] }
   }
 
   function handleToggle(id: string, currentActive: boolean) {
+    setListError('')
     startTransition(async () => {
-      const result = await toggleAlertRule(id, !currentActive)
-      if (!result.error) {
+      try {
+        const result = await toggleAlertRule(id, !currentActive)
+        if (result.error) { setListError(result.error); return }
         setRules((prev) =>
           prev.map((r) => (r.id === id ? { ...r, is_active: !currentActive } : r))
         )
+      } catch {
+        setListError('Could not change the rule. Check your internet and try again.')
       }
     })
   }
 
   function handleDelete(id: string) {
     if (!confirm('Delete this alert rule?')) return
+    setListError('')
     startTransition(async () => {
-      const result = await deleteAlertRule(id)
-      if (!result.error) {
+      try {
+        const result = await deleteAlertRule(id)
+        if (result.error) { setListError(result.error); return }
         setRules((prev) => prev.filter((r) => r.id !== id))
+      } catch {
+        setListError('Could not delete the rule. Check your internet and try again.')
       }
     })
   }
 
   return (
     <div className="space-y-3">
+      {listError && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">{listError}</p>}
       <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
         <div className="grid grid-cols-[1fr_120px_80px_120px_120px_80px_80px] border-b border-border bg-muted/30 px-4 py-2.5">
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Name</span>

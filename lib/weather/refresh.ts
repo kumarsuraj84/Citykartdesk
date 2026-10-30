@@ -1,5 +1,6 @@
 import { dayKey } from '@/lib/reporting/executive/ac-calendar'
 import { fetchArchive, fetchRecent, geocodeCity, type FetchLike } from './open-meteo'
+import { fetchAllPages } from '@/lib/queries/paging'
 
 // The daily weather job (scheduled task, every day at 08:00 India time). It is the ONLY thing that talks to the weather service: opening the AC Calendar never does.
 // For every city that has an AC in the AC sheet it saves the day's highest and lowest outside temperature; the calendar reads what is saved.
@@ -129,8 +130,11 @@ export async function weatherFor(db: Db, cities: { city: string; state: string }
   const days: Record<string, { max: number[]; min: number[] }> = {}
   const have = new Set<string>()
   for (let i = 0; i < names.length; i += 100) {
-    const rows = must<{ city: string; state: string; day: string; tmax: number | null; tmin: number | null }[]>(
-      await db.from('weather_city_daily').select('city, state, day, tmax, tmin').in('city', names.slice(i, i + 100)).gte('day', from).lte('day', to), 'read temperatures') ?? []
+    // 100 cities over up to 62 days is up to 6,200 rows, and the database answers at most 1000 rows per request: an unpaged read averaged an arbitrary part of them (audit F-08).
+    // Read every page in a stable order (city, state, day is the table's key); an error on any page throws.
+    const { rows } = await fetchAllPages<{ city: string; state: string; day: string; tmax: number | null; tmin: number | null }>((a, b) =>
+      db.from('weather_city_daily').select('city, state, day, tmax, tmin').in('city', names.slice(i, i + 100)).gte('day', from).lte('day', to)
+        .order('city', { ascending: true }).order('state', { ascending: true }).order('day', { ascending: true }).range(a, b))
     for (const r of rows) {
       if (!wanted.has(`${r.city}|${r.state}`)) continue
       have.add(`${r.city}|${r.state}`)

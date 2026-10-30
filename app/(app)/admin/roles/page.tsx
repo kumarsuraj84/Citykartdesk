@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { PermissionMatrixClient } from './PermissionMatrixClient'
 import { Check, Minus } from 'lucide-react'
 import { ROLE_LABELS } from '@/lib/constants/roles'
+import { listAuthEmails } from '@/lib/auth/emails'
 
 type Tab = 'overview' | 'users' | 'permissions'
 
@@ -146,11 +147,10 @@ export default async function RolesPage({
   // Get emails via admin client
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = createAdminClient() as any
-  const { data: authData } = await admin.auth.admin.listUsers({ perPage: 1000 })
-  const emailMap = new Map<string, string>()
-  for (const u of authData?.users ?? []) {
-    if (u.email) emailMap.set(u.id, u.email)
-  }
+  // every page of the sign-in accounts is read (lib/auth/emails.ts), not only the first 1000; the list still opens (without addresses) if the sign-in service cannot be read
+  const scanned = await listAuthEmails(admin, (profiles ?? []).map((p: { id: string }) => p.id))
+  if (!scanned.ok) console.error('[admin/roles] the sign-in accounts could not be read', scanned.error)
+  const emailMap = scanned.ok ? scanned.value : new Map<string, string>()
 
   // Permissions tab — fetch overrides + custom roles
   const [{ data: overrideRows }, { data: customRoleRows }] = tab === 'permissions'

@@ -3,12 +3,16 @@
 // process.env.NEXT_PUBLIC_SUPABASE_URL etc.) runs.
 import path from 'node:path'
 import WebSocket from 'ws'
+import { assertLocalSupabase } from './local-guard'
 
 try {
   process.loadEnvFile(path.resolve(__dirname, '../../.env.local'))
 } catch {
   // Fall back to whatever is already in process.env (e.g. CI-provided secrets).
 }
+
+// Never run against a database that is not on this machine (audit H-02): see tests/setup/local-guard.ts.
+assertLocalSupabase()
 
 // Switches that only exist for trying the app by hand on a development PC (mail saved to files instead of sent, sheets read from files) must never change how
 // the tests run: a test that wants one sets it itself.

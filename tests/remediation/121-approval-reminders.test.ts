@@ -34,7 +34,11 @@ async function makeApproval(ticket: { id: string }, approvers: Session[], status
 }
 
 const now = () => new Date(Date.now() + 5 * 86_400_000)             // well after the synthetic approvals, so each counts as an old one
-const clearDay = () => svc('DELETE', `/app_settings?key=eq.${LAST_RUN_KEY}`)
+// the day's marker AND each approver's own "already sent today" entry (G-21), so the next run in this file starts from a clean day
+const clearDay = async () => {
+  await svc('DELETE', `/app_settings?key=eq.${LAST_RUN_KEY}`)
+  await svc('DELETE', `/app_settings?key=like.approval_reminder_sent:*`)
+}
 
 async function run(deliver: { to: string; subject: string; html: string }[]) {
   return sendApprovalReminders(createAdminClient() as never, { now: now(), send: async (m) => { deliver.push(m); return {} } })

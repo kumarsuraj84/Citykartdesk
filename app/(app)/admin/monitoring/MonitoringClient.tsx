@@ -1,5 +1,6 @@
 'use client'
 
+import { formatShortDateTime } from '@/lib/ui/formatDate'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -262,13 +263,7 @@ export function MonitoringClient({ stats, recentActivity }: MonitoringClientProp
                   {recentActivity.map((row) => (
                     <tr key={row.id} className="hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                        {new Date(row.created_at).toLocaleString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          hour12: false,
-                        })}
+                        {formatShortDateTime(row.created_at)}
                       </td>
                       <td className="px-4 py-3 font-medium whitespace-nowrap">{row.actor_name}</td>
                       <td className="px-4 py-3">

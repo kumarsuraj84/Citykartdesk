@@ -10,8 +10,11 @@ import type { ConversationState } from './types'
  * separately rather than repeated in each row: →'cancelled' (the CANCEL
  * command) and →'expired' (lazy expiry), except 'submitting' — a
  * submission already in flight must not silently expire out from under
- * itself (Step 24), and is deliberately not cancellable either (see
- * ACTIVE_TERMINAL_ESCAPES below).
+ * itself (Step 24), and is deliberately not cancellable either. A
+ * 'submitting' conversation that has been stuck for longer than
+ * STALE_SUBMITTING_MS (below) is repaired first by recovery.ts, which moves
+ * it to 'completed' or back to 'review'; CANCEL and RESTART then work as for
+ * any other state.
  *
  * "Config drift" backward transitions (Step 25 — a service/sub-category/
  * mandatory field becomes invalid between when it was answered and REVIEW/
@@ -75,4 +78,18 @@ export function transitionConversation(from: ConversationState, to: Conversation
     throw new Error(`Illegal conversation state transition: ${from} -> ${to}`)
   }
   return to
+}
+
+/**
+ * How long a conversation may sit in 'submitting' before it is treated as abandoned. A real submission takes a few seconds; one that is still
+ * 'submitting' after this long belongs to a request that died half way (a restart or crash between the review -> submitting commit and the completion),
+ * which used to leave that phone unable to start a new request for ever. See lib/conversations/recovery.ts.
+ */
+export const STALE_SUBMITTING_MS = 5 * 60_000
+
+/** True for a 'submitting' conversation whose last activity is older than STALE_SUBMITTING_MS. Any other state is never stale. */
+export function isStaleSubmitting(conversation: { state: ConversationState; lastActivityAt: string }, now: Date = new Date()): boolean {
+  if (conversation.state !== 'submitting') return false
+  const last = new Date(conversation.lastActivityAt).getTime()
+  return Number.isFinite(last) && now.getTime() - last > STALE_SUBMITTING_MS
 }

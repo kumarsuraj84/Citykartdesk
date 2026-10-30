@@ -1,6 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { TASK_STATUS_GROUP, REQUEST_STATUS_GROUP } from '@/lib/constants/status-groups'
 import { computeProjectProgressPct } from '@/lib/projects/progress'
+import { fetchAllPages } from '@/lib/queries/paging'
+import { istToday, istAddDays, istDayStartMs, isOverdueDate } from '@/lib/reporting/ist'
 import type { TaskStatus, RequestStatus, ProjectStatus } from '@/types'
 
 // Independent from lib/queries/analytics.ts's BacklogAging (Requests-specific,
@@ -88,6 +90,9 @@ export async function getProjectAnalytics(orgId: string): Promise<ProjectAnalyti
   // so they're scoped via their parent project's org_id after the fact
   // (projectsArr below is already org-filtered, and everything else is
   // filtered against project IDs drawn from it).
+  // Every page of every read: the database answers at most 1000 rows per request (project_updates, tasks and requests are far more than that, and with the updates ordered
+  // oldest first the newest ones were the rows cut off). An error on any page throws instead of showing smaller numbers.
+  const all = async (build: (from: number, to: number) => any): Promise<{ data: any[] }> => ({ data: (await fetchAllPages<any>(build)).rows }) // eslint-disable-line @typescript-eslint/no-explicit-any
   const [
     { data: projectsRaw },
     { data: milestonesRaw },
@@ -96,20 +101,21 @@ export async function getProjectAnalytics(orgId: string): Promise<ProjectAnalyti
     { data: requestsRaw },
     { data: profilesRaw },
   ] = await Promise.all([
-    admin.from('projects').select('id, name, owner_id, status, start_date, target_date').eq('org_id', orgId).is('archived_at', null),
-    admin
+    all((from, to) => admin.from('projects').select('id, name, owner_id, status, start_date, target_date').eq('org_id', orgId).is('archived_at', null).order('id', { ascending: true }).range(from, to)),
+    all((from, to) => admin
       .from('milestones')
       .select('id, name, status, start_date, end_date, project_id, project:projects(name)')
       .eq('org_id', orgId)
-      .not('status', 'in', '("done","cancelled")'),
-    admin
+      .not('status', 'in', '("done","cancelled")')
+      .order('id', { ascending: true }).range(from, to)),
+    all((from, to) => admin
       .from('project_updates')
       .select('project_id, update_date, percent_snapshot')
       .eq('org_id', orgId)
-      .order('update_date', { ascending: true }),
-    admin.from('tasks').select('status, assignee_id, project_id').eq('org_id', orgId).not('project_id', 'is', null),
-    admin.from('requests').select('status, project_id').eq('org_id', orgId).not('project_id', 'is', null),
-    admin.from('profiles').select('id, full_name, manager_id').eq('org_id', orgId),
+      .order('update_date', { ascending: true }).order('id', { ascending: true }).range(from, to)),
+    all((from, to) => admin.from('tasks').select('status, assignee_id, project_id').eq('org_id', orgId).not('project_id', 'is', null).order('id', { ascending: true }).range(from, to)),
+    all((from, to) => admin.from('requests').select('status, project_id').eq('org_id', orgId).not('project_id', 'is', null).order('id', { ascending: true }).range(from, to)),
+    all((from, to) => admin.from('profiles').select('id, full_name, manager_id').eq('org_id', orgId).order('id', { ascending: true }).range(from, to)),
   ])
 
   const projectsArr = (projectsRaw ?? []) as Array<{
@@ -132,13 +138,14 @@ export async function getProjectAnalytics(orgId: string): Promise<ProjectAnalyti
   for (const p of projectsArr) projectStatusCounts[p.status] = (projectStatusCounts[p.status] ?? 0) + 1
   const projectsByStatus = Object.entries(projectStatusCounts).map(([status, count]) => ({ status, count }))
 
-  const sevenDaysOut = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-  // Milestones without an end_date (not yet scheduled) can't be overdue/due-soon —
-  // exclude rather than let a null slip into `new Date(null)` (silently epoch-1970,
-  // which would wrongly count as "overdue").
-  const milestonesOverdue = milestonesArr.filter((m) => m.end_date && new Date(m.end_date) < now).length
+  // ONE rule for every milestone / project date on every screen (audit F-11/F-23): end_date is a plain DATE, overdue = its day is BEFORE today in India,
+  // due soon = today up to 7 days ahead. (new Date('2026-10-29') is 05:30 IST, which made a milestone due today "overdue" all day.)
+  const todayStr = istToday()
+  const sevenDaysOutStr = istAddDays(todayStr, 7)
+  // Milestones without an end_date (not yet scheduled) can't be overdue/due-soon.
+  const milestonesOverdue = milestonesArr.filter((m) => isOverdueDate(m.end_date, todayStr)).length
   const milestonesDueSoon = milestonesArr.filter(
-    (m) => m.end_date && new Date(m.end_date) >= now && new Date(m.end_date) <= sevenDaysOut
+    (m) => m.end_date && m.end_date.slice(0, 10) >= todayStr && m.end_date.slice(0, 10) <= sevenDaysOutStr
   ).length
 
   // ── Owner workload — open (non-done/cancelled) project-linked tasks, by assignee ──
@@ -218,13 +225,14 @@ export async function getProjectAnalytics(orgId: string): Promise<ProjectAnalyti
 
   const overdueMilestones = milestonesArr
     .filter((m): m is typeof m & { end_date: string } => !!m.end_date)
-    .filter((m) => new Date(m.end_date) < now)
-  const daysOverdue = (m: { end_date: string }) => (now.getTime() - new Date(m.end_date).getTime()) / (1000 * 3600 * 24)
+    .filter((m) => isOverdueDate(m.end_date, todayStr))
+  // whole days past the due day (an overdue milestone is at least 1 day late): 1 day, 2-7 days, 8-30 days, 31+ days
+  const daysOverdue = (m: { end_date: string }) => Math.round((istDayStartMs(todayStr) - istDayStartMs(m.end_date)) / 86_400_000)
   const milestoneOverdueAging: MilestoneOverdueAging = {
-    d1:      overdueMilestones.filter((m) => daysOverdue(m) < 1).length,
-    d7:      overdueMilestones.filter((m) => daysOverdue(m) >= 1 && daysOverdue(m) < 7).length,
-    d30:     overdueMilestones.filter((m) => daysOverdue(m) >= 7 && daysOverdue(m) < 30).length,
-    d30plus: overdueMilestones.filter((m) => daysOverdue(m) >= 30).length,
+    d1:      overdueMilestones.filter((m) => daysOverdue(m) <= 1).length,
+    d7:      overdueMilestones.filter((m) => daysOverdue(m) > 1 && daysOverdue(m) <= 7).length,
+    d30:     overdueMilestones.filter((m) => daysOverdue(m) > 7 && daysOverdue(m) <= 30).length,
+    d30plus: overdueMilestones.filter((m) => daysOverdue(m) > 30).length,
   }
 
   // ── Progress trend — walk the last 30 days, carrying forward each project's
@@ -272,19 +280,16 @@ export async function getProjectAnalytics(orgId: string): Promise<ProjectAnalyti
   // Per-project-owner stats, then grouped by their manager (profiles.manager_id
   // — a real FK, not the string-matching a lot of trackers resort to).
 
-  const todayStr = now.toISOString().slice(0, 10)
-
   function bucketProgress(projectId: string, status: ProjectStatus): number {
     const tRows = tasksArr.filter((t) => t.project_id === projectId)
     const rRows = requestsArr.filter((r) => r.project_id === projectId)
-    const total = tRows.length + rRows.length
+    // a cancelled task / request is not work that was ever going to be done: it stays out of the denominator (audit F-23)
+    const total = tRows.filter((t) => TASK_STATUS_GROUP[t.status] !== 'cancelled').length + rRows.filter((r) => REQUEST_STATUS_GROUP[r.status] !== 'cancelled').length
     const done =
       tRows.filter((t) => TASK_STATUS_GROUP[t.status] === 'done').length +
       rRows.filter((r) => REQUEST_STATUS_GROUP[r.status] === 'done').length
     return computeProjectProgressPct(status, { done, total })
   }
-
-  const sevenDaysOutStr = sevenDaysOut.toISOString().slice(0, 10)
 
   function emptyOwnerRow(ownerId: string, ownerName: string): OwnerRollupRow {
     return {
@@ -377,7 +382,7 @@ export async function getProjectAnalytics(orgId: string): Promise<ProjectAnalyti
     if (!p.target_date) { deliveryBuckets.noDate++; continue }
     if (p.target_date < todayStr) deliveryBuckets.overdue++
     else if (p.target_date <= sevenDaysOutStr) deliveryBuckets.due7++
-    else if (Date.parse(p.target_date) <= now.getTime() + 30 * 86_400_000) deliveryBuckets.due30++
+    else if (p.target_date.slice(0, 10) <= istAddDays(todayStr, 30)) deliveryBuckets.due30++
     else deliveryBuckets.dueLater++
   }
   for (const m of milestonesArr) {
@@ -385,7 +390,7 @@ export async function getProjectAnalytics(orgId: string): Promise<ProjectAnalyti
     const endStr = m.end_date.slice(0, 10)
     if (endStr < todayStr) deliveryBuckets.overdue++
     else if (endStr <= sevenDaysOutStr) deliveryBuckets.due7++
-    else if (Date.parse(endStr) <= now.getTime() + 30 * 86_400_000) deliveryBuckets.due30++
+    else if (endStr <= istAddDays(todayStr, 30)) deliveryBuckets.due30++
     else deliveryBuckets.dueLater++
   }
 

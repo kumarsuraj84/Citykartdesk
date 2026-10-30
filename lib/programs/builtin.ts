@@ -78,6 +78,7 @@ export async function loadBuiltInEditor(orgId: string, kind: BuiltInKind): Promi
   const saved = tpl.data ?? null
   const t = resolveTemplate(saved, kind)
   const template: TemplateView = { kind, subject: t.subject, body: t.body, custom: !!saved }
+  const currentApprover = kind === 'ac' ? await resolvePoApprover(orgId) : null
   const readiness = programReadiness({
     categories: categories.filter((c) => c.selected).length,
     hasSheet: !!source?.spreadsheet_id,
@@ -87,16 +88,14 @@ export async function loadBuiltInEditor(orgId: string, kind: BuiltInKind): Promi
     rowsWithoutMail: issueList.filter((i) => i.code === 'no_email' || i.code === 'no_valid_email').length,
     unknownStores: 0,
     unknownFields: [],
+    poApprover: kind === 'ac' ? { set: !!currentApprover } : undefined,
   })
   let staff: { id: string; full_name: string; role: string }[] = []
   let approverId = ''
   if (kind === 'ac') {
-    const [{ data: s }, current] = await Promise.all([
-      db.from('profiles').select('id, full_name, role').eq('org_id', orgId).eq('is_active', true).is('vendor_company_id', null).in('role', ['agent', 'manager', 'admin', 'platform_owner']).order('full_name', { ascending: true }),
-      resolvePoApprover(orgId),
-    ])
+    const { data: s } = await db.from('profiles').select('id, full_name, role').eq('org_id', orgId).eq('is_active', true).is('vendor_company_id', null).in('role', ['agent', 'manager', 'admin', 'platform_owner']).order('full_name', { ascending: true })
     staff = (s ?? []) as typeof staff
-    approverId = current?.id ?? ''
+    approverId = currentApprover?.id ?? ''
   }
   return { kind, name: spec.name, categories, source, issues: issueList, template, activeRows: active.count ?? 0, readiness, connected: conn.data?.status === 'connected', staff, approverId }
 }

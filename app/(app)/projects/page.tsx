@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { ExportButton } from '@/components/requests/ExportButton'
 import { exportProjects } from '@/lib/actions/export'
 import { getCurrentProfile, getAllProfiles } from '@/lib/queries/profiles'
+import { requireStaff } from '@/lib/ui/requireStaff'
 import { getProjects, getProjectsProgress, getProjectStats, getAllTeamsMini, getLatestUpdateByProject } from '@/lib/queries/projects'
 import { NewProjectPanel } from '@/components/projects/NewProjectPanel'
 import { BulkUploadProjectsDialog } from '@/components/projects/BulkUploadProjectsDialog'
@@ -26,6 +27,8 @@ interface PageProps {
 export default async function ProjectsPage({ searchParams }: PageProps) {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
+  // the app layout does not run again when moving between pages, so an OEM engineer is turned away here as well
+  requireStaff(profile, '/projects')
   // Projects isn't fully built out yet — Admin/Owner only until that work ships.
   if (profile.role !== 'admin' && profile.role !== 'platform_owner') redirect('/home')
 

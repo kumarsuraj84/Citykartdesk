@@ -2,6 +2,7 @@
 // VAPT-048 cross-organisation identifiers, 049 page-level role checks, 051 exports audited and limited, 065 uploads, 066 health route.
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { execFileSync } from 'node:child_process'
+import { NextRequest } from 'next/server'
 import { setupD03Fixtures, clientForToken, getAdmin, createTestUser, type D03Fixtures } from '../setup/fixtures-d03'
 import { http } from '../remediation/helpers'
 
@@ -171,8 +172,8 @@ describe('VAPT-065: uploads', () => {
 
 describe('VAPT-066: the public health route', () => {
   it('answers from a short shared cache, so repeated calls do not each query the database', async () => {
-    const first = await healthGet()
-    const second = await healthGet()
+    const first = await healthGet(new NextRequest('http://localhost/api/health'))
+    const second = await healthGet(new NextRequest('http://localhost/api/health'))
     expect(first.status).toBe(200)
     expect(second.status).toBe(200)
     expect((await second.json()).cached).toBe(true)

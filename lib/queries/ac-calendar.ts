@@ -149,13 +149,27 @@ async function loadRows(orgId: string, level: DashLevel, scope: Parameters<typeo
     })
   }
 
-  // the machines of the AC and Genset sheets: all of them for an administrator; for anyone else only the stores they have tickets for (and their own store)
+  // The machines of the AC and Genset sheets are the DENOMINATOR of every percentage (day colours, worst places), so which machines are counted must not depend on which tickets happen to
+  // be loaded: limiting the fleet to the stores that HAVE a ticket divided by too few ACs and made every place look worse than it is (audit F-18).
+  //  - an administrator, a manager and a technician (their permission limits the TICKETS they see, not the existence of the machines): the whole fleet;
+  //  - a person with a team (the people who report to them): the stores of those people and their own store - decided by who is in the scope, not by tickets.
   let myStore: string | null = null
   if (myStoreId) {
     const { data } = await admin.from('stores').select('code').eq('id', myStoreId).maybeSingle()
     myStore = (data?.code as string | undefined)?.toUpperCase() ?? null
   }
-  const allowed = scope.kind === 'all' ? null : new Set<string>([...tickets.map((t) => t.store).filter(Boolean), ...(myStore ? [myStore] : [])])
+  let allowed: Set<string> | null = null
+  if (scope.kind === 'reports' || scope.kind === 'own') {
+    allowed = new Set<string>(myStore ? [myStore] : [])
+    const peopleIds = scope.kind === 'reports' ? scope.reportIds : []
+    for (let i = 0; i < peopleIds.length; i += CHUNK) {
+      const { data: ps } = await admin.from('profiles').select('store_id').in('id', peopleIds.slice(i, i + CHUNK))
+      const storeIds = [...new Set(((ps ?? []) as { store_id: string | null }[]).map((p) => p.store_id).filter((x): x is string => !!x))]
+      if (storeIds.length === 0) continue
+      const { data: ss } = await admin.from('stores').select('code').in('id', storeIds)
+      for (const s of (ss ?? []) as { code: string }[]) allowed.add(s.code.toUpperCase())
+    }
+  }
   const units = await fetchAllPages<{ store_code: string; ckdesk_no: string; serial: string | null; brand: string | null; tonnage: string | null; region: string | null; cluster: string | null; state: string | null; city: string | null }>(
     (from, to) => admin.from('master_ac_units').select('store_code, ckdesk_no, serial, brand, tonnage, region, cluster, state, city')
       .eq('org_id', orgId).eq('is_active', true).is('removed_at', null).order('id', { ascending: true }).range(from, to), { maxRows: MAX_ROWS })

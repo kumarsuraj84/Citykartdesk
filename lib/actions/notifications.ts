@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { Constants } from '@/types/database'
 
 type ActionResult = { error?: string }
 
@@ -109,6 +110,12 @@ export async function setNotificationPreference(
 ): Promise<ActionResult> {
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
+  // Only the notification types that exist (the database's own list) can be switched off or on. This used to store any text the browser sent, so a
+  // user could fill the table with arbitrary rows of any length.
+  if (typeof eventType !== 'string' || eventType.length > 64 || !(Constants.public.Enums.notification_type as readonly string[]).includes(eventType)) {
+    return { error: 'Unknown notification type.' }
+  }
+  if (typeof enabled !== 'boolean') return { error: 'Invalid setting.' }
 
   // Written by the server for the signed-in person only (their own row): a database built from the migrations gives the user's own session no write right here.
   const { error } = await createAdminClient()

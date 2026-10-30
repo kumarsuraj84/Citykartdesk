@@ -6,7 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
-import { mailHostProblem } from '@/lib/validation/mail-host'
+import { mailHostProblemResolved } from '@/lib/validation/mail-host'
 import { getSecret } from '@/lib/secrets'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 
@@ -208,7 +208,7 @@ export async function connectChannel(
   if (!creds.host?.trim() || !creds.user?.trim() || !creds.port) {
     return { error: 'Host, port and username are required.' }
   }
-  const hostProblem = mailHostProblem(creds.host.trim())
+  const hostProblem = await mailHostProblemResolved(creds.host.trim())   // the written form AND where the name points (A-21), like the Platform Settings mail server
   if (hostProblem) return { error: hostProblem }
 
   // Verify the channel belongs to the caller's org (RLS-scoped read).
@@ -444,6 +444,16 @@ export async function testChannel(channelId: string): Promise<{ ok: boolean; err
   const moduleError = await requireModuleEnabled('intake')
   if (moduleError) return { ok: false, error: moduleError }
   if (!canManageChannels(profile.role)) return { ok: false, error: 'You do not have permission to manage channels.' }
+
+  // The channel must be this organisation's own, like every other action on a channel here: the worker looks channels up by id alone, so without this a
+  // manager of one organisation could make it log in to another organisation's mailbox with the stored credentials and read back the result.
+  const { data: ownChannel } = await ((await createClient()) as unknown as AnyClient)
+    .from('intake_channels')
+    .select('id')
+    .eq('id', channelId)
+    .eq('org_id', profile.org_id)
+    .maybeSingle()
+  if (!ownChannel) return { ok: false, error: 'Channel not found.' }
 
   const rawUrl = process.env.INTAKE_WORKER_URL
   const workerSecret = getSecret('intake_worker')

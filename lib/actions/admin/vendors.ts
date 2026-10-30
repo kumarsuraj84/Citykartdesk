@@ -10,6 +10,7 @@ import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { organisationMailDomains, isOrganisationAddress } from '@/lib/email/org-domains'
 import { loadPolicies } from '@/lib/permissions/policies'
 import { PO_APPROVER_SETTING } from '@/lib/vendor/po'
+import { OPEN_REQUEST_STATUSES } from '@/lib/constants/requests'
 
 // Administrator screens for the OEM engineers' companies and logins. A vendor login is an ordinary requester-level account that also belongs to a vendor company
 // as a technician or as a manager (read only). Only administrators and the platform owner may create or change them.
@@ -131,15 +132,33 @@ export async function updateVendorPerson(userId: string, change: { company_id?: 
     if (change.vendor_role !== 'technician' && change.vendor_role !== 'manager') return { error: 'Choose technician or manager.' }
     patch.vendor_role = change.vendor_role
   }
+  // nothing really changes: nothing to check or write
+  if (patch.vendor_company_id === person.vendor_company_id) delete patch.vendor_company_id
+  if (patch.vendor_role === person.vendor_role) delete patch.vendor_role
   if (Object.keys(patch).length === 0) return {}
+
+  // A technician's tickets (and the quotes and prices on them) are seen by the manager of HIS company. Moving him to another company would show them to the new company's manager, and
+  // making him a manager would leave his open tickets with somebody who cannot act on them. So the change waits until his open tickets are given to somebody else.
+  const { data: open, error: openErr } = await admin.from('requests').select('request_no').eq('org_id', profile.org_id).eq('assigned_to', userId).in('status', [...OPEN_REQUEST_STATUSES]).order('created_at', { ascending: true }).limit(8)
+  if (openErr) return { error: sanitizeError(openErr, { route: 'admin/vendors.ts#open-tickets' }) }
+  const openList = (open ?? []) as { request_no: string }[]
+  if (openList.length > 0) {
+    const { count } = await admin.from('requests').select('id', { count: 'exact', head: true }).eq('org_id', profile.org_id).eq('assigned_to', userId).in('status', [...OPEN_REQUEST_STATUSES])
+    const n = count ?? openList.length
+    return { error: `He still holds ${n} open ticket${n === 1 ? '' : 's'} (${openList.map((r) => r.request_no).join(', ')}${n > openList.length ? ' and more' : ''}). Give ${n === 1 ? 'it' : 'them'} to somebody else first, then change his ${patch.vendor_company_id ? 'company' : 'role'}.` }
+  }
   const { error } = await admin.from('profiles').update(patch).eq('id', userId)
   if (error) return { error: sanitizeError(error, { route: 'admin/vendors.ts#update' }) }
   await recordAudit({ action: 'vendor.person_changed', entityType: 'user', entityId: userId, entityLabel: userId, after: patch, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/vendors')
+  if (patch.vendor_company_id) {
+    const { count: earlier } = await admin.from('requests').select('id', { count: 'exact', head: true }).eq('org_id', profile.org_id).eq('assigned_to', userId)
+    if ((earlier ?? 0) > 0) return { warning: `Changed. His ${earlier} earlier ticket${earlier === 1 ? '' : 's'} (with their quotes and prices) can now be seen by the manager of the new company. To keep them with the old company, make a new login for the new company instead.` }
+  }
   return {}
 }
 
-/** Who approves the purchase orders vendors ask for. Krishan is the default until an administrator names somebody else. */
+/** Who approves the purchase orders vendors ask for. There is no built-in person: until an administrator names one here, a vendor cannot ask for a PO (unless the AC row names the approvers). */
 export async function setPoApprover(userId: string): Promise<Result> {
   const profile = await adminOnly()
   if (!profile?.org_id) return { error: 'Unauthorized.' }

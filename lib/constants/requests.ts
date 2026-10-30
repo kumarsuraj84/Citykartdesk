@@ -5,6 +5,17 @@ import type { RequestStatus } from '@/types'
 /** Every status that still means work to do (what "Open now" counts on the dashboards and Home). */
 export const OPEN_REQUEST_STATUSES = ['open', 'assigned', 'in_progress', 'waiting_user', 'hold_purchase_ho', 'pending_approval'] as const
 
+/**
+ * Statuses where the ticket's SLA clock is STOPPED (the ticket waits for somebody outside the technician's control). One list for the whole app: the server pauses on exactly
+ * these (lib/requests/status-change.ts), so every screen, count and rule must treat them as "paused", never as "breached" or "running".
+ */
+export const PAUSED_SLA_STATUSES = ['waiting_user', 'hold_purchase_ho', 'pending_approval'] as const
+export const isSlaPausedStatus = (status: string | null | undefined): boolean => (PAUSED_SLA_STATUSES as readonly string[]).includes(status ?? '')
+
+/** Statuses that are finished: no SLA, no work left. (TERMINAL_STATUSES below means only closed / cancelled: nothing more can happen at all.) */
+export const CLOSED_LIKE_REQUEST_STATUSES = ['resolved', 'closed', 'cancelled'] as const
+export const isClosedLikeStatus = (status: string | null | undefined): boolean => (CLOSED_LIKE_REQUEST_STATUSES as readonly string[]).includes(status ?? '')
+
 export const STATUS_LABELS: Record<RequestStatus, string> = {
   open:             'Open',
   assigned:         'Assigned',

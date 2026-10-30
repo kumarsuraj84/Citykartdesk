@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { CLOSED_LIKE_REQUEST_STATUSES, PAUSED_SLA_STATUSES } from '@/lib/constants/requests'
 import { publicActivityMetadata } from '@/lib/activity-public'
 import type { ReportViewerScope } from '@/lib/reporting/access'
 import { ACTIVE_TECH_STATUSES, type TechnicianWorkloadRow } from '@/lib/queries/technicianWorkloadShared'
@@ -210,6 +211,9 @@ export async function getWorkloadMetrics(userId: string): Promise<WorkloadMetric
   weekStart.setHours(0, 0, 0, 0)
 
   const ACTIVE = '("closed","cancelled")' as const
+  // Overdue = past the deadline, not finished and not paused: a ticket whose SLA clock is stopped (waiting on the user / a purchase / an approval) is not overdue (F-02).
+  // The same statuses as the "Overdue" list, so the number on the card and the list behind it agree.
+  const NOT_OVERDUE = `(${[...CLOSED_LIKE_REQUEST_STATUSES, ...PAUSED_SLA_STATUSES].map((st) => `"${st}"`).join(',')})`
 
   const [
     { count: personalOpen },
@@ -225,10 +229,10 @@ export async function getWorkloadMetrics(userId: string): Promise<WorkloadMetric
     supabase.from('requests').select('*', { count: 'exact', head: true })
       .eq('assigned_to', userId).not('status', 'in', ACTIVE),
 
-    // personal: assigned to me, overdue (resolution past due, not terminal/resolved)
+    // personal: assigned to me, overdue (resolution past due, not finished, not paused)
     supabase.from('requests').select('*', { count: 'exact', head: true })
       .eq('assigned_to', userId).lt('resolution_due_at', now)
-      .not('status', 'in', '("closed","cancelled","resolved")'),
+      .not('status', 'in', NOT_OVERDUE),
 
     // personal: resolved today (use resolved_at for accuracy)
     supabase.from('requests').select('*', { count: 'exact', head: true })
@@ -254,7 +258,7 @@ export async function getWorkloadMetrics(userId: string): Promise<WorkloadMetric
 
     // team: overdue
     supabase.from('requests').select('*', { count: 'exact', head: true })
-      .lt('resolution_due_at', now).not('status', 'in', '("closed","cancelled","resolved")'),
+      .lt('resolution_due_at', now).not('status', 'in', NOT_OVERDUE),
   ])
 
   return {
@@ -459,9 +463,10 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
       .not('status', 'in', '("closed","cancelled","resolved")')
       .order('resolution_due_at', { ascending: true })
   } else if (view === 'overdue') {
+    // not finished and not paused: a ticket whose SLA clock is stopped (waiting on the user / a purchase / an approval) is not overdue (F-02)
     query = query
       .lt('resolution_due_at', now)
-      .not('status', 'in', '("closed","cancelled","resolved")')
+      .not('status', 'in', `(${[...CLOSED_LIKE_REQUEST_STATUSES, ...PAUSED_SLA_STATUSES].map((st) => `"${st}"`).join(',')})`)
       .order('resolution_due_at', { ascending: true })
   } else if (view === 'waiting_response') {
     query = query
@@ -605,8 +610,9 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
     }
   }
 
-  // Apply range for pagination
-  query = query.range(from, to)
+  // Apply range for pagination. The id is the last sort key (F-19): many tickets share the same due date or update time, and with no unique tiebreaker the database may
+  // order them differently on page 1 and page 2, so a ticket shows twice or never.
+  query = query.order('id', { ascending: true }).range(from, to)
 
   const { data, count } = await query
   const total = count ?? 0

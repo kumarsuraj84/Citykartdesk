@@ -4,6 +4,7 @@
 // "Week-N" every ticket already carries (facts.ts weekOfMonth), so this page and the other reports always agree.
 
 import { monthLabel, weekOfMonth } from './facts'
+import { istDay as istDayW } from '@/lib/reporting/ist'
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -45,8 +46,10 @@ export function weeksOfMonth(year: number, month: number): WeekRange[] {
 /** "2026-10" → that month; anything else (or nothing) → the month `now` is in. */
 export function resolveMonth(value: string | undefined | null, now: Date = new Date()): WeekMonth {
   const m = /^(\d{4})-(\d{2})$/.exec(value ?? '')
-  let year = now.getFullYear()
-  let month = now.getMonth() + 1
+  // the month it is in INDIA right now, whatever zone the server runs in (audit H-28)
+  const [istY, istM] = istDayW(now).split('-').map(Number)
+  let year = istY
+  let month = istM
   if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12 && Number(m[1]) >= 2000 && Number(m[1]) <= 2100) { year = Number(m[1]); month = Number(m[2]) }
   return {
     value: `${year}-${String(month).padStart(2, '0')}`,

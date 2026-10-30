@@ -1,22 +1,21 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 import type { RequestStatus, SLAState } from "@/types"
+import { isClosedLikeStatus, isSlaPausedStatus } from "@/lib/constants/requests"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Statuses for which the SLA clock is no longer meaningful.
-// Note: 'resolved' is included here (SLA display stops at resolution)
-// even though it is not a lifecycle-terminal status (requests can be reopened).
+// The SLA clock is not meaningful for a finished ticket (resolved/closed/cancelled: SLA display stops at resolution even though a resolved
+// ticket can be reopened) and is STOPPED for a paused one (waiting on the user, on a purchase, on an approval): its deadline moves out by the
+// pause when it resumes, so a paused ticket is never "breached" or "at risk". Callers show the pause itself (see SLABadge).
 // Use TERMINAL_STATUSES from lib/constants/requests for lifecycle decisions.
-const SLA_INACTIVE_STATUSES: RequestStatus[] = ['resolved', 'closed', 'cancelled']
-
 export function computeSLAState(
   dueAt: string | null,
   status: RequestStatus
 ): SLAState {
-  if (!dueAt || SLA_INACTIVE_STATUSES.includes(status)) return 'none'
+  if (!dueAt || isClosedLikeStatus(status) || isSlaPausedStatus(status)) return 'none'
   const now = Date.now()
   const due = new Date(dueAt).getTime()
   if (due < now) return 'breached'

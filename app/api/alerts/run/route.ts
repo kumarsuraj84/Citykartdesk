@@ -8,6 +8,8 @@ import { mapWithConcurrency } from '@/lib/async/concurrency'
 import { logger } from '@/lib/observability/logger'
 import { alertOperator } from '@/lib/observability/alert'
 import { readLogRetention } from '@/lib/syslog/retention'
+import { fetchAllPages } from '@/lib/queries/paging'
+import { istToday, istDay, istParts, istDayStartIso } from '@/lib/reporting/ist'
 import type { UserRole } from '@/types'
 
 // profiles has no `email` column in the generated schema — email is fetched
@@ -15,8 +17,12 @@ import type { UserRole } from '@/types'
 // compatibility with callers that may rely on it, but is never populated.
 type RoleProfile = { id: string; email?: string }
 
+// A due date with no time ("2026-10-29", tasks and milestones) is shown as the day; a moment is shown in India time. (new Date('2026-10-29') is 05:30 UTC and printed
+// "10/29/2026, 05:30" with a time nobody chose, in the server's zone.)
 function formatDueDate(d: string | null): string {
-  return d ? new Date(d).toLocaleString('en-US', { hour12: false }) : 'unknown'
+  if (!d) return 'unknown'
+  if (d.length <= 10) return new Date(d).toLocaleDateString('en-US', { timeZone: 'UTC' })
+  return new Date(d).toLocaleString('en-US', { hour12: false, timeZone: 'Asia/Kolkata' })
 }
 
 export async function GET(req: NextRequest) {
@@ -30,8 +36,9 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient()
   const now = new Date()
-  const todayStart = new Date(now)
-  todayStart.setHours(0, 0, 0, 0)
+  // "today" is the INDIA day, whatever zone the server runs in; task and milestone due dates are plain dates compared with that day's text (audit F-11)
+  const today = istToday(now)
+  const todayStart = new Date(istDayStartIso(today))
 
   // Housekeeping: drop event-log rows older than the retention set in Platform Settings (90 days unless changed). Never blocks the alerts.
   try {
@@ -40,6 +47,9 @@ export async function GET(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (admin as any).rpc('purge_app_event_log', { p_days: days })
   } catch { /* table may not exist yet on an un-migrated environment */ }
+
+  // old claims are of no use after a few days
+  try { await (admin as any).from('alert_claims').delete().lt('claimed_at', new Date(Date.now() - 3 * 86_400_000).toISOString()) } catch { /* table may not exist yet */ } // eslint-disable-line @typescript-eslint/no-explicit-any
 
   const results: Record<string, number> = {}
   // Bounds how many rows within one rule's batch are processed at once —
@@ -83,6 +93,28 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // The database answers at most 1000 rows per request: a rule that matches more rows than that must read every page, or the rest are never alerted (audit F-09).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const readAll = async <T,>(build: (from: number, to: number) => any): Promise<T[]> => (await fetchAllPages<T>(build)).rows
+
+  // G-20: two overlapping runs used to both pass the "already notified?" read and both send. The run that inserts the claim row owns the alert; the other one sees the row
+  // and skips it. The claim's time is the DATABASE clock (the app's clock is not compared with the database's). One claim per alert and India day.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const claimsTable = () => (admin as any).from('alert_claims')
+  async function claimAlert(key: string): Promise<{ claimedAt: string } | null> {
+    const { data, error } = await claimsTable().upsert({ key }, { onConflict: 'key', ignoreDuplicates: true }).select('claimed_at')
+    if (error) {
+      // the claim table is missing (a database not yet migrated): fall back to the old behaviour (the dedup read in each branch) rather than stop all alerts
+      console.error('[alerts] claim failed', error.message)
+      return { claimedAt: new Date().toISOString() }
+    }
+    const row = (data as { claimed_at: string }[] | null)?.[0]
+    return row ? { claimedAt: row.claimed_at } : null
+  }
+  async function releaseAlert(key: string) {
+    await claimsTable().delete().eq('key', key)
+  }
+
   // D-07: alert_rules.channels selects which channels a rule uses (in_app
   // and/or email) — the email branch at each call site below already
   // respects it, but notify() used to be called unconditionally, so
@@ -96,10 +128,22 @@ export async function GET(req: NextRequest) {
   // of once. Instead, when 'in_app' isn't selected, the row(s) just
   // inserted are immediately marked read+archived so they never show as an
   // unread bell notification, while still existing for that dedup check to find.
-  async function notifyRespectingChannels(rule: { channels: string[] | null }, notifications: NotifyInput[]) {
-    if (notifications.length === 0) return
-    const insertedAfter = new Date().toISOString()
-    await notify(notifications)
+  // Returns false when another run already owns this alert (nothing was sent: the caller must not send its email either).
+  async function notifyRespectingChannels(rule: { channels: string[] | null }, notifications: NotifyInput[]): Promise<boolean> {
+    if (notifications.length === 0) return true
+    const first = notifications[0]
+    const itemId = first.taskId ?? first.requestId ?? (first.metadata as { milestone_id?: string } | undefined)?.milestone_id ?? first.recipientId
+    const claimKey = `alert:${first.type}:${itemId}:${today}`
+    const claim = await claimAlert(claimKey)
+    if (!claim) return false
+    // (the rows notify() inserts get a created_at from the database clock, at or after the claim's own database time)
+    const insertedAfter = new Date(new Date(claim.claimedAt).getTime() - 1000).toISOString()
+    try {
+      await notify(notifications)
+    } catch (err) {
+      await releaseAlert(claimKey).catch(() => {}) // nothing was sent: let the next run try again
+      throw err
+    }
     if (!rule.channels?.includes('in_app')) {
       const userIds = [...new Set(notifications.map((n) => n.recipientId))]
       const taskIds = [...new Set(notifications.map((n) => n.taskId).filter((v): v is string => !!v))]
@@ -115,6 +159,7 @@ export async function GET(req: NextRequest) {
       const { error } = await query
       if (error) console.error('[notifyRespectingChannels] archive update failed', error.message)
     }
+    return true
   }
 
   // DESK-OBS-001 — cron health semantics: per-rule isolation was already
@@ -133,15 +178,17 @@ export async function GET(req: NextRequest) {
       if (rule.alert_type === 'due_soon' && rule.entity_type === 'task') {
         // Tasks due between now and now+threshold_minutes, not done/cancelled
         const windowEnd = new Date(now.getTime() + (rule.threshold_minutes ?? 1440) * 60 * 1000)
-        const { data: tasks } = await admin
+        // (due_date is a date: from today up to the day the window ends, India days)
+        const tasks = await readAll<{ id: string; title: string; assignee_id: string | null; due_date: string | null; request_id: string | null }>((from, to) => admin
           .from('tasks')
           .select('id, title, assignee_id, due_date, request_id')
-          .eq('org_id', rule.org_id)
+          .eq('org_id', rule.org_id!)
           .not('status', 'in', '("done","cancelled")')
-          .gte('due_date', now.toISOString())
-          .lte('due_date', windowEnd.toISOString())
+          .gte('due_date', today)
+          .lte('due_date', istDay(windowEnd))
+          .order('id', { ascending: true }).range(from, to))
 
-        const dueSoonFlags = await mapWithConcurrency(tasks ?? [], ALERT_ITEM_CONCURRENCY, async (task) => {
+        const dueSoonFlags = await mapWithConcurrency(tasks, ALERT_ITEM_CONCURRENCY, async (task) => {
           // Check if already notified in last 25 hours
           const cutoff = new Date(now.getTime() - 25 * 60 * 60 * 1000)
           const { data: existing } = await admin
@@ -173,7 +220,7 @@ export async function GET(req: NextRequest) {
             link: task.request_id ? `/requests/${task.request_id}` : undefined,
           }))
 
-          await notifyRespectingChannels(rule, notifications)
+          if (!(await notifyRespectingChannels(rule, notifications))) return false
 
           // Email channel
           if (rule.channels?.includes('email')) {
@@ -194,14 +241,15 @@ export async function GET(req: NextRequest) {
         results['due_soon'] = dueSoonFlags.filter(Boolean).length
 
       } else if (rule.alert_type === 'overdue' && rule.entity_type === 'task') {
-        const { data: tasks } = await admin
+        const tasks = await readAll<{ id: string; title: string; assignee_id: string | null; due_date: string | null; request_id: string | null }>((from, to) => admin
           .from('tasks')
           .select('id, title, assignee_id, due_date, request_id')
-          .eq('org_id', rule.org_id)
+          .eq('org_id', rule.org_id!)
           .not('status', 'in', '("done","cancelled")')
-          .lt('due_date', now.toISOString())
+          .lt('due_date', today) // overdue = the due day is before today (India); a task due today is not overdue yet
+          .order('id', { ascending: true }).range(from, to))
 
-        const overdueFlags = await mapWithConcurrency(tasks ?? [], ALERT_ITEM_CONCURRENCY, async (task) => {
+        const overdueFlags = await mapWithConcurrency(tasks, ALERT_ITEM_CONCURRENCY, async (task) => {
           const { data: existing } = await admin
             .from('notifications')
             .select('id')
@@ -231,7 +279,7 @@ export async function GET(req: NextRequest) {
             link: task.request_id ? `/requests/${task.request_id}` : undefined,
           }))
 
-          await notifyRespectingChannels(rule, notifications)
+          if (!(await notifyRespectingChannels(rule, notifications))) return false
 
           if (rule.channels?.includes('email')) {
             for (const recipientId of uniqueRecipients) {
@@ -253,15 +301,16 @@ export async function GET(req: NextRequest) {
       } else if (rule.alert_type === 'due_soon' && rule.entity_type === 'milestone') {
         // Milestones ending between now and now+threshold_minutes, not done/cancelled
         const windowEnd = new Date(now.getTime() + (rule.threshold_minutes ?? 1440) * 60 * 1000)
-        const { data: milestones } = await admin
+        const milestones = await readAll<{ id: string; name: string; end_date: string | null; project_id: string; project: unknown }>((from, to) => admin
           .from('milestones')
           .select('id, name, end_date, project_id, project:projects(id, name, owner_id)')
-          .eq('org_id', rule.org_id)
+          .eq('org_id', rule.org_id!)
           .not('status', 'in', '("done","cancelled")')
-          .gte('end_date', now.toISOString().slice(0, 10))
-          .lte('end_date', windowEnd.toISOString().slice(0, 10))
+          .gte('end_date', today)
+          .lte('end_date', istDay(windowEnd))
+          .order('id', { ascending: true }).range(from, to))
 
-        const milestoneDueSoonFlags = await mapWithConcurrency(milestones ?? [], ALERT_ITEM_CONCURRENCY, async (milestone) => {
+        const milestoneDueSoonFlags = await mapWithConcurrency(milestones, ALERT_ITEM_CONCURRENCY, async (milestone) => {
           const project = milestone.project as unknown as { id: string; name: string; owner_id: string } | null
           if (!project) return false
 
@@ -295,7 +344,7 @@ export async function GET(req: NextRequest) {
             metadata: { milestone_id: milestone.id },
           }))
 
-          await notifyRespectingChannels(rule, notifications)
+          if (!(await notifyRespectingChannels(rule, notifications))) return false
 
           if (rule.channels?.includes('email')) {
             for (const recipientId of recipients) {
@@ -315,14 +364,15 @@ export async function GET(req: NextRequest) {
         results['milestone_due_soon'] = milestoneDueSoonFlags.filter(Boolean).length
 
       } else if (rule.alert_type === 'overdue' && rule.entity_type === 'milestone') {
-        const { data: milestones } = await admin
+        const milestones = await readAll<{ id: string; name: string; end_date: string | null; project_id: string; project: unknown }>((from, to) => admin
           .from('milestones')
           .select('id, name, end_date, project_id, project:projects(id, name, owner_id)')
-          .eq('org_id', rule.org_id)
+          .eq('org_id', rule.org_id!)
           .not('status', 'in', '("done","cancelled")')
-          .lt('end_date', now.toISOString().slice(0, 10))
+          .lt('end_date', today)
+          .order('id', { ascending: true }).range(from, to))
 
-        const milestoneOverdueFlags = await mapWithConcurrency(milestones ?? [], ALERT_ITEM_CONCURRENCY, async (milestone) => {
+        const milestoneOverdueFlags = await mapWithConcurrency(milestones, ALERT_ITEM_CONCURRENCY, async (milestone) => {
           const project = milestone.project as unknown as { id: string; name: string; owner_id: string } | null
           if (!project) return false
 
@@ -355,7 +405,7 @@ export async function GET(req: NextRequest) {
             metadata: { milestone_id: milestone.id },
           }))
 
-          await notifyRespectingChannels(rule, notifications)
+          if (!(await notifyRespectingChannels(rule, notifications))) return false
 
           if (rule.channels?.includes('email')) {
             for (const recipientId of recipients) {
@@ -376,15 +426,16 @@ export async function GET(req: NextRequest) {
 
       } else if (rule.alert_type === 'unassigned' && rule.entity_type === 'request') {
         const cutoff = new Date(now.getTime() - (rule.threshold_minutes ?? 120) * 60 * 1000)
-        const { data: requests } = await admin
+        const requests = await readAll<{ id: string; title: string; created_at: string }>((from, to) => admin
           .from('requests')
           .select('id, title, created_at')
-          .eq('org_id', rule.org_id)
+          .eq('org_id', rule.org_id!)
           .is('assigned_to', null)
           .not('status', 'in', '("resolved","cancelled","closed")')
           .lt('created_at', cutoff.toISOString())
+          .order('id', { ascending: true }).range(from, to))
 
-        const unassignedFlags = await mapWithConcurrency(requests ?? [], ALERT_ITEM_CONCURRENCY, async (request) => {
+        const unassignedFlags = await mapWithConcurrency(requests, ALERT_ITEM_CONCURRENCY, async (request) => {
           const { data: existing } = await admin
             .from('notifications')
             .select('id')
@@ -406,7 +457,7 @@ export async function GET(req: NextRequest) {
             link: `/requests/${request.id}`,
           }))
 
-          await notifyRespectingChannels(rule, notifications)
+          if (!(await notifyRespectingChannels(rule, notifications))) return false
 
           return notifications.length > 0
         })
@@ -414,7 +465,7 @@ export async function GET(req: NextRequest) {
 
       } else if (rule.alert_type === 'daily_digest') {
         // Only run at hour 8, once per day
-        if (now.getHours() !== 8) continue
+        if (istParts(now).hour !== 8) continue // (8 o'clock India time, not the server's)
 
         const managers = await getProfilesByRoles(rule.notify_roles ?? ['manager', 'admin'], rule.org_id)
         if (managers.length === 0) continue
@@ -443,14 +494,14 @@ export async function GET(req: NextRequest) {
           admin.from('tasks').select('id', { count: 'exact', head: true })
             .eq('org_id', rule.org_id)
             .not('status', 'in', '("done","cancelled")')
-            .lt('due_date', now.toISOString()),
+            .lt('due_date', today),
           // approvals has no org_id of its own — scope via its parent request.
           admin.from('approvals').select('id, request:requests!inner(org_id)', { count: 'exact', head: true })
             .eq('status', 'pending')
             .eq('request.org_id', rule.org_id),
         ])
 
-        const digestTitle = `Daily Digest — ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`
+        const digestTitle = `Daily Digest — ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'Asia/Kolkata' })}`
         const digestBody = `Open requests: ${openRequestsCount ?? 0} | Overdue tasks: ${overdueTasksCount ?? 0} | Pending approvals: ${pendingApprovalsCount ?? 0}`
 
         const notifications = managers.map((p): NotifyInput => ({
@@ -462,7 +513,10 @@ export async function GET(req: NextRequest) {
           link: '/home',
         }))
 
-        await notifyRespectingChannels(rule, notifications)
+        // (one claim per rule and day, so two overlapping runs cannot both send the digest; a failed send gives the claim back so the next run tries again)
+        const digestKey = `alert:daily_digest:${rule.id}:${today}`
+        if (!(await claimAlert(digestKey))) continue
+        try { await notifyRespectingChannels(rule, notifications) } catch (e) { await releaseAlert(digestKey).catch(() => {}); throw e }
 
         if (rule.channels?.includes('email')) {
           const html = `

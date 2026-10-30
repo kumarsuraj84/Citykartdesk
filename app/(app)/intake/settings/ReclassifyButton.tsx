@@ -36,6 +36,7 @@ export function ReclassifyButton() {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastSig = useRef('')
   const stall = useRef(0)
+  const startingRef = useRef(false)
 
   const stop = useCallback(() => {
     if (timer.current) { clearInterval(timer.current); timer.current = null }
@@ -63,15 +64,30 @@ export function ReclassifyButton() {
   }, [])
 
   async function handleClick() {
+    // The busy flag is set BEFORE the first await (and a second click is refused): the state only changes after the call returned, so a quick double click
+    // used to start two paid AI jobs.
+    if (startingRef.current || running) return
+    startingRef.current = true
+    setRunning(true)
     // force=true re-runs the pipeline on un-actioned messages so low-confidence
     // ones now escalate to Stage 2 (without it, already-classified mail is skipped).
     const dateParam = sinceDate ? new Date(sinceDate).toISOString() : undefined
-    const res = await reclassifyBacklog(true, dateParam)
-    if (!res.ok) { toast.error(res.error ?? 'Re-classification failed.'); return }
+    let res: Awaited<ReturnType<typeof reclassifyBacklog>>
+    try {
+      res = await reclassifyBacklog(true, dateParam)
+    } catch {
+      res = { ok: false, error: 'Re-classification could not be started. Please try again.' } as typeof res
+    }
+    if (!res.ok) {
+      startingRef.current = false
+      setRunning(false)
+      toast.error(res.error ?? 'Re-classification failed.')
+      return
+    }
     const scopeMsg = sinceDate ? ` (from ${sinceDate})` : ' (all messages)'
     toast.success(`Re-classification started${scopeMsg} — tracking progress…`)
 
-    setRunning(true)
+    startingRef.current = false
     lastSig.current = ''
     stall.current = 0
     await poll()
@@ -140,7 +156,7 @@ export function ReclassifyButton() {
             className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 px-3 py-2 text-xs font-semibold text-white shadow-sm shadow-indigo-500/30 transition hover:brightness-110 disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${running ? 'animate-spin' : ''}`} />
-            {running ? 'Re-classifying…' : 'Re-classify all messages'}
+            {running ? 'Re-classifying…' : sinceDate ? `Re-classify messages from ${sinceDate}` : 'Re-classify all messages'}
           </button>
         </div>
       </div>

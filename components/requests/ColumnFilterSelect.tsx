@@ -15,6 +15,8 @@ interface ColumnFilterSelectProps {
    *  adding/removing exactly this one param, locally, from a plain string. */
   currentSearch: string
   className?: string
+  /** Filters that depend on this one (Service -> Category -> Sub Category): they are cleared when this one changes. */
+  clearParams?: string[]
 }
 
 /** Generic "column filter" combobox for the requests table — one instance per
@@ -22,7 +24,7 @@ interface ColumnFilterSelectProps {
  *  option list client-side (several of these, like Requester, run to 40+ names —
  *  a plain <select> makes those unusable), and picking an option navigates via a
  *  URL param, keeping every filter shareable/bookmarkable. */
-export function ColumnFilterSelect({ paramName, value, options, placeholder, pathname, currentSearch, className }: ColumnFilterSelectProps) {
+export function ColumnFilterSelect({ paramName, value, options, placeholder, pathname, currentSearch, className, clearParams }: ColumnFilterSelectProps) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -42,6 +44,7 @@ export function ColumnFilterSelect({ paramName, value, options, placeholder, pat
     if (next) params.set(paramName, next)
     else params.delete(paramName)
     params.delete('page')
+    for (const dependent of clearParams ?? []) params.delete(dependent)
     setOpen(false); setQuery('')
     router.push(`${pathname}?${params.toString()}`)
   }

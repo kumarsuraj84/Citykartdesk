@@ -1,3 +1,6 @@
+# HISTORICAL (2026-10-29): this file belongs to the old Railway/Docker deployment, which is NOT how Citykart Desk runs any more.
+# Production is the Windows app server 10.0.1.98 + database 10.0.0.205 + NAS files; see docs/PRODUCTION-INFRASTRUCTURE-AND-MIGRATION.md.
+# It is kept only as a record. Do not deploy from it.
 # Windows server (Main): run `scripts/windows/install-cron-tasks.ps1` once as Administrator.
 # It creates Scheduled Tasks CitykartDesk-Cron-Alerts (30 min) and CitykartDesk-Cron-BusinessRules (15 min),
 # which call scripts/windows/run-cron-tick.ps1 (reads CRON_SECRET from the app's .env.local).

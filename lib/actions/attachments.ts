@@ -6,7 +6,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logActivity } from '@/lib/activity'
 import { ALLOWED_MIME_SET as ALLOWED_MIME_TYPES, ALLOWED_EXTENSIONS, MAX_FILE_SIZE_BYTES as MAX_FILE_SIZE } from '@/lib/attachments/validate'
-import { uploadAllowed, UPLOAD_LIMIT_MESSAGE } from '@/lib/attachments/quota'
+import { uploadAllowed, uploadBytesAllowed, ticketBytesAllowed, UPLOAD_LIMIT_MESSAGE, UPLOAD_BYTES_MESSAGE, TICKET_BYTES_MESSAGE } from '@/lib/attachments/quota'
+import { flagMissingRequiredFiles } from '@/lib/attachments/required-files'
 import { validateAttachmentServer } from '@/lib/attachments/validate-server'
 import { vendorRoleOf } from '@/lib/vendor/access'
 
@@ -138,9 +139,14 @@ export async function uploadAttachment(
     attachmentIsInternal = comment.is_internal === true
   }
 
+  // ── Size budgets ──────────────────────────────────────────────────────────
+  // Checked only now, when the file is known to be acceptable, so a refused file does not use up the person's daily budget.
+  const admin = createAdminClient()
+  if (!(await uploadBytesAllowed(profile.id, file.size))) return { error: UPLOAD_BYTES_MESSAGE }
+  if (!(await ticketBytesAllowed(admin, requestId, file.size))) return { error: TICKET_BYTES_MESSAGE }
+
   // ── Storage upload ────────────────────────────────────────────────────────
   // VIRUS_SCAN_HOOK: insert quarantine/scan step here before moving to final bucket
-  const admin = createAdminClient()
   const storagePath = buildStoragePath(requestId, file.name)
   const buffer = Buffer.from(await file.arrayBuffer())
 
@@ -192,6 +198,19 @@ export async function uploadAttachment(
   revalidatePath(`/requests/${requestId}`)
 
   return { attachmentId: attachment.id }
+}
+
+// ── confirmRequiredFiles ──────────────────────────────────────────────────────
+// B-16: called by the "Request created" screen once the files have been sent. A required file field cannot be checked while the ticket is being made (a file can only be
+// stored after the ticket exists), so this looks afterwards: when the form asked for a file and the ticket has none, a staff-only note is left once and the labels come back
+// so the screen can tell the requester. Anyone who can see the ticket may ask; it only ever adds that one note.
+export async function confirmRequiredFiles(requestId: string): Promise<{ missing: string[] }> {
+  const profile = await getCurrentProfile()
+  if (!profile) return { missing: [] }
+  const supabase = await createClient()
+  const { data: visible } = await supabase.from('requests').select('id').eq('id', requestId).maybeSingle()
+  if (!visible) return { missing: [] }
+  return flagMissingRequiredFiles(createAdminClient(), requestId, profile.id)
 }
 
 // ── deleteAttachment ──────────────────────────────────────────────────────────

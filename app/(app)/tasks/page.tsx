@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { requireStaff } from '@/lib/ui/requireStaff'
 import { ExportButton } from '@/components/requests/ExportButton'
 import { exportTasks } from '@/lib/actions/export'
 import { getTasks, getAllProfiles, getCustomFields, getCustomFieldValues } from '@/lib/queries/tasks'
@@ -16,6 +17,8 @@ interface PageProps {
 export default async function TasksPage({ searchParams }: PageProps) {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
+  // the app layout does not run again when moving between pages, so an OEM engineer is turned away here as well
+  requireStaff(profile, '/tasks')
   // Tasks isn't fully built out yet — Admin/Owner only until that work ships.
   if (profile.role !== 'admin' && profile.role !== 'platform_owner') redirect('/home')
 

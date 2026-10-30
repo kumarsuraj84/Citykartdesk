@@ -87,7 +87,7 @@ export async function getExecutiveTicketDetail(id: string): Promise<{ error: str
 
   const admin = createAdminClient() as unknown as AnyClient
   const select = [
-    'id, request_no, title, description, status, priority, created_at, resolved_at, closed_at, responded_at, resolution_due_at, response_due_at, reopen_count',
+    'id, request_no, title, description, status, priority, created_at, resolved_at, closed_at, responded_at, resolution_due_at, response_due_at, reopen_count, cancellation_reason',
     'team:teams(name)',
     'assignee:profiles!requests_assigned_to_fkey(full_name)',
     'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), store:stores!profiles_store_id_fkey(name, state, ac_amc_vendor))',
@@ -142,7 +142,8 @@ export async function getExecutiveTicketDetail(id: string): Promise<{ error: str
     subCategory: data.sub_category?.name ?? '',
     created: new Date(data.created_at).getTime(),
     responded: ms(data.responded_at),
-    resolved: ms(data.resolved_at ?? data.closed_at),
+    // a ticket the approval flow cancelled and the auto-close then closed was never resolved: no "resolved" time (the same rule as the dashboard figures)
+    resolved: data.cancellation_reason && !data.resolved_at ? null : ms(data.resolved_at ?? data.closed_at),
     resolutionDue: ms(data.resolution_due_at),
     responseDue: ms(data.response_due_at),
     reopenCount: data.reopen_count ?? 0,

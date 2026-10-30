@@ -13,16 +13,67 @@ export function cell(v: unknown): string {
   return String(v).replace(/ /g, ' ').trim()
 }
 
-export type Grid = { header: Map<string, number>; body: { sheetRow: number; cells: unknown[] }[] }
+export type Grid = {
+  header: Map<string, number>
+  body: { sheetRow: number; cells: unknown[] }[]
+  /** the heading as typed, by column */
+  labels: string[]
+  /** headings that appear in more than one column: normalised heading -> every column (0-based). The first column is the one in `header`; the others are ignored by the readers. */
+  duplicates: Map<string, number[]>
+}
 
 export function toGrid(values: unknown[][]): Grid | null {
   let h = 0
   while (h < values.length && !(values[h] ?? []).some((c) => cell(c) !== '')) h++
   if (h >= values.length) return null
   const header = new Map<string, number>()
-  ;(values[h] ?? []).forEach((c, i) => { const k = norm(c); if (k && !header.has(k)) header.set(k, i) })
+  const duplicates = new Map<string, number[]>()
+  const labels = (values[h] ?? []).map((c) => cell(c))
+  ;(values[h] ?? []).forEach((c, i) => {
+    const k = norm(c)
+    if (!k) return
+    if (header.has(k)) duplicates.set(k, [...(duplicates.get(k) ?? [header.get(k) as number]), i])
+    else header.set(k, i)
+  })
   const body = values.slice(h + 1).map((cells, i) => ({ sheetRow: h + 2 + i, cells: cells ?? [] }))
-  return { header, body }
+  return { header, body, labels, duplicates }
+}
+
+/** Column letters as the sheet shows them: 0 -> A, 26 -> AA. */
+export function columnLetter(index: number): string {
+  let n = index + 1
+  let out = ''
+  while (n > 0) { const r = (n - 1) % 26; out = String.fromCharCode(65 + r) + out; n = Math.floor((n - 1) / 26) }
+  return out
+}
+
+/**
+ * Blocking problem text when a heading CK Desk reads appears in more than one column (the first would win silently, and the team would not know the other column is ignored);
+ * null when there is none. Only the headings in `keys` (the ones the sheet is read by) are checked; a repeated heading CK Desk does not read is harmless.
+ */
+export function duplicateMappedHeading(grid: Grid, keys: string[], sheetName: string): string | null {
+  for (const k of keys) {
+    const cols = grid.duplicates.get(k)
+    if (cols && cols.length > 1) {
+      return `The ${sheetName} sheet has the heading "${grid.labels[cols[0]] || k}" in more than one column (${cols.map(columnLetter).join(', ')}). CK Desk cannot tell which one to read. Please keep only one of them (rename the others).`
+    }
+  }
+  return null
+}
+
+/**
+ * The text the sheet SHOWS in a cell, when the sheet was also read in its displayed form (valueRenderOption FORMATTED_VALUE), else null. The normal read gives raw values: a date as
+ * a serial number, '007' as 7, a 16-digit serial rounded. For the cells a person reads (machine number, serial, extra details) the shown text is what the mail must say.
+ * The two reads happen a moment apart: the shown row is used only when its store code is the same as in the raw read, so a sheet edited in between is never mixed up.
+ */
+export function shownText(display: unknown[][] | undefined, values: unknown[][], sheetRow: number, col: number | undefined, storeCol: number | undefined): string | null {
+  if (!display || col === undefined) return null
+  const shown = display[sheetRow - 1]
+  const raw = values[sheetRow - 1]
+  if (!shown || !raw) return null
+  if (storeCol !== undefined && cell(shown[storeCol]).toLowerCase() !== cell(raw[storeCol]).toLowerCase()) return null
+  const t = cell(shown[col])
+  return t === '' ? null : t
 }
 
 export function reader(grid: Grid) {
@@ -37,31 +88,52 @@ export function reader(grid: Grid) {
 
 export const rowIsBlank = (cells: unknown[]) => !cells.some((c) => cell(c) !== '')
 
-/** Excel / Sheets date number (days since 1899-12-30) or text (2026-08-17, 17/08/2026) -> yyyy-mm-dd, or null. */
+/**
+ * Excel / Sheets date number (days since 1899-12-30) or text (2026-08-17, 17/08/2026, 25 Oct 2026) -> yyyy-mm-dd, or null. Text dates are DAY first (17/08/2026), like the rest of
+ * CK Desk. A day that does not exist (31/02/2026) is null, never a date the database would refuse. A 2-digit year or a month-first date (12/25/2026) is not guessed: null.
+ * `dateProblem()` says why in words.
+ */
 export function toIsoDate(raw: string): string | null {
-  if (!raw) return null
+  return parseDate(raw).iso
+}
+
+/** Why a non-empty date cell could not be read, in plain words; null when it can be read (or is empty). */
+export function dateProblem(raw: string): string | null {
+  return parseDate(raw).problem
+}
+
+function parseDate(raw: string): { iso: string | null; problem: string | null } {
+  if (!raw) return { iso: null, problem: null }
+  const ok = (iso: string) => (realDay(iso) ? { iso, problem: null } : { iso: null, problem: `"${raw}" is not a day that exists in the calendar` })
   if (/^\d+(\.\d+)?$/.test(raw)) {
     const n = Number(raw)
-    if (n < 20000 || n > 80000) return null
+    if (n < 20000 || n > 80000) return { iso: null, problem: `"${raw}" is not a date (a date number must be between the years 1954 and 2118)` }
     const d = new Date(Date.UTC(1899, 11, 30) + Math.floor(n) * 86400000)
-    return d.toISOString().slice(0, 10)
+    return { iso: d.toISOString().slice(0, 10), problem: null }
   }
   let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(raw)
-  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
+  if (m) return ok(`${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`)
   m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(raw)
-  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
+  if (m) {
+    const dayFirst = ok(`${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`)
+    if (dayFirst.iso) return dayFirst
+    // 12/25/2026 is month first (the US way): not guessed, said plainly
+    if (Number(m[1]) <= 12 && Number(m[2]) > 12) return { iso: null, problem: `"${raw}" looks like month/day/year. Please write the day first, like 25/12/2026` }
+    return dayFirst
+  }
+  if (/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2})$/.test(raw)) return { iso: null, problem: `"${raw}" has a 2-digit year. Please write the year with 4 digits, like 25/12/2026` }
   // 25-Oct-2026, 25 Oct 2026, 25 October 2026 (the form a sheet shows when the cell is formatted as a long date)
   m = /^(\d{1,2})[\s/.-]([A-Za-z]{3,9})[\s/.,-]+(\d{4})$/.exec(raw)
   if (m) {
     const mon = MONTHS.indexOf(m[2].slice(0, 3).toLowerCase())
-    if (mon >= 0) return `${m[3]}-${String(mon + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}`
+    if (mon >= 0) return ok(`${m[3]}-${String(mon + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}`)
   }
-  return null
+  return { iso: null, problem: `"${raw}" is not a date CK Desk can read. Please write it like 25/12/2026` }
 }
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 
 /** True when yyyy-mm-dd is a real calendar day (31 Feb is not). */
-function realDay(iso: string): boolean {
+export function realDay(iso: string): boolean {
   const d = new Date(`${iso}T00:00:00Z`)
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso
 }
@@ -116,9 +188,18 @@ export function groupEmailIssues(issues: MasterIssue[]): MasterIssue[] {
   return out
 }
 
-export function parseAcSheet(values: unknown[][]): ParseResult<AcRow> {
+const AC_MAPPED = [
+  'storecode', 'acckdeskserialno', 'ckdeskserialno', 'acserialno', 'serialno', 'acfloor', 'floor', 'actype', 'actonnage', 'acbrand', 'acamcvendor', 'acamcbrand', 'zenatixyesno', 'zenatix',
+  'storeprioritylist', 'storepriority', 'festival', 'region', 'cluster', 'openingdate', 'opendate', 'city', 'state', 'address', 'pincode', 'status',
+  ...AC_TICKET_MAIL.keys, ...AC_PO_MAIL.keys, ...AC_APPROVER_MAIL.keys,
+]
+
+/** `display` = the same sheet read as it is SHOWN (optional): the machine number and serial are taken from it, so '007' stays '007' and a long serial keeps every digit. */
+export function parseAcSheet(values: unknown[][], display?: unknown[][]): ParseResult<AcRow> {
   const grid = toGrid(values)
   if (!grid) return { rows: [], issues: [], fatal: 'The AC sheet is empty.' }
+  const dupe = duplicateMappedHeading(grid, AC_MAPPED, 'AC')
+  if (dupe) return { rows: [], issues: [], fatal: dupe }
   const missing = missingColumns(grid, [
     { label: 'Store Code', keys: ['storecode'] },
     { label: 'AC CKDESK SERIAL NO', keys: ['acckdeskserialno', 'ckdeskserialno'] },
@@ -128,6 +209,15 @@ export function parseAcSheet(values: unknown[][]): ParseResult<AcRow> {
   if (missing.length) return { rows: [], issues: [], fatal: `The AC sheet is missing the column(s): ${missing.join(', ')}.` }
 
   const get = reader(grid)
+  const storeCol = grid.header.get('storecode')
+  // the text the sheet shows for the cells a person reads as text (machine number, serial)
+  const getShown = (cells: unknown[], sheetRow: number, ...names: string[]): string => {
+    for (const n of names) {
+      const i = grid.header.get(n)
+      if (i !== undefined) return shownText(display, values, sheetRow, i, storeCol) ?? cell(cells[i])
+    }
+    return ''
+  }
   const rows: AcRow[] = []
   const issues: MasterIssue[] = []
   const hasStatus = grid.header.has('status')
@@ -144,7 +234,7 @@ export function parseAcSheet(values: unknown[][]): ParseResult<AcRow> {
   for (const { sheetRow, cells } of grid.body) {
     if (rowIsBlank(cells)) continue
     const storeCode = get(cells, 'storecode').toUpperCase()
-    const ckdeskNo = get(cells, 'acckdeskserialno', 'ckdeskserialno')
+    const ckdeskNo = getShown(cells, sheetRow, 'acckdeskserialno', 'ckdeskserialno')
     if (!storeCode) { issues.push({ kind: 'ac', severity: 'error', code: 'blank_store', storeCode: null, sheetRow, message: `Row ${sheetRow}: the Store Code is empty, the row is skipped.` }); continue }
     if (!ckdeskNo) { issues.push({ kind: 'ac', severity: 'error', code: 'blank_number', storeCode, sheetRow, message: `Row ${sheetRow} (${storeCode}): the AC CKDESK SERIAL NO is empty, the row is skipped.` }); continue }
 
@@ -161,7 +251,7 @@ export function parseAcSheet(values: unknown[][]): ParseResult<AcRow> {
       issues.push({ kind: 'ac', severity: 'warning', code: 'unknown_status', storeCode, sheetRow, message: `Row ${sheetRow} (${storeCode}): the Status "${statusRaw}" is not Active or Inactive, the AC is treated as Inactive.` })
     }
 
-    const serial = get(cells, 'acserialno', 'serialno')
+    const serial = getShown(cells, sheetRow, 'acserialno', 'serialno')
     const numKey = `${storeCode}|${ckdeskNo.toLowerCase()}`
     if (seenNumber.has(numKey)) {
       issues.push({ kind: 'ac', severity: 'error', code: 'duplicate_number', storeCode, sheetRow, message: `Rows ${seenNumber.get(numKey)} and ${sheetRow}: ${storeCode} has the AC number ${ckdeskNo} twice. Both are kept and shown with their serial, please correct one of them.` })
@@ -192,21 +282,30 @@ export function parseAcSheet(values: unknown[][]): ParseResult<AcRow> {
     const approverEmails = parseEmails(apRaw)
     if (isActive) for (const bad of approverEmails.invalid) issues.push({ kind: 'ac', severity: 'warning', code: 'bad_approver_email', storeCode, sheetRow, token: bad, message: `Row ${sheetRow} (${storeCode}): "${bad}" in the ${AC_APPROVER_MAIL.label} is not an e-mail address and is skipped.` })
 
+    // an opening date that cannot be read: the row still imports (the date stays empty), but the team is told why, because an empty date makes the store look like a new one
+    const openRaw = get(cells, 'openingdate', 'opendate')
+    const openProblem = dateProblem(openRaw)
+    if (openProblem) issues.push({ kind: 'ac', severity: 'warning', code: 'bad_opening_date', storeCode, sheetRow, message: `Row ${sheetRow} (${storeCode}): the opening date ${openProblem}, so the store's opening date is left empty.` })
+
     rows.push({
       sheetRow, storeCode, ckdeskNo, serial,
       floor: get(cells, 'acfloor', 'floor'), acType: get(cells, 'actype'), tonnage: get(cells, 'actonnage'), brand: get(cells, 'acbrand'),
       amcVendor: get(cells, 'acamcvendor'), amcBrand: get(cells, 'acamcbrand'), zenatix: get(cells, 'zenatixyesno', 'zenatix'),
       storePriority: get(cells, 'storeprioritylist', 'storepriority'), festival: get(cells, 'festival'), region: get(cells, 'region'), cluster: get(cells, 'cluster'),
-      openingDate: toIsoDate(get(cells, 'openingdate', 'opendate')), city: get(cells, 'city'), state: get(cells, 'state'), address: get(cells, 'address'), pincode: get(cells, 'pincode'),
+      openingDate: toIsoDate(openRaw), city: get(cells, 'city'), state: get(cells, 'state'), address: get(cells, 'address'), pincode: get(cells, 'pincode'),
       isActive, emails: emails.valid, poEmails: poEmails.valid, approverEmails: approverEmails.valid,
     })
   }
   return { rows, issues: groupEmailIssues(issues) }
 }
 
-export function parseGensetSheet(values: unknown[][]): ParseResult<GensetRow> {
+const GENSET_MAPPED = ['storecode', ...GENSET_TICKET_MAIL.keys, 'gensetserialno', 'serialno', 'gensetbrand', 'brand', 'gensetkva', 'kva', 'cpcbgroup']
+
+export function parseGensetSheet(values: unknown[][], display?: unknown[][]): ParseResult<GensetRow> {
   const grid = toGrid(values)
   if (!grid) return { rows: [], issues: [], fatal: 'The Genset sheet is empty.' }
+  const dupe = duplicateMappedHeading(grid, GENSET_MAPPED, 'Genset')
+  if (dupe) return { rows: [], issues: [], fatal: dupe }
   const missing = missingColumns(grid, [
     { label: 'Store Code', keys: ['storecode'] },
     { label: GENSET_TICKET_MAIL.label, keys: GENSET_TICKET_MAIL.keys },
@@ -214,6 +313,14 @@ export function parseGensetSheet(values: unknown[][]): ParseResult<GensetRow> {
   if (missing.length) return { rows: [], issues: [], fatal: `The Genset sheet is missing the column(s): ${missing.join(', ')}.` }
 
   const get = reader(grid)
+  const storeCol = grid.header.get('storecode')
+  const getShown = (cells: unknown[], sheetRow: number, ...names: string[]): string => {
+    for (const n of names) {
+      const i = grid.header.get(n)
+      if (i !== undefined) return shownText(display, values, sheetRow, i, storeCol) ?? cell(cells[i])
+    }
+    return ''
+  }
   const rows: GensetRow[] = []
   const issues: MasterIssue[] = []
   const perStore = new Map<string, number[]>()
@@ -224,7 +331,7 @@ export function parseGensetSheet(values: unknown[][]): ParseResult<GensetRow> {
     const mailRaw = get(cells, ...GENSET_TICKET_MAIL.keys)
     const emails = parseEmails(mailRaw)
     addEmailIssues(issues, 'genset', storeCode, sheetRow, mailRaw, emails, true, GENSET_TICKET_MAIL.label)
-    const serial = get(cells, 'gensetserialno', 'serialno')
+    const serial = getShown(cells, sheetRow, 'gensetserialno', 'serialno')
     if (!serial) issues.push({ kind: 'genset', severity: 'warning', code: 'no_serial', storeCode, sheetRow, message: `Row ${sheetRow} (${storeCode}): the Genset Serial No is empty.` })
     perStore.set(storeCode, [...(perStore.get(storeCode) ?? []), sheetRow])
     rows.push({ sheetRow, storeCode, brand: get(cells, 'gensetbrand', 'brand'), kva: get(cells, 'gensetkva', 'kva'), serial, cpcbGroup: get(cells, 'cpcbgroup'), emails: emails.valid })
@@ -238,6 +345,8 @@ export function parseGensetSheet(values: unknown[][]): ParseResult<GensetRow> {
 export function parseCvmSheet(values: unknown[][]): ParseResult<CvmRow> {
   const grid = toGrid(values)
   if (!grid) return { rows: [], issues: [], fatal: 'The CVM sheet is empty.' }
+  const dupe = duplicateMappedHeading(grid, ['storecode', 'cvmemailid', 'cvmemail', 'emailid'], 'CVM')
+  if (dupe) return { rows: [], issues: [], fatal: dupe }
   const missing = missingColumns(grid, [
     { label: 'Store Code', keys: ['storecode'] },
     { label: 'CVM EMAIL ID', keys: ['cvmemailid', 'cvmemail', 'emailid'] },
@@ -277,6 +386,8 @@ export function parsePmsSheet(values: unknown[][]): ParseResult<PmsRow> {
   if (!grid) return { rows: [], issues: [], fatal: 'The AC PMS sheet is empty.' }
   const STORE = ['storecode', 'store', 'storeid']
   const DATE = ['acpmsdate', 'pmsdate', 'pmsdates', 'acpmsdates', 'pmsvisitdate']
+  const dupe = duplicateMappedHeading(grid, [...STORE, ...DATE], 'AC PMS')
+  if (dupe) return { rows: [], issues: [], fatal: dupe }
   const missing = missingColumns(grid, [
     { label: 'Store Code', keys: STORE },
     { label: 'AC PMS Date', keys: DATE },

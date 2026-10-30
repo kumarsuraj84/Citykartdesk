@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useCallback, useEffect, useMemo } from 'react'
+import { useState, useTransition, useCallback, useMemo } from 'react'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { filterActiveOptions } from '@/lib/forms/options'
 import Link from 'next/link'
@@ -8,6 +8,7 @@ import { requesterCanView, requesterCanSet } from '@/lib/forms/sections'
 import { fieldLimitProblem } from '@/lib/validation/formFields'
 import { fieldFromLibrary, type LibraryFieldDef } from '@/lib/forms/library'
 import type { FormField, FormFieldType, FormFieldOption, FormSection } from '@/types'
+import { useUnsavedGuard } from '@/lib/ui/useUnsavedGuard'
 
 type PreviewAudience = 'requester' | 'technician'
 
@@ -631,17 +632,8 @@ export function SectionBuilder({
 
   const isLinkedSel = !!selectedField?.library_field_id
 
-  // Warn on unsaved changes
-  useEffect(() => {
-    function handleBeforeUnload(e: BeforeUnloadEvent) {
-      if (isDirty) {
-        e.preventDefault()
-        e.returnValue = ''
-      }
-    }
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [isDirty])
+  // Warn on unsaved changes: closing the tab, clicking a link inside the app, or pressing Back
+  useUnsavedGuard(isDirty)
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 

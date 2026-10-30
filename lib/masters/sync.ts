@@ -4,12 +4,17 @@ import { matchAcUnits, matchGensets, planRemovals, REMOVAL_WAIT_MINUTES } from '
 import type { AcRow, CvmRow, GensetRow, MasterIssue, MasterKind, PmsRow } from './types'
 import type { SheetsSource } from './google'
 import { fetchAllPages } from '@/lib/queries/paging'
+import { fetchDisplaySafe } from './display'
 
 // Copies the three master sheets into CK Desk's database (read only: nothing is ever written to a sheet). Run three times a day by the scheduled task (see
 // schedule.ts) and on demand by an administrator. Everything else in CK Desk reads the database copy, never Google.
 //  - a sheet whose content did not change is not applied again (a quick hash check), except for a full pass every 15 minutes and while a delayed removal is waiting;
 //  - a sheet that cannot be read or has lost a required column is NOT applied: the last good copy stays in use and the page "Master data health" shows why;
 //  - units that leave a sheet are kept (marked removed); a big disappearance is applied only at a later update (at least 30 minutes on), so a mistake can be undone in time.
+//    The real wait is "the next scheduled copy that is at least 30 minutes later" (the copies run at 11:00, 15:00 and 19:00, and when an administrator presses the button). The rule is
+//    worked out again on each run from the units that are still missing then, so after a partial restore the rest follow at once if they now count as a small change.
+//  - a sheet with headings but NO data rows is refused while CK Desk holds rows for it (an emptied sheet is a mistake far more often than a wish): the last good copy stays.
+//  - a change of the ticket / PO / quote-approval mail addresses of a unit is reported as a warning in the problem list (the sheet's editors decide where tickets and quotes go).
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (t: string) => any }
@@ -42,7 +47,12 @@ export async function inChunks<T>(items: T[], fn: (chunk: T[]) => Promise<unknow
   for (let i = 0; i < items.length; i += CHUNK) await fn(items.slice(i, i + CHUNK))
 }
 
-const sameList = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+// jsonb comes back from the database with its keys in the database's order, the parsed sheet has them in the sheet's order: compare with the keys sorted, or an unchanged row looks
+// changed and is rewritten at every copy.
+export function canonicalJson(v: unknown): string {
+  return JSON.stringify(v ?? null, (_k, val) => (val && typeof val === 'object' && !Array.isArray(val) ? Object.fromEntries(Object.keys(val).sort().map((k) => [k, (val as Record<string, unknown>)[k]])) : val))
+}
+const sameList = (a: unknown, b: unknown) => canonicalJson(a) === canonicalJson(b)
 export function differs(old: Record<string, unknown>, next: Record<string, unknown>): boolean {
   return Object.keys(next).some((k) => !sameList(old[k], next[k]))
 }
@@ -132,11 +142,25 @@ async function unknownStoreIssues(db: Db, orgId: string, kind: MasterKind, codes
   }))
 }
 
+const lowerSorted = (v: unknown) => [...((v as string[] | null) ?? [])].map((e) => String(e).toLowerCase()).sort()
+
+/** A unit whose ticket / PO / quote-approval addresses changed since the last copy: the sheet's editors decide where tickets and quotes go, so the change is shown to the administrators (a warning, nothing is blocked). */
+export function recipientChangeIssues(kind: MasterKind, changes: { storeCode: string; label: string; before: string[]; after: string[] }[]): MasterIssue[] {
+  const shown = changes.slice(0, 30).map((c): MasterIssue => ({
+    kind, severity: 'warning', code: 'recipients_changed', storeCode: c.storeCode, sheetRow: null,
+    message: `Store ${c.storeCode}: the ${c.label} changed from ${c.before.join(', ') || '(empty)'} to ${c.after.join(', ') || '(empty)'}. Tickets and quotes for it now go to the new address(es). Please check this was meant.`,
+  }))
+  if (changes.length > shown.length) shown.push({ kind, severity: 'warning', code: 'recipients_changed', storeCode: null, sheetRow: null, message: `${changes.length - shown.length} more mail address change(s) are not listed here.` })
+  return shown
+}
+
 async function applyUnits<R extends { storeCode: string }>(p: {
   db: Db; orgId: string; table: 'master_ac_units' | 'master_gensets'; rows: R[]; now: Date
   match: (rows: R[], stored: { id: string; storeCode: string; ckdeskNo: string; serial: string | null; removedAt: string | null; missingSince: string | null }[]) => ReturnType<typeof matchGensets>
   columns: (r: R) => Record<string, unknown>
-}): Promise<{ added: number; changed: number; removed: number; waiting: number; waitingIssue: MasterIssue | null }> {
+  /** the columns that say where mail goes, with the sheet heading they come from */
+  recipientColumns: { column: string; label: string }[]
+}): Promise<{ added: number; changed: number; removed: number; waiting: number; waitingIssue: MasterIssue | null; recipientIssues: MasterIssue[] }> {
   const { db, orgId, table, rows, now } = p
   const nowIso = now.toISOString()
   const stored = await readAll(db, table, '*', orgId, ['id'])
@@ -147,10 +171,17 @@ async function applyUnits<R extends { storeCode: string }>(p: {
   })))
 
   const upserts: Record<string, unknown>[] = []
+  const recipientChanges: { storeCode: string; label: string; before: string[]; after: string[] }[] = []
   for (const { rowIndex, unitId } of m.matches) {
     const old = byId.get(unitId)!
     const next = p.columns(rows[rowIndex])
     const revived = !!old.removed_at || !!old.missing_since
+    if (!revived) {
+      for (const rc of p.recipientColumns) {
+        const before = lowerSorted(old[rc.column]); const after = lowerSorted(next[rc.column])
+        if (JSON.stringify(before) !== JSON.stringify(after)) recipientChanges.push({ storeCode: String(next.store_code ?? old.store_code), label: rc.label, before, after })
+      }
+    }
     if (!revived && !differs(old, next)) continue
     const prev = (old.previous_serials as string[] | null) ?? []
     const oldSerial = (old.serial as string | null) ?? null
@@ -176,7 +207,7 @@ async function applyUnits<R extends { storeCode: string }>(p: {
       message: `${plan.markMissing.length} unit(s) disappeared from the sheet at once. This looks like a mistake, so they stay in CK Desk and are removed at the next update only if they are still missing then (at least ${REMOVAL_WAIT_MINUTES} minutes later). Undo the change in the sheet if it was not intended.`,
     }
   }
-  return { added: inserts.length, changed: changedCount, removed: plan.removeNow.length, waiting: plan.markMissing.length, waitingIssue }
+  return { added: inserts.length, changed: changedCount, removed: plan.removeNow.length, waiting: plan.markMissing.length, waitingIssue, recipientIssues: recipientChangeIssues(table === 'master_ac_units' ? 'ac' : 'genset', recipientChanges) }
 }
 
 async function applyCvm(p: { db: Db; orgId: string; rows: CvmRow[]; now: Date }) {
@@ -224,6 +255,18 @@ async function applyPms(p: { db: Db; orgId: string; rows: PmsRow[]; now: Date })
   return { added: adds.length, changed: moved.length, removed: gone.length, waiting: 0, waitingIssue: null as MasterIssue | null }
 }
 
+/**
+ * A sheet with headings but no data rows while CK Desk holds current rows for it: refused (the text says why), so a sheet emptied by mistake cannot wipe the copy. Null = fine to apply.
+ * (With 4 rows or fewer the "big change waits" rule would not hold anything back, so this is the only protection for a small sheet.)
+ */
+export async function refuseEmptySheet(db: Db, orgId: string, name: string, table: string, parsedRows: number): Promise<string | null> {
+  if (parsedRows > 0) return null
+  const { count, error } = await db.from(table).select('id', { count: 'exact', head: true }).eq('org_id', orgId).is('removed_at', null)
+  if (error) throw new Error(`count ${table}: ${error.message}`)
+  if ((count ?? 0) === 0) return null
+  return `The ${name} sheet has headings but no data rows, while CK Desk holds ${count} current row(s) for it. It was not applied, so the last good copy stays in use. If the sheet was emptied on purpose, please tell the CK Desk team.`
+}
+
 async function pendingCount(db: Db, orgId: string, kind: MasterKind): Promise<number> {
   if (kind === 'pms') return 0   // the PMS copy has no delayed removals
   const table = kind === 'ac' ? 'master_ac_units' : kind === 'genset' ? 'master_gensets' : 'master_store_cvm'
@@ -267,8 +310,10 @@ async function syncOneUnlocked(p: { db: Db; orgId: string; kind: MasterKind; sou
 
   let values: unknown[][]
   try { values = await p.source.fetchValues(src.spreadsheet_id, src.tab_name ?? null) } catch (e) { return fail(e instanceof Error ? e.message : 'The sheet could not be read.') }
+  // the machine number and serial are read as the sheet SHOWS them (AC and Genset only; '007' keeps its zeros, a long serial every digit); the raw read is the fallback
+  const display = kind === 'ac' || kind === 'genset' ? await fetchDisplaySafe(p.source, src.spreadsheet_id, src.tab_name ?? null) : undefined
 
-  const hash = createHash('sha1').update(JSON.stringify(values)).digest('hex')
+  const hash = createHash('sha1').update(JSON.stringify(display ? [values, display] : values)).digest('hex')
   const pending = await pendingCount(db, orgId, kind)
   const fresh = src.last_applied_at && now.getTime() - new Date(src.last_applied_at).getTime() < FULL_PASS_MINUTES * 60_000
   if (!p.force && src.content_hash === hash && src.last_status === 'ok' && pending === 0 && fresh) {
@@ -277,13 +322,15 @@ async function syncOneUnlocked(p: { db: Db; orgId: string; kind: MasterKind; sou
   }
 
   try {
-    let result: { added: number; changed: number; removed: number; waiting: number; waitingIssue: MasterIssue | null }
+    let result: { added: number; changed: number; removed: number; waiting: number; waitingIssue: MasterIssue | null; recipientIssues?: MasterIssue[] }
     let issues: MasterIssue[]
     let rowCount: number
     if (kind === 'ac') {
-      const parsed = parseAcSheet(values)
+      const parsed = parseAcSheet(values, display)
       if (parsed.fatal) return fail(parsed.fatal)
-      result = await applyUnits<AcRow>({ db, orgId, table: 'master_ac_units', rows: parsed.rows, now, match: (r, s) => matchAcUnits(r, s as never), columns: acColumns })
+      const empty = await refuseEmptySheet(db, orgId, 'AC', 'master_ac_units', parsed.rows.length)
+      if (empty) return fail(empty)
+      result = await applyUnits<AcRow>({ db, orgId, table: 'master_ac_units', rows: parsed.rows, now, match: (r, s) => matchAcUnits(r, s as never), columns: acColumns, recipientColumns: [{ column: 'emails', label: 'Ticket Mail To' }, { column: 'po_emails', label: 'PO Mail To' }, { column: 'approver_emails', label: 'Quote Approver Mail To' }] })
       await updateStoreMaster(db, orgId, parsed.rows)
       issues = [...parsed.issues, ...(await unknownStoreIssues(db, orgId, 'ac', parsed.rows.map((r) => r.storeCode)))]
       if (p.cvmEmailKnown) {   // an approver must be an active technician, manager or admin, or a vendor's quote for that AC would never reach anyone
@@ -297,9 +344,11 @@ async function syncOneUnlocked(p: { db: Db; orgId: string; kind: MasterKind; sou
       }
       rowCount = parsed.rows.length
     } else if (kind === 'genset') {
-      const parsed = parseGensetSheet(values)
+      const parsed = parseGensetSheet(values, display)
       if (parsed.fatal) return fail(parsed.fatal)
-      result = await applyUnits<GensetRow>({ db, orgId, table: 'master_gensets', rows: parsed.rows, now, match: (r, s) => matchGensets(r, s), columns: gensetColumns })
+      const empty = await refuseEmptySheet(db, orgId, 'Genset', 'master_gensets', parsed.rows.length)
+      if (empty) return fail(empty)
+      result = await applyUnits<GensetRow>({ db, orgId, table: 'master_gensets', rows: parsed.rows, now, match: (r, s) => matchGensets(r, s), columns: gensetColumns, recipientColumns: [{ column: 'emails', label: 'Ticket Mail To' }] })
       issues = [...parsed.issues, ...(await unknownStoreIssues(db, orgId, 'genset', parsed.rows.map((r) => r.storeCode)))]
       rowCount = parsed.rows.length
     } else if (kind === 'pms') {
@@ -311,6 +360,8 @@ async function syncOneUnlocked(p: { db: Db; orgId: string; kind: MasterKind; sou
     } else {
       const parsed = parseCvmSheet(values)
       if (parsed.fatal) return fail(parsed.fatal)
+      const empty = await refuseEmptySheet(db, orgId, 'CVM', 'master_store_cvm', parsed.rows.length)
+      if (empty) return fail(empty)
       result = await applyCvm({ db, orgId, rows: parsed.rows, now })
       issues = [...parsed.issues, ...(await unknownStoreIssues(db, orgId, 'cvm', parsed.rows.map((r) => r.storeCode)))]
       if (p.cvmEmailKnown) {
@@ -324,6 +375,7 @@ async function syncOneUnlocked(p: { db: Db; orgId: string; kind: MasterKind; sou
       rowCount = parsed.rows.length
     }
     if (result.waitingIssue) issues.push(result.waitingIssue)
+    if (result.recipientIssues?.length) issues.push(...result.recipientIssues)
     await replaceIssues(db, orgId, kind, issues)
     must(await db.from('master_sources').update({ last_checked_at: nowIso, last_applied_at: nowIso, last_status: 'ok', last_error: null, row_count: rowCount, content_hash: hash }).eq('org_id', orgId).eq('kind', kind), 'save status')
     return { status: 'ok', added: result.added, changed: result.changed, removed: result.removed, waiting: result.waiting }

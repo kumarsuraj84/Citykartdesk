@@ -1,5 +1,6 @@
 'use client'
 
+import { formatDateOnly } from '@/lib/ui/formatDate'
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -79,8 +80,7 @@ function formatBytes(b: number) {
 }
 
 function fmtDate(iso: string | null) {
-  if (!iso) return ''
-  return new Date(iso).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+  return formatDateOnly(iso, { year: true }, '')
 }
 
 export function TaskDetailInline({

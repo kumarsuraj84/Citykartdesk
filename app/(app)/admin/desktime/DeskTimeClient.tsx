@@ -1,5 +1,6 @@
 'use client'
 
+import { formatDateAndTime } from '@/lib/ui/formatDate'
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { RefreshCw } from 'lucide-react'
@@ -77,7 +78,7 @@ function SyncPanel({ lastSync, isAdmin }: { lastSync: DeskTimeSyncRun | null; is
 
       <p className="text-xs text-muted-foreground">
         {lastSync
-          ? `Last sync ${new Date(lastSync.ran_at).toLocaleString('en-US', { hour12: false })} · ${lastSync.status}${
+          ? `Last sync ${formatDateAndTime(lastSync.ran_at)} · ${lastSync.status}${
               lastSync.status === 'success' ? ` · ${lastSync.rows_upserted} rows, ${lastSync.matched_projects} matched` : ''
             }${lastSync.message ? ` · ${lastSync.message}` : ''}`
           : 'No sync has run yet.'}

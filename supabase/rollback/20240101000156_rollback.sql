@@ -1,3 +1,4 @@
+BEGIN;
 -- ROLLBACK for migration 156 (Critical database fixes D-002, D-003, D-007). LOCAL; NOT run on production.
 --
 -- WARNING: this puts back the original behaviour, which IS the vulnerability: any signed-in or anonymous API user can call owner_delete_org()
@@ -53,3 +54,5 @@ BEGIN
 END;
 $function$;
 GRANT EXECUTE ON FUNCTION public.owner_delete_org(uuid) TO PUBLIC;
+DELETE FROM auth.schema_migrations WHERE version = '20240101000156';
+COMMIT;

@@ -14,6 +14,8 @@ import { TaskActivityFeed } from './TaskActivityFeed'
 import { SubtaskList } from './SubtaskList'
 import { TaskDependencyList } from './TaskDependencyList'
 import { formatRelativeTime } from '@/lib/utils'
+import { formatDateOnly } from '@/lib/ui/formatDate'
+import { useModalA11y } from '@/components/ui/useModalA11y'
 import type { TaskDependency } from '@/lib/queries/tasks'
 import type { TaskWithDetails, TaskCommentWithAuthor, TaskActivityWithActor } from '@/types'
 import type { TaskStatus, TaskPriority } from '@/types'
@@ -87,8 +89,9 @@ function DropdownProp({
     const handler = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node)) onToggle()
     }
-    setTimeout(() => document.addEventListener('mousedown', handler), 0)
-    return () => document.removeEventListener('mousedown', handler)
+    // added a tick late so the click that opened the dropdown does not close it at once; the timer is cleared if it closes first
+    const timer = setTimeout(() => document.addEventListener('mousedown', handler), 0)
+    return () => { clearTimeout(timer); document.removeEventListener('mousedown', handler) }
   }, [open, onToggle])
   return (
     <div className="relative" ref={ref}>
@@ -134,11 +137,8 @@ export function TaskDetailPanel({
   const titleInputRef = useRef<HTMLInputElement>(null)
   const descInputRef  = useRef<HTMLTextAreaElement>(null)
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  // Escape closes, Tab stays inside, focus returns to the task row on close (one shared helper)
+  const dialog = useModalA11y({ onClose, label: task.title || 'Task' })
 
   useEffect(() => { if (editingTitle) titleInputRef.current?.focus() }, [editingTitle])
   useEffect(() => { if (editingDesc)  descInputRef.current?.focus()  }, [editingDesc])
@@ -207,7 +207,7 @@ export function TaskDetailPanel({
   const priorityCfg  = PRIORITY_CONFIG[localPriority]
   const assignee     = profiles.find((p) => p.id === localAssigneeId) ?? null
   const dueDateLabel = localDueDate
-    ? new Date(localDueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    ? formatDateOnly(localDueDate)
     : null
 
   return (
@@ -216,7 +216,7 @@ export function TaskDetailPanel({
       <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
       {/* Centered modal */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div {...dialog.props} className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div
           className={`relative flex w-full flex-col rounded-2xl bg-card shadow-2xl overflow-hidden transition-opacity ${isPending ? 'opacity-90' : ''}`}
           style={{ maxWidth: 960, maxHeight: '90vh' }}

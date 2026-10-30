@@ -75,6 +75,9 @@ export function kpiText(tickets: ExecTicket[], approvals: ApprovalRow[], filters
   const rated = resolvedIn.filter((t) => t.csat !== null).length
   const csatGroups = perGroup(base, W, 'csat', 3).sort((a, b) => a.v - b.v)
   const reopenedTickets = base.filter((t) => t.reo.some((r) => inWin(r, W)))
+  // The same tickets on both sides of the share: the tickets resolved in the period together with the ones re-opened in it (a re-opened ticket may have been resolved BEFORE the
+  // period, so dividing by the resolved ones alone could pass 100%, audit F-07).
+  const resolvedOrReopened = new Set([...resolvedIn.map((t) => t.id), ...reopenedTickets.map((t) => t.id)]).size
   const reopenByGroup = [...groupBy(reopenedTickets, (t) => t.group)].map(([g, xs]) => ({ g, n: xs.length })).sort((a, b) => b.n - a.n)
 
   // approvals
@@ -124,7 +127,7 @@ export function kpiText(tickets: ExecTicket[], approvals: ApprovalRow[], filters
       benchmark: csatGroups.length === 0 ? none : `Lowest: ${fmtList(csatGroups, 'csat', 2)}`,
     },
     reopened: {
-      context: reopenedTickets.length === 0 ? 'No ticket was re-opened' : `${reopenedTickets.length} ticket${reopenedTickets.length === 1 ? '' : 's'} re-opened · ${pct(reopenedTickets.length, resolvedIn.length)}% of those resolved`,
+      context: reopenedTickets.length === 0 ? 'No ticket was re-opened' : `${reopenedTickets.length} ticket${reopenedTickets.length === 1 ? '' : 's'} re-opened · ${pct(reopenedTickets.length, resolvedOrReopened)}% of the ${resolvedOrReopened} resolved or re-opened`,
       benchmark: reopenByGroup.length === 0 ? none : `Most re-opens: ${reopenByGroup[0].g} (${reopenByGroup[0].n})`,
     },
   }

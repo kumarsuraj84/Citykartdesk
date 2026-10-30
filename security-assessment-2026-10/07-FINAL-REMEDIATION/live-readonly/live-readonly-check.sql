@@ -15,6 +15,12 @@ select 'INFO|organisations|'||(select count(*) from public.organizations);
 select 'INFO|system_log rows|'||(select count(*) from public.system_log);
 select 'INFO|attachments rows|'||(select count(*) from public.request_attachments);
 select 'INFO|accounts still on the old shared import password|'||(select count(*) from auth.users where encrypted_password = extensions.crypt('Welcome@123', encrypted_password));
+-- G-05: the development seed (supabase/seed.sql, in git history) creates suraj@citykart.org as platform_owner with a fixed password. This MUST print 0 on the live database.
+-- If it prints 1, that password is still valid on live: change it at once (docs/HTTPS-AND-CSP-PLAN.md section "Seed password"). Only a count is printed, never a hash.
+select 'INFO|owner account still on the git-history seed password (must be 0)|'||(select count(*) from auth.users where email = 'suraj@citykart.org' and encrypted_password = extensions.crypt('Welcome@citykart@123', encrypted_password));
+-- H-28: the database time zone (the app itself must run with TZ=Asia/Kolkata); G-12/D-12 helpers
+select 'INFO|database time zone (show timezone)|'||current_setting('TimeZone');
+select 'INFO|new sign-ups land in the oldest organisation (handle_new_user): GOTRUE_DISABLE_SIGNUP must be true on the app server; organisations|'||(select count(*) from public.organizations);
 select 'INFO|accounts forced to change password and not yet changed|'||(select count(*) from public.profiles where must_reset_password);
 select 'INFO|latest migration recorded|'||coalesce((select max(version) from auth.schema_migrations where version ~ '^2024'), 'none');
 select 'INFO|migrations 164-170 already recorded|'||(select count(*) from auth.schema_migrations where version in ('20240101000164','20240101000165','20240101000166','20240101000167','20240101000168','20240101000169','20240101000170'));

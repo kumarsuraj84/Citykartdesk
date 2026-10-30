@@ -1,5 +1,6 @@
 'use client'
 
+import { formatDateOnly } from '@/lib/ui/formatDate'
 import { useState, useEffect, useRef, useTransition } from 'react'
 import {
   DndContext,
@@ -33,8 +34,7 @@ const COLUMNS: { status: TaskStatus; label: string; accent: string; dot: string 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string | null): string {
-  if (!iso) return ''
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return formatDateOnly(iso, { year: false }, '')
 }
 
 function AvatarInitial({ name }: { name: string }) {
@@ -95,7 +95,7 @@ function SortableCard({
         {...attributes}
         {...listeners}
         onClick={e => e.stopPropagation()}
-        className="absolute right-2 top-2.5 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity touch-none"
+        className="absolute right-2 top-2.5 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity touch-none"
       >
         <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50" />
       </div>

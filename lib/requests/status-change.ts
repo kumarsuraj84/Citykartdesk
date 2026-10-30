@@ -7,13 +7,15 @@ import { revalidatePath } from 'next/cache'
 import type { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { logActivity } from '@/lib/activity'
-import { notify } from '@/lib/notifications'
+import { notify, getRequestAudience } from '@/lib/notifications'
+import { logger } from '@/lib/observability/logger'
+import { pauseCreditMs, shiftDeadlineByCredit } from '@/lib/sla/business-hours'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS, VENDOR_TRANSITIONS } from '@/lib/constants/request-transitions'
 import { vendorRoleOf } from '@/lib/vendor/access'
 import { clearOemTicketOnReopen } from '@/lib/vendor/ticket-fields'
 import { cancelOpenRequest } from '@/lib/vendor/requests'
 import { tellVendorHoldEnded, tellVendorReopened } from '@/lib/vendor/ticket-notify'
-import { STATUS_LABELS } from '@/lib/constants/requests'
+import { STATUS_LABELS, isClosedLikeStatus } from '@/lib/constants/requests'
 import { getResolvedReopenWindowHours } from '@/lib/settings/reopenWindow'
 import { isFieldValueEmpty } from '@/lib/validation/formFields'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
@@ -51,6 +53,52 @@ export interface StatusChangeOptions {
   poDecision?: 'approve' | 'reject'
 }
 
+/**
+ * Runs one step that comes AFTER the status has already been changed (timer, vendor mail, survey, notification ...). The change is committed, so a failure here must not be
+ * reported to the user as a failed status change (they would retry something that already happened): it is logged as an error with the request id, and the rest carries on (H-03).
+ */
+async function followUp<T>(requestId: string, step: string, fn: () => Promise<T>): Promise<T | undefined> {
+  try {
+    return await fn()
+  } catch (e) {
+    logger.error({
+      event: 'status_change.follow_up_failed',
+      message: `The status was changed, but the follow-up step "${step}" failed`,
+      route: 'lib/requests/status-change.ts#applyStatusChange',
+      requestId,
+      errorCode: 'status_change_follow_up_failed',
+      context: { step },
+      error: e,
+    })
+    return undefined
+  }
+}
+
+/**
+ * Stops the open timer(s) of a ticket (B-07). Admin client, not the RLS-scoped one: the open entry may belong to a DIFFERENT agent than the one calling this (the ticket was
+ * reassigned mid-progress), and request_time_entries' UPDATE policy only allows `user_id = auth.uid()`. Pass a userId to stop only that person's timer.
+ * Never throws; a failure is logged with the request id.
+ */
+export async function stopOpenTimeEntries(requestId: string, stoppedAtIso: string, userId?: string): Promise<{ error?: string }> {
+  try {
+    let q = createAdminClient().from('request_time_entries').update({ stopped_at: stoppedAtIso }).eq('request_id', requestId).is('stopped_at', null)
+    if (userId) q = q.eq('user_id', userId)
+    const { error } = await q
+    if (error) throw error
+    return {}
+  } catch (e) {
+    logger.error({
+      event: 'time_entries.stop_failed',
+      message: 'The open timer of a ticket could not be stopped',
+      route: 'lib/requests/status-change.ts#stopOpenTimeEntries',
+      requestId,
+      errorCode: 'time_entry_stop_failed',
+      error: e,
+    })
+    return { error: 'Could not stop the timer.' }
+  }
+}
+
 const PO_DECISION_MOVES: Record<'approve' | 'reject', RequestStatus> = { approve: 'in_progress', reject: 'cancelled' }
 
 const VENDOR_FLOW_MOVES: Record<VendorFlow, { from: RequestStatus[]; to: RequestStatus }> = {
@@ -58,6 +106,57 @@ const VENDOR_FLOW_MOVES: Record<VendorFlow, { from: RequestStatus[]; to: Request
   resolve: { from: ['in_progress'], to: 'resolved' },
   hold:    { from: ['in_progress'], to: 'hold_purchase_ho' },
   resume:  { from: ['hold_purchase_ho'], to: 'in_progress' },
+}
+
+type SlaResetResult = { ok: true } | { ok: false; error: unknown }
+
+/**
+ * REOPEN: recalculate resolution_due_at from the current time and clear the resolution timestamps and the pause ledger of the clock that just ended.
+ * Uses the same field-override > policy resolution as request creation — a reopened ticket should still get the SLA its selected field values/service imply.
+ * Uses the server's client (the requester who reopens has no write right, and the SLA tables must be readable whoever calls); the caller already checked who may reopen.
+ * Never throws: it reports whether the reset was written.
+ */
+async function resetSlaAfterReopen(db: ReturnType<typeof createAdminClient>, requestId: string, priority: RequestPriority): Promise<SlaResetResult> {
+  try {
+    const { data: full, error: readError } = await db
+      .from('requests')
+      .select('service_id, form_data, service:services(sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections))')
+      .eq('id', requestId)
+      .single()
+    if (readError || !full) return { ok: false, error: readError ?? new Error('ticket not found') }
+
+    const svc = full.service as unknown as {
+      sla_policy?: { config?: SLAConfig } | null
+      form_sections?: FormSection[]
+      form_fields?: FormField[]
+      template?: { form_sections?: FormSection[] } | null
+    }
+    const allFields = resolveServiceFormSections(svc).flatMap((sec) => sec.fields)
+    const resolved = await resolveSlaDeadlines(db, {
+      serviceId: full.service_id,
+      priority,
+      servicePolicyConfig: svc.sla_policy?.config ?? null,
+      allFields,
+      formData: (full.form_data ?? {}) as Record<string, unknown>,
+      from: new Date(),
+    })
+
+    // A reopen starts a brand-new SLA clock from now — any pause credit accumulated against the OLD (pre-reopen) clock no longer means
+    // anything and must not leak into the new one. With no applicable SLA config the timestamps are still cleared.
+    const { error: writeError } = await db
+      .from('requests')
+      .update({
+        ...(resolved.resolutionDueAt ? { resolution_due_at: resolved.resolutionDueAt } : {}),
+        resolved_at: null,
+        closed_at: null,
+        waiting_since: null,
+        paused_ms_total: 0,
+      })
+      .eq('id', requestId)
+    return writeError ? { ok: false, error: writeError } : { ok: true }
+  } catch (e) {
+    return { ok: false, error: e }
+  }
 }
 
 export async function applyStatusChange(
@@ -326,19 +425,18 @@ export async function applyStatusChange(
   // priority/category/service change (which recomputes deadlines from
   // created_at) doesn't discard it.
   if ((currentStatus === 'waiting_user' || currentStatus === 'hold_purchase_ho') && request.waiting_since) {
-    const pausedMs = now.getTime() - new Date(request.waiting_since).getTime()
+    // The whole pause is credited here, once. (A re-classification while paused no longer adds the running pause itself: it used to, and this then credited it again.)
+    // Credited in business time when the calendar has gaps (deadlines are counted in business minutes), plain wall-clock time otherwise; the same number
+    // goes into the deadline and into the ledger.
+    const creditMs = await pauseCreditMs(new Date(request.waiting_since), now)
     if (request.response_due_at) {
-      updatePayload.response_due_at = new Date(
-        new Date(request.response_due_at).getTime() + pausedMs
-      ).toISOString()
+      updatePayload.response_due_at = (await shiftDeadlineByCredit(new Date(request.response_due_at), creditMs)).toISOString()
     }
     if (request.resolution_due_at) {
-      updatePayload.resolution_due_at = new Date(
-        new Date(request.resolution_due_at).getTime() + pausedMs
-      ).toISOString()
+      updatePayload.resolution_due_at = (await shiftDeadlineByCredit(new Date(request.resolution_due_at), creditMs)).toISOString()
     }
     updatePayload.waiting_since = null
-    updatePayload.paused_ms_total = Number(request.paused_ms_total ?? 0) + pausedMs
+    updatePayload.paused_ms_total = Number(request.paused_ms_total ?? 0) + creditMs
   }
 
   // responded_at: first agent action that moves the request to an active state
@@ -386,41 +484,37 @@ export async function applyStatusChange(
 
   // A Citykart technician ends a hold that a vendor had asked for (parts / PO): that request is closed as cancelled, so nothing stays "pending" on a ticket that moved on.
   if (currentStatus === 'hold_purchase_ho' && !options.vendorFlow && !isPoDecision) {
-    const closed = await cancelOpenRequest(requestId, profile.id, 'The hold was ended by Citykart.')
-    // the vendor who asked is told (mail and bell); nothing is sent when the ticket is not with a vendor
-    if (closed) await tellVendorHoldEnded(requestId, profile.id, profile.full_name, comment?.trim() ?? '', closed)
+    await followUp(requestId, 'end the vendor hold request', async () => {
+      const closed = await cancelOpenRequest(requestId, profile.id, 'The hold was ended by Citykart.')
+      // the vendor who asked is told (mail and bell); nothing is sent when the ticket is not with a vendor
+      if (closed) await tellVendorHoldEnded(requestId, profile.id, profile.full_name, comment?.trim() ?? '', closed)
+    })
   }
 
   // Auto time-tracking: starts the instant work actually begins (→ in_progress) and
   // stops the instant it stops (leaving in_progress for any reason — waiting_user,
   // resolved, cancelled) — no manual Start/Stop Timer action for an agent to remember.
   if (isAgent && !isVendorTech && !isPoDecision && newStatus === 'in_progress' && currentStatus !== 'in_progress') {
-    await supabase
+    const { error: closeError } = await supabase
       .from('request_time_entries')
       .update({ stopped_at: nowIso })
       .eq('request_id', requestId)
       .eq('user_id', profile.id)
       .is('stopped_at', null)
+    if (closeError) {
+      logger.error({ event: 'time_entries.close_previous_failed', message: 'An earlier open timer could not be closed before a new one was opened', route: 'lib/requests/status-change.ts#applyStatusChange', requestId, errorCode: 'time_entry_stop_failed', error: closeError })
+    }
     const { error: insertError } = await supabase
       .from('request_time_entries')
       .insert({ request_id: requestId, user_id: profile.id, started_at: nowIso })
     // 23505 = a concurrent call already opened an entry for this user+request
     // (partial unique index) — that's "already started", not a real failure.
     if (insertError && insertError.code !== '23505') {
-      console.error('[updateRequestStatus] failed to open time entry', insertError)
+      logger.error({ event: 'time_entries.open_failed', message: 'The timer could not be started', route: 'lib/requests/status-change.ts#applyStatusChange', requestId, errorCode: 'time_entry_start_failed', error: insertError })
     }
-  } else if (currentStatus === 'in_progress' && newStatus !== 'in_progress') {
-    // Admin client, not the RLS-scoped one: the open entry may belong to a
-    // DIFFERENT agent than the one calling this (e.g. the ticket was
-    // reassigned mid-progress) — request_time_entries' UPDATE policy only
-    // allows `user_id = auth.uid()`, so the RLS-scoped client would silently
-    // no-op on another agent's row, leaving their timer running forever.
-    const admin = createAdminClient()
-    await admin
-      .from('request_time_entries')
-      .update({ stopped_at: nowIso })
-      .eq('request_id', requestId)
-      .is('stopped_at', null)
+  } else if ((currentStatus === 'in_progress' && newStatus !== 'in_progress') || isClosedLikeStatus(newStatus)) {
+    // Leaving in_progress for ANY status stops the timer, and so does finishing the ticket whatever it was before (B-07: a timer left open by an earlier move must not run on).
+    await stopOpenTimeEntries(requestId, nowIso)
   }
 
   // CSAT: start the survey and send the ONE e-mail for a resolution ("resolved" + stars + reopen link).
@@ -441,7 +535,7 @@ export async function applyStatusChange(
       })
       csatEmailed = csat.emailed
     } catch (e) {
-      console.error('[updateRequestStatus] CSAT survey creation failed', e)
+      logger.error({ event: 'status_change.csat_failed', message: 'The status was changed to resolved, but the CSAT survey could not be created', route: 'lib/requests/status-change.ts#applyStatusChange', requestId, errorCode: 'csat_issue_failed', error: e })
     }
   }
 
@@ -453,63 +547,19 @@ export async function applyStatusChange(
     (newStatus === 'open' && (currentStatus === 'resolved' || currentStatus === 'closed')) ||
     isApprovalRejectionReopen
   ) {
-    try {
-      const priority = request.priority as RequestPriority
-      const { data: full } = await supabase
-        .from('requests')
-        .select('service_id, form_data, service:services(sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections))')
-        .eq('id', requestId)
-        .single()
-
-      let resolutionDueAt: string | null = null
-      if (full) {
-        const svc = full.service as unknown as {
-          sla_policy?: { config?: SLAConfig } | null
-          form_sections?: FormSection[]
-          form_fields?: FormField[]
-          template?: { form_sections?: FormSection[] } | null
-        }
-        const allFields = resolveServiceFormSections(svc).flatMap((s) => s.fields)
-        const resolved = await resolveSlaDeadlines(supabase, {
-          serviceId: full.service_id,
-          priority,
-          servicePolicyConfig: svc.sla_policy?.config ?? null,
-          allFields,
-          formData: (full.form_data ?? {}) as Record<string, unknown>,
-          from: new Date(),
-        })
-        resolutionDueAt = resolved.resolutionDueAt
-      }
-
-      // A reopen starts a brand-new SLA clock from now — any pause credit
-      // accumulated against the OLD (pre-reopen) clock no longer means
-      // anything and must not leak into the new one.
-      //
-      // Reuses statusUpdateClient (admin, scoped above, for the requester
-      // reopen case) rather than the plain RLS client: by the time this runs
-      // the row's status is already 'open', not 'resolved', so the same RLS
-      // gap that blocked the primary update would block this follow-up write
-      // too. requestId/ownership were already established by the update above.
-      if (resolutionDueAt) {
-        await statusUpdateClient
-          .from('requests')
-          .update({
-            resolution_due_at: resolutionDueAt,
-            resolved_at: null,
-            closed_at: null,
-            waiting_since: null,
-            paused_ms_total: 0,
-          })
-          .eq('id', requestId)
-      } else {
-        // No applicable SLA config found — still clear the timestamps
-        await statusUpdateClient
-          .from('requests')
-          .update({ resolved_at: null, closed_at: null, waiting_since: null, paused_ms_total: 0 })
-          .eq('id', requestId)
-      }
-    } catch (e) {
-      console.error('[updateRequestStatus] REOPEN SLA recalculation failed', e)
+    // One try, and ONE more if it fails: the ticket is already reopened, and without this reset it keeps the deadline (and pause credit) of the clock that just ended.
+    // If both tries fail it is logged as an error with the request id, so the ticket can be corrected; the reopen itself is not undone.
+    let slaReset = await resetSlaAfterReopen(statusUpdateClient, requestId, request.priority as RequestPriority)
+    if (!slaReset.ok) slaReset = await resetSlaAfterReopen(statusUpdateClient, requestId, request.priority as RequestPriority)
+    if (!slaReset.ok) {
+      logger.error({
+        event: 'status_change.reopen_sla_reset_failed',
+        message: 'The ticket was reopened but its SLA clock could not be reset (tried twice)',
+        route: 'lib/requests/status-change.ts#applyStatusChange',
+        requestId,
+        errorCode: 'reopen_sla_reset_failed',
+        error: slaReset.error,
+      })
     }
   }
 
@@ -520,8 +570,10 @@ export async function applyStatusChange(
     action: 'status_changed',
     metadata: { from: currentStatus, to: newStatus, ...(comment?.trim() ? { remark: comment.trim() } : {}) },
   })
+  // B-15: the status HAS changed by now. A failed history entry is already logged by logActivity(); telling the user "error" for a change that went through made them retry
+  // (and fail, or repeat it). So carry on.
   if (activityResult.error) {
-    return { error: activityResult.error }
+    logger.error({ event: 'status_change.activity_missing', message: 'The status was changed but its history entry could not be written', route: 'lib/requests/status-change.ts#applyStatusChange', requestId, errorCode: 'activity_insert_failed' })
   }
 
   // A reopen gets its own activity entry (in addition to the generic
@@ -548,8 +600,8 @@ export async function applyStatusChange(
   // A resolved ticket that is reopened is not fixed, so the OEM is e-mailed again like for a new ticket (only tickets the sheets sent to an OEM in the first place).
   if (isResolvedReopen) {
     // a vendor must enter the OEM's NEW ticket number (the old one is replaced), so the two boxes are emptied first; the old number stays in the conversation
-    await clearOemTicketOnReopen(requestId)
-    await resendOemOnReopen({ requestId, actorId: profile.id, reason: comment?.trim() ?? '' })
+    await followUp(requestId, 'clear the OEM ticket number', () => clearOemTicketOnReopen(requestId))
+    await followUp(requestId, 'e-mail the OEM again', () => resendOemOnReopen({ requestId, actorId: profile.id, reason: comment?.trim() ?? '' }))
   }
 
   // D-06: when the requester and assignee are the same person, the two
@@ -567,7 +619,7 @@ export async function applyStatusChange(
       hold_purchase_ho: { type: 'status_changed', title: 'Your request is on hold — pending purchase from HO', body: `${profile.full_name} put this on hold pending a Head Office purchase.` },
       resolved:     { type: 'request_resolved',  title: 'Your request has been resolved',    body: `${profile.full_name} marked it resolved.`, skipEmail: csatEmailed },
       // Closing needs nothing from the requester, so it shows in the bell only (no e-mail).
-      closed:       { type: 'request_closed',    title: 'Your request has been closed',      body: `Request ${request.id} is now closed.`, skipEmail: true },
+      closed:       { type: 'request_closed',    title: 'Your request has been closed',      body: `${request.request_no ? `Request ${request.request_no}` : 'Your request'} is now closed.`, skipEmail: true },   // the ticket number, never the internal id
       cancelled:    { type: 'request_cancelled', title: 'Your request has been cancelled',   body: `${profile.full_name} cancelled the request.` },
       open:         { type: 'request_reopened',  title: 'Your request has been reopened',    body: `${profile.full_name} reopened the request.` },
     }
@@ -591,12 +643,33 @@ export async function applyStatusChange(
     }
   }
 
+  // B-14: a ticket that is cancelled or resolved is also news for the technician who has it (a vendor technician included) and for its collaborators, not only for the requester.
+  // Never the person who did it, and never someone already told above. Bell only: the e-mail wording of these two events is written for the requester.
+  if (newStatus === 'cancelled' || newStatus === 'resolved') {
+    await followUp(requestId, 'tell the technician and collaborators', async () => {
+      const audience = await getRequestAudience(requestId)
+      const recipients = [...new Set([audience.assigneeId, ...audience.collaboratorIds].filter((id): id is string => !!id && id !== profile.id && !notifiedUserIds.has(id)))]
+      if (recipients.length === 0) return
+      for (const id of recipients) notifiedUserIds.add(id)
+      await notify(recipients.map((recipientId) => ({
+        recipientId,
+        actorId: profile.id,
+        type: (newStatus === 'cancelled' ? 'request_cancelled' : 'request_resolved') as import('@/lib/notifications').NotifyInput['type'],
+        title: newStatus === 'cancelled' ? `Request ${request.request_no} was cancelled` : `Request ${request.request_no} was resolved`,
+        body: newStatus === 'cancelled' ? `${profile.full_name} cancelled the request.` : `${profile.full_name} marked it resolved.`,
+        requestId,
+        link: `/requests/${requestId}`,
+        skipEmail: true,
+      })))
+    })
+  }
+
   // Notify assignee when request is reopened (open, or back-to-assigned via
   // the approval-rejection reopen path) — unless they were already notified
   // above as the requester (D-06).
   // a vendor technician gets his own, clearly marked "REOPENED" mail (and bell) instead of the plain one; he must enter the new OEM ticket number after a resolved ticket is reopened
   const reopenedForVendor = (isResolvedReopen || isApprovalRejectionReopen) && !!request.assigned_to && request.assigned_to !== profile.id && !notifiedUserIds.has(request.assigned_to)
-    && await tellVendorReopened(requestId, profile.id, profile.full_name, comment?.trim() ?? '', (request.reopen_count ?? 0) + 1, isResolvedReopen)
+    && !!(await followUp(requestId, 'tell the vendor it was reopened', () => tellVendorReopened(requestId, profile.id, profile.full_name, comment?.trim() ?? '', (request.reopen_count ?? 0) + 1, isResolvedReopen)))
   if (reopenedForVendor && request.assigned_to) notifiedUserIds.add(request.assigned_to)
   if (
     (newStatus === 'open' || isApprovalRejectionReopen) &&
@@ -632,7 +705,7 @@ export async function applyStatusChange(
   // other assignment. Not folded into notifyRequesterOfAssignment (that's for someone ELSE
   // assigning the ticket) since the message here is about reopening, not first assignment.
   if ((isResolvedReopenByRequester || isApprovalRejectionReopen) && request.assigned_to) {
-    const { data: assignee } = await supabase.from('profiles').select('full_name').eq('id', request.assigned_to).maybeSingle()
+    const { data: assignee } = await supabase.from('profiles').select('full_name').eq('id', request.assigned_to).maybeSingle()   // (a missing name only changes the wording below)
     notify({
       recipientId: profile.id,
       actorId: profile.id,
@@ -661,7 +734,7 @@ export async function applyStatusChange(
     }).select('id').single()
     writtenCommentId = written?.id
     if (commentError) {
-      console.error('[updateRequestStatus] Comment insert failed', commentError.message)
+      logger.error({ event: 'status_change.comment_failed', message: 'The status was changed but its comment could not be saved', route: 'lib/requests/status-change.ts#applyStatusChange', requestId, errorCode: 'comment_insert_failed', error: commentError })
       // Status was updated and logged — do not roll back for a failed comment
     }
   }
@@ -671,7 +744,7 @@ export async function applyStatusChange(
     const { runRulesForTrigger } = await import('@/lib/rules/run')
     await runRulesForTrigger('updated', requestId)
   } catch (e) {
-    console.error('[updateRequestStatus] Business rules (updated) failed', e)
+    logger.error({ event: 'status_change.rules_failed', message: 'The status was changed but the Business Rules (updated) failed', route: 'lib/requests/status-change.ts#applyStatusChange', requestId, errorCode: 'business_rules_failed', error: e })
   }
 
   revalidatePath(`/requests/${requestId}`)

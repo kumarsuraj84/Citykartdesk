@@ -19,5 +19,5 @@ const findings = [
   { ok: external.length === 0, text: external.length === 0 ? 'No social/OAuth sign-in providers are enabled.' : `Sign-in providers enabled: ${external.join(', ')}.` },
 ]
 for (const f of findings) console.log(`${f.ok ? 'OK  ' : 'FAIL'}  ${f.text}`)
-console.log('(The minimum password length is not published by the service: confirm GOTRUE_PASSWORD_MIN_LENGTH=8 in its configuration file.)')
+console.log('(The minimum password length is not published by the service: confirm GOTRUE_PASSWORD_MIN_LENGTH=10 (the application checks 10 characters and 3 of 4 kinds for new passwords) in its configuration file.)')
 exit(findings.every((f) => f.ok) ? 0 : 1)

@@ -69,4 +69,5 @@ BEGIN
   DELETE FROM public._grant_snapshots WHERE stage = '167';
   IF NOT EXISTS (SELECT 1 FROM public._grant_snapshots) THEN DROP TABLE public._grant_snapshots; END IF;
 END $$;
+DELETE FROM auth.schema_migrations WHERE version = '20240101000167';
 COMMIT;

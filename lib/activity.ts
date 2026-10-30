@@ -9,6 +9,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { logger } from '@/lib/observability/logger'
 import type { ActivityAction } from '@/types'
 import type { Json } from '@/types/database'
 
@@ -28,8 +29,10 @@ export type LogActivityResult = { error?: string }
  * Insert a request_activity row via the admin client.
  *
  * Returns `{}` on success.
- * Returns `{ error: string }` on failure AND logs to stderr.
- * Never throws.
+ * Returns `{ error: string }` on failure AND logs it through the structured logger
+ * (event "activity.log_failed", so it reaches the System Log).
+ * Never throws. A caller whose change is already saved should log and carry on when it gets
+ * an error back: it must NOT report the whole action as failed (the user would retry something that already happened).
  */
 export async function logActivity({
   requestId,
@@ -47,12 +50,15 @@ export async function logActivity({
     })
 
     if (error) {
-      console.error('[logActivity] Insert failed', {
+      logger.error({
+        event: 'activity.log_failed',
+        message: 'A request_activity row could not be written',
+        route: 'lib/activity.ts#logActivity',
         requestId,
-        actorId,
-        action,
-        supabaseError: error.message,
-        code: error.code,
+        actorId: actorId ?? undefined,
+        errorCode: 'activity_insert_failed',
+        context: { action, dbCode: error.code },
+        error,
       })
       return { error: `Activity log failed: ${error.message}` }
     }
@@ -60,7 +66,16 @@ export async function logActivity({
     return {}
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    console.error('[logActivity] Unexpected error', { requestId, action, message })
+    logger.error({
+      event: 'activity.log_failed',
+      message: 'A request_activity row could not be written (unexpected error)',
+      route: 'lib/activity.ts#logActivity',
+      requestId,
+      actorId: actorId ?? undefined,
+      errorCode: 'activity_unexpected_error',
+      context: { action },
+      error: err,
+    })
     return { error: `Activity log failed: ${message}` }
   }
 }

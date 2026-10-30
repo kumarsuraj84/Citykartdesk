@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { isVendor } from '@/lib/vendor/access'
+import { parseRequestTab } from '@/lib/ui/requestTabs'
 import { AGENT_QUEUE_PATH, REQUESTS_PATH, safeOrigin, defaultTicketOrigin, ticketHref } from '@/lib/requests/origin'
 import { getCurrentProfile, getTeamMembers } from '@/lib/queries/profiles'
 import { suggestedCvmForRequest } from '@/lib/cvm/suggest'
@@ -64,7 +65,7 @@ import type {
 
 interface PageProps {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ from?: string }>
+  searchParams: Promise<{ from?: string; tab?: string }>
 }
 
 // ── Activity labels ────────────────────────────────────────────────────────────
@@ -338,12 +339,14 @@ function HistoryRow({ item }: { item: RequestActivityWithActor }) {
       <div className="w-28 shrink-0 space-y-0.5">
         <p className="text-xs font-medium text-foreground">
           {new Date(item.created_at).toLocaleDateString('en-US', {
+            timeZone: 'Asia/Kolkata',
             month: 'short',
             day: 'numeric',
           })}
         </p>
         <p className="text-[10px] text-muted-foreground">
           {new Date(item.created_at).toLocaleTimeString('en-US', {
+            timeZone: 'Asia/Kolkata',
             hour: '2-digit',
             minute: '2-digit',
             hour12: false,
@@ -367,7 +370,7 @@ function HistoryRow({ item }: { item: RequestActivityWithActor }) {
 
 export default async function RequestDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params
-  const { from } = await searchParams
+  const { from, tab } = await searchParams
 
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
@@ -804,7 +807,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
             request.response_due_at
               ? responseDueMs != null && responseDueMs > 0
                 ? 'remaining'
-                : new Date(request.response_due_at).toLocaleDateString()
+                : new Date(request.response_due_at).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' })
               : 'Not set'
           }
           highlight={responseDueMs != null && responseDueMs < 0 ? 'red' : undefined}
@@ -822,7 +825,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
             request.resolution_due_at
               ? resolutionDueMs != null && resolutionDueMs > 0
                 ? 'remaining'
-                : new Date(request.resolution_due_at).toLocaleDateString()
+                : new Date(request.resolution_due_at).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' })
               : 'Not set'
           }
           highlight={resolutionDueMs != null && resolutionDueMs < 0 ? 'red' : undefined}
@@ -848,6 +851,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
               <span className="text-xs text-muted-foreground">
                 Due{' '}
                 {new Date(request.resolution_due_at).toLocaleDateString('en-US', {
+                  timeZone: 'Asia/Kolkata',
                   month: 'short',
                   day: 'numeric',
                   year: 'numeric',
@@ -871,6 +875,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>
                   {new Date(request.created_at).toLocaleDateString('en-US', {
+                    timeZone: 'Asia/Kolkata',
                     month: 'short',
                     day: 'numeric',
                   })}
@@ -878,6 +883,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
                 <span className="font-semibold text-foreground">{pct}% elapsed</span>
                 <span>
                   {new Date(request.resolution_due_at).toLocaleDateString('en-US', {
+                    timeZone: 'Asia/Kolkata',
                     month: 'short',
                     day: 'numeric',
                   })}
@@ -1106,6 +1112,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
         activityCount={activity.length}
         taskCount={linkedTasks.length}
         showApprovals={hasApprovalWorkflow}
+        initialTab={parseRequestTab(tab, { showApprovals: hasApprovalWorkflow })}
       />
     </div>
   )

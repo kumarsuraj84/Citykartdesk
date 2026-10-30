@@ -5,14 +5,13 @@
  *
  *   open → assigned  is NOT a manual status transition.
  *
- * The `assigned` status is reached exclusively through the AssignmentPanel
- * (which calls assignRequest(), which auto-promotes open → assigned).
- * Keeping assignment-as-status separate from workflow-transitions prevents
- * the two mechanisms from fighting each other and keeps the StatusTransitionPanel
- * focused on workflow progression.
+ * The `assigned` status is reached exclusively through assignRequest(), which
+ * auto-promotes open → assigned (the Assign control of the ticket page and the
+ * bulk assign). Keeping assignment-as-status separate from workflow-transitions
+ * prevents the two mechanisms from fighting each other.
  *
- * Both lib/actions/requests.ts (server) and
- * components/requests/StatusTransitionPanel.tsx (client)
+ * Both lib/actions/requests.ts (server) and the status control of the ticket page
+ * (components/requests/RequestSidebarPanel.tsx, client)
  * MUST import from this file — no local copies.
  */
 

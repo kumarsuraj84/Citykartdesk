@@ -34,7 +34,13 @@ interface Props {
 
 const DAY = 86_400_000
 
-export function ExecutiveDashboard({ level, me, now, tickets, approvals, truncated }: Props) {
+export function ExecutiveDashboard({ level, me, now, tickets: ticketsProp, approvals: approvalsProp, truncated }: Props) {
+  // Every 12 seconds the page asks the server again, and the answer comes back as NEW arrays even when nothing changed (the server shares one load for a minute, so `now` stays the
+  // same until the data really is re-read). Every list and number below is worked out from these arrays: keeping the previous ones while `now` is the same stops all of it being
+  // calculated again for a year of tickets every 12 seconds (audit E-07).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stable = useMemo(() => ({ tickets: ticketsProp, approvals: approvalsProp }), [now])
+  const { tickets, approvals } = stable
   const copy = LEVEL_COPY[level]
   const [period, setPeriod] = useState<Period>('30d')
   const [custom, setCustom] = useState<CustomRange>(() => ({ start: isoDay(now - 13 * DAY), end: isoDay(now) }))

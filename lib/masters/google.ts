@@ -9,6 +9,8 @@ export const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readon
 /** Where the sheet rows come from. The real one is Google; tests use files or fixed rows. */
 export interface SheetsSource {
   fetchValues(spreadsheetId: string, tabName: string | null): Promise<unknown[][]>
+  /** The same sheet as it is SHOWN (dates as dates, '007' as '007', long numbers with every digit). Optional; used for the cells a person reads as text. */
+  fetchDisplayValues?(spreadsheetId: string, tabName: string | null): Promise<unknown[][]>
 }
 
 export class SheetsAccessError extends Error {
@@ -53,23 +55,25 @@ async function sheetsGet(url: string, token: string): Promise<unknown> {
 }
 
 export function googleSheetsSource(refreshToken: string): SheetsSource {
+  async function read(spreadsheetId: string, tabName: string | null, render: string): Promise<unknown[][]> {
+    const token = await accessTokenFor(refreshToken)
+    const id = encodeURIComponent(spreadsheetId)
+    let tab = tabName
+    if (!tab) {
+      const meta = (await sheetsGet(`https://sheets.googleapis.com/v4/spreadsheets/${id}?fields=sheets.properties.title`, token)) as { sheets?: { properties?: { title?: string } }[] }
+      tab = meta.sheets?.[0]?.properties?.title ?? null
+      if (!tab) throw new SheetsAccessError('The sheet has no tab.', 'other')
+    }
+    const range = encodeURIComponent(`'${tab.replace(/'/g, "''")}'`)
+    const data = (await sheetsGet(
+      `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${range}?majorDimension=ROWS&valueRenderOption=${render}&dateTimeRenderOption=${render === 'FORMATTED_VALUE' ? 'FORMATTED_STRING' : 'SERIAL_NUMBER'}`,
+      token,
+    )) as { values?: unknown[][] }
+    return data.values ?? []
+  }
   return {
-    async fetchValues(spreadsheetId, tabName) {
-      const token = await accessTokenFor(refreshToken)
-      const id = encodeURIComponent(spreadsheetId)
-      let tab = tabName
-      if (!tab) {
-        const meta = (await sheetsGet(`https://sheets.googleapis.com/v4/spreadsheets/${id}?fields=sheets.properties.title`, token)) as { sheets?: { properties?: { title?: string } }[] }
-        tab = meta.sheets?.[0]?.properties?.title ?? null
-        if (!tab) throw new SheetsAccessError('The sheet has no tab.', 'other')
-      }
-      const range = encodeURIComponent(`'${tab.replace(/'/g, "''")}'`)
-      const data = (await sheetsGet(
-        `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${range}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
-        token,
-      )) as { values?: unknown[][] }
-      return data.values ?? []
-    },
+    fetchValues: (spreadsheetId, tabName) => read(spreadsheetId, tabName, 'UNFORMATTED_VALUE'),
+    fetchDisplayValues: (spreadsheetId, tabName) => read(spreadsheetId, tabName, 'FORMATTED_VALUE'),
   }
 }
 

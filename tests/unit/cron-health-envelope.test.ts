@@ -47,7 +47,7 @@ function orgIdFilter(calls: Array<[string, unknown[]]>): string | undefined {
 }
 
 beforeEach(() => {
-  vi.stubEnv('CRON_SECRET', 'test-secret')
+  vi.stubEnv('CRON_SECRET', 'test-secret-0123456789')
   alertOperatorMock.mockClear()
 })
 afterEach(() => {
@@ -57,7 +57,7 @@ afterEach(() => {
 })
 
 function cronRequest() {
-  return new NextRequest('http://localhost/api/x', { headers: { 'x-cron-secret': 'test-secret' } })
+  return new NextRequest('http://localhost/api/x', { headers: { 'x-cron-secret': 'test-secret-0123456789' } })
 }
 
 describe('app/api/business-rules/run — cron health envelope', () => {

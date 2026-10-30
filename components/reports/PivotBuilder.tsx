@@ -39,6 +39,7 @@ import {
 import type { ReportRow } from '@/lib/queries/reporting'
 import type { SavedReport } from '@/types'
 import { PivotTableView } from './PivotTableView'
+import { istToday, istAddDays } from '@/lib/reporting/ist'
 import { FlatTableView } from './FlatTableView'
 
 type Well = 'rows' | 'cols' | 'values' | 'filters' | 'columns'
@@ -54,16 +55,12 @@ function moveInArray<T>(arr: T[], index: number, dir: -1 | 1): T[] {
   return next
 }
 
-// the day as the viewer's calendar shows it (toISOString is UTC, which is the day before between midnight and 05:30 in India)
-function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
+// The day is the INDIA day, in the browser as on the server (the report rows carry India dates): the browser's own zone made "Today" a different day for a viewer abroad (audit F-29).
 const DATE_PRESETS: { key: NonNullable<DatePreset>; label: string; from: () => string; to: () => string }[] = [
-  { key: 'today', label: 'Today', from: () => isoDate(new Date()), to: () => isoDate(new Date()) },
-  { key: 'last7', label: 'Last 7 days', from: () => isoDate(new Date(Date.now() - 6 * 86_400_000)), to: () => isoDate(new Date()) },
-  { key: 'last30', label: 'Last 30 days', from: () => isoDate(new Date(Date.now() - 29 * 86_400_000)), to: () => isoDate(new Date()) },
-  { key: 'thisMonth', label: 'This month', from: () => { const d = new Date(); return isoDate(new Date(d.getFullYear(), d.getMonth(), 1)) }, to: () => isoDate(new Date()) },
+  { key: 'today', label: 'Today', from: () => istToday(), to: () => istToday() },
+  { key: 'last7', label: 'Last 7 days', from: () => istAddDays(istToday(), -6), to: () => istToday() },
+  { key: 'last30', label: 'Last 30 days', from: () => istAddDays(istToday(), -29), to: () => istToday() },
+  { key: 'thisMonth', label: 'This month', from: () => `${istToday().slice(0, 8)}01`, to: () => istToday() },
 ]
 
 function defaultFilterFor(field: ReportField): FieldFilter {

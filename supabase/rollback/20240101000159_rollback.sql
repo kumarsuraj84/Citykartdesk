@@ -1,3 +1,4 @@
+BEGIN;
 -- ROLLBACK for migration 159 (ticket-number overflow). Restores the previous function, which repeats a ticket number after 999,999. LOCAL; NOT run on production.
 
 CREATE OR REPLACE FUNCTION public.generate_request_no()
@@ -18,3 +19,5 @@ BEGIN
   RETURN 'CKSD-' || LPAD(v_no::TEXT, 6, '0');
 END;
 $function$;
+DELETE FROM auth.schema_migrations WHERE version = '20240101000159';
+COMMIT;

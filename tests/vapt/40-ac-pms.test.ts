@@ -202,8 +202,9 @@ describe('the tickets are made from 09:00 on the PMS date', () => {
     await db().from('master_sources').delete().eq('org_id', fx.orgId).eq('kind', 'pms')
     sheets[SHEET] = [HEAD, [A, '26/10/2026']]
     const r = await createDuePmsTickets(db(), fx.orgId, T0900)
-    expect(r).toEqual({ created: 0, alreadyDone: 0, skipped: 0, failed: 0 })
+    // put the PMS sheet back first, so a failed check below cannot leave the next tests without it
     await db().from('master_sources').upsert({ org_id: fx.orgId, kind: 'pms', spreadsheet_id: SHEET }, { onConflict: 'org_id,kind' })
+    expect(r).toEqual({ created: 0, alreadyDone: 0, skipped: 0, failed: 0, waiting: 0 })
   })
 })
 

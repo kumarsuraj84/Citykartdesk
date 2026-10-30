@@ -50,3 +50,15 @@ describe('ticket title = the Subject field', () => {
     expect(subjectToTitle('a'.repeat(500))).toHaveLength(200)
   })
 })
+
+describe('B-28: the title comes from the first field that has an answer', () => {
+  it('a blank text box in front of the filled one is skipped', () => {
+    const fields = [{ id: 'a', type: 'text', label: 'Serial No' }, { id: 'b', type: 'text', label: 'Store name' }]
+    expect(pickTitleField(fields, { a: '   ', b: 'Alcove' }).field?.id).toBe('b')
+  })
+  it('with no text answer, the textarea is used, then nothing', () => {
+    const fields = [{ id: 'a', type: 'text', label: 'Serial No' }, { id: 'd', type: 'textarea', label: 'Details' }]
+    expect(pickTitleField(fields, { a: '', d: 'It does not start' }).field?.id).toBe('d')
+    expect(pickTitleField(fields, { a: '', d: ' ' }).field).toBeUndefined()
+  })
+})

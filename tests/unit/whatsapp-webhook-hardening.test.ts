@@ -9,6 +9,9 @@ const touched = vi.fn()
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => { touched(); throw new Error('the database must not be touched for this request') } }))
 const limiter = vi.fn(async () => ({ limited: false, remaining: 1 }))
 vi.mock('@/lib/rate-limit', () => ({ rateLimit: (...a: unknown[]) => limiter(...(a as [])), getClientIp: async () => '203.0.113.9' }))
+// the shared (database) limiter is not what these tests are about, and it must not touch the database either
+const sharedLimited = vi.fn(async () => false)
+vi.mock('@/lib/security/shared-limits', () => ({ sharedRateLimited: (...a: unknown[]) => sharedLimited(...(a as [])), firstDelivery: async () => true }))
 
 import { POST } from '@/app/api/intake/webhook/whatsapp/route'
 import { MAX_REQUESTS_PER_MINUTE_PER_CALLER } from '@/lib/whatsapp/webhook-limits'
@@ -20,7 +23,7 @@ const payload = (...phoneIds: string[]) => JSON.stringify({
 })
 const post = (body: string, headers: Record<string, string> = {}) => POST(new NextRequest('http://localhost/api/intake/webhook/whatsapp', { method: 'POST', body, headers }))
 
-beforeEach(() => { touched.mockClear(); limiter.mockClear(); limiter.mockResolvedValue({ limited: false, remaining: 1 }) })
+beforeEach(() => { touched.mockClear(); limiter.mockClear(); sharedLimited.mockClear(); sharedLimited.mockResolvedValue(false); limiter.mockResolvedValue({ limited: false, remaining: 1 }) })
 
 describe('webhook route', () => {
   it('refuses a body larger than 1 MB without reading the database', async () => {
@@ -34,6 +37,19 @@ describe('webhook route', () => {
     expect(res.status).toBe(429)
     expect(touched).not.toHaveBeenCalled()
     expect(limiter).toHaveBeenCalledWith('wa-webhook:203.0.113.9', MAX_REQUESTS_PER_MINUTE_PER_CALLER, 60_000)
+  })
+  it('also refuses with 429 when the shared (all-process) limit is exceeded, before any database work', async () => {
+    sharedLimited.mockResolvedValue(true)
+    const res = await post(payload('111'))
+    expect(res.status).toBe(429)
+    expect(touched).not.toHaveBeenCalled()
+  })
+  it('refuses an oversized body that has no Content-Length (chunked) while it is being read', async () => {
+    const chunk = new TextEncoder().encode('x'.repeat(600_000))
+    const stream = new ReadableStream({ start(c) { c.enqueue(chunk); c.enqueue(chunk); c.close() } })
+    const res = await POST(new NextRequest('http://localhost/api/intake/webhook/whatsapp', { method: 'POST', body: stream, duplex: 'half' } as never))
+    expect(res.status).toBe(413)
+    expect(touched).not.toHaveBeenCalled()
   })
 })
 

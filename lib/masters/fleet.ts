@@ -1,5 +1,6 @@
 // AC master and Genset master: the copy of the sheets as lists the screens, the Excel export and the dashboards can use. Read only, server side.
 // The same columns serve every dashboard: counts by brand, tonnage, region, AMC vendor, store.
+import { fetchAllPages } from '@/lib/queries/paging'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (t: string) => any }
@@ -38,9 +39,12 @@ export async function loadFleet(db: Db, orgId: string, kind: 'ac'): Promise<AcMa
 export async function loadFleet(db: Db, orgId: string, kind: 'genset'): Promise<GensetMasterRow[]>
 export async function loadFleet(db: Db, orgId: string, kind: FleetKind): Promise<(AcMasterRow | GensetMasterRow)[]> {
   const table = kind === 'ac' ? 'master_ac_units' : 'master_gensets'
-  const { data, error } = await db.from(table).select(kind === 'ac' ? AC_COLS : GS_COLS).eq('org_id', orgId).order('store_code').limit(MAX_LIST_ROWS)
-  if (error) throw new Error(`fleet list failed: ${error.message}`)
-  return (data ?? []) as (AcMasterRow | GensetMasterRow)[]
+  // read in pages: one answer is cut at 1,000 rows without any error, so a single .limit(20000) showed only the first 1,000 units
+  const { rows } = await fetchAllPages<AcMasterRow | GensetMasterRow>(
+    (from, to) => db.from(table).select(kind === 'ac' ? AC_COLS : GS_COLS).eq('org_id', orgId).order('store_code').order('id').range(from, to),
+    { maxRows: MAX_LIST_ROWS },
+  )
+  return rows
 }
 
 /** The state of one row as the screens and the export say it. */

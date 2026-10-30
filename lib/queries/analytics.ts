@@ -1,13 +1,13 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { ReportViewerScope } from '@/lib/reporting/access'
 import { fetchAllPages } from '@/lib/queries/paging'
-import { isCurrentlyBreached } from '@/lib/sla/breach'
-import { AGE_BUCKETS, ageBucketFor } from '@/lib/reporting/aging'
+import { isSlaPausedStatus } from '@/lib/constants/requests'
+import { AGE_BUCKETS, ageBucketFor, ageInDays } from '@/lib/reporting/aging'
 import { RED_FLAG } from '@/lib/reporting/executive/engine'
 import { loadStoreDims } from '@/lib/queries/store-dims'
 import { momentOf } from '@/lib/analytics/moment'
 import { applyScope } from '@/lib/queries/executive-dashboard'
-import { istDay, istWeekStart } from '@/lib/reporting/ist'
+import { istDay, istWeekStart, istToday, isOverdueDate, istDayStartMs, istDayStartIso, istAddDays } from '@/lib/reporting/ist'
 import {
   emptyStoreFilter, matchesStoreFilter, storeFilterCount, toCombos, type StoreCombo, type StoreDims, type StoreFilter,
 } from '@/lib/analytics/store-filter'
@@ -27,21 +27,30 @@ export const PERIOD_OPTIONS: { value: Period; label: string }[] = [
 ]
 export const isPeriod = (v: unknown): v is Period => PERIOD_OPTIONS.some((p) => p.value === v)
 
-/** Start of the current financial year (1 April). */
+const DAY_MS = 86_400_000
+
+/** Daily points up to this many days, weekly points beyond it (one limit for the request and the task trend charts). */
+export const TREND_DAILY_MAX_DAYS = 60
+
+// Every day below is an INDIA day ("YYYY-MM-DD" worked out with fixed +05:30 moments), never the server's own: the code must give the same
+// answer whatever time zone the server runs in (audit H-28).
+/** Start of the current financial year (1 April, 00:00 India time). */
 function fyStart(now = new Date()): Date {
-  const year = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
-  return new Date(year, 3, 1)
+  const today = istToday(now)
+  const year = Number(today.slice(0, 4))
+  const fyYear = Number(today.slice(5, 7)) >= 4 ? year : year - 1
+  return new Date(istDayStartMs(`${fyYear}-04-01`))
 }
 function periodDays(p: Period): number {
-  if (p === 'fy') {
-    const today = new Date(); today.setHours(0, 0, 0, 0)
-    return Math.round((today.getTime() - fyStart().getTime()) / 86_400_000) + 1
-  }
+  if (p === 'fy') return Math.round((istDayStartMs(istToday()) - fyStart().getTime()) / DAY_MS) + 1
   return Number.parseInt(p, 10)
 }
 
-/** Explicit start/end date range (YYYY-MM-DD), for "custom" report windows. */
-export type DateRange = { from: string; to: string }
+/**
+ * Explicit start/end date range (YYYY-MM-DD), for "custom" report windows. A range may also carry exact moments (epoch ms) when it is not whole days:
+ * the Req. Inflow / Outflow cards count a real rolling 24 hours / 7 days / 30 days, and the list behind a card must cover exactly the same window.
+ */
+export type DateRange = { from: string; to: string; fromMs?: number; toMs?: number }
 
 export type PeriodParam = Period | DateRange
 
@@ -51,24 +60,32 @@ export function isDateRange(p: PeriodParam): p is DateRange {
 
 export function periodStart(p: Period): Date {
   if (p === 'fy') return fyStart()
-  const d = new Date()
   const days = periodDays(p)
   // N calendar days including today: today and the N-1 days before it (it used to start N days back, which is N+1 days)
-  d.setDate(d.getDate() - (days - 1))
-  d.setHours(0, 0, 0, 0)
-  return d
+  return new Date(istDayStartMs(istAddDays(istToday(), -(days - 1))))
 }
 
 function shortDate(d: Date): string {
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata' })
+}
+
+/** A share as a whole percent that never rounds up to 100 (99.6 shows as 99) or down to 0 unless it is exact: "100%" must mean every single one (audit F-31). */
+export function wholePercent(part: number, total: number): number {
+  if (total <= 0) return 0
+  const exact = (part / total) * 100
+  const r = Math.round(exact)
+  if (part === total) return 100
+  if (part === 0) return 0
+  return Math.min(99, Math.max(1, r))
 }
 
 /** Resolves a preset period or a custom range into a concrete window + display label. */
 export function resolvePeriodParam(p: PeriodParam): { start: Date; end: Date; label: string; days: number } {
   if (isDateRange(p)) {
-    const start = new Date(`${p.from}T00:00:00`)
-    const end = new Date(`${p.to}T23:59:59.999`)
-    const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1)
+    // whole India days, both included (one day = 1 day, not 2); or the exact moments when the range carries them
+    const start = p.fromMs !== undefined ? new Date(p.fromMs) : new Date(istDayStartIso(p.from))
+    const end = p.toMs !== undefined ? new Date(p.toMs) : new Date(istDayStartMs(istAddDays(p.to, 1)) - 1)
+    const days = Math.max(1, Math.round((end.getTime() - start.getTime() + 1) / DAY_MS))
     return { start, end, label: `${shortDate(start)} – ${shortDate(end)}`, days }
   }
   const days = periodDays(p)
@@ -256,6 +273,7 @@ export type RequestFlow = { inflow: RollingStat; outflow: RollingStat }
 // A viewer who isn't org-wide only sees their own technician groups' data; no groups → nothing.
 const NO_TEAM_ID = '00000000-0000-0000-0000-000000000000'
 
+// Used for TASKS and for nothing else (a task has no requester or assignee-on-a-ticket column); tickets use applyScope below.
 function scopeTeamIds(scope: ReportViewerScope): string[] | null {
   if (scope.kind === 'all') return null
   if (scope.kind === 'team' || scope.kind === 'agent') return scope.teamIds.length > 0 ? scope.teamIds : [NO_TEAM_ID]
@@ -270,10 +288,13 @@ export async function getAnalytics(
 ): Promise<AnalyticsData> {
   const teamScope = scopeTeamIds(scope)
   // a person's team (the people who report to them) is limited by who raised or works each ticket, not by technician group
+  // ONE definition of "the tickets this viewer sees", the same one the list behind a clicked number uses (lib/actions/analytics.ts), so a card and its list agree (audit F-27):
+  // a technician sees the tickets assigned to them, raised by them, and those of their technician groups; a manager the groups' tickets; a person with a team their team's.
+  // A viewer who may see tickets only as a requester (kind 'own') has no dashboard: nothing.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const inScope = (q: any) => (scope.kind === 'reports' ? applyScope(q, scope, '') : teamScope ? q.in('team_id', teamScope) : q)
+  const inScope = (q: any) => (scope.kind === 'own' ? q.in('team_id', [NO_TEAM_ID]) : applyScope(q, scope, ''))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const inTaskScope = (q: any) => (scope.kind === 'reports' ? q.in('assignee_id', scope.techIds && scope.techIds.length > 0 ? scope.techIds : scope.reportIds.length > 0 ? scope.reportIds : [NO_TEAM_ID]) : inScope(q))
+  const inTaskScope = (q: any) => (scope.kind === 'reports' ? q.in('assignee_id', scope.techIds && scope.techIds.length > 0 ? scope.techIds : scope.reportIds.length > 0 ? scope.reportIds : [NO_TEAM_ID]) : teamScope ? q.in('team_id', teamScope) : q)
   const admin = createAdminClient() as unknown as AnyClient
   const { start: startDate, end: endDate, label: periodLabel, days } = resolvePeriodParam(period)
   const start = startDate.toISOString()
@@ -288,32 +309,22 @@ export async function getAnalytics(
     const { rows } = await fetchAllPages<any>(build, { maxRows: 200_000 })
     return { data: rows }
   }
-  const withinScope = (q: any, col: string) => (scope.kind === 'reports' ? applyScope(q, scope, 'request.') : teamScope ? q.in(col, teamScope) : q) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const withinScope = (q: any) => (scope.kind === 'own' ? q.in('request.team_id', [NO_TEAM_ID]) : applyScope(q, scope, 'request.')) // eslint-disable-line @typescript-eslint/no-explicit-any
 
   // Today/yesterday window for the Daily Activity widget -- always the last
   // two calendar days regardless of the dashboard's own 7d/30d/90d/custom
   // period selector above, since "how many were created today" is an
   // absolute question, not one scoped to whatever range happens to be picked.
-  const todayStart = new Date(now)
-  todayStart.setHours(0, 0, 0, 0)
-  const yesterdayStart = new Date(todayStart)
-  yesterdayStart.setDate(yesterdayStart.getDate() - 1)
+  // (midnight of the INDIA day, whatever zone the server runs in)
+  const todayStart = new Date(istDayStartMs(istToday(now)))
+  const yesterdayStart = new Date(todayStart.getTime() - DAY_MS)
   const yesterdayStartIso = yesterdayStart.toISOString()
 
-  // Rolling windows for the Req. Inflow/Outflow cards — also absolute, not
-  // scoped to the period selector. Calendar-day granularity (midnight N days
-  // ago through now), matching the Daily Activity widget's own convention —
-  // this keeps each card's headline number consistent with what its
-  // click-through drawer shows (same day boundaries both places), rather
-  // than a millisecond-precise rolling window the drawer can't reproduce.
-  const daysAgoMidnight = (days: number) => {
-    const d = new Date(todayStart)
-    d.setDate(d.getDate() - days)
-    return d
-  }
-  const last24hStartIso = yesterdayStart.toISOString() // "last 24h" ≈ today + yesterday
-  const last7dStartIso = daysAgoMidnight(7).toISOString()
-  const last30dStartIso = daysAgoMidnight(30).toISOString()
+  // Rolling windows for the Req. Inflow/Outflow cards: the last 24 hours, 7 days and 30 days, counted back from this moment (they used to start at midnight,
+  // so "24 hours" was up to 48 hours, "7 days" 8 days and "30 days" 31 days). The list behind a card is asked for the same exact moments (DateRange.fromMs/toMs).
+  const last24hStartIso = new Date(now.getTime() - DAY_MS).toISOString()
+  const last7dStartIso = new Date(now.getTime() - 7 * DAY_MS).toISOString()
+  const last30dStartIso = new Date(now.getTime() - 30 * DAY_MS).toISOString()
 
   // Run all fetches in parallel
   const [
@@ -353,6 +364,8 @@ export async function getAnalytics(
       .from('requests')
       .select('id, requester_id, status, priority, team_id, assigned_to, created_at, resolved_at, closed_at, updated_at, resolution_due_at')
       .eq('org_id', orgId)
+      // a ticket the approval flow cancelled and the auto-close then closed was never resolved (audit F-12)
+      .is('cancellation_reason', null)
       .or(`and(resolved_at.gte.${start},resolved_at.lte.${end}),and(resolved_at.is.null,closed_at.gte.${start},closed_at.lte.${end}),and(resolved_at.is.null,closed_at.is.null,status.in.(resolved,closed),updated_at.gte.${start},updated_at.lte.${end})`))
       .order('id', { ascending: true }).range(from, to)),
 
@@ -360,7 +373,7 @@ export async function getAnalytics(
     pageAll((from, to) => withinScope(admin
       .from('approvals')
       .select('id, status, created_at, request_id, decisions:approval_decisions(decision, decided_at), request:requests!inner(org_id, team_id, requester_id)')
-      .eq('request.org_id', orgId), 'request.team_id')
+      .eq('request.org_id', orgId))
       .order('id', { ascending: true }).range(from, to)),
 
     // Teams lookup
@@ -369,26 +382,33 @@ export async function getAnalytics(
     // Services lookup
     admin.from('services').select('id, name').eq('org_id', orgId),
 
-    // Profiles lookup (agents)
-    admin.from('profiles').select('id, full_name, role').eq('org_id', orgId),
+    // Profiles lookup (agents): every page (the database answers at most 1000 rows per request)
+    pageAll((from, to) => admin.from('profiles').select('id, full_name, role').eq('org_id', orgId).order('id', { ascending: true }).range(from, to)),
 
-    // Tasks
-    inTaskScope(admin
+    // Tasks (every page)
+    pageAll((from, to) => inTaskScope(admin
       .from('tasks')
-      .select('id, status, priority, due_date, assignee_id, team_id, created_at, updated_at')
-      .eq('org_id', orgId)),
+      .select('id, status, priority, due_date, assignee_id, team_id, created_at, updated_at, completed_at')
+      .eq('org_id', orgId))
+      .order('id', { ascending: true }).range(from, to)),
 
     // Daily Activity (today/yesterday) + Req. Inflow/Outflow (24h/7d/30d) both
     // bucket off these same rows — fetched back to the widest window either
     // needs (30 days) so there's one created/closed query, not two.
-    inScope(admin.from('requests').select('created_at, requester_id').eq('org_id', orgId).gte('created_at', last30dStartIso)),
-    inScope(admin.from('requests').select('closed_at, requester_id').eq('org_id', orgId).not('closed_at', 'is', null).gte('closed_at', last30dStartIso)),
+    // (30 days of tickets is far more than 1000 rows in a busy month: every page, in a stable order)
+    pageAll((from, to) => inScope(admin.from('requests').select('created_at, requester_id').eq('org_id', orgId).gte('created_at', last30dStartIso))
+      .order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to)),
+    // closed_at is the Daily Activity "Closed" card; Req. Outflow counts tickets RESOLVED in the window by the same rule as the Resolved card (resolved_at, else closed_at, else, for a
+    // resolved / closed ticket with neither, its last update)
+    pageAll((from, to) => inScope(admin.from('requests').select('closed_at, resolved_at, updated_at, status, cancellation_reason, requester_id').eq('org_id', orgId)
+      .or(`closed_at.gte.${last30dStartIso},resolved_at.gte.${last30dStartIso},and(resolved_at.is.null,closed_at.is.null,status.in.(resolved,closed),updated_at.gte.${last30dStartIso})`))
+      .order('id', { ascending: true }).range(from, to)),
     pageAll((from, to) => withinScope(admin
       .from('request_activity')
       .select('created_at, request:requests!inner(org_id, team_id, requester_id)')
       .eq('action', 'assigned')
       .eq('request.org_id', orgId)
-      .gte('created_at', yesterdayStartIso), 'request.team_id')
+      .gte('created_at', yesterdayStartIso))
       .order('created_at', { ascending: true }).range(from, to)),
 
     // The Store Master details of every requester that is a store, to filter and break the numbers down by
@@ -415,12 +435,12 @@ export async function getAnalytics(
   type ApprovalRaw = { id: string; status: string; created_at: string; request_id: string; request: { requester_id: string } | null; decisions: { decision: string; decided_at: string }[] | null }
   const approvalsAll = ((approvalRowsRaw ?? []) as ApprovalRaw[]).filter((a) => keep(a.request?.requester_id))
   const createdRows = ((dailyCreatedRows ?? []) as { created_at: string; requester_id: string }[]).filter((r) => keep(r.requester_id))
-  const closedRows = ((dailyClosedRows ?? []) as { closed_at: string; requester_id: string }[]).filter((r) => keep(r.requester_id))
+  const closedRows = ((dailyClosedRows ?? []) as { closed_at: string | null; resolved_at: string | null; updated_at: string; status: string; cancellation_reason: string | null; requester_id: string }[]).filter((r) => keep(r.requester_id))
   const assignedRows = ((dailyAssignedRows ?? []) as { created_at: string; request: { requester_id: string } | null }[]).filter((r) => keep(r.request?.requester_id))
   const teamsArr = (teams ?? []) as Array<{ id: string; name: string }>
   const servicesArr = (services ?? []) as Array<{ id: string; name: string }>
   const profilesArr = (profiles ?? []) as Array<{ id: string; full_name: string; role: string }>
-  const tasksArr = (tasks ?? []) as Array<{ id: string; status: string; priority: string; due_date: string | null; assignee_id: string | null; team_id: string | null; created_at: string; updated_at: string }>
+  const tasksArr = (tasks ?? []) as Array<{ id: string; status: string; priority: string; due_date: string | null; assignee_id: string | null; team_id: string | null; created_at: string; updated_at: string; completed_at: string | null }>
 
   const teamMap = Object.fromEntries(teamsArr.map((t) => [t.id, t.name]))
   const serviceMap = Object.fromEntries(servicesArr.map((s) => [s.id, s.name]))
@@ -439,8 +459,9 @@ export async function getAnalytics(
 
   const resolvedWithSla = resolvedIn.filter((r) => r.resolution_due_at)
   const slaCompliant = resolvedWithSla.filter((r) => new Date(r.doneAt) <= new Date(r.resolution_due_at!))
+  // (a share of the tickets resolved in the period: a ticket still open and already late is in no denominator; slaBreachedNow below counts those)
   const slaComplianceRate = resolvedWithSla.length
-    ? Math.round((slaCompliant.length / resolvedWithSla.length) * 100)
+    ? wholePercent(slaCompliant.length, resolvedWithSla.length)
     : null
 
   const respondedWithSla = reqs.filter((r) => r.responded_at && r.response_due_at)
@@ -448,17 +469,19 @@ export async function getAnalytics(
     (r) => new Date(r.responded_at!) <= new Date(r.response_due_at!)
   )
   const frtComplianceRate = respondedWithSla.length
-    ? Math.round((frtCompliant.length / respondedWithSla.length) * 100)
+    ? wholePercent(frtCompliant.length, respondedWithSla.length)
     : null
 
   // "Currently Breached" (D-01, lib/sla/breach.ts) — open is already
   // pre-filtered to exclude resolved/closed/cancelled (query above), so
   // isCurrentlyBreached's own status check is redundant here but keeps this
   // call site correct on its own even if that upstream filter ever changes.
-  const slaBreachedNow = open.filter((r) => isCurrentlyBreached(r, now)).length
+  // A ticket that waits for somebody else (waiting on the user, on purchase from HO, on an approval) has its clock stopped: it is not breached while it waits (audit F-02).
+  const breachedNow = (r: { status: string; resolution_due_at: string | null }) => !isSlaPausedStatus(r.status) && !!r.resolution_due_at && new Date(r.resolution_due_at) < now
+  const slaBreachedNow = open.filter(breachedNow).length
 
   const frtBreachedNow = open.filter(
-    (r) => !r.responded_at && r.response_due_at && new Date(r.response_due_at) < now
+    (r) => !isSlaPausedStatus(r.status) && !r.responded_at && r.response_due_at && new Date(r.response_due_at) < now
   ).length
 
   // ── TAT ───────────────────────────────────────────────────────────────────
@@ -518,7 +541,7 @@ export async function getAnalytics(
       teamName: teamMap[teamId] ?? teamId,
       volume: group.length,
       resolved: groupResolved.length,
-      slaRate: groupWithSla.length ? Math.round((groupSlaOk.length / groupWithSla.length) * 100) : null,
+      slaRate: groupWithSla.length ? wholePercent(groupSlaOk.length, groupWithSla.length) : null,
       avgTatHours: avg(groupTat),
       openNow,
     }
@@ -582,13 +605,12 @@ export async function getAnalytics(
   // Bucket by day for short windows, by week once the range gets long enough
   // that a daily chart would be unreadable (mirrors taskAnalytics's bucketing).
 
-  const byWeek = days > 60
+  const byWeek = days > TREND_DAILY_MAX_DAYS
   const trendMap: Record<string, { created: number; resolved: number }> = {}
   // (a day is the India day, not the UTC day: a ticket created at 03:00 IST belongs to that day, not the day before)
   const bucketKey = (d: Date) => (byWeek ? istWeekStart(d) : istDay(d))
   for (let i = 0; i < days; i++) {
-    const d = new Date(startDate)
-    d.setDate(d.getDate() + i)
+    const d = new Date(startDate.getTime() + i * DAY_MS)
     if (d > endDate) break
     const key = bucketKey(d)
     if (!trendMap[key]) trendMap[key] = { created: 0, resolved: 0 }
@@ -607,12 +629,10 @@ export async function getAnalytics(
 
   // ── Backlog aging ─────────────────────────────────────────────────────────
 
-  const ageOf = (r: { created_at: string }) =>
-    (now.getTime() - new Date(r.created_at).getTime()) / (1000 * 3600 * 24)
-
+  // whole elapsed days, the one way every report ages a ticket (lib/reporting/aging.ts, audit F-16)
   const openBucketCounts = new Map<string, number>()
   for (const r of open) {
-    const key = ageBucketFor(ageOf(r)).key
+    const key = ageBucketFor(ageInDays(r.created_at, now)).key
     openBucketCounts.set(key, (openBucketCounts.get(key) ?? 0) + 1)
   }
   const backlogAging: BacklogAging = AGE_BUCKETS.map((b) => ({
@@ -635,7 +655,7 @@ export async function getAnalytics(
   const dailyActivity: DailyActivity = {
     pendingNow: totalOpenNow,
     created: bucketByDay(createdRows.map((r) => ({ at: r.created_at }))),
-    closed: bucketByDay(closedRows.map((r) => ({ at: r.closed_at }))),
+    closed: bucketByDay(closedRows.filter((r) => r.closed_at).map((r) => ({ at: r.closed_at as string }))),
     assigned: bucketByDay(assignedRows.map((r) => ({ at: r.created_at }))),
   }
 
@@ -653,7 +673,8 @@ export async function getAnalytics(
   }
   const requestFlow: RequestFlow = {
     inflow: bucketByRollingWindow(createdRows.map((r) => ({ at: r.created_at }))),
-    outflow: bucketByRollingWindow(closedRows.map((r) => ({ at: r.closed_at }))),
+    // outflow = tickets RESOLVED in the window (the Resolved card's moment), not closed_at, which lags by the reopen window (audit F-21); a ticket the approval flow cancelled was never resolved (F-12)
+    outflow: bucketByRollingWindow(closedRows.filter((r) => r.cancellation_reason === null).map((r) => ({ at: r.resolved_at ?? r.closed_at ?? (r.status === 'resolved' || r.status === 'closed' ? r.updated_at : null) })).filter((r): r is { at: string } => r.at !== null)),
   }
 
   // ── Store Master: the numbers by region / state / cluster / store type / priority list, and the stores that need a look ──
@@ -674,9 +695,9 @@ export async function getAnalytics(
       x.resolved++
       if (r.resolution_due_at) { x.slaBase++; if (new Date(r.doneAt) <= new Date(r.resolution_due_at)) x.slaCompliant++ }
     })
-    open.forEach((r) => { const x = row(r.requester_id); x.openNow++; if (isCurrentlyBreached(r, now)) x.breachedNow++ })
+    open.forEach((r) => { const x = row(r.requester_id); x.openNow++; if (breachedNow(r)) x.breachedNow++ })
     placesOut[k] = [...rows.values()]
-      .map((r) => ({ ...r, slaRate: r.slaBase ? Math.round((r.slaCompliant / r.slaBase) * 100) : null }))
+      .map((r) => ({ ...r, slaRate: r.slaBase ? wholePercent(r.slaCompliant, r.slaBase) : null }))
       .sort((a, b) => b.created - a.created || b.openNow - a.openNow || a.name.localeCompare(b.name, undefined, { numeric: true }))
   }
   const seenStores = new Map<string, StoreDims>()
@@ -698,12 +719,16 @@ export async function getAnalytics(
   // ── Task KPIs ─────────────────────────────────────────────────────────────
 
   const tasksOpen = tasksArr.filter((t) => !['done', 'cancelled'].includes(t.status)).length
+  // overdue = its due DAY is before today (India); a task due today is not overdue (audit F-11)
   const tasksOverdue = tasksArr.filter(
-    (t) => t.due_date && new Date(t.due_date) < now && !['done', 'cancelled'].includes(t.status)
+    (t) => isOverdueDate(t.due_date) && !['done', 'cancelled'].includes(t.status)
   ).length
-  const tasksDoneInPeriod = tasksArr.filter(
-    (t) => t.status === 'done' && momentOf(t.updated_at) >= startDate.getTime() && momentOf(t.updated_at) <= endDate.getTime()
-  ).length
+  // done in the period by the day it was completed (updated_at moves with every later edit, audit F-34)
+  const tasksDoneInPeriod = tasksArr.filter((t) => {
+    if (t.status !== 'done') return false
+    const at = momentOf(t.completed_at ?? t.updated_at)
+    return at >= startDate.getTime() && at <= endDate.getTime()
+  }).length
 
   return {
     period,

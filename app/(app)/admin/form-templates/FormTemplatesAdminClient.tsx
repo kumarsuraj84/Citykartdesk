@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { safely } from '@/lib/ui/safeAction'
+import { ModalFrame } from '@/components/ui/ModalFrame'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Copy, Archive, Trash2, FileText } from 'lucide-react'
@@ -41,10 +43,10 @@ function TemplateModal({ mode, onClose }: { mode: Exclude<ModalMode, null>; onCl
 
     startTransition(async () => {
       const result = isEdit
-        ? await updateFormTemplate(existing!.id, data)
+        ? await safely(() => updateFormTemplate(existing!.id, data))
         : isDuplicate
-        ? await duplicateFormTemplate(existing!.id, data)
-        : await createFormTemplate(data)
+        ? await safely(() => duplicateFormTemplate(existing!.id, data))
+        : await safely(() => createFormTemplate(data))
 
       if (result.error) {
         setError(result.error)
@@ -57,7 +59,7 @@ function TemplateModal({ mode, onClose }: { mode: Exclude<ModalMode, null>; onCl
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <ModalFrame label="Form template" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card shadow-xl">
         <div className="border-b border-border px-4 py-3">
           <h2 className="text-base font-semibold text-foreground">
@@ -111,7 +113,7 @@ function TemplateModal({ mode, onClose }: { mode: Exclude<ModalMode, null>; onCl
           </div>
         </form>
       </div>
-    </div>
+    </ModalFrame>
   )
 }
 
@@ -130,7 +132,7 @@ export default function FormTemplatesAdminClient({ templates }: { templates: For
     if (!archiveTarget) return
     setArchiveError('')
     startArchive(async () => {
-      const result = await archiveFormTemplate(archiveTarget.id)
+      const result = await safely(() => archiveFormTemplate(archiveTarget.id))
       if (result.error) {
         setArchiveError(result.error)
       } else {
@@ -143,7 +145,7 @@ export default function FormTemplatesAdminClient({ templates }: { templates: For
     if (!deleteTarget) return
     setDeleteError('')
     startDelete(async () => {
-      const result = await deleteFormTemplate(deleteTarget.id)
+      const result = await safely(() => deleteFormTemplate(deleteTarget.id))
       if (result.error) {
         setDeleteError(result.error)
       } else {
@@ -237,7 +239,7 @@ export default function FormTemplatesAdminClient({ templates }: { templates: For
       {modal && <TemplateModal mode={modal} onClose={() => setModal(null)} />}
 
       {archiveTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <ModalFrame label="Archive template" onClose={() => setArchiveTarget(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl">
             <h2 className="text-sm font-semibold text-foreground">Archive &ldquo;{archiveTarget.name}&rdquo;?</h2>
             <p className="mt-1.5 text-xs text-muted-foreground">
@@ -260,11 +262,11 @@ export default function FormTemplatesAdminClient({ templates }: { templates: For
               </button>
             </div>
           </div>
-        </div>
+        </ModalFrame>
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <ModalFrame label="Delete template" onClose={() => setDeleteTarget(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl">
             <h2 className="text-sm font-semibold text-foreground">Delete &ldquo;{deleteTarget.name}&rdquo;?</h2>
             <p className="mt-1.5 text-xs text-muted-foreground">This cannot be undone.</p>
@@ -285,7 +287,7 @@ export default function FormTemplatesAdminClient({ templates }: { templates: For
               </button>
             </div>
           </div>
-        </div>
+        </ModalFrame>
       )}
     </div>
   )

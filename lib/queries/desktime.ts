@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import type { Tables } from '@/types/database'
+import { fetchAllPages } from '@/lib/queries/paging'
 
 export type AiApplication = Pick<Tables<'ai_applications'>, 'id' | 'name' | 'is_active'>
 export type DeskTimeProjectMapRow = Pick<Tables<'desktime_project_map'>, 'id' | 'desktime_key' | 'desktime_project_name' | 'project_id'>
@@ -46,28 +47,31 @@ export async function getDeskTimeProjectMap(orgId: string): Promise<DeskTimeProj
 
 export async function getDeskTimeAppLogs(orgId: string, from: string, to: string): Promise<DeskTimeAppLogRow[]> {
   const supabase = await createClient()
-  const { data } = await supabase
+  // .limit(20000) was cut to 1000 by the database: read every page (largest first, the id keeps the pages stable), up to 50,000 rows
+  const { rows } = await fetchAllPages<DeskTimeAppLogRow>((a, b) => supabase
     .from('desktime_app_logs')
     .select('work_date, member_name, app_name, minutes')
     .eq('org_id', orgId)
     .gte('work_date', from)
     .lte('work_date', to)
     .order('minutes', { ascending: false })
-    .limit(20000)
-  return data ?? []
+    .order('id', { ascending: true })
+    .range(a, b), { maxRows: 50_000 })
+  return rows
 }
 
 export async function getDeskTimeMemberProjectHours(orgId: string, from: string, to: string): Promise<DeskTimeMemberProjectLog[]> {
   const supabase = await createClient()
-  const { data } = await supabase
+  const { rows: data } = await fetchAllPages<{ work_date: string; member_name: string; minutes: number; project_id: string | null; desktime_project_name: string | null; project: unknown }>((a, b) => supabase
     .from('desktime_time_logs')
     .select('work_date, member_name, minutes, project_id, desktime_project_name, project:projects(name)')
     .eq('org_id', orgId)
     .gte('work_date', from)
     .lte('work_date', to)
-    .limit(20000)
+    .order('id', { ascending: true })
+    .range(a, b), { maxRows: 50_000 })
 
-  return (data ?? []).map((r) => {
+  return data.map((r) => {
     const rel = r.project as { name: string } | { name: string }[] | null
     const name = Array.isArray(rel) ? rel[0]?.name : rel?.name
     return {

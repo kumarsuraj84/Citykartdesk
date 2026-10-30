@@ -4,6 +4,7 @@ import { executeActions, type RuleAction, type ActionRequest } from './actions'
 import { resolveServiceFormSections } from '@/lib/forms/sections'
 import { libraryFieldValues } from '@/lib/forms/library'
 import { sourceChannelOf } from '@/lib/sources'
+import { isSlaPausedStatus } from '@/lib/constants/requests'
 import type { SLAConfig, FormSection, FormField } from '@/types'
 
 export { sourceChannelOf }
@@ -20,7 +21,7 @@ type BusinessRuleRow = {
   execution_order: number
 }
 
-type RawRequest = {
+export type RawRequest = {
   id: string
   request_no: string
   title: string
@@ -62,39 +63,48 @@ type RawRequest = {
   } | null
 }
 
-const SELECT =
+export const RULE_REQUEST_SELECT =
   'id, request_no, title, description, priority, status, service_id, team_id, project_id, requester_id, assigned_to, org_id, created_at, resolved_at, closed_at, source_metadata, form_data, waiting_since, response_due_at, resolution_due_at, category_id, sub_category_id, reopen_count, responded_at, paused_ms_total, service:services(template_id, sla_policy:sla_policies(config), form_sections, form_fields, template:form_templates(form_sections)), requester:profiles!requester_id(role, department_id, location_id, designation_id, function_id, store_id)'
 
 async function fetchRequest(admin: AnyClient, requestId: string): Promise<RawRequest | null> {
-  const { data } = await admin.from('requests').select(SELECT).eq('id', requestId).single()
+  const { data, error } = await admin.from('requests').select(RULE_REQUEST_SELECT).eq('id', requestId).maybeSingle()
+  // a failed read must not look like "no such ticket" (the rules would silently not run and the ticket be marked as done)
+  if (error) throw new Error(`Could not read ticket ${requestId} for the Business Rules: ${error.message ?? 'unknown error'}`)
   return (data as RawRequest) ?? null
 }
 
-
-function isSlaBreached(request: RawRequest): boolean {
+/** Is the ticket past its resolution deadline? Real instants are compared (F-03: the database may write the same moment as '...Z' or '...-07:00', and as TEXT
+ *  those compare wrongly by hours). A ticket whose SLA clock is paused (waiting on the user / a purchase / an approval) is not breached (F-02). */
+export function isSlaBreached(request: Pick<RawRequest, 'resolution_due_at' | 'resolved_at' | 'closed_at' | 'status'>, nowMs: number = Date.now()): boolean {
   if (!request.resolution_due_at) return false
+  const dueMs = new Date(request.resolution_due_at).getTime()
   const closedLike = request.resolved_at ?? request.closed_at
-  const now = new Date().toISOString()
-  return closedLike ? closedLike > request.resolution_due_at : now > request.resolution_due_at
+  if (closedLike) return new Date(closedLike).getTime() > dueMs
+  if (isSlaPausedStatus(request.status)) return false
+  return nowMs > dueMs
 }
 
-function ageDays(request: RawRequest): number {
-  return Math.round((Date.now() - new Date(request.created_at).getTime()) / 86_400_000)
+/** Whole days since the ticket was created (1.5 days is 1, not 2: a rule "older than 2 days" must not fire at 36 hours). */
+export function ageDays(request: Pick<RawRequest, 'created_at'>, nowMs: number = Date.now()): number {
+  return Math.floor((nowMs - new Date(request.created_at).getTime()) / 86_400_000)
 }
 
 async function hasAttachment(admin: AnyClient, requestId: string): Promise<boolean> {
-  const { data } = await admin
+  const { data, error } = await admin
     .from('request_attachments')
     .select('id')
     .eq('request_id', requestId)
     .is('deleted_at', null)
     .limit(1)
+  if (error) throw new Error(`Could not read the attachments of ticket ${requestId}: ${error.message ?? 'unknown error'}`)
   return (data?.length ?? 0) > 0
 }
 
 /** The AC the ticket was raised for (saved with the ticket), as far as a rule needs it. Empty strings when the ticket has none. */
 async function acFacts(admin: AnyClient, requestId: string) {
-  const { data } = await admin.from('request_master_snapshots').select('snapshot').eq('request_id', requestId).eq('kind', 'ac').maybeSingle()
+  const { data, error } = await admin.from('request_master_snapshots').select('snapshot').eq('request_id', requestId).eq('kind', 'ac').maybeSingle()
+  // an unreadable snapshot must not look like "this ticket has no AC" (a "is not ..." condition would then match wrongly)
+  if (error) throw new Error(`Could not read the AC of ticket ${requestId}: ${error.message ?? 'unknown error'}`)
   const unit = (Array.isArray(data?.snapshot) ? data.snapshot[0] : null) as Record<string, string | null> | null
   const s = (v: string | null | undefined) => (v ?? '').trim()
   return { ac_amc_vendor: s(unit?.amc_vendor), ac_brand: s(unit?.brand), store_region: s(unit?.region), store_state: s(unit?.state), store_cluster: s(unit?.cluster) }
@@ -104,18 +114,26 @@ async function acFacts(admin: AnyClient, requestId: string) {
 async function vendorFacts(admin: AnyClient, request: { category_id: string | null; assigned_to: string | null }) {
   let vendor_line = ''
   if (request.category_id) {
-    const { data } = await admin.from('service_categories').select('program_id, auto_oem_kind').eq('id', request.category_id).maybeSingle()
+    const { data, error } = await admin.from('service_categories').select('program_id, auto_oem_kind').eq('id', request.category_id).maybeSingle()
+    if (error) throw new Error(`Could not read the category of a ticket for the Business Rules: ${error.message ?? 'unknown error'}`)
     vendor_line = (data?.program_id as string | null) ?? (data?.auto_oem_kind as string | null) ?? ''
   }
   let vendor_company_id = ''
   if (request.assigned_to) {
-    const { data: p } = await admin.from('profiles').select('vendor_company_id, vendor_role').eq('id', request.assigned_to).maybeSingle()
+    const { data: p, error } = await admin.from('profiles').select('vendor_company_id, vendor_role').eq('id', request.assigned_to).maybeSingle()
+    if (error) throw new Error(`Could not read the assignee of a ticket for the Business Rules: ${error.message ?? 'unknown error'}`)
     if (p?.vendor_company_id && p.vendor_role === 'technician') vendor_company_id = p.vendor_company_id as string
   }
   return { vendor_line, vendor_company_id, is_with_vendor: vendor_company_id !== '' }
 }
 
-async function toEvalRequest(admin: AnyClient, request: RawRequest): Promise<RuleEvaluationRequest> {
+/**
+ * The ONE builder of the facts a rule's conditions are checked against. The "created"/"updated" rules (this file) and the scheduled rules
+ * (app/api/business-rules/run) both use it: the scheduled path used to build its own partial copy that lacked the AC / vendor / store facts
+ * (ac_amc_vendor, store_region, vendor_line, is_with_vendor ...), so a scheduled rule with such a condition never matched (is / is one of)
+ * or always matched (is not / is not one of) (B-25 / H-01).
+ */
+export async function buildRuleEvaluationRequest(admin: AnyClient, request: RawRequest): Promise<RuleEvaluationRequest> {
   return {
     ...(await acFacts(admin, request.id)),
     ...(await vendorFacts(admin, request)),
@@ -146,7 +164,7 @@ async function toEvalRequest(admin: AnyClient, request: RawRequest): Promise<Rul
   }
 }
 
-function toActionRequest(request: RawRequest): ActionRequest {
+export function toActionRequest(request: RawRequest): ActionRequest {
   return {
     id: request.id,
     request_no: request.request_no,
@@ -183,6 +201,9 @@ function toActionRequest(request: RawRequest): ActionRequest {
  * the single call site both createRequest and the status/priority-change
  * actions use — see lib/actions/requests.ts.
  *
+ * `allowReassign` is for a deliberate re-routing (the category was changed): only then may an assign action of an "edited" rule replace a person who already has
+ * the ticket. After any other edit an assign rule only fills an empty slot (B-02).
+ *
  * A rule's `trigger` is an array (a rule can fire on Created AND Edited, not
  * just one), so this queries with a containment check rather than equality.
  *
@@ -193,13 +214,13 @@ function toActionRequest(request: RawRequest): ActionRequest {
  * status to resolved, rule B is conditioned on status = resolved) would
  * evaluate against pre-write data and silently never fire.
  */
-export async function runRulesForTrigger(trigger: 'created' | 'updated', requestId: string): Promise<void> {
+export async function runRulesForTrigger(trigger: 'created' | 'updated', requestId: string, opts: { allowReassign?: boolean } = {}): Promise<void> {
   const admin = createAdminClient() as unknown as AnyClient
 
   let request = await fetchRequest(admin, requestId)
   if (!request || !request.org_id) return
 
-  const { data: rules } = await admin
+  const { data: rules, error: rulesError } = await admin
     .from('business_rules')
     .select('id, name, conditions, conditions_logic, actions, execution_order')
     .eq('org_id', request.org_id)
@@ -207,23 +228,25 @@ export async function runRulesForTrigger(trigger: 'created' | 'updated', request
     .eq('is_active', true)
     .order('execution_order', { ascending: true })
 
+  // a failed read is an error, not "there are no rules" (the caller would then mark the rules as having run)
+  if (rulesError) throw new Error(`Could not read the Business Rules (${trigger}): ${rulesError.message ?? 'unknown error'}`)
   if (!rules || rules.length === 0) return
 
   // Computed once per request "version" rather than once per rule — one of
   // its fields (has_attachment) costs a real DB query, and the request only
   // actually changes when a rule's actions run (recomputed below in that
   // case), not on every loop iteration.
-  let evalRequest = await toEvalRequest(admin, request)
+  let evalRequest = await buildRuleEvaluationRequest(admin, request)
 
   for (const rule of rules as BusinessRuleRow[]) {
     if (!matchesConditions(evalRequest, rule.conditions ?? [], rule.conditions_logic)) continue
 
-    await executeActions(admin, toActionRequest(request), rule.actions ?? [], { ruleId: rule.id, ruleName: rule.name })
+    await executeActions(admin, toActionRequest(request), rule.actions ?? [], { ruleId: rule.id, ruleName: rule.name, trigger, allowReassign: opts.allowReassign })
 
     const refreshed = await fetchRequest(admin, requestId)
     if (refreshed) {
       request = refreshed
-      evalRequest = await toEvalRequest(admin, request)
+      evalRequest = await buildRuleEvaluationRequest(admin, request)
     }
   }
 }

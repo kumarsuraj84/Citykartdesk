@@ -584,9 +584,14 @@ export async function setCategoryOemKind(id: string, kind: OemKind | null): Prom
   const orgId = guard.profile!.org_id
   if (!orgId) return { error: 'Your account is not linked to an organisation.' }
   const admin = createAdminClient()
-  const { data: before } = await admin.from('service_categories').select('name, auto_oem_kind').eq('id', id).eq('org_id', orgId).maybeSingle()
+  const { data: before } = await admin.from('service_categories').select('name, auto_oem_kind, program_id').eq('id', id).eq('org_id', orgId).maybeSingle()
   if (!before) return { error: 'Category not found.' }
   if ((before.auto_oem_kind ?? null) === kind) return {}
+  // a category of a Vendor Program already sends to that program's vendor; the database refuses both at once, so say it plainly instead of a generic error
+  if (kind !== null && before.program_id) {
+    const { data: prog } = await (admin as unknown as { from: (t: string) => any }).from('vendor_programs').select('name').eq('id', before.program_id).maybeSingle() // eslint-disable-line @typescript-eslint/no-explicit-any
+    return { error: `This category belongs to the Vendor Program "${(prog as { name?: string } | null)?.name ?? 'another program'}", which already sends its tickets to the vendor. Take the category out of the program first (Admin > Vendor Programs), then choose the OEM type.` }
+  }
 
   const { error } = await admin.from('service_categories').update({ auto_oem_kind: kind }).eq('id', id).eq('org_id', orgId)
   if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/categories.ts#setCategoryOemKind' }) }

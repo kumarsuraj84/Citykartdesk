@@ -11,10 +11,13 @@ export function ApprovalDecisionForm({ token, preselect }: { token: string; pres
   const [comment, setComment] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
+  // which button was pressed: only that one says "Saving…" (both used to)
+  const [action, setAction] = useState<'approve' | 'reject' | null>(null)
 
   const decide = (kind: 'approve' | 'reject') => {
     if (!comment.trim()) { setError('Please add a comment: it is required to approve or reject.'); return }
     setError(null)
+    setAction(kind)
     start(async () => {
       const r = await decideByEmail(token, kind, comment.trim())
       if (r.error) setError(r.error)
@@ -33,11 +36,11 @@ export function ApprovalDecisionForm({ token, preselect }: { token: string; pres
       <div className="flex gap-2">
         <button type="button" onClick={() => decide('approve')} disabled={pending}
           className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50 ${preselect === 'reject' ? 'bg-emerald-600/80' : 'bg-emerald-600'}`}>
-          <CheckCircle2 className="h-4 w-4" />{pending ? 'Saving…' : 'Approve'}
+          <CheckCircle2 className="h-4 w-4" />{pending && action === 'approve' ? 'Saving…' : 'Approve'}
         </button>
         <button type="button" onClick={() => decide('reject')} disabled={pending}
           className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50 ${preselect === 'approve' ? 'bg-red-600/80' : 'bg-red-600'}`}>
-          <XCircle className="h-4 w-4" />{pending ? 'Saving…' : 'Reject'}
+          <XCircle className="h-4 w-4" />{pending && action === 'reject' ? 'Saving…' : 'Reject'}
         </button>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

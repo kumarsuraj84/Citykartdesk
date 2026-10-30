@@ -12,4 +12,5 @@ DROP INDEX IF EXISTS public.idx_stores_genset_oem;
 ALTER TABLE public.stores DROP COLUMN IF EXISTS genset_oem_id;
 ALTER TABLE public.oems DROP CONSTRAINT IF EXISTS oems_kind_check;
 ALTER TABLE public.oems DROP COLUMN IF EXISTS kind;
+DELETE FROM auth.schema_migrations WHERE version = '20240101000172';
 COMMIT;

@@ -149,7 +149,7 @@ export default async function ApprovePage({
         <h1 className="text-lg font-semibold tracking-tight">{state.title}</h1>
         <p className="text-sm text-muted-foreground">Deciding as <strong className="text-foreground">{state.approverName}</strong></p>
       </div>
-      <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1 rounded-lg border border-border bg-muted/20 p-3 text-xs">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-lg border border-border bg-muted/20 p-3 text-xs">
         <dt className="text-muted-foreground">Raised by</dt><dd className="font-medium">{d.requesterName || '-'}</dd>
         {d.sentByName && <><dt className="text-muted-foreground">Sent for approval by</dt><dd className="font-medium">{d.sentByName}</dd></>}
         <dt className="text-muted-foreground">Priority</dt><dd className="font-medium capitalize">{d.priority}</dd>

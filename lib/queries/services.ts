@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { isLocationRuleExempt, isServiceVisibleToLocation } from '@/lib/services/location-visibility'
+import type { FilterTaxonomy } from '@/lib/requests/filter-taxonomy'
 import type {
   AllowedSubCategory,
   ServiceCategory,
@@ -202,6 +203,24 @@ export async function getServiceSubCategoriesForFilter(): Promise<ServiceSubCate
     .order('sort_order')
   return ((data ?? []) as unknown as { id: string; name: string; category: { name: string } | null }[])
     .map((s) => ({ id: s.id, name: s.name, category_name: s.category?.name ?? '—' }))
+}
+
+/** Everything the linked Service / Category / Sub Category filters of the ticket lists need, read once (see lib/requests/filter-taxonomy.ts). */
+export async function getRequestFilterTaxonomy(): Promise<FilterTaxonomy> {
+  const supabase = await createClient()
+  const [services, categories, subs, tags] = await Promise.all([
+    supabase.from('services').select('id, name').eq('is_active', true).order('sort_order'),
+    supabase.from('service_categories').select('id, name').eq('is_active', true).order('sort_order'),
+    supabase.from('service_sub_categories').select('id, name, category_id, category:service_categories(name)').eq('is_active', true).order('sort_order'),
+    supabase.from('service_sub_category_tags').select('service_id, sub_category_id'),
+  ])
+  return {
+    services: (services.data ?? []) as { id: string; name: string }[],
+    categories: (categories.data ?? []) as { id: string; name: string }[],
+    subCategories: ((subs.data ?? []) as unknown as { id: string; name: string; category_id: string; category: { name: string } | null }[])
+      .map((s) => ({ id: s.id, name: s.name, category_id: s.category_id, category_name: s.category?.name ?? '—' })),
+    tags: (tags.data ?? []) as { service_id: string; sub_category_id: string }[],
+  }
 }
 
 /** Lean active-service list for the "move to a different service" reclassify

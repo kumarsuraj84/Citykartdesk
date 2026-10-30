@@ -6,6 +6,7 @@
 
 import { OPEN_REQUEST_STATUSES } from '@/lib/constants/requests'
 import { emptyFilters, type Filters, type Win } from '@/lib/reporting/executive/engine'
+import { istDayStartMs, istAddDays } from '@/lib/reporting/ist'
 import { STORE_FILTER_KEYS, type StoreFilter } from '@/lib/analytics/store-filter'
 import type { DrawerFilter } from '@/lib/actions/analytics'
 import type { PeriodParam } from '@/lib/queries/analytics'
@@ -27,12 +28,14 @@ export interface BridgeEnv {
 
 export interface DrillRequest { ctx: DrillContext; filters: Filters }
 
-const isRange = (p: unknown): p is { from: string; to: string } => !!p && typeof p === 'object' && 'from' in p && 'to' in p
+const isRange = (p: unknown): p is { from: string; to: string; fromMs?: number; toMs?: number } => !!p && typeof p === 'object' && 'from' in p && 'to' in p
 
-/** A date range as the page writes it (calendar days) to epoch ms, in the browser's own time zone: midnight to the last millisecond. */
-function rangeWindow(p: { from: string; to: string }): Win | null {
-  const start = new Date(`${p.from}T00:00:00`).getTime()
-  const end = new Date(`${p.to}T23:59:59.999`).getTime()
+/** A date range as the page writes it to epoch ms: the exact moments when it carries them (a rolling 24 hours), otherwise the India days, midnight to the last millisecond - the same window the server counts. */
+function rangeWindow(p: { from: string; to: string; fromMs?: number; toMs?: number }): Win | null {
+  const day = /^\d{4}-\d{2}-\d{2}$/
+  if ((p.fromMs === undefined && !day.test(p.from)) || (p.toMs === undefined && !day.test(p.to))) return null // (a range that cannot be placed keeps the plain side list)
+  const start = p.fromMs ?? istDayStartMs(p.from)
+  const end = p.toMs ?? istDayStartMs(istAddDays(p.to, 1)) - 1
   return Number.isFinite(start) && Number.isFinite(end) ? { start, end } : null
 }
 

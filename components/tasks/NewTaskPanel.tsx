@@ -4,6 +4,8 @@ import { useState, useTransition, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, Loader2, Plus, User, Calendar, Flag } from 'lucide-react'
 import { createTask } from '@/lib/actions/tasks'
+import { formatDateOnly } from '@/lib/ui/formatDate'
+import { useModalA11y } from '@/components/ui/useModalA11y'
 import type { TaskPriority, TaskStatus, TaskType } from '@/types'
 
 interface NewTaskPanelProps {
@@ -49,23 +51,13 @@ export function NewTaskPanel({ profiles, onCreated, allProjects = [], defaultPro
 
   const titleRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    if (open) setTimeout(() => titleRef.current?.focus(), 50)
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); reset() } }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open])
-
-  // close dropdowns on outside click
+  // close dropdowns on outside click. The listener is added a tick late so the click that opened the dropdown
+  // does not close it at once; the timer is cleared if the dropdown closes before it fires.
   useEffect(() => {
     if (!openDrop) return
     const onDown = () => setOpenDrop(null)
-    setTimeout(() => document.addEventListener('mousedown', onDown), 0)
-    return () => document.removeEventListener('mousedown', onDown)
+    const timer = setTimeout(() => document.addEventListener('mousedown', onDown), 0)
+    return () => { clearTimeout(timer); document.removeEventListener('mousedown', onDown) }
   }, [openDrop])
 
   function reset() {
@@ -75,6 +67,9 @@ export function NewTaskPanel({ profiles, onCreated, allProjects = [], defaultPro
   }
 
   function handleClose() { setOpen(false); reset() }
+
+  // Escape closes, Tab stays inside, the cursor starts in the name box (one shared helper)
+  const dialog = useModalA11y({ onClose: handleClose, label: 'New task', enabled: open, initialFocus: titleRef })
 
   function handleSubmit() {
     if (!title.trim()) { setError('Task name is required.'); return }
@@ -106,7 +101,7 @@ export function NewTaskPanel({ profiles, onCreated, allProjects = [], defaultPro
   const currentPriority = PRIORITY_OPTIONS.find((p) => p.value === priority)!
   const currentAssignee = profiles.find((p) => p.id === assigneeId)
   const dueDateLabel    = dueDate
-    ? new Date(dueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    ? formatDateOnly(dueDate, { year: false })
     : 'Due date'
 
   return (
@@ -135,7 +130,7 @@ export function NewTaskPanel({ profiles, onCreated, allProjects = [], defaultPro
           <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={handleClose} />
 
           {/* Modal — wider, centered */}
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div {...dialog.props} className="fixed inset-0 z-50 flex items-center justify-center px-4">
             <div
               className="relative w-full max-w-[640px] rounded-2xl bg-card shadow-2xl border border-border"
               onMouseDown={(e) => e.stopPropagation()}
@@ -145,6 +140,7 @@ export function NewTaskPanel({ profiles, onCreated, allProjects = [], defaultPro
                 <h2 className="text-sm font-semibold text-foreground">New Task</h2>
                 <button
                   onClick={handleClose}
+                  aria-label="Close"
                   className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 >
                   <X className="h-4 w-4" />

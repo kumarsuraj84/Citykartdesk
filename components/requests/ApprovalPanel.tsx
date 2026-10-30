@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { CheckCircle2, XCircle, Clock, UserCheck, MessageSquare, CalendarDays } from 'lucide-react'
-import { approveApproval, rejectApproval, delegateApproval, searchUsersForDelegation } from '@/lib/actions/approvals'
+import { approveApproval, rejectApproval, delegateApproval, recallApproval, searchUsersForDelegation } from '@/lib/actions/approvals'
 import { canActOnApproval } from '@/lib/approvals/canAct'
 import type { ApprovalWithDetails } from '@/lib/queries/approvals'
 import type { UserRole } from '@/types'
@@ -44,6 +44,8 @@ export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: App
   const [delegateUserId, setDelegateUserId] = useState('')
   const [delegateSearch, setDelegateSearch] = useState('')
   const [delegateResults, setDelegateResults] = useState<{ id: string; full_name: string }[]>([])
+  const [recalling, setRecalling] = useState(false)
+  const [recallReason, setRecallReason] = useState('')
 
   const isParallel = approval.current_step === 0
   const isAdHoc    = approval.workflow?.name.startsWith('Ad-hoc:') ?? false
@@ -67,6 +69,17 @@ export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: App
       const result = await rejectApproval(approval.id, comment.trim())
       if (result.error) { setError(result.error) }
       else { setShowCommentBox(null); setComment(''); onDecided?.() }
+    })
+  }
+
+  // A manager / admin can withdraw a pending approval (the approver left, was the wrong person ...): the ticket goes back to where it was.
+  const canRecall = approval.status === 'pending' && (viewerRole === 'manager' || viewerRole === 'admin' || viewerRole === 'platform_owner')
+  function handleRecall() {
+    setError(null)
+    startTransition(async () => {
+      const result = await recallApproval(approval.request_id, recallReason.trim() || undefined)
+      if (result.error) { setError(result.error) }
+      else { setRecalling(false); setRecallReason(''); onDecided?.() }
     })
   }
 
@@ -205,6 +218,35 @@ export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: App
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* ── Recall (managers) ── */}
+      {canRecall && (
+        <div className="space-y-2 rounded-xl border border-border bg-card p-3">
+          {error && !canAct && (
+            <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
+          )}
+          {recalling ? (
+            <>
+              <p className="text-xs text-muted-foreground">The approval is withdrawn and the ticket goes back to where it was. Nobody can decide it any more.</p>
+              <input
+                value={recallReason}
+                onChange={(e) => setRecallReason(e.target.value)}
+                maxLength={500}
+                placeholder="Reason (optional)"
+                className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <div className="flex gap-2">
+                <button type="button" onClick={handleRecall} disabled={isPending} className="btn-soft flex-1">{isPending ? 'Recalling…' : 'Confirm recall'}</button>
+                <button type="button" onClick={() => { setRecalling(false); setRecallReason('') }} disabled={isPending} className="btn-soft">Cancel</button>
+              </div>
+            </>
+          ) : (
+            <button type="button" onClick={() => setRecalling(true)} className="text-xs font-medium text-muted-foreground hover:text-foreground hover:underline">
+              Recall this approval
+            </button>
+          )}
         </div>
       )}
 

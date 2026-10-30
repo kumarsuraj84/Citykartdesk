@@ -1,4 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { fetchAllPages } from '@/lib/queries/paging'
+import { isOverdueDate } from '@/lib/reporting/ist'
+import { isSlaPausedStatus } from '@/lib/constants/requests'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -29,36 +32,39 @@ export async function getWorkloadReport(orgId: string, teamIds: string[] | null 
   const admin = createAdminClient() as unknown as AnyClient
   const now = new Date()
 
-  // Admin client bypasses RLS — every query below scopes to orgId explicitly.
-  const [{ data: openRequests }, { data: openTasks }, { data: profiles }] = await Promise.all([
-    inGroups(admin.from('requests')
-      .select('assigned_to,resolution_due_at')
+  // Admin client bypasses RLS — every query below scopes to orgId explicitly. Every page is read (the database answers at most 1000 rows per request; a busy
+  // queue has more open tickets than that, and a shorter list made the busiest technician look less busy).
+  const [{ rows: openRequests }, { rows: openTasks }, { rows: profiles }] = await Promise.all([
+    fetchAllPages<{ assigned_to: string; resolution_due_at: string | null; status: string }>((from, to) => inGroups(admin.from('requests')
+      .select('assigned_to,resolution_due_at,status')
       .eq('org_id', orgId)
       .not('status', 'in', '("resolved","closed","cancelled")')
-      .not('assigned_to', 'is', null)),
-    inGroups(admin.from('tasks')
+      .not('assigned_to', 'is', null))
+      .order('id', { ascending: true }).range(from, to)),
+    fetchAllPages<{ assignee_id: string; due_date: string | null }>((from, to) => inGroups(admin.from('tasks')
       .select('assignee_id,due_date')
       .eq('org_id', orgId)
       .not('status', 'in', '("done","cancelled")')
-      .not('assignee_id', 'is', null)),
-    admin.from('profiles').select('id,full_name').eq('org_id', orgId),
+      .not('assignee_id', 'is', null))
+      .order('id', { ascending: true }).range(from, to)),
+    fetchAllPages<{ id: string; full_name: string }>((from, to) => admin.from('profiles').select('id,full_name').eq('org_id', orgId).order('id', { ascending: true }).range(from, to)),
   ])
 
-  type ProfileRow = { id: string; full_name: string }
-  const profileMap = Object.fromEntries(((profiles ?? []) as ProfileRow[]).map((p) => [p.id, p.full_name]))
+  const profileMap = Object.fromEntries(profiles.map((p) => [p.id, p.full_name]))
 
   const agg: Record<string, { openRequests: number; overdueRequests: number; openTasks: number; overdueTasks: number }> = {}
 
   for (const r of openRequests ?? []) {
     const a = (agg[r.assigned_to] ??= { openRequests: 0, overdueRequests: 0, openTasks: 0, overdueTasks: 0 })
     a.openRequests++
-    if (r.resolution_due_at && new Date(r.resolution_due_at) < now) a.overdueRequests++
+    // (a ticket waiting for somebody else has its clock stopped: it is not overdue while it waits)
+    if (r.resolution_due_at && !isSlaPausedStatus(r.status) && new Date(r.resolution_due_at) < now) a.overdueRequests++
   }
 
   for (const t of openTasks ?? []) {
     const a = (agg[t.assignee_id] ??= { openRequests: 0, overdueRequests: 0, openTasks: 0, overdueTasks: 0 })
     a.openTasks++
-    if (t.due_date && new Date(t.due_date) < now) a.overdueTasks++
+    if (isOverdueDate(t.due_date)) a.overdueTasks++
   }
 
   return Object.entries(agg)

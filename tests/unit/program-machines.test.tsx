@@ -11,13 +11,20 @@ describe('the machine list of a program with one row per machine', () => {
     expect(machineValueOf(row({ machine_no: null, serial: null }))).toBe('r1')
     expect(machineOptions([row({})])).toEqual([{ value: '3', label: '3' }])
   })
-  it('two rows with the same machine number are one choice, and a choice is found again whatever its case', () => {
-    const rows = [row({ id: 'a', machine_no: 'Server Room' }), row({ id: 'b', machine_no: 'server room' }), row({ id: 'c', machine_no: '5', serial: 'XY9' })]
-    expect(machineOptions(rows).map((o) => o.value)).toEqual(['Server Room', '5'])
-    expect(findSelectedMachine(rows, 'SERVER ROOM')?.id).toBe('a')
+  it('two rows with the same machine number are BOTH choices (the second shows its serial), and a choice is found again whatever its case', () => {
+    const rows = [row({ id: 'a', machine_no: 'Server Room', serial: 'S-A' }), row({ id: 'b', machine_no: 'server room', serial: 'S-B' }), row({ id: 'c', machine_no: '5', serial: 'XY9' })]
+    expect(machineOptions(rows).map((o) => o.value)).toEqual(['Server Room', 'server room (S-B)', '5'])
+    expect(findSelectedMachine(rows, 'SERVER ROOM')?.id).toBe('a')   // the plain number is the first row, so a choice saved before still points to it
+    expect(findSelectedMachine(rows, 'server room (s-b)')?.id).toBe('b')   // the second machine can be chosen, so its addresses are reachable
+    expect(machineValueOf(findSelectedMachine(rows, 'server room (S-B)')!)).toBe('server room (S-B)')   // and the value kept with the ticket points back to exactly that row
     expect(findSelectedMachine(rows, 'xy9')?.id).toBe('c')      // by serial too
     expect(findSelectedMachine(rows, 'nope')).toBeNull()
     expect(findSelectedMachine(rows, '')).toBeNull()
+  })
+  it('a repeated number without a serial is told apart by its sheet row', () => {
+    const rows = [row({ id: 'a', machine_no: '7', serial: null, sheet_row: 2 }), row({ id: 'b', machine_no: '7', serial: null, sheet_row: 9 })]
+    expect(machineOptions(rows).map((o) => o.value)).toEqual(['7', '7 (row 9)'])
+    expect(findSelectedMachine(rows, '7 (row 9)')?.id).toBe('b')
   })
 })
 

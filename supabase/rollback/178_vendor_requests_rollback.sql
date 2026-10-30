@@ -2,4 +2,5 @@
 BEGIN;
 DROP TABLE IF EXISTS public.vendor_request_items;
 DROP TABLE IF EXISTS public.vendor_requests;
+DELETE FROM auth.schema_migrations WHERE version = '20240101000178';
 COMMIT;

@@ -3,7 +3,7 @@ import { FileQuestion } from 'lucide-react'
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#F8F9FC]">
+    <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="text-center px-6 max-w-sm">
         <div className="flex justify-center mb-5">
           <div className="h-14 w-14 rounded-2xl bg-muted flex items-center justify-center">

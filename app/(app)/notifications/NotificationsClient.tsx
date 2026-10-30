@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Bell, Check, CheckCheck, Archive } from 'lucide-react'
 import {
@@ -152,16 +153,43 @@ function EmptyState({ filter }: { filter: Filter }) {
 export interface NotificationsClientProps {
   initialNotifications: NotificationWithActor[]
   initialUnreadCount: number
+  /** the tab, as the server loaded it */
+  filter: Filter
+  /** how many items the server was asked for, and the step of "Load more" */
+  limit: number
+  pageSize: number
+  /** there are older items than the ones shown */
+  hasMore: boolean
 }
 
 export function NotificationsClient({
   initialNotifications,
   initialUnreadCount,
+  filter,
+  limit,
+  pageSize,
+  hasMore,
 }: NotificationsClientProps) {
-  const [filter, setFilter] = useState<Filter>('all')
+  const router = useRouter()
   const [notifications, setNotifications] = useState(initialNotifications)
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount)
   const [isPending, startTransition] = useTransition()
+
+  // The list is loaded by the server (and refreshed by it). The copy kept here for instant feedback on read / archive is replaced whenever the server sends
+  // a new list; it used to be filled once and never again, so new notifications did not appear until the page was reloaded.
+  const [seenList, setSeenList] = useState(initialNotifications)
+  if (seenList !== initialNotifications) {
+    setSeenList(initialNotifications)
+    setNotifications(initialNotifications)
+    setUnreadCount(initialUnreadCount)
+  }
+
+  function go(next: Filter, nextLimit?: number) {
+    const qs = new URLSearchParams()
+    if (next !== 'all') qs.set('filter', next)
+    if (nextLimit && nextLimit > pageSize) qs.set('limit', String(nextLimit))
+    startTransition(() => router.push(`/notifications${qs.toString() ? `?${qs}` : ''}`))
+  }
 
   function handleRead(id: string) {
     const prevNotifications = notifications
@@ -180,7 +208,9 @@ export function NotificationsClient({
     const prevNotifications = notifications
     const prevUnreadCount = unreadCount
     const wasUnread = notifications.find((n) => n.id === id && !n.read_at)
-    setNotifications((prev) => prev.filter((n) => n.id !== id))
+    // Archiving marks the item archived (it then belongs to the Archived tab); it used to be dropped from the list, so that tab could never show it.
+    const archivedAt = new Date().toISOString()
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, archived_at: archivedAt, read_at: n.read_at ?? archivedAt } : n)))
     if (wasUnread) setUnreadCount((c) => Math.max(0, c - 1))
     startTransition(async () => {
       const result = await archiveNotification(id)
@@ -236,7 +266,8 @@ export function NotificationsClient({
           <button
             key={f}
             type="button"
-            onClick={() => setFilter(f)}
+            onClick={() => go(f)}
+            aria-pressed={filter === f}
             className={`flex-1 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors capitalize ${
               filter === f
                 ? 'bg-card text-foreground shadow-sm'
@@ -266,6 +297,13 @@ export function NotificationsClient({
               onArchive={handleArchive}
             />
           ))
+        )}
+        {hasMore && (
+          <div className="flex justify-center pt-2">
+            <button type="button" onClick={() => go(filter, limit + pageSize)} disabled={isPending} className="btn-soft shadow-sm">
+              {isPending ? 'Loading…' : 'Load more'}
+            </button>
+          </div>
         )}
       </div>
     </div>

@@ -1,3 +1,6 @@
+# HISTORICAL (2026-10-29): this file belongs to the old Railway/Docker deployment, which is NOT how Citykart Desk runs any more.
+# Production is the Windows app server 10.0.1.98 + database 10.0.0.205 + NAS files; see docs/PRODUCTION-INFRASTRUCTURE-AND-MIGRATION.md.
+# It is kept only as a record. Do not deploy from it.
 # 3-stage build: deps -> builder -> runner. Final image only carries the
 # standalone Next.js server output, not the full source tree or dev deps.
 # See docs/RAILWAY-DEPLOYMENT.md.

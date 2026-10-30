@@ -1,5 +1,6 @@
 import { Clock, PauseCircle } from 'lucide-react'
 import { computeSLAState } from '@/lib/utils'
+import { isSlaPausedStatus } from '@/lib/constants/requests'
 import type { RequestStatus } from '@/types'
 
 interface SLABadgeProps {
@@ -21,21 +22,29 @@ const SLA_LABELS = {
   breached: 'SLA Breached',
 } as const
 
+// Why the SLA clock is stopped, in the words shown next to "On Hold".
+const PAUSE_REASONS: Record<string, string> = {
+  waiting_user: 'Waiting on User',
+  hold_purchase_ho: 'Purchase from HO',
+  pending_approval: 'Pending Approval',
+}
+
 export function SLABadge({
   resolutionDueAt,
   responseDueAt,
   status,
   showLabel = false,
 }: SLABadgeProps) {
-  // Special case: request is on hold waiting for approval — SLA timer paused
-  if (status === 'pending_approval') {
+  // A paused ticket (waiting on the user, on a purchase from HO, or on an approval) has its SLA timer stopped: it shows why, and is never "breached" or "at risk"
+  if (isSlaPausedStatus(status)) {
+    const reason = PAUSE_REASONS[status] ?? 'Paused'
     return (
       <span
         className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 whitespace-nowrap shrink-0"
-        title="SLA timer paused — waiting for approval"
+        title={`SLA timer paused — ${reason}`}
       >
         <PauseCircle className="h-3 w-3" />
-        On Hold · Pending Approval
+        On Hold · {reason}
       </span>
     )
   }

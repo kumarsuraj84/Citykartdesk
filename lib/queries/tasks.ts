@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import type { Tables } from '@/types/database'
 import { inBatches } from '@/lib/queries/in-batches'
+import { istToday, istAddDays, istDayStartIso } from '@/lib/reporting/ist'
 import type { TaskStatus, TaskWithDetails, TaskCommentWithAuthor, TaskActivityWithActor } from '@/types'
 
 export type { TaskWithDetails, TaskCommentWithAuthor, TaskActivityWithActor }
@@ -37,11 +38,10 @@ export async function getTasks(opts: {
   const from = (pg - 1) * size
   const to = from + size - 1
 
-  // Compute time boundaries
-  const now = new Date()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
-  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString()
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  // Time boundaries. due_date is a plain DATE, so "today" is India's calendar day as a date ("2026-10-29"), the same on every screen and whatever zone the server runs in;
+  // compared with a timestamp, the database took the UTC date of it (the list showed yesterday and today as "due today", audit F-11 / H-28).
+  const today = istToday()
+  const weekStartIso = istDayStartIso(istAddDays(today, -7))
 
   let query = supabase
     .from('tasks')
@@ -63,24 +63,24 @@ export async function getTasks(opts: {
   } else if (filter === 'due_today') {
     query = query
       .eq('assignee_id', userId)
-      .gte('due_date', todayStart)
-      .lte('due_date', todayEnd)
+      .eq('due_date', today)
       .not('status', 'in', '("done","cancelled")')
   } else if (filter === 'overdue') {
     query = query
       .eq('assignee_id', userId)
-      .lt('due_date', todayStart)
+      .lt('due_date', today)
       .not('status', 'in', '("done","cancelled")')
   } else if (filter === 'done_week') {
     query = query
       .eq('assignee_id', userId)
       .eq('status', 'done')
-      .gte('updated_at', sevenDaysAgo)
+      // done in the last seven days by the day it was completed (updated_at moves with every later edit), the same as the Home count
+      .or(`completed_at.gte.${weekStartIso},and(completed_at.is.null,updated_at.gte.${weekStartIso})`)
   } else if (filter === 'team_overdue' && teamIds?.length) {
     // Team-wide overdue: tasks in any of the user's teams, past due and not completed
     query = query
       .in('team_id', teamIds)
-      .lt('due_date', todayStart)
+      .lt('due_date', today)
       .not('status', 'in', '("done","cancelled")')
   }
   // 'all': no extra filter (RLS scopes visibility)

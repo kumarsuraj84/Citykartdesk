@@ -6,7 +6,7 @@
 //   - the calculated columns: ticket and OEM age buckets, open / close month and week, NSO, AC Not Working %, Red Flag.
 // Pure functions, so each rule is easy to test. The database reading is in lib/queries/report-analytics.ts.
 
-import { ageBucketLabel } from '@/lib/reporting/aging'
+import { ageBucketLabel, ageInDays as sharedAgeInDays } from '@/lib/reporting/aging'
 import { flattenAllLeafOptions } from '@/lib/forms/options'
 import type { FormFieldOption } from '@/types'
 
@@ -122,7 +122,7 @@ export function daysFrom(isoDay: string, asOf: Date): number {
  * still 0 days old at 10 am today. (The Excel's ages are never above the calendar difference and sometimes one below it, which is exactly this.)
  */
 export function ageInDays(createdIso: string, endIso: string): number {
-  return Math.max(0, Math.floor((new Date(endIso).getTime() - new Date(createdIso).getTime()) / 86_400_000))
+  return sharedAgeInDays(createdIso, endIso) // (the one age rule of every report, lib/reporting/aging.ts)
 }
 
 /**
@@ -132,7 +132,9 @@ export function ageInDays(createdIso: string, endIso: string): number {
 export function isNsoStore(openDate: string | null, asOf: Date, months: number = NSO_MONTHS): boolean {
   if (!openDate) return true
   const o = toDay(openDate)
-  const until = new Date(o.getFullYear(), o.getMonth() + months, o.getDate())
+  // "N months later" must not overflow into the next month (opened 31 May + 9 months is 28 Feb, not 3 Mar): clamp the day to the last day of that month
+  const lastDayOfTargetMonth = new Date(o.getFullYear(), o.getMonth() + months + 1, 0).getDate()
+  const until = new Date(o.getFullYear(), o.getMonth() + months, Math.min(o.getDate(), lastDayOfTargetMonth))
   return startOfDay(asOf).getTime() <= until.getTime()
 }
 
@@ -191,6 +193,8 @@ export interface RawTicket {
   created_at: string
   resolved_at: string | null
   closed_at: string | null
+  /** set when the approval flow cancelled the ticket (the auto-close then moves it to "closed" without ever resolving it) */
+  cancellation_reason?: string | null
   form_data: Record<string, unknown> | null
   service: { id: string; name: string; auto_oem_routing: boolean | null } | null
   category: { name: string } | null
@@ -253,7 +257,8 @@ export function makeFact(r: RawTicket, ctx: FactContext): TicketFact {
     priority: r.priority,
     createdAt: r.created_at,
     resolvedAt: r.resolved_at,
-    doneAt: r.resolved_at ?? r.closed_at ?? null,
+    // a ticket the approval flow cancelled and the auto-close then closed was never resolved: it is in no "resolved / closed in the month" figure (audit F-12)
+    doneAt: r.cancellation_reason && !r.resolved_at ? null : (r.resolved_at ?? r.closed_at ?? null),
     ageDays,
     ageBucket: ageBucketLabel(ageDays),
 

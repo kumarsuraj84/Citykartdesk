@@ -159,7 +159,9 @@ async function pass(opts, target, secret) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2))
   const target = (process.env.SYSTEM_LOG_TARGET_URL ?? process.env.CRON_TARGET_URL ?? '').replace(/\/$/, '')
-  const secret = process.env.SYSTEM_LOG_INGEST_SECRET ?? (process.env.ALLOW_SHARED_SECRET_FALLBACK === '1' ? process.env.CRON_SECRET : '') ?? ''
+  // its own secret first; an EMPTY value counts as not set ('||', not '??': an empty SYSTEM_LOG_INGEST_SECRET= line used to switch the fallback off too).
+  // The cron secret only works here while the app also has ALLOW_SHARED_SECRET_FALLBACK=1: otherwise the app accepts it for 'cron' entries only and refuses these.
+  const secret = process.env.SYSTEM_LOG_INGEST_SECRET || (process.env.ALLOW_SHARED_SECRET_FALLBACK === '1' ? process.env.CRON_SECRET : '') || ''
   if (!opts.dryRun && (!target || secret.length < 16)) throw new Error('Set SYSTEM_LOG_TARGET_URL and SYSTEM_LOG_INGEST_SECRET (16+ characters), or use --dry-run')
   if (opts.once || opts.dryRun) {
     const r = await pass(opts, target, secret)

@@ -109,7 +109,8 @@ describe('priority highlights', () => {
   })
   it('SLA risk names the groups behind the breaches and opens the breaches cohort', () => {
     const sla = hl[0]
-    expect(sla.headline).toMatch(/^6 of 14 tickets breached SLA/)
+    // (the same tickets on both sides: the open backlog and the ones of it past their deadline, so the share can never pass 100%)
+    expect(sla.headline).toMatch(/^6 of 10 open tickets are past their deadline/)
     expect(sla.severity).toBe('critical')
     expect(sla.detail).toContain('ADMIN GROUP')
     expect(sla.open).toMatchObject({ metric: 'breaches', stage: 1 })
@@ -138,7 +139,7 @@ describe('priority highlights', () => {
   })
   it('says so when nothing was created', () => {
     const r = highlights([], [], f, W, NOW, true)[0]
-    expect(r.headline).toBe('No tickets in this period')
+    expect(r.headline).toBe('No open tickets at the end of this period')
   })
 })
 

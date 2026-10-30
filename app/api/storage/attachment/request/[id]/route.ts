@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { contentDisposition, contentTypeForFileName, pathBelongsToRequest } from '@/lib/attachments/serve'
+import { fileResponse, openStoredFile } from '@/lib/attachments/stream'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic'
 // time, then streamed from the admin client so the browser never sees a
 // Supabase-hosted URL at all.
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
@@ -42,27 +42,20 @@ export async function GET(
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
 
-  const admin = createAdminClient()
-  const { data, error: downloadError } = await admin.storage
-    .from('request-attachments')
-    .download(attachment.storage_path)
-  if (downloadError || !data) {
+  // streamed from the storage service as it arrives (no whole-file copy in memory), with Content-Length and single-range support for audio / video (G-24)
+  const stored = await openStoredFile('request-attachments', attachment.storage_path, req.headers.get('range'))
+  if (stored.kind === 'unavailable') {
     // the storage service itself did not answer (down, unreachable, 5xx): the file is not missing, so say so (QA-D017)
-    const e = downloadError as { name?: string; status?: number } | null
-    if (e && (e.name === 'StorageUnknownError' || (typeof e.status === 'number' && e.status >= 500))) {
-      return NextResponse.json({ error: 'file storage is temporarily unavailable' }, { status: 503, headers: { 'Retry-After': '30' } })
-    }
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return NextResponse.json({ error: 'file storage is temporarily unavailable' }, { status: 503, headers: { 'Retry-After': '30' } })
   }
+  if (stored.kind === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  return new NextResponse(data, {
-    headers: {
-      // D-053: the type comes from the file's own extension (a fixed table), never from the stored column or the stored object's claim
-      'Content-Type': contentTypeForFileName(attachment.file_name),
-      'Content-Disposition': contentDisposition(attachment.file_name, contentTypeForFileName(attachment.file_name)),
-      'X-Content-Type-Options': 'nosniff',
-      // Access can be revoked (deleted_at, RLS) at any time — never cache.
-      'Cache-Control': 'private, no-store',
-    },
-  })
+  return fileResponse(stored.res, {
+    // D-053: the type comes from the file's own extension (a fixed table), never from the stored column or the stored object's claim
+    'Content-Type': contentTypeForFileName(attachment.file_name),
+    'Content-Disposition': contentDisposition(attachment.file_name, contentTypeForFileName(attachment.file_name)),
+    'X-Content-Type-Options': 'nosniff',
+    // Access can be revoked (deleted_at, RLS) at any time — never cache.
+    'Cache-Control': 'private, no-store',
+  }, req.headers.get('range'))
 }

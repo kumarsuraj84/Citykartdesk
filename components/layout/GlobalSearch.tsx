@@ -97,6 +97,9 @@ export function GlobalSearch({ dark = false }: { dark?: boolean }) {
       try {
         const res = await globalSearch(query)
         setGrouped(res)
+      } catch {
+        // a failed search shows "no results" instead of an unhandled error
+        setGrouped(EMPTY_RESULTS)
       } finally {
         setLoading(false)
       }

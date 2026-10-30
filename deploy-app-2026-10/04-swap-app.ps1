@@ -1,10 +1,12 @@
 # STEP 4 - run on 10.0.1.98 (PowerShell as Administrator), ONLY AFTER the database script on 10.0.0.205 said DONE.
 # What it does, in this order, and stops at the first problem:
-#   1. Restarts CkDeskPostgrest (it must learn the new tables) and proves it can see them (one read of an empty new table, status code only).
-#   2. Checks the zip (exists, 8-80 MB).
+#   1. Checks the zip FIRST (exists, 8-80 MB, opens as a zip, contains server.js) - nothing on the server is touched before the zip is known to be good.
+#   2. Restarts CkDeskPostgrest (it must learn the new tables) and proves it can see them (one read of an empty new table, status code only).
 #   3. Stops CkDeskApp, renames app\standalone to app\standalone-bak-<time> (the rollback copy), expands the zip to app\standalone,
 #      copies .env.local back from the bak folder, starts CkDeskApp.
 #   4. Waits for /api/health = ok and shows /api/version. If the app does not come up in 90 seconds it ROLLS BACK by itself.
+# Whatever happens, the last lines say the TRUE state of the CkDeskApp service. If the script stopped the service and then failed before the swap
+# (for example the rename was refused), it starts the service again and says so; it never claims "unchanged" while the service is stopped.
 # Usage:   .\04-swap-app.ps1 -Zip D:\release\ckdesk-20261027.zip
 param(
   [Parameter(Mandatory = $true)][string]$Zip,
@@ -27,10 +29,25 @@ function Wait-Health($seconds) {
   }
   return $false
 }
+function Test-ZipHasServerJs($path) {
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $z = [System.IO.Compression.ZipFile]::OpenRead($path)
+  # server.js at the top of the zip (or one folder down, which the swap step also copes with); a server.js deep inside node_modules does not count
+  try { return [bool]($z.Entries | Where-Object { $_.FullName -match '^([^/\\]+[/\\])?server\.js$' } | Select-Object -First 1) } finally { $z.Dispose() }
+}
 
-$swapped = $false
+$stopped = $false      # set BEFORE the service is stopped: from then on the script owns the duty to start it again
+$swapped = $false      # set once the old folder has been renamed to the bak folder
 try {
-  "--- 1. PostgREST restart and schema check"
+  "--- 1. zip (checked before anything on the server is touched)"
+  if (-not (Test-Path $Zip)) { throw "zip not found: $Zip" }
+  $mb = [math]::Round((Get-Item $Zip).Length / 1MB, 1)
+  "zip size: $mb MB"
+  if ($mb -lt 8 -or $mb -gt 80) { throw "The zip is $mb MB; expected about 20-25 MB. A very large zip is the node_modules-junction problem. Nothing was changed." }
+  if (-not (Test-ZipHasServerJs $Zip)) { throw 'The zip cannot be opened or contains no server.js - it is not the standalone build. Nothing was changed.' }
+  "zip looks like a standalone build"
+
+  "--- 2. PostgREST restart and schema check"
   if (-not (Test-Path $cur)) { throw "not found: $cur" }
   Restart-Service CkDeskPostgrest
   Start-Sleep -Seconds 12
@@ -47,13 +64,8 @@ try {
   }
   $svcKey = $null
 
-  "--- 2. zip"
-  if (-not (Test-Path $Zip)) { throw "zip not found: $Zip" }
-  $mb = [math]::Round((Get-Item $Zip).Length / 1MB, 1)
-  "zip size: $mb MB"
-  if ($mb -lt 8 -or $mb -gt 80) { throw "The zip is $mb MB; expected about 20-25 MB. A very large zip is the node_modules-junction problem. Nothing was changed." }
-
   "--- 3. swap"
+  $stopped = $true
   Stop-Service CkDeskApp
   Start-Sleep -Seconds 3
   Rename-Item $cur $bak
@@ -82,13 +94,27 @@ catch {
   "STOPPED: $($_.Exception.Message)"
   if ($swapped) {
     "ROLLING BACK to $bak"
-    Stop-Service CkDeskApp -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 3
-    if (Test-Path $cur) { Rename-Item $cur (Join-Path $app "standalone-failed-$stamp") }
-    Rename-Item $bak $cur
-    Start-Service CkDeskApp
-    if (Wait-Health 90) { 'Rolled back: the previous app is running again.' } else { 'Rollback done but health is not OK - look at the logs folder, file CkDeskApp.err.log.' }
-  } else { 'Nothing was swapped: the running app is unchanged.' }
+    try {
+      Stop-Service CkDeskApp -ErrorAction SilentlyContinue
+      Start-Sleep -Seconds 3
+      if (Test-Path $cur) { Rename-Item $cur (Join-Path $app "standalone-failed-$stamp") }
+      Rename-Item $bak $cur
+      Start-Service CkDeskApp
+      if (Wait-Health 90) { 'Rolled back: the previous app is running again.' } else { 'Rollback done but health is not OK - look at the logs folder, file CkDeskApp.err.log.' }
+    } catch {
+      "THE ROLLBACK ITSELF FAILED: $($_.Exception.Message)"
+      "MANUAL ACTION NEEDED: the previous app is in $bak (and a half-copied new one may be in $cur). Put the bak folder back as 'standalone' and start CkDeskApp."
+    }
+  } elseif ($stopped) {
+    # the service was stopped but the old folder was never renamed (for example the rename was refused): the old app is still in place - start it again
+    'Nothing was swapped: the old app folder is still in place. The script had stopped CkDeskApp, so it starts it again now.'
+    try { Start-Service CkDeskApp -ErrorAction Stop } catch { "COULD NOT START CkDeskApp: $($_.Exception.Message)" }
+  } else { 'Nothing was swapped and CkDeskApp was never stopped: the running app is unchanged.' }
   "Keep this log: $log"
 }
-finally { Stop-Transcript | Out-Null }
+finally {
+  # the true state, whatever happened above
+  try { "CkDeskApp service is now: " + (Get-Service CkDeskApp).Status } catch { "CkDeskApp service state could not be read: $($_.Exception.Message)" }
+  if ($stopped -and (Get-Service CkDeskApp -ErrorAction SilentlyContinue).Status -ne 'Running') { "WARNING: CkDeskApp is NOT running. Start it with: Start-Service CkDeskApp" }
+  Stop-Transcript | Out-Null
+}

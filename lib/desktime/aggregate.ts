@@ -131,7 +131,8 @@ export function buildPersonProjectRows(logs: MemberProjectLog[], aiRatios: Map<s
     const entry = projects.get(log.project_name) ?? { minutes: 0, ai: 0, dates: new Set<string>() }
     const ratio = aiRatios.get(`${log.member_name}|${log.work_date}`) ?? 0
     entry.minutes += log.minutes
-    entry.ai += Math.round(log.minutes * ratio)
+    // (kept exact here and rounded once at the end: rounding every log made the AI minutes drift from the true share, audit F-39)
+    entry.ai += log.minutes * ratio
     entry.dates.add(log.work_date)
     projects.set(log.project_name, entry)
   }
@@ -142,14 +143,14 @@ export function buildPersonProjectRows(logs: MemberProjectLog[], aiRatios: Map<s
         .map(([project, { minutes, ai, dates }]) => ({
           project,
           minutes,
-          aiMinutes: ai,
-          otherMinutes: minutes - ai,
+          aiMinutes: Math.round(ai),
+          otherMinutes: minutes - Math.round(ai),
           days: dates.size,
         }))
         .sort((a, b) => b.minutes - a.minutes)
 
       const totalMinutes = projectRows.reduce((s, p) => s + p.minutes, 0)
-      const aiMinutes = projectRows.reduce((s, p) => s + p.aiMinutes, 0)
+      const aiMinutes = Math.round([...projects.values()].reduce((s, p) => s + p.ai, 0))
       return { member, totalMinutes, aiMinutes, otherMinutes: totalMinutes - aiMinutes, projects: projectRows }
     })
     .sort((a, b) => b.totalMinutes - a.totalMinutes)

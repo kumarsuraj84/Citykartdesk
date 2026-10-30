@@ -95,9 +95,11 @@ interface Props {
   groupIds?: string[]
   /** Store Master choices on the dashboard; a card that sets its own `store` (a region row) overrides them. */
   storeFilter?: StoreFilter
+  /** the technicians / requesters picked on a team Dashboard: the list is narrowed to them exactly as the numbers are */
+  people?: { techIds: string[]; requesterIds: string[] }
 }
 
-export function DetailDrawer({ filter, onClose, groupIds, storeFilter }: Props) {
+export function DetailDrawer({ filter, onClose, groupIds, storeFilter, people }: Props) {
   const [isPending, startTransition] = useTransition()
   const [data, setData]  = useState<DrawerRequest[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -110,17 +112,18 @@ export function DetailDrawer({ filter, onClose, groupIds, storeFilter }: Props) 
     // clearing stale results when the filter is removed is part of that external sync.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!filter) { setData(null); setError(null); return }
-    const key = JSON.stringify({ filter, groupIds, storeFilter })
+    const key = JSON.stringify({ filter, groupIds, storeFilter, people })
     if (key === prevFilterRef.current) return
     prevFilterRef.current = key
     setData(null); setError(null)
     startTransition(async () => {
       const withStore = !filter.store && storeFilter && storeFilterCount(storeFilter) > 0 ? { ...filter, store: storeFilter } : filter
-      const res = await getFilteredRequests(groupIds?.length ? { ...withStore, groupIds } : withStore)
+      const withPeople = people && (people.techIds.length > 0 || people.requesterIds.length > 0) ? { ...withStore, techIds: people.techIds, requesterIds: people.requesterIds } : withStore
+      const res = await getFilteredRequests(groupIds?.length ? { ...withPeople, groupIds } : withPeople)
       if (res.error) setError(res.error)
       else setData(res.data)
     })
-  }, [filter, groupIds, storeFilter])
+  }, [filter, groupIds, storeFilter, people])
 
   // Escape to close
   useEffect(() => {

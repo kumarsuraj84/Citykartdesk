@@ -29,11 +29,12 @@ export async function notifyRequesterTicketLogged(p: {
  * "Your ticket was assigned to <technician>" — sent to the requester whenever a ticket gets an
  * owner, whether a business rule or a person assigned it. Governed by "Ticket assigned" /
  * "Ticket reassigned" in Notification Rules. Never throws.
+ * actorId is null when nobody did it (an automatic rule or job): the notification then simply has no "by <person>" instead of borrowing the requester's name.
  */
 export async function notifyRequesterOfAssignment(p: {
   requestId: string
   assigneeId: string
-  actorId: string
+  actorId: string | null
   reassigned?: boolean
 }): Promise<void> {
   try {

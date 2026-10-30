@@ -1,6 +1,7 @@
 // AC PMS: which PMS dates are due to become tickets right now. Pure (no database, no clock of its own), so it can be tested.
 //   - a ticket for a date is made from 09:00 India time on that day, never before;
-//   - only the PMS date of today is made; a date that has already passed is never made, even if the job did not run that day (PMS_CATCH_UP_DAYS = 0).
+//   - only the PMS date of today is made; a date that has already passed is never made AUTOMATICALLY, even if the job did not run that day (PMS_CATCH_UP_DAYS = 0, a product rule).
+//     A date that could not be made stays visible in the problem list for 7 days (lib/pms/tickets.ts, PMS_PROBLEM_DAYS) so an administrator can make the ticket by hand.
 
 export const PMS_TICKET_HOUR_IST = 9
 export const PMS_CATCH_UP_DAYS = 0
@@ -22,11 +23,11 @@ export function addDays(isoDate: string, days: number): string {
 }
 
 /** The first and last PMS date that may become a ticket now. From 09:00 both are today; before 09:00 `from` (today) is after `to` (yesterday), so nothing is due. */
-export function pmsDueRange(now: Date): { from: string; to: string; todayOpen: boolean } {
+export function pmsDueRange(now: Date): { from: string; to: string; todayOpen: boolean; /** today in India time, yyyy-mm-dd */ today: string } {
   const t = istNow(now)
   const todayOpen = t.minutes >= PMS_TICKET_HOUR_IST * 60
   const to = todayOpen ? t.date : addDays(t.date, -1)
-  return { from: addDays(t.date, -PMS_CATCH_UP_DAYS), to, todayOpen }
+  return { from: addDays(t.date, -PMS_CATCH_UP_DAYS), to, todayOpen, today: t.date }
 }
 
 /** "25 Oct 2026" */

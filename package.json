@@ -2,14 +2,18 @@
   "name": "citykart-desk",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22 <25"
+  },
   "scripts": {
     "dev": "next dev",
     "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "node node_modules/eslint/bin/eslint.js app lib components types proxy.ts",
+    "lint": "node node_modules/eslint/bin/eslint.js app lib components types proxy.ts instrumentation.ts next.config.ts scripts",
     "typecheck": "node node_modules/typescript/lib/tsc.js --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify": "npm run typecheck && npm run lint && vitest run tests/unit"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

@@ -35,12 +35,15 @@ describe('getAnalytics — scoped to the viewer', () => {
     expect(teamFilters('tasks')).toHaveLength(0)
   })
 
-  it('a technician only gets requests and tasks from their groups', async () => {
+  it('a technician gets the tickets assigned to them, raised by them and of their groups (the same set the list behind a clicked number uses), and the tasks of their groups', async () => {
     await getAnalytics('org-1', '30d', { kind: 'agent', userId: 'u1', teamIds: ['bd', 'admin'] })
-    // org request ids, period requests, open requests, daily created, daily closed
-    expect(teamFilters('requests')).toHaveLength(5)
+    const own = 'assigned_to.eq.u1,requester_id.eq.u1,team_id.in.(bd,admin)'
+    // period requests, open requests, resolved in the period, daily created, daily closed / resolved
+    const scoped = calls.filter((c) => c.table === 'requests' && c.method === 'or' && c.args[0] === own)
+    expect(scoped).toHaveLength(5)
+    expect(teamFilters('requests')).toHaveLength(0)
     expect(teamFilters('tasks')).toHaveLength(1)
-    for (const c of [...teamFilters('requests'), ...teamFilters('tasks')]) expect(c.args[1]).toEqual(['bd', 'admin'])
+    expect(teamFilters('tasks')[0].args[1]).toEqual(['bd', 'admin'])
   })
 
   it('a manager is limited to their groups too', async () => {

@@ -32,17 +32,25 @@ export interface ResolvedRange {
   label: string
 }
 
-const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
-const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
+// Every day here is an INDIA day (fixed +05:30), whatever zone the server runs in: the old code used the server's own calendar (setHours / getDate), which is right only
+// when the server happens to run on India time (audit H-28). A "Date" below is a moment; the day boundaries are 00:00 and 23:59:59.999 India time.
+const IST_MS = 5.5 * 3_600_000
+/** 00:00 India time of the given calendar day (month 0-11; an out-of-range month or day rolls over like Date does). */
+const istMidnight = (y: number, mo: number, d: number) => new Date(Date.UTC(y, mo, d) - IST_MS)
+/** The India calendar fields of a moment. */
+const istFields = (d: Date) => { const x = new Date(d.getTime() + IST_MS); return { y: x.getUTCFullYear(), mo: x.getUTCMonth(), d: x.getUTCDate() } }
+const startOfDay = (d: Date) => { const f = istFields(d); return istMidnight(f.y, f.mo, f.d) }
+const endOfDay = (d: Date) => new Date(startOfDay(d).getTime() + 86_400_000 - 1)
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-export const formatDay = (d: Date) => `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+export const formatDay = (d: Date) => { const f = istFields(d); return `${f.d} ${MONTHS[f.mo]} ${f.y}` }
 
-/** Parses a yyyy-mm-dd string as a local calendar day; null when it is not a real date. */
+/** Parses a yyyy-mm-dd string as an India calendar day (its 00:00 India time); null when it is not a real date. */
 export function parseDay(s: string | undefined | null): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s ?? '')
   if (!m) return null
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
-  return d.getFullYear() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3]) ? d : null
+  const d = istMidnight(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  const f = istFields(d)
+  return f.y === Number(m[1]) && f.mo === Number(m[2]) - 1 && f.d === Number(m[3]) ? d : null
 }
 
 export function isRangePreset(v: string | undefined): v is RangePreset {
@@ -62,9 +70,8 @@ export function resolveDateRange(
   now: Date = new Date()
 ): ResolvedRange {
   const today = startOfDay(now)
-  const y = today.getFullYear()
-  const mo = today.getMonth()
-  const day = (yy: number, mm: number, dd: number) => new Date(yy, mm, dd)
+  const { y, mo, d: todayDate } = istFields(today)
+  const day = (yy: number, mm: number, dd: number) => istMidnight(yy, mm, dd)
   // Financial year containing today starts on 1 April of this year, or of last year if we are in Jan–Mar.
   const fyStartYear = mo >= 3 ? y : y - 1
 
@@ -75,8 +82,8 @@ export function resolveDateRange(
   switch (p) {
     case 'all': break
     case 'today': from = today; to = endOfDay(today); break
-    case 'last_7': from = day(y, mo, today.getDate() - 6); to = endOfDay(today); break
-    case 'last_30': from = day(y, mo, today.getDate() - 29); to = endOfDay(today); break
+    case 'last_7': from = day(y, mo, todayDate - 6); to = endOfDay(today); break
+    case 'last_30': from = day(y, mo, todayDate - 29); to = endOfDay(today); break
     case 'this_month': from = day(y, mo, 1); to = endOfDay(today); break
     case 'last_month': from = day(y, mo - 1, 1); to = endOfDay(day(y, mo, 0)); break
     case 'this_year': from = day(y, 0, 1); to = endOfDay(today); break

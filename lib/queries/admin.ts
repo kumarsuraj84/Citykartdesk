@@ -1,6 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { applyCurrentlyBreachedFilter } from '@/lib/sla/breach'
+import { PAUSED_SLA_STATUSES } from '@/lib/constants/requests'
+import { istToday, istAddDays, istDayStartIso } from '@/lib/reporting/ist'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -103,9 +105,10 @@ export async function getMonitoringStats(): Promise<MonitoringStats> {
   // org-level `admin`, so a service-role client with no org filter leaked cross-org counts.
   const supabase = (await createClient()) as unknown as AnyClient
 
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
-  const todayIso = todayStart.toISOString()
+  // today = the INDIA day (midnight to midnight IST), whatever zone the server runs in
+  const today = istToday()
+  const todayIso = istDayStartIso(today)
+  const tomorrowIso = istDayStartIso(istAddDays(today, 1))
 
   const closedStatuses = ['resolved', 'cancelled', 'closed']
   const doneCancelled = ['done', 'cancelled']
@@ -125,14 +128,15 @@ export async function getMonitoringStats(): Promise<MonitoringStats> {
     supabase.from('requests').select('id', { count: 'exact', head: true }).not('status', 'in', `(${closedStatuses.join(',')})`),
     supabase.from('tasks').select('id', { count: 'exact', head: true }).not('status', 'in', `(${doneCancelled.join(',')})`),
     supabase.from('approvals').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-    supabase.from('tasks').select('id', { count: 'exact', head: true }).lt('due_date', new Date().toISOString()).not('status', 'in', `(${doneCancelled.join(',')})`),
+    supabase.from('tasks').select('id', { count: 'exact', head: true }).lt('due_date', today).not('status', 'in', `(${doneCancelled.join(',')})`), // (due_date is a date: overdue = before today in India, the same rule as the Tasks page)
     // "Currently Breached" (D-01, lib/sla/breach.ts) — same formula as the
     // Home Dashboard and Admin Analytics KPI card, not the Report Builder's
     // broader "Ever Breached" (which also counts tickets resolved late).
-    applyCurrentlyBreachedFilter(supabase.from('requests').select('id', { count: 'exact', head: true })),
-    supabase.from('requests').select('id', { count: 'exact', head: true }).is('assigned_to', null).not('status', 'in', `(${closedStatuses.join(',')})`),
-    supabase.from('requests').select('id', { count: 'exact', head: true }).gte('created_at', todayIso),
-    supabase.from('requests').select('id', { count: 'exact', head: true }).eq('status', 'resolved').gte('updated_at', todayIso),
+    // (and not a ticket whose clock is stopped: waiting on the user, on purchase from HO, or on an approval)
+    applyCurrentlyBreachedFilter(supabase.from('requests').select('id', { count: 'exact', head: true })).not('status', 'in', `(${PAUSED_SLA_STATUSES.join(',')})`),
+    supabase.from('requests').select('id', { count: 'exact', head: true }).is('assigned_to', null).not('status', 'in', `(${[...closedStatuses, 'pending_approval'].join(',')})`), // (the same tickets the queue's "unassigned" view lists)
+    supabase.from('requests').select('id', { count: 'exact', head: true }).gte('created_at', todayIso).lt('created_at', tomorrowIso),
+    supabase.from('requests').select('id', { count: 'exact', head: true }).gte('resolved_at', todayIso).lt('resolved_at', tomorrowIso), // (resolved TODAY by the resolution time: updated_at moves with every later edit)
     supabase.from('scheduled_reports').select('id', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('business_rules').select('id', { count: 'exact', head: true }).eq('is_active', true),
   ])
@@ -240,6 +244,10 @@ export async function getAuditLogs(opts: {
       )
     ),
   ])
+
+  // A failed read must not look like "nothing happened": an empty audit log would be believed. The caller (the page, or the /api/admin/audit route) decides how to show it.
+  const failed = [rawRequests, rawTasks, rawAdmin].find((r) => r.error) as { error?: { message?: string } } | undefined
+  if (failed?.error) throw new Error(`The audit log could not be read: ${failed.error.message ?? 'database error'}`)
 
   const requestEntries: AuditEntry[] = (rawRequests.data ?? []).map((row: {
     id: string; request_id: string; action: string

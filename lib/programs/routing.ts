@@ -77,9 +77,10 @@ export async function runProgramRouting(p: {
   const target = splitRecipients(pool)
 
   // The rows the ticket belongs to are saved FIRST, so the vendor portal, the quote / PO approval and a later reopen work from them even when the mail cannot be sent.
+  // mailed_to / mailed_cc are filled only AFTER the mail went out: they are the proof that it did (the automation checker reads them), so they stay empty until then.
   if (!p.reopen) {
     await db.from('request_program_snapshots').upsert(
-      { request_id: request.id, program_id: program.id, row_ids: rows.map((r) => r.id), snapshot: rows as unknown, mailed_to: target.to, mailed_cc: target.cc },
+      { request_id: request.id, program_id: program.id, row_ids: rows.map((r) => r.id), snapshot: rows as unknown, mailed_to: [], mailed_cc: [] },
       { onConflict: 'request_id,program_id' },
     )
     // level "portal": who gets the ticket is decided in CK Desk only (Business Rules assign a vendor technician, as they do for Citykart technicians, or Citykart staff assign it by
@@ -107,14 +108,18 @@ export async function runProgramRouting(p: {
   })
   const mail = p.reopen ? { ...rendered, subject: `REOPENED - ${rendered.subject}` } : rendered
 
+  // a send that says it failed (mail switched off, the mail server refused, a recipient was rejected) is NOT a sent mail: the ticket gets a note and the automation retry may try again
   const sent = await sendEmail({ to: target.to, cc: target.cc, subject: mail.subject, html: mail.html, text: mail.text, threadRequestNo: request.request_no })
   if (sent.error) { await note(`The automatic e-mail to the ${label} vendor could not be sent. Please send this ticket to them yourself.`); return }
+  if (!p.reopen) await db.from('request_program_snapshots').update({ mailed_to: target.to, mailed_cc: target.cc }).eq('request_id', request.id).eq('program_id', program.id)
   await admin.from('request_comments').insert({
     request_id: request.id, author_id: p.actorId, is_internal: false,
     body: masterSentComment({ label, to: target.to, cc: target.cc, subject: mail.subject, html: mail.html }),
   })
 
   if (program.level !== 'mail') return   // "portal": the ticket stays Open for the vendor technician it was given to
+  // A ticket a Business Rule gave to a vendor technician stays Open for him to start (the same rule as the AC / Genset path in lib/requests/master-routing.ts)
+  if (await isAssignedToVendor(request.id)) return
   const { data: moved } = await admin
     .from('requests')
     .update(p.reopen ? { status: 'in_progress' } : { status: 'in_progress', responded_at: new Date().toISOString() })

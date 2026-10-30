@@ -1,5 +1,5 @@
 import { parseEmails } from '@/lib/masters/emails'
-import { cell, norm, reader, rowIsBlank, toGrid, type Grid } from '@/lib/masters/parse'
+import { cell, duplicateMappedHeading, norm, reader, rowIsBlank, shownText, toGrid, type Grid } from '@/lib/masters/parse'
 import { DEFAULT_HEADINGS, FIELD_LABEL, type ParsedProgramRow, type ProgramColumns, type ProgramField, type ProgramIssue, type ProgramParseResult, type ProgramRowType } from './types'
 
 // Pure: turns the cells of a program's sheet into rows plus a list of problems. No database, no network. Columns are found by their heading (case, spaces and punctuation do
@@ -11,10 +11,14 @@ export function headingKeys(field: ProgramField, columns: ProgramColumns | null 
   return [...new Set([...(typed ? [norm(typed)] : []), ...DEFAULT_HEADINGS[field].map(norm)])].filter(Boolean)
 }
 
-// compared after removing spaces and punctuation, so "Not Active", "Non-Active" and "In active" all count as off
+// compared after removing spaces and punctuation, so "Not Active", "Non-Active" and "In active" all count as off. Like the AC sheet (lib/masters/parse.ts), anything that is
+// neither clearly on nor clearly off is NOT treated as active: "Deactivated", "Disabled", "Not in use", "N/A" must not keep a machine mailed.
+const TRUE_WORDS = new Set(['active', 'yes', 'y', 'true', '1', 'on'])
 const FALSE_WORDS = new Set(['no', 'n', 'false', '0', 'inactive', 'nonactive', 'notactive', 'off', 'closed', 'removed', 'scrap', 'scrapped'])
 
-export function parseProgramSheet(values: unknown[][], opts: { name: string; rowType: ProgramRowType; columns?: ProgramColumns | null }): ProgramParseResult {
+const squashWord = (raw: string) => raw.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+export function parseProgramSheet(values: unknown[][], opts: { name: string; rowType: ProgramRowType; columns?: ProgramColumns | null; /** the same sheet read as it is SHOWN (optional): extra details, the machine number and the serial are taken from it */ display?: unknown[][] }): ProgramParseResult {
   const grid: Grid | null = toGrid(values)
   if (!grid) return { rows: [], issues: [], fatal: `The ${opts.name} sheet is empty.` }
   const keys = (f: ProgramField) => headingKeys(f, opts.columns)
@@ -23,16 +27,30 @@ export function parseProgramSheet(values: unknown[][], opts: { name: string; row
   const missing = required.filter((f) => !has(f)).map((f) => `${FIELD_LABEL[f]} (${DEFAULT_HEADINGS[f][0]}${opts.columns?.[f] ? `, or "${opts.columns[f]}"` : ''})`)
   if (missing.length) return { rows: [], issues: [], fatal: `The ${opts.name} sheet is missing the column(s): ${missing.join('; ')}.` }
 
+  // Only a column the administrator (or the usual names) calls "Active" switches a row on or off. A plain "Status" column stays an extra detail: in some sheets it means something
+  // else (a warranty or service state), and treating it as on / off would silently take machines out of use (a deliberate rule, tests/unit/programs-engine.test.ts).
+  // two columns with the same heading, both of a meaning CK Desk reads: the first would win silently, so the sheet is not applied until it is made clear
+  const mappedFields = ['store', 'mail', 'vendor', 'machine', 'serial', 'poMail', 'approverMail', 'active'] as ProgramField[]
+  const dupe = duplicateMappedHeading(grid, [...new Set(mappedFields.flatMap((f) => keys(f)))], opts.name)
+  if (dupe) return { rows: [], issues: [], fatal: dupe }
+
   // the headings as typed (for the extra details), and which columns have a meaning
-  let h = 0
-  while (h < values.length && !(values[h] ?? []).some((c) => cell(c) !== '')) h++
-  const labels = (values[h] ?? []).map((c) => cell(c))
+  const labels = grid.labels
   const mapped = new Set<number>()
-  for (const f of ['store', 'mail', 'vendor', 'machine', 'serial', 'poMail', 'approverMail', 'active'] as ProgramField[]) {
+  for (const f of mappedFields) {
     for (const k of keys(f)) { const i = grid.header.get(k); if (i !== undefined) mapped.add(i) }
   }
 
   const get = reader(grid)
+  const storeCol = [...keys('store')].map((k) => grid.header.get(k)).find((i) => i !== undefined)
+  // the text the sheet SHOWS for a cell a person reads as text ('007' stays '007', a long serial keeps every digit); the raw value when the sheet was not read in its shown form
+  const getShown = (cells: unknown[], sheetRow: number, names: string[]): string => {
+    for (const n of names) {
+      const i = grid.header.get(n)
+      if (i !== undefined) return shownText(opts.display, values, sheetRow, i, storeCol) ?? cell(cells[i])
+    }
+    return ''
+  }
   const rows: ParsedProgramRow[] = []
   const issues: ProgramIssue[] = []
   const at = (severity: 'error' | 'warning', code: string, storeCode: string | null, sheetRow: number | null, message: string, token?: string) => issues.push({ severity, code, storeCode, sheetRow, message, token })
@@ -51,24 +69,36 @@ export function parseProgramSheet(values: unknown[][], opts: { name: string; row
     if (mailRaw === '') at('warning', 'no_email', storeCode, sheetRow, `Row ${sheetRow} (${storeCode}): the mail column is empty, so a ticket for it cannot be mailed to the vendor.`)
     else if (mail.valid.length === 0) at('error', 'no_valid_email', storeCode, sheetRow, `Row ${sheetRow} (${storeCode}): the mail column has no usable address.`)
 
-    const machineNo = get(cells, ...keys('machine'))
-    const serial = get(cells, ...keys('serial'))
+    const machineNo = getShown(cells, sheetRow, keys('machine'))
+    const serial = getShown(cells, sheetRow, keys('serial'))
     if (opts.rowType === 'machine') {
       if (!machineNo) { at('error', 'blank_machine', storeCode, sheetRow, `Row ${sheetRow} (${storeCode}): the ${DEFAULT_HEADINGS.machine[0]} is empty, the row is skipped.`); continue }
       const k = `${storeCode}|${machineNo.toLowerCase()}`
-      if (machineSeen.has(k)) at('warning', 'duplicate_machine', storeCode, sheetRow, `Row ${sheetRow} (${storeCode}): machine ${machineNo} is also on row ${machineSeen.get(k)}.`)
+      // both rows are KEPT (they may be two real machines with the same number); the ticket form tells them apart by their serial (lib/programs/machines.ts)
+      if (machineSeen.has(k)) at('warning', 'duplicate_machine', storeCode, sheetRow, `Row ${sheetRow} (${storeCode}): machine ${machineNo} is also on row ${machineSeen.get(k)}. Both are kept and shown with their serial; please correct one of them.`)
       else machineSeen.set(k, sheetRow)
     }
     perStore.set(storeCode, [...(perStore.get(storeCode) ?? []), sheetRow])
 
-    const activeRaw = get(cells, ...keys('active')).toLowerCase()
+    // Active: clearly on = active; clearly off = inactive; anything else = INACTIVE with a warning (so a "Deactivated" machine is not mailed). A blank cell means active.
+    const activeRaw = getShown(cells, sheetRow, keys('active'))
+    const word = squashWord(activeRaw)
+    let isActive = true
+    if (word === '' || TRUE_WORDS.has(word)) isActive = true
+    else if (FALSE_WORDS.has(word)) isActive = false
+    else {
+      isActive = false
+      at('warning', 'unknown_active', storeCode, sheetRow, `Row ${sheetRow} (${storeCode}): the Active column says "${activeRaw}", which is not Active or Inactive, so the row is treated as Inactive.`)
+    }
+
+    // the details a person reads in a mail are taken as the sheet shows them (a date as a date, a code with its leading zeros)
     const extra: Record<string, string> = {}
-    labels.forEach((label, i) => { if (label && !mapped.has(i)) { const v = cell(cells[i]); if (v) extra[label] = v } })
+    labels.forEach((label, i) => { if (label && !mapped.has(i)) { const v = shownText(opts.display, values, sheetRow, i, storeCol) ?? cell(cells[i]); if (v) extra[label] = v } })
 
     rows.push({
       sheetRow, storeCode, machineNo, serial, vendor: get(cells, ...keys('vendor')),
       emails: mail.valid, poEmails: parseEmails(get(cells, ...keys('poMail'))).valid, approverEmails: parseEmails(get(cells, ...keys('approverMail'))).valid,
-      isActive: !FALSE_WORDS.has(activeRaw.replace(/[^a-z0-9]/g, '')), extra,
+      isActive, extra,
     })
   }
   if (opts.rowType === 'store') {

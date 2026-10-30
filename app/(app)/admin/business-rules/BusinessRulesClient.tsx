@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { Zap, Plus, Pencil, Copy, Trash2, X, RefreshCw, Search } from 'lucide-react'
 import { matchesRuleSearch } from '@/lib/rules/search'
 import { cn } from '@/lib/utils'
@@ -19,6 +20,8 @@ import type { RuleAction } from '@/lib/rules/actions'
 import { flattenLeafOptions } from '@/lib/forms/options'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { ROLE_LABELS } from '@/lib/constants/roles'
+import { useModalA11y } from '@/components/ui/useModalA11y'
+import { useUnsavedGuard } from '@/lib/ui/useUnsavedGuard'
 import type { ServiceFormFieldRef } from '@/lib/forms/sections'
 import type { LibraryFieldDef } from '@/lib/forms/library'
 import type { Profile, FormFieldType, FormFieldOption, UserRole } from '@/types'
@@ -406,7 +409,7 @@ function ConditionRow({
           />
         )
       )}
-      <button type="button" onClick={onRemove} className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
+      <button type="button" onClick={onRemove} aria-label="Remove condition" className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
         <X className="h-3.5 w-3.5" />
       </button>
     </div>
@@ -442,7 +445,7 @@ function ActionRow({
             <option key={t} value={t}>{ACTION_TYPE_LABELS[t]}</option>
           ))}
         </select>
-        <button type="button" onClick={onRemove} className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
+        <button type="button" onClick={onRemove} aria-label="Remove action" className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -645,6 +648,10 @@ function RuleEditor({
   const [form, setForm] = useState<BusinessRuleInput>(() => initialFormState(editRule, duplicateOf))
   const [saving, startSave] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const dialog = useModalA11y({ onClose: () => { if (!saving) onClose() }, label: 'Business rule', enabled: open })
+  // changes not saved yet (compared with what the drawer opened with)
+  const dirty = open && JSON.stringify(form) !== JSON.stringify(initialFormState(editRule, duplicateOf))
+  useUnsavedGuard(dirty)
 
   // Reset whenever the drawer (re)opens for a different rule — state derived
   // from props, adjusted during render (same pattern as RoutingRulesClient).
@@ -706,11 +713,11 @@ function RuleEditor({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-end bg-black/40">
+    <div {...dialog.props} className="fixed inset-0 z-40 flex items-center justify-end bg-black/40">
       <div className="h-full w-full max-w-2xl overflow-y-auto bg-background shadow-2xl flex flex-col">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 className="text-lg font-semibold text-foreground">{editRule ? 'Edit Business Rule' : duplicateOf ? 'Duplicate Business Rule' : 'New Business Rule'}</h2>
-          <button onClick={onClose} className="rounded-md p-1.5 hover:bg-muted transition-colors text-muted-foreground">
+          <button onClick={onClose} aria-label="Close" className="rounded-md p-1.5 hover:bg-muted transition-colors text-muted-foreground">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -867,7 +874,7 @@ function RuleCard({ rule, onEdit, onDuplicate, onDelete }: { rule: BusinessRuleR
     setLocalActive(v)
     startTransition(async () => {
       const result = await toggleBusinessRuleActive(rule.id, v)
-      if (result.error) setLocalActive(!v)
+      if (result.error) { setLocalActive(!v); toast.error(result.error) }
     })
   }
 
@@ -911,9 +918,10 @@ function RuleCard({ rule, onEdit, onDuplicate, onDelete }: { rule: BusinessRuleR
 // ── Confirm dialog ───────────────────────────────────────────────────────────
 
 function ConfirmDialog({ open, title, body, onConfirm, onCancel }: { open: boolean; title: string; body: string; onConfirm: () => void; onCancel: () => void }) {
+  const dialog = useModalA11y({ onClose: onCancel, label: title, enabled: open })
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div {...dialog.props} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="w-full max-w-sm rounded-xl border border-border bg-background p-4 shadow-xl">
         <h3 className="text-base font-semibold text-foreground mb-2">{title}</h3>
         <p className="text-sm text-muted-foreground mb-4">{body}</p>
@@ -958,14 +966,17 @@ export function BusinessRulesClient(props: BusinessRulesClientProps) {
     const id = deleteTarget
     setDeleteTarget(null)
     startDelete(async () => {
-      await deleteBusinessRule(id)
+      const result = await deleteBusinessRule(id)
+      // only take the rule off the screen when the server really deleted it
+      if (result.error) { toast.error(result.error); return }
       setRules((prev) => prev.filter((r) => r.id !== id))
     })
   }
 
   function handleMigrate() {
     startMigrate(async () => {
-      await migrateLegacyRulesToBusinessRules()
+      const result = await migrateLegacyRulesToBusinessRules()
+      if (result.error) { toast.error(result.error); return }
       router.refresh()
     })
   }

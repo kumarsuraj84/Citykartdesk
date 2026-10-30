@@ -128,7 +128,16 @@ intakeRouter.post('/send', requireWorkerSecret, async (req, res) => {
 
   if (!msg) { res.json({ ok: false, error: 'message not found' }); return }
 
-  const channel = ((msg as unknown as { intake_channels: { id: string; credentials_ref: string | null; config: unknown }[] }).intake_channels ?? [])[0]
+  // The person who sends must belong to the same organisation as the message (a wrong id can never send from another organisation's mailbox).
+  if (senderId) {
+    const { data: sender } = await supabase.from('profiles').select('org_id').eq('id', senderId).maybeSingle()
+    if (!sender || (sender as { org_id: string }).org_id !== (msg as { org_id: string }).org_id) {
+      res.status(403).json({ ok: false, error: 'sender is not in this organisation' })
+      return
+    }
+  }
+
+  const channel =((msg as unknown as { intake_channels: { id: string; credentials_ref: string | null; config: unknown }[] }).intake_channels ?? [])[0]
   if (!channel?.credentials_ref) {
     res.json({ ok: false, error: 'channel has no credentials' })
     return

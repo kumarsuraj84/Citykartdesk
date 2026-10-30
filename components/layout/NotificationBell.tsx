@@ -198,14 +198,25 @@ export function NotificationBell({
   const [previewApproval, setPreviewApproval] = useState<ApprovalWithDetails | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
 
+  // A number for the latest preview request: a result that arrives after the person pressed Cancel (or after a newer request) is ignored.
+  const previewToken = useRef(0)
   async function handlePreviewApproval(n: NotificationWithActor) {
     if (!n.request_id) return
+    const token = ++previewToken.current
     setPreviewLoading(true)
-    const approval = await getApprovalForRequestAction(n.request_id)
-    setPreviewLoading(false)
-    if (!approval) { toast.error('This approval is no longer available.'); return }
-    setPreviewApproval(approval)
+    // try / finally: a failed call used to leave the full-screen spinner on for ever, with nothing to press
+    try {
+      const approval = await getApprovalForRequestAction(n.request_id)
+      if (token !== previewToken.current) return
+      if (!approval) { toast.error('This approval is no longer available.'); return }
+      setPreviewApproval(approval)
+    } catch {
+      if (token === previewToken.current) toast.error('Could not open this approval. Please try again.')
+    } finally {
+      if (token === previewToken.current) setPreviewLoading(false)
+    }
   }
+  function cancelPreview() { previewToken.current++; setPreviewLoading(false) }
 
   // Close on outside click
   useEffect(() => {
@@ -337,8 +348,9 @@ export function NotificationBell({
       )}
 
       {previewLoading && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/20">
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-3 bg-black/20" role="status" aria-live="polite">
           <Loader2 className="h-6 w-6 animate-spin text-white" />
+          <button type="button" onClick={cancelPreview} className="rounded-lg bg-white/90 px-3 py-1.5 text-xs font-semibold text-foreground shadow hover:bg-white">Cancel</button>
         </div>
       )}
 

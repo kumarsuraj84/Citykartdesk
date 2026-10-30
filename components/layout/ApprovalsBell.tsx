@@ -58,29 +58,46 @@ export function ApprovalsBell({
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
+  // A number for the latest preview request: a result that arrives after the person pressed Cancel (or after a newer request) is ignored.
+  const previewToken = useRef(0)
   async function handlePreview(n: NotificationWithActor) {
     if (!n.request_id) return
     setOpen(false)
+    const token = ++previewToken.current
     setPreviewLoading(true)
-    const approval = await getApprovalForRequestAction(n.request_id)
-    setPreviewLoading(false)
-    if (!approval) { toast.error('This approval is no longer available.'); return }
-    setPreviewApproval(approval)
+    // try / finally: a failed call used to leave the full-screen spinner on for ever, with nothing to press
+    try {
+      const approval = await getApprovalForRequestAction(n.request_id)
+      if (token !== previewToken.current) return
+      if (!approval) { toast.error('This approval is no longer available.'); return }
+      setPreviewApproval(approval)
+    } catch {
+      if (token === previewToken.current) toast.error('Could not open this approval. Please try again.')
+    } finally {
+      if (token === previewToken.current) setPreviewLoading(false)
+    }
   }
+  function cancelPreview() { previewToken.current++; setPreviewLoading(false) }
 
   async function handleTakeAction(n: NotificationWithActor) {
     if (!n.request_id) return
     setQuickActionNotifId(n.id)
     setQuickActionApprovalId(null)
     setQuickActionLoading(true)
-    const approval = await getApprovalForRequestAction(n.request_id)
-    setQuickActionLoading(false)
-    if (!approval) {
-      toast.error('This approval is no longer available.')
+    try {
+      const approval = await getApprovalForRequestAction(n.request_id)
+      if (!approval) {
+        toast.error('This approval is no longer available.')
+        setQuickActionNotifId(null)
+        return
+      }
+      setQuickActionApprovalId(approval.id)
+    } catch {
+      toast.error('Could not load this approval. Please try again.')
       setQuickActionNotifId(null)
-      return
+    } finally {
+      setQuickActionLoading(false)
     }
-    setQuickActionApprovalId(approval.id)
   }
 
   function handleQuickDecided(notifId: string) {
@@ -196,8 +213,9 @@ export function ApprovalsBell({
       )}
 
       {previewLoading && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/20">
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-3 bg-black/20" role="status" aria-live="polite">
           <Loader2 className="h-6 w-6 animate-spin text-white" />
+          <button type="button" onClick={cancelPreview} className="rounded-lg bg-white/90 px-3 py-1.5 text-xs font-semibold text-foreground shadow hover:bg-white">Cancel</button>
         </div>
       )}
 

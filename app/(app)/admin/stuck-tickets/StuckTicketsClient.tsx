@@ -62,9 +62,13 @@ function Row({ row }: { row: StuckRow }) {
   )
 }
 
-export function StuckTicketsClient({ broken, unassigned, checked }: { broken: StuckRow[]; unassigned: StuckRow[]; checked: number }) {
+export function StuckTicketsClient({ broken, unassigned, checked, total, checkError }: { broken: StuckRow[]; unassigned: StuckRow[]; checked: number; total?: number; checkError?: string | null }) {
   return (
     <div className="space-y-6">
+      {checkError && <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">{checkError}</p>}
+      {total !== undefined && total > checked && (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">Showing the newest {checked} of {total} recent tickets. Older ones are not checked on this page.</p>
+      )}
       <section>
         <h2 className="mb-2 text-sm font-semibold text-foreground">Automation did not finish ({broken.length})</h2>
         {broken.length === 0 ? (

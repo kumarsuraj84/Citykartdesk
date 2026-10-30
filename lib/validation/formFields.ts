@@ -50,6 +50,7 @@ export function isFieldValueEmpty(val: unknown, fieldType?: FormFieldType): bool
     val === undefined ||
     val === null ||
     val === '' ||
+    (typeof val === 'string' && val.trim() === '') ||   // spaces only is not an answer (B-16): "   " used to satisfy a required text field
     val === false ||
     (Array.isArray(val) && val.length === 0)
   )

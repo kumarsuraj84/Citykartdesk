@@ -10,4 +10,5 @@ DROP POLICY IF EXISTS "teams_admin" ON public.teams;
 CREATE POLICY "teams_admin" ON public.teams FOR ALL
   USING ((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])))
   WITH CHECK ((org_id = current_org_id()) AND (current_user_role() = ANY (ARRAY['admin'::user_role, 'manager'::user_role, 'platform_owner'::user_role])));
+DELETE FROM auth.schema_migrations WHERE version = '20240101000185';
 COMMIT;

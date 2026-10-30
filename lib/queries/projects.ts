@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { TASK_STATUS_GROUP, REQUEST_STATUS_GROUP } from '@/lib/constants/status-groups'
+import { istToday, istAddDays } from '@/lib/reporting/ist'
 import type { Tables } from '@/types/database'
 import type {
   ProjectWithDetails,
@@ -118,7 +119,8 @@ function bucketTasks(progress: ProjectProgress, rows: { status: TaskStatus }[]) 
   for (const row of rows) {
     const group = TASK_STATUS_GROUP[row.status] ?? 'not_started'
     progress[group]++
-    progress.total++
+    // a cancelled item is counted as cancelled but is not part of the work that has to be done, so it stays out of the total (and the done / total percentage) (audit F-23)
+    if (group !== 'cancelled') progress.total++
   }
 }
 
@@ -126,7 +128,7 @@ function bucketRequests(progress: ProjectProgress, rows: { status: RequestStatus
   for (const row of rows) {
     const group = REQUEST_STATUS_GROUP[row.status] ?? 'not_started'
     progress[group]++
-    progress.total++
+    if (group !== 'cancelled') progress.total++
   }
 }
 
@@ -225,8 +227,9 @@ export type HomeProjectsSummary = {
  * characteristics stay untouched. See docs/ARCHITECTURE.md §4. */
 export async function getHomeProjectsSummary(): Promise<HomeProjectsSummary> {
   const supabase = await createClient()
-  const now = new Date().toISOString().slice(0, 10)
-  const sevenDaysOut = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  // India's today (a date column compared with the UTC date was a day off for five and a half hours every morning)
+  const now = istToday()
+  const sevenDaysOut = istAddDays(now, 7)
 
   const [{ data: projects }, { data: milestones }] = await Promise.all([
     supabase.from('projects').select('id, name, status, target_date').is('archived_at', null),

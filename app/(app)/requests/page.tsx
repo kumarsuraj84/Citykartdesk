@@ -8,11 +8,14 @@ import { redirect } from 'next/navigation'
 import { getCurrentProfile, hasSubordinates, getDirectReports } from '@/lib/queries/profiles'
 import { ROLE_LABELS } from '@/lib/constants/roles'
 import { getRequests } from '@/lib/queries/requests'
-import { getActiveServicesForReclassify, getServiceCategories, getServiceSubCategoriesForFilter } from '@/lib/queries/services'
+import { getRequestFilterTaxonomy } from '@/lib/queries/services'
+import { scopeTaxonomy } from '@/lib/requests/filter-taxonomy'
 import { RequestsTable } from '@/components/requests/RequestsTable'
 import { ColumnFilterSelect } from '@/components/requests/ColumnFilterSelect'
+import { SortSelect } from '@/components/requests/SortSelect'
 import { StatusFilterSelect } from '@/components/requests/StatusFilterSelect'
 import { Pagination } from '@/components/ui/Pagination'
+import { requireStaff } from '@/lib/ui/requireStaff'
 import type { RequestStatus, RequestPriority } from '@/types'
 
 // ── Requests — purely "what did I raise / what am I cc'd on" ───────────────────
@@ -60,10 +63,19 @@ const PRIORITY_OPTIONS: { value: RequestPriority; label: string }[] = [
 ]
 
 const SORT_COLUMNS = ['updated_at', 'created_at', 'priority', 'status', 'request_no']
+const SORT_OPTIONS = [
+  { value: 'updated_at', label: 'Updated' },
+  { value: 'created_at', label: 'Created' },
+  { value: 'priority',   label: 'Priority' },
+  { value: 'status',     label: 'Status' },
+  { value: 'request_no', label: 'Request #' },
+]
 
 export default async function RequestsPage({ searchParams }: PageProps) {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
+  // the app layout does not run again when moving between pages, so an OEM engineer is turned away here as well
+  requireStaff(profile, '/requests')
 
   const params = await searchParams
 
@@ -90,11 +102,14 @@ export default async function RequestsPage({ searchParams }: PageProps) {
     rawStatus === 'all' ? undefined : !rawStatus ? 'active' : (rawStatus as RequestStatus | 'active')
 
   const priorityFilter = PRIORITY_OPTIONS.some((p) => p.value === rawPriority) ? (rawPriority as RequestPriority) : undefined
-  const serviceFilter = rawService || undefined
-  const categoryFilter = rawCategory || undefined
-  const subCategoryFilter = rawSubCategory || undefined
+  // Service -> Category -> Sub Category are linked: each list offers only what fits the choice above it, and a choice that no longer fits is dropped
+  const taxonomy = await getRequestFilterTaxonomy()
+  const scoped = scopeTaxonomy(taxonomy, { service: rawService || undefined, category: rawCategory || undefined, subcategory: rawSubCategory || undefined })
+  const serviceFilter = scoped.effective.service
+  const categoryFilter = scoped.effective.category
+  const subCategoryFilter = scoped.effective.subcategory
 
-  const [result, serviceOptions, categoryOptions, subCategoryOptions, showTeamView] = await Promise.all([
+  const [result, showTeamView] = await Promise.all([
     getRequests({
       view: rawView,
       userId: profile.id,
@@ -109,9 +124,6 @@ export default async function RequestsPage({ searchParams }: PageProps) {
       sort: sortCol,
       dir: sortDir,
     }),
-    getActiveServicesForReclassify(),
-    getServiceCategories(),
-    getServiceSubCategoriesForFilter(),
     hasSubordinates(profile.id),
   ])
   const requests = result.data
@@ -170,7 +182,10 @@ export default async function RequestsPage({ searchParams }: PageProps) {
           // who actually has direct reports.
           ...(showTeamView ? [{ value: 'subordinates', label: 'My Team' } as const] : []),
         ] as { value: 'mine' | 'collaborated' | 'subordinates'; label: string }[]).map(({ value: v, label }) => {
-          const href = `/requests?view=${v}${rawStatus && rawStatus !== 'active' ? `&status=${rawStatus}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`
+          // switching the view keeps every filter, the search and the sort that are chosen (only the page number starts again)
+          const p = currentParams()
+          p.set('view', v)
+          const href = `/requests?${p.toString()}`
           return (
             <Link
               key={v}
@@ -212,6 +227,8 @@ export default async function RequestsPage({ searchParams }: PageProps) {
             {serviceFilter && <input type="hidden" name="service" value={serviceFilter} />}
             {categoryFilter && <input type="hidden" name="category" value={categoryFilter} />}
             {subCategoryFilter && <input type="hidden" name="subcategory" value={subCategoryFilter} />}
+            {params.sort && <input type="hidden" name="sort" value={params.sort} />}
+            {params.dir && <input type="hidden" name="dir" value={params.dir} />}
             <input
               type="search"
               name="q"
@@ -241,29 +258,32 @@ export default async function RequestsPage({ searchParams }: PageProps) {
           currentSearch={currentSearch}
         />
         <ColumnFilterSelect
+          paramName="service"
+          value={serviceFilter ?? ''}
+          options={taxonomy.services.map((s) => ({ value: s.id, label: s.name }))}
+          placeholder="Any service…"
+          pathname="/requests"
+          currentSearch={currentSearch}
+          clearParams={['category', 'subcategory']}
+        />
+        <ColumnFilterSelect
           paramName="category"
           value={categoryFilter ?? ''}
-          options={categoryOptions.map((c) => ({ value: c.id, label: c.name }))}
+          options={scoped.categories.map((c) => ({ value: c.id, label: c.name }))}
           placeholder="Any category…"
           pathname="/requests"
           currentSearch={currentSearch}
+          clearParams={['subcategory']}
         />
         <ColumnFilterSelect
           paramName="subcategory"
           value={subCategoryFilter ?? ''}
-          options={subCategoryOptions.map((s) => ({ value: s.id, label: `${s.name} (${s.category_name})` }))}
+          options={scoped.subCategories.map((s) => ({ value: s.id, label: categoryFilter ? s.name : `${s.name} (${s.category_name})` }))}
           placeholder="Any sub category…"
           pathname="/requests"
           currentSearch={currentSearch}
         />
-        <ColumnFilterSelect
-          paramName="service"
-          value={serviceFilter ?? ''}
-          options={serviceOptions.map((s) => ({ value: s.id, label: s.name }))}
-          placeholder="Any service…"
-          pathname="/requests"
-          currentSearch={currentSearch}
-        />
+        <SortSelect value={sortCol} dir={sortDir} options={SORT_OPTIONS} pathname="/requests" currentSearch={currentSearch} />
       </div>
 
       {/* ── Request list ── */}

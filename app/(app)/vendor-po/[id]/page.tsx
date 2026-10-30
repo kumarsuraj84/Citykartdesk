@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { approversOf, isApproverOf, loadPoContext } from '@/lib/vendor/po'
-import { formatMoney, totalOf } from '@/lib/vendor/lines'
+import { formatMoney, lineTotal, totalOf } from '@/lib/vendor/lines'
 import { todayIstDate } from '@/lib/vendor/fields'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { PoDecisionForm } from '@/components/vendor/PoDecisionForm'
@@ -51,7 +51,7 @@ export default async function VendorPoApprovalPage({ params }: { params: Promise
           <thead className="bg-muted/50 text-left text-xs text-muted-foreground"><tr><th className="px-3 py-2 font-medium">#</th><th className="px-3 py-2 font-medium">Item</th><th className="px-3 py-2 font-medium">Qty</th><th className="px-3 py-2 font-medium">Price (without GST)</th><th className="px-3 py-2 font-medium">Line total</th></tr></thead>
           <tbody className="divide-y divide-border">
             {po.lines.map((l, i) => (
-              <tr key={i}><td className="px-3 py-2">{i + 1}</td><td className="px-3 py-2">{l.item_name}</td><td className="px-3 py-2">{l.qty}</td><td className="px-3 py-2">{formatMoney(l.price_excl_gst ?? 0)}</td><td className="px-3 py-2">{formatMoney(l.qty * (l.price_excl_gst ?? 0))}</td></tr>
+              <tr key={i}><td className="px-3 py-2">{i + 1}</td><td className="px-3 py-2">{l.item_name}</td><td className="px-3 py-2">{l.qty}</td><td className="px-3 py-2">{formatMoney(l.price_excl_gst ?? 0)}</td><td className="px-3 py-2">{formatMoney(lineTotal(l))}</td></tr>
             ))}
           </tbody>
           <tfoot><tr className="border-t border-border"><td colSpan={4} className="px-3 py-2 text-right font-medium">Total (without GST)</td><td className="px-3 py-2 font-semibold">{formatMoney(total)}</td></tr></tfoot>

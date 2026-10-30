@@ -88,7 +88,9 @@ const nextConfig: NextConfig = {
         { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
         // only when the site really is served over https (a browser ignores it on http, and it must never be sent before https works)
         ...((process.env.NEXT_PUBLIC_APP_URL ?? '').startsWith('https') ? [{ key: 'Strict-Transport-Security', value: 'max-age=31536000' }] : []),
-        { key: 'Content-Security-Policy-Report-Only', value: buildCspReportOnly(process.env.NEXT_PUBLIC_SUPABASE_URL) },
+        // Report-only until the owner decides otherwise: building with CSP_ENFORCE=1 sends the same policy as an enforced Content-Security-Policy instead.
+        // Step by step plan (watch the reports first, then enforce, then tighten): docs/HTTPS-AND-CSP-PLAN.md.
+        { key: process.env.CSP_ENFORCE === '1' ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only', value: buildCspReportOnly(process.env.NEXT_PUBLIC_SUPABASE_URL) },
       ],
     }]
   },

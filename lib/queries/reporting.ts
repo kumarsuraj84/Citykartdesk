@@ -5,10 +5,11 @@ import { latestResolveActivities, resolutionRemarks, type StatusActivity, type R
 import { getServiceFormFieldsForOrg, type ServiceFormFieldRef } from '@/lib/forms/sections'
 import { flattenLeafOptions } from '@/lib/forms/options'
 import { sourceChannelOf } from '@/lib/sources'
-import { isEverBreached, isEverResponseBreached } from '@/lib/sla/breach'
-import { ageBucketLabel } from '@/lib/reporting/aging'
+import { ageBucketLabel, ageInDays } from '@/lib/reporting/aging'
 import { createShortCache } from '@/lib/cache/short-ttl'
-import { istStamp, istTime } from '@/lib/reporting/ist'
+import { istStamp, istTime, isOverdueDate } from '@/lib/reporting/ist'
+import { isSlaPausedStatus } from '@/lib/constants/requests'
+import { fetchAllPages, type PageResult } from '@/lib/queries/paging'
 import type { Database } from '@/types/database'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,8 +25,35 @@ export interface ReportDataResult {
   truncated: boolean
 }
 
+// The age of a record in whole elapsed days (rounded down), the same way every other report counts it (lib/reporting/aging.ts, audit F-16)
 function daysBetween(a: string, b: string): number {
-  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000)
+  return ageInDays(a, b)
+}
+
+/**
+ * Reads every page of a query, up to MAX_REPORT_ROWS rows. The database answers at most 1000 rows per request whatever .limit() says (and an error on any page
+ * must not look like "no more rows"), so the rows are read page by page. `truncated` is true only when there really were more than MAX_REPORT_ROWS. (Audit F-01.)
+ */
+async function fetchCapped<T>(build: (from: number, to: number) => PromiseLike<PageResult>): Promise<{ rows: T[]; truncated: boolean }> {
+  const { rows } = await fetchAllPages<T>(build, { maxRows: MAX_REPORT_ROWS + 1 })
+  return { rows: rows.slice(0, MAX_REPORT_ROWS), truncated: rows.length > MAX_REPORT_ROWS }
+}
+
+// Moments are compared as moments. The database may send "...-07:00" and the app's own clock is "...Z"; compared as TEXT, a ticket resolved at 00:30 IST
+// could be judged against a deadline of the same morning the wrong way round (audit F-03).
+const at = (iso: string) => new Date(iso).getTime()
+
+/** Resolved late, or still open and past the deadline (a ticket that waits for somebody else, with its clock paused, is not breached while it waits). */
+function everBreached(r: { resolution_due_at: string | null; resolved_at: string | null; closed_at: string | null; status: string }, nowMs: number): boolean {
+  if (!r.resolution_due_at) return false
+  const done = r.resolved_at ?? r.closed_at
+  if (done) return at(done) > at(r.resolution_due_at)
+  return !isSlaPausedStatus(r.status) && nowMs > at(r.resolution_due_at)
+}
+function everResponseBreached(r: { response_due_at: string | null; responded_at: string | null; status: string }, nowMs: number): boolean {
+  if (!r.response_due_at) return false
+  if (r.responded_at) return at(r.responded_at) > at(r.response_due_at)
+  return !isSlaPausedStatus(r.status) && nowMs > at(r.response_due_at)
 }
 
 const nowIso = () => new Date().toISOString()
@@ -183,41 +211,42 @@ async function fetchRequestRows(
   // would otherwise match every row instead of none.
   if (scope.kind === 'team' && scope.teamIds.length === 0) return { rows: [], truncated: false }
 
-  let query = admin
-    .from('requests')
-    .select(`
-      id, request_no, title, description, status, priority, created_at, updated_at,
-      responded_at, resolved_at, closed_at, resolution_due_at, response_due_at, source_metadata, form_data,
-      reopen_count, service_id,
-      service:services(name, template:form_templates(name)),
-      category:service_categories(name), sub_category:service_sub_categories(name),
-      team:teams(name), project:projects(name),
-      requester:profiles!requests_requester_id_fkey(full_name),
-      assignee:profiles!requests_assigned_to_fkey(full_name)
-    `)
-    .eq('org_id', orgId)
+  // (a fresh query for every page: a query object is changed by each .order() / .range() call, so one object is not reused across pages)
+  const makeQuery = () => {
+    let query = admin
+      .from('requests')
+      .select(`
+        id, request_no, title, description, status, priority, created_at, updated_at,
+        responded_at, resolved_at, closed_at, resolution_due_at, response_due_at, source_metadata, form_data,
+        reopen_count, service_id, cancellation_reason,
+        service:services(name, template:form_templates(name)),
+        category:service_categories(name), sub_category:service_sub_categories(name),
+        team:teams(name), project:projects(name),
+        requester:profiles!requests_requester_id_fkey(full_name),
+        assignee:profiles!requests_assigned_to_fkey(full_name)
+      `)
+      .eq('org_id', orgId)
 
-  if (scope.kind === 'own') query = query.eq('requester_id', scope.userId)
-  else if (scope.kind === 'agent') query = query.or(agentScopeOrFilter(scope))
-  else if (scope.kind === 'team') query = query.in('team_id', scope.teamIds)
-
-  const { data } = await query.limit(MAX_REPORT_ROWS + 1)
+    if (scope.kind === 'own') query = query.eq('requester_id', scope.userId)
+    else if (scope.kind === 'agent') query = query.or(agentScopeOrFilter(scope))
+    else if (scope.kind === 'team') query = query.in('team_id', scope.teamIds)
+    return query
+  }
 
   type Row = {
     id: string; request_no: string; title: string; description: string | null; status: string; priority: string
     created_at: string; updated_at: string; responded_at: string | null; resolved_at: string | null; closed_at: string | null
     resolution_due_at: string | null; response_due_at: string | null; source_metadata: unknown
     form_data: Record<string, unknown> | null
-    reopen_count: number; service_id: string | null
+    reopen_count: number; service_id: string | null; cancellation_reason: string | null
     service: { name: string; template: { name: string } | null } | null
     category: { name: string } | null; sub_category: { name: string } | null
     team: { name: string } | null; project: { name: string } | null
     requester: { full_name: string } | null; assignee: { full_name: string } | null
   }
 
-  const all = (data ?? []) as Row[]
-  const truncated = all.length > MAX_REPORT_ROWS
-  const pageRows = all.slice(0, MAX_REPORT_ROWS)
+  // newest first with the id as a tie-breaker, so every page is a stable slice (no row is read twice or missed between two pages)
+  const { rows: pageRows, truncated } = await fetchCapped<Row>((from, to) => makeQuery().order('created_at', { ascending: false }).order('id', { ascending: true }).range(from, to))
   const requestIds = pageRows.map((r) => r.id)
 
   const resolvedIds = pageRows.filter((r) => r.resolved_at).map((r) => r.id)
@@ -261,8 +290,11 @@ async function fetchRequestRows(
   }
 
   const now = nowIso()
+  const nowMs = Date.now()
   const rows = pageRows.map((r) => {
-    const closedLike = r.resolved_at ?? r.closed_at
+    // a ticket the approval flow cancelled and the auto-close then closed carries no resolved_at: it was never resolved, so it has no resolution time and no breach (audit F-12)
+    const neverResolved = r.cancellation_reason !== null && r.resolved_at === null
+    const closedLike = neverResolved ? (r.closed_at ?? r.updated_at) : (r.resolved_at ?? r.closed_at)
     const descriptionFieldId = r.service_id ? textareaFieldByService.get(r.service_id) : undefined
     const formDescription = descriptionFieldId ? r.form_data?.[descriptionFieldId] : undefined
     const description = r.description || (typeof formDescription === 'string' ? formDescription : '')
@@ -270,8 +302,8 @@ async function fetchRequestRows(
     // the live "Currently Breached" count used by Home/Monitoring/the Admin
     // Analytics KPI card: a resolved-late ticket stays breached here even
     // after it closes, which is the correct question for a report/export.
-    const isSlaBreached = isEverBreached(r)
-    const isResponseSlaBreached = isEverResponseBreached(r)
+    const isSlaBreached = neverResolved ? false : everBreached(r, nowMs)
+    const isResponseSlaBreached = everResponseBreached(r, nowMs)
     const row: ReportRow = {
       request_no: r.request_no,
       title: r.title,
@@ -342,7 +374,7 @@ async function fetchRequestRows(
 // single batch covering all 20,000 possible rows would produce a multi-
 // hundred-KB URL, well past what most proxies/gateways/PostgREST allow.
 // Every request_id-scoped aggregate below batches through this.
-const IN_CLAUSE_BATCH_SIZE = 200
+const IN_CLAUSE_BATCH_SIZE = 100
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = []
@@ -362,10 +394,14 @@ async function selectInBatches<T>(
   if (ids.length === 0) return []
   const results = await Promise.all(
     chunk(ids, IN_CLAUSE_BATCH_SIZE).map(async (batch) => {
-      let query = admin.from(table).select(select).in(idColumn, batch)
-      if (refine) query = refine(query)
-      const { data } = await query
-      return (data ?? []) as T[]
+      // 100 requests can have more than 1000 comment / activity rows between them and the database answers at most 1000 rows at a time: read every page
+      // (stable order by id), and let an error on any page surface instead of quietly counting fewer rows (audit F-10)
+      const { rows } = await fetchAllPages<T>((from, to) => {
+        let query = admin.from(table).select(select).in(idColumn, batch)
+        if (refine) query = refine(query)
+        return query.order('id', { ascending: true }).range(from, to)
+      })
+      return rows
     })
   )
   return results.flat()
@@ -479,17 +515,6 @@ async function getApprovalSummaryByRequestId(
 }
 
 async function fetchTaskRows(admin: AnyClient, orgId: string, customFields: CustomFieldDef[]): Promise<{ rows: ReportRow[]; truncated: boolean }> {
-  const { data } = await admin
-    .from('tasks')
-    .select(`
-      id, title, status, priority, task_type, start_date, due_date, completed_at, created_at, tags,
-      team:teams(name), project:projects(name), milestone:milestones(name), request:requests(request_no),
-      assignee:profiles!tasks_assignee_id_fkey(full_name),
-      created_by_profile:profiles!tasks_created_by_fkey(full_name)
-    `)
-    .eq('org_id', orgId)
-    .limit(MAX_REPORT_ROWS + 1)
-
   type Row = {
     id: string; title: string; status: string; priority: string; task_type: string
     start_date: string | null; due_date: string | null; completed_at: string | null; created_at: string
@@ -498,26 +523,32 @@ async function fetchTaskRows(admin: AnyClient, orgId: string, customFields: Cust
     request: { request_no: string } | null
     assignee: { full_name: string } | null; created_by_profile: { full_name: string } | null
   }
-
-  const all = (data ?? []) as Row[]
-  const truncated = all.length > MAX_REPORT_ROWS
-  const taskIds = all.slice(0, MAX_REPORT_ROWS).map((t) => t.id)
+  const { rows: all, truncated } = await fetchCapped<Row>((from, to) => admin
+    .from('tasks')
+    .select(`
+      id, title, status, priority, task_type, start_date, due_date, completed_at, created_at, tags,
+      team:teams(name), project:projects(name), milestone:milestones(name), request:requests(request_no),
+      assignee:profiles!tasks_assignee_id_fkey(full_name),
+      created_by_profile:profiles!tasks_created_by_fkey(full_name)
+    `)
+    .eq('org_id', orgId)
+    .order('created_at', { ascending: false }).order('id', { ascending: true }).range(from, to))
+  const taskIds = all.map((t) => t.id)
 
   const valuesByTask = new Map<string, Map<string, unknown>>()
   if (customFields.length > 0 && taskIds.length > 0) {
-    const { data: values } = await admin
-      .from('task_custom_field_values')
-      .select('task_id, field_id, value')
-      .in('task_id', taskIds)
-    for (const v of (values ?? []) as { task_id: string; field_id: string; value: unknown }[]) {
+    // up to 20,000 task ids in one .in() made the address too long (the answer came back empty): batches of 100, every page of each (audit F-10)
+    const values = await selectInBatches<{ task_id: string; field_id: string; value: unknown }>(admin, 'task_custom_field_values', 'task_id, field_id, value', taskIds, undefined, 'task_id')
+    for (const v of values) {
       if (!valuesByTask.has(v.task_id)) valuesByTask.set(v.task_id, new Map())
       valuesByTask.get(v.task_id)!.set(v.field_id, v.value)
     }
   }
 
   const now = nowIso()
-  const rows = all.slice(0, MAX_REPORT_ROWS).map((t) => {
-    const isOverdue = !!t.due_date && !t.completed_at && t.due_date < now
+  const rows = all.map((t) => {
+    // a task is overdue when its due DAY is before today (India), not when "its date as midnight UTC" is before this moment (audit F-11)
+    const isOverdue = !t.completed_at && isOverdueDate(t.due_date)
     const row: ReportRow = {
       title: t.title,
       status: t.status,
@@ -553,7 +584,14 @@ async function fetchTaskRows(admin: AnyClient, orgId: string, customFields: Cust
 }
 
 async function fetchProjectRows(admin: AnyClient, orgId: string): Promise<{ rows: ReportRow[]; truncated: boolean }> {
-  const { data } = await admin
+  type Row = {
+    id: string; name: string; status: string; priority: string
+    start_date: string | null; target_date: string | null; created_at: string
+    team: { name: string } | null
+    owner: { full_name: string } | null; functional_owner: { full_name: string } | null
+    created_by_profile: { full_name: string } | null
+  }
+  const { rows: all, truncated } = await fetchCapped<Row>((from, to) => admin
     .from('projects')
     .select(`
       id, name, status, priority, start_date, target_date, created_at,
@@ -564,20 +602,10 @@ async function fetchProjectRows(admin: AnyClient, orgId: string): Promise<{ rows
     `)
     .eq('org_id', orgId)
     .is('archived_at', null)
-    .limit(MAX_REPORT_ROWS + 1)
+    .order('created_at', { ascending: false }).order('id', { ascending: true }).range(from, to))
 
-  type Row = {
-    id: string; name: string; status: string; priority: string
-    start_date: string | null; target_date: string | null; created_at: string
-    team: { name: string } | null
-    owner: { full_name: string } | null; functional_owner: { full_name: string } | null
-    created_by_profile: { full_name: string } | null
-  }
-
-  const all = (data ?? []) as Row[]
-  const truncated = all.length > MAX_REPORT_ROWS
   const now = nowIso()
-  const rows = all.slice(0, MAX_REPORT_ROWS).map((p) => ({
+  const rows = all.map((p) => ({
     name: p.name,
     status: p.status,
     priority: p.priority,
@@ -590,13 +618,19 @@ async function fetchProjectRows(admin: AnyClient, orgId: string): Promise<{ rows
     created_at: p.created_at,
     age_days: daysBetween(p.created_at, now),
     age_bucket: ageBucketLabel(daysBetween(p.created_at, now)),
-    is_overdue: !!p.target_date && p.status !== 'done' && p.status !== 'cancelled' && p.target_date < now,
+    is_overdue: p.status !== 'done' && p.status !== 'cancelled' && isOverdueDate(p.target_date),
   } satisfies ReportRow))
   return { rows, truncated }
 }
 
 async function fetchMilestoneRows(admin: AnyClient, orgId: string): Promise<{ rows: ReportRow[]; truncated: boolean }> {
-  const { data } = await admin
+  type Row = {
+    id: string; name: string; status: string; priority: string; percent_complete: number
+    start_date: string | null; end_date: string | null
+    project: { name: string } | null
+    owner: { full_name: string } | null; functional_owner: { full_name: string } | null
+  }
+  const { rows: all, truncated } = await fetchCapped<Row>((from, to) => admin
     .from('milestones')
     .select(`
       id, name, status, priority, percent_complete, start_date, end_date,
@@ -605,19 +639,9 @@ async function fetchMilestoneRows(admin: AnyClient, orgId: string): Promise<{ ro
       functional_owner:profiles!milestones_functional_owner_id_fkey(full_name)
     `)
     .eq('org_id', orgId)
-    .limit(MAX_REPORT_ROWS + 1)
+    .order('id', { ascending: true }).range(from, to))
 
-  type Row = {
-    id: string; name: string; status: string; priority: string; percent_complete: number
-    start_date: string | null; end_date: string | null
-    project: { name: string } | null
-    owner: { full_name: string } | null; functional_owner: { full_name: string } | null
-  }
-
-  const all = (data ?? []) as Row[]
-  const truncated = all.length > MAX_REPORT_ROWS
-  const now = nowIso()
-  const rows = all.slice(0, MAX_REPORT_ROWS).map((m) => ({
+  const rows = all.map((m) => ({
     name: m.name,
     project_name: m.project?.name ?? '',
     status: m.status,
@@ -627,13 +651,18 @@ async function fetchMilestoneRows(admin: AnyClient, orgId: string): Promise<{ ro
     percent_complete: m.percent_complete,
     start_date: m.start_date,
     end_date: m.end_date,
-    is_overdue: !!m.end_date && m.status !== 'done' && m.status !== 'cancelled' && m.end_date < now,
+    is_overdue: m.status !== 'done' && m.status !== 'cancelled' && isOverdueDate(m.end_date),
   } satisfies ReportRow))
   return { rows, truncated }
 }
 
 async function fetchApprovalRows(admin: AnyClient, orgId: string): Promise<{ rows: ReportRow[]; truncated: boolean }> {
-  const { data } = await admin
+  type Row = {
+    id: string; status: string; current_step: number | null; created_at: string; updated_at: string
+    request: { request_no: string } | null
+    workflow: { name: string } | null
+  }
+  const { rows: page, truncated } = await fetchCapped<Row>((from, to) => admin
     .from('approvals')
     .select(`
       id, status, current_step, created_at, updated_at,
@@ -641,17 +670,7 @@ async function fetchApprovalRows(admin: AnyClient, orgId: string): Promise<{ row
       workflow:approval_workflows(name)
     `)
     .eq('request.org_id', orgId)
-    .limit(MAX_REPORT_ROWS + 1)
-
-  type Row = {
-    id: string; status: string; current_step: number | null; created_at: string; updated_at: string
-    request: { request_no: string } | null
-    workflow: { name: string } | null
-  }
-
-  const all = (data ?? []) as Row[]
-  const truncated = all.length > MAX_REPORT_ROWS
-  const page = all.slice(0, MAX_REPORT_ROWS)
+    .order('created_at', { ascending: false }).order('id', { ascending: true }).range(from, to))
 
   // Who decided each approval, and when — fetched separately since a single
   // approval can carry multiple decisions (sequential steps, or every

@@ -1,5 +1,6 @@
 'use client'
 
+import { formatDateOnly } from '@/lib/ui/formatDate'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -97,7 +98,7 @@ export function ProjectCard({ project, progress, profiles = [] }: {
         {project.target_date && (
           <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
             <Calendar className="h-3 w-3" />
-            {new Date(project.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            {formatDateOnly(project.target_date, { year: false })}
           </span>
         )}
       </div>

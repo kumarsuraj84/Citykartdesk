@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { requireStaff } from '@/lib/ui/requireStaff'
 import {
   getTaskById, getTaskComments, getTaskActivity, getSubtasks, getAllProfiles,
   getTaskAssignees, getTaskAttachments, getTaskIntakeContext, getTaskDependencies,
@@ -19,6 +20,8 @@ export default async function TaskDetailPage({ params }: PageProps) {
 
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
+  // the app layout does not run again when moving between pages, so an OEM engineer is turned away here as well
+  requireStaff(profile, `/tasks/${id}`)
   // Tasks isn't fully built out yet — Admin/Owner only until that work ships.
   if (profile.role !== 'admin' && profile.role !== 'platform_owner') redirect('/home')
 

@@ -2,14 +2,13 @@
 
 import { applyStatusChange } from '@/lib/requests/status-change'
 import { notify } from '@/lib/notifications'
-import { sendEmail } from '@/lib/email/send'
 import { absoluteAppUrl } from '@/lib/email/notify-email'
 import { refreshVendorPaths, vendorTechAndTicket } from '@/lib/vendor/ctx'
 import { checkLines, formatMoney, linesAsText, totalOf, type RequestLineInput } from '@/lib/vendor/lines'
 import {
   createNextVersion, createVendorRequest, getOpenRequest, getRequestItems, linkFilesToComment, ownFiles, settleRequest, OPEN_STATUSES,
 } from '@/lib/vendor/requests'
-import { approversOf, loadPoContext, resolveApproversFor, userEmail, type PoApprover } from '@/lib/vendor/po'
+import { approversOf, internalNote, loadPoContext, resolveApproversFor, sendMailOrNote, userEmail, type PoApprover } from '@/lib/vendor/po'
 import { buildPoApprovalRequestMail, buildQuoteWithdrawnMail } from '@/lib/vendor/po-mail'
 import { postPublicComment } from '@/lib/vendor/ticket-fields'
 import { tellStorePartsUpdated } from '@/lib/vendor/ticket-notify'
@@ -102,7 +101,10 @@ async function askApprovers(vendorRequestId: string, requestNo: string, actorId:
     const total = totalOf(po.lines)
     if (to.length) {
       const mail = buildPoApprovalRequestMail({ ...po.mailBase, link, approverName: namesOf(approvers), version: po.vendorRequest.version, previousTotal: po.previousTotal, anyOneCanDecide: approvers.length > 1 })
-      await sendEmail({ to, subject: mail.subject, html: mail.html, text: mail.text, threadRequestNo: requestNo })
+      // a mail that fails is logged and left as a note on the ticket (the approvers still get the bell message below)
+      await sendMailOrNote({ to, mail, request: po.request, noteAuthorId: actorId, whom: 'the PO approver(s)' })
+    } else {
+      await internalNote(po.request.id, actorId, 'None of the PO approvers has an e-mail address, so no approval mail was sent. They were told by bell message only.')
     }
     for (const approver of approvers) {
       await notify({
@@ -209,7 +211,7 @@ export async function vendorWithdrawRequest(input: { requestId: string; reason: 
       const to = (await Promise.all(approvers.map((a) => userEmail(a.id)))).filter((x): x is string => !!x)
       if (po && to.length) {
         const mail = buildQuoteWithdrawnMail({ ...po.mailBase, link: absoluteAppUrl(`/vendor-po/${open.id}`), reason, approverName: namesOf(approvers), vendorPersonName: profile.full_name, version: open.version })
-        await sendEmail({ to, subject: mail.subject, html: mail.html, text: mail.text, threadRequestNo: ticket.request_no })
+        await sendMailOrNote({ to, mail, request: po.request, noteAuthorId: profile.id, whom: 'the PO approver(s) (quote withdrawn)' })
       }
       for (const a of approvers) await notify({ recipientId: a.id, actorId: profile.id, type: 'status_changed', title: `Quote withdrawn: ${ticket.request_no}`, body: reason, requestId: input.requestId, link: `/vendor-po/${open.id}`, skipEmail: true })
     } catch (e) {

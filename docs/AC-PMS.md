@@ -21,9 +21,9 @@ LOCAL ONLY until released. Migration 184 (rollback in `supabase/rollback/184_ac_
 
 ## Rules the job follows (`lib/pms/tickets.ts`, `lib/pms/window.ts`)
 
-- Today's date is made only from 09:00 India time. A date missed because the job did not run is still made for 2 days afterwards, never older.
+- Today's date is made only from 09:00 India time. A date that has already passed is NEVER made automatically (a product rule): if a run fails or more than 150 stores are due, the rest continue at the next run the SAME day, and a date still not made stays in the problem list for 7 days so an administrator can raise it by hand. PMS tickets are made even when the Google connection is broken (they read only the copy in the database); admins get one mail a day when dates could not be made.
 - `pms_ticket_log` keeps one row per store and date: a date never makes two tickets (even if two runs overlap).
-- No category marked as AC PMS, a store that is not in the store master, a store with no login, or a refused ticket: nothing is made, the reason is shown in Sheet Masters, and the date is tried again at the next run until it is older than 2 days.
+- No category marked as AC PMS, a store that is not in the store master, a store with no login, or a refused ticket: nothing is made, the reason is shown in Sheet Masters, and the date is tried again at the next run of the same day, and stays in the problem list for 7 days.
 - A date removed from the sheet later does not touch the tickets already made.
 - PMS tickets are not in the AC Ticket Calendar and the AC complaint reports (those read the AC OEM categories and AC services only).
 

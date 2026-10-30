@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { safely } from '@/lib/ui/safeAction'
+import { toast } from 'sonner'
 import Link from 'next/link'
 import { Plus, Pencil, Check, X, Layers, Power, Trash2, LayoutGrid, GitBranch, Download } from 'lucide-react'
 import {
@@ -85,25 +87,25 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
   function handleSave() {
     setError('')
     startTransition(async () => {
-      const result = await updateCategory(cat.id, { name, description, icon, icon_image_url: iconImageUrl })
+      const result = await safely(() => updateCategory(cat.id, { name, description, icon, icon_image_url: iconImageUrl }))
       if (result.error) {
         setError(result.error)
         return
       }
       if (oemKind !== savedOemKind) {
-        const oemResult = await setCategoryOemKind(cat.id, oemKind === '' ? null : oemKind)
+        const oemResult = await safely(() => setCategoryOemKind(cat.id, oemKind === '' ? null : oemKind))
         if (oemResult.error) { setError(oemResult.error); return }
       }
       if (cvmApproval !== savedCvmApproval) {
-        const r = await setCategoryCvmApproval(cat.id, cvmApproval)
+        const r = await safely(() => setCategoryCvmApproval(cat.id, cvmApproval))
         if (r.error) { setError(r.error); return }
       }
       if (isPms !== savedPms) {
-        const r = await setCategoryPms(cat.id, isPms)
+        const r = await safely(() => setCategoryPms(cat.id, isPms))
         if (r.error) { setError(r.error); return }
       }
       if (approvalHistory !== savedApprovalHistory) {
-        const r = await setCategoryApprovalHistory(cat.id, approvalHistory)
+        const r = await safely(() => setCategoryApprovalHistory(cat.id, approvalHistory))
         if (r.error) { setError(r.error); return }
       }
       setEditing(false)
@@ -125,14 +127,17 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
 
   function handleToggle() {
     startToggle(async () => {
-      await toggleCategoryActive(cat.id, !cat.is_active)
+      try {
+        const result = await toggleCategoryActive(cat.id, !cat.is_active)
+        if (result?.error) toast.error(result.error)
+      } catch { toast.error('Could not reach the server. Check your internet and try again.') }
     })
   }
 
   function handleDeleteConfirm() {
     setDeleteError('')
     startDelete(async () => {
-      const result = await deleteCategory(cat.id)
+      const result = await safely(() => deleteCategory(cat.id))
       if (result.error) {
         setDeleteError(result.error)
       } else {
@@ -363,7 +368,7 @@ function CreateCategoryForm({ onDone }: { onDone: () => void }) {
     e.preventDefault()
     setError('')
     startTransition(async () => {
-      const result = await createCategory({ name, description, icon, icon_image_url: iconImageUrl })
+      const result = await safely(() => createCategory({ name, description, icon, icon_image_url: iconImageUrl }))
       if (result.error) {
         setError(result.error)
       } else {

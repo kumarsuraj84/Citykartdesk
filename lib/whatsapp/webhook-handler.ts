@@ -1,6 +1,7 @@
 import { processConversationInbound, findConversationById, type ConversationResult, type MediaStager } from '@/lib/conversations'
 import { resolveUserByWhatsAppNumber } from '@/lib/users/resolveWhatsAppUser'
 import { rateLimit } from '@/lib/rate-limit'
+import { logger } from '@/lib/observability/logger'
 import {
   findActiveWhatsAppChannelByPhoneNumberId,
   loadWhatsAppSecret,
@@ -69,25 +70,28 @@ async function logWhatsAppAudit(admin: AnyClient, entry: {
     // entity_id fix above, just on a different column. Routed instead to
     // owner_audit_log, the one audit table that already models a nullable
     // org_id for exactly this kind of platform-level, pre-org event.
-    if (entry.orgId === null) {
-      await admin.from('owner_audit_log').insert({
+    // The database client returns a failed write in `error` and does not throw, so the try/catch below can never see it: the result must be read. This is
+    // exactly how the two column bugs described above stayed invisible. The audit stays best-effort, but a lost entry is now logged. (It matters beyond
+    // tidiness: the 'whatsapp_send_failed' entry is what lets a repeated message recover an undelivered prompt.)
+    const res = entry.orgId === null
+      ? await admin.from('owner_audit_log').insert({
         org_id: null,
         actor_id: null,
         action: entry.action,
         metadata: entry.metadata ?? {},
       })
-      return
-    }
-    await admin.from('intake_audit_log').insert({
-      org_id: entry.orgId,
-      actor_id: null,
-      entity_type: 'whatsapp_message',
-      entity_id: entry.entityId ?? null,
-      action: entry.action,
-      metadata: entry.metadata ?? {},
-    })
-  } catch {
+      : await admin.from('intake_audit_log').insert({
+        org_id: entry.orgId,
+        actor_id: null,
+        entity_type: 'whatsapp_message',
+        entity_id: entry.entityId ?? null,
+        action: entry.action,
+        metadata: entry.metadata ?? {},
+      })
+    if (res?.error) logger.error({ event: 'whatsapp.audit_write_failed', message: 'A WhatsApp audit entry could not be written.', orgId: entry.orgId ?? undefined, errorCode: res.error.code, context: { action: entry.action }, error: res.error })
+  } catch (e) {
     // best-effort — never let audit logging break message processing
+    logger.error({ event: 'whatsapp.audit_write_failed', message: 'A WhatsApp audit entry could not be written.', orgId: entry.orgId ?? undefined, context: { action: entry.action }, error: e })
   }
 }
 

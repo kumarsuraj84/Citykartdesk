@@ -1,6 +1,9 @@
 'use server'
 
 import { generateOneTimePassword } from '@/lib/auth/one-time-password'
+import { findAuthUserByEmail, listAuthEmails, listAuthIdsByEmail } from '@/lib/auth/emails'
+import { revokeAllSessions } from '@/lib/auth/sessions'
+import { validateNewPassword } from '@/lib/security/password-policy'
 import { revalidatePath } from 'next/cache'
 import { targetGuardError } from '@/lib/admin/target-guard'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -76,8 +79,11 @@ function assertCanAssignRole(callerRole: UserRole, targetRole: UserRole): string
 
 export async function updateUserRole(
   userId: string,
-  role: UserRole
-): Promise<{ error?: string }> {
+  role: UserRole,
+  // A vendor technician / manager is a normal 'user' account linked to a vendor company. Giving such a person any other role ends that link, so it needs a
+  // deliberate yes (audit A-23). The screen sends this only after asking.
+  opts: { confirmRemoveVendorAccess?: boolean } = {}
+): Promise<{ error?: string; needsConfirm?: boolean }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin','platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
@@ -86,18 +92,24 @@ export async function updateUserRole(
 
   const admin = createAdminClient()
   // D-009: the person being changed matters too, not only the role being given
-  const { data: target } = await admin.from('profiles').select('id, role, org_id').eq('id', userId).eq('org_id', profile.org_id).maybeSingle()
+  const { data: target } = await admin.from('profiles').select('id, role, org_id, vendor_company_id, vendor_role').eq('id', userId).eq('org_id', profile.org_id).maybeSingle()
   if (!target) return { error: 'User not found.' }
   const guard = targetGuardError({ id: profile.id, role: profile.role }, { id: target.id, role: target.role }, 'role')
   if (guard) return { error: guard }
+  // The database allows the vendor link only on a plain 'user' account, so a vendor who gets another role must lose the link in the same save (before this the
+  // save simply failed with a database error). It is never done silently: see opts above.
+  const leavesVendor = !!target.vendor_company_id && role !== 'user'
+  if (leavesVendor && !opts.confirmRemoveVendorAccess) {
+    return { error: `This person is a vendor ${target.vendor_role ?? 'user'}. Changing their role to "${role}" removes their vendor access (the link to their vendor company). Confirm to continue.`, needsConfirm: true }
+  }
   const { error } = await admin
     .from('profiles')
-    .update({ role, updated_at: new Date().toISOString() })
+    .update({ role, updated_at: new Date().toISOString(), ...(leavesVendor ? { vendor_company_id: null, vendor_role: null } : {}) })
     .eq('id', userId)
     .eq('org_id', profile.org_id)
 
   if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/users.ts' }) }
-  await recordAudit({ category: 'security', action: 'user.role_changed', entityType: 'user', entityId: userId, before: { role: target.role }, after: { role }, actorId: profile.id, orgId: profile.org_id })
+  await recordAudit({ category: 'security', action: 'user.role_changed', entityType: 'user', entityId: userId, before: { role: target.role, ...(leavesVendor ? { vendor_company_id: target.vendor_company_id, vendor_role: target.vendor_role } : {}) }, after: { role, ...(leavesVendor ? { vendor_company_id: null, vendor_role: null } : {}) }, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/users')
   return {}
 }
@@ -132,6 +144,18 @@ export async function toggleUserActive(
   return {}
 }
 
+const MAX_NAME_LENGTH = 120
+const MAX_JOB_TITLE_LENGTH = 120
+const MAX_EMPLOYEE_ID_LENGTH = 60
+
+/** The first too-long text among the profile fields, as a sentence, or null. */
+function profileTextLengthError(f: { full_name?: string | null; job_title?: string | null; employee_id?: string | null }): string | null {
+  if (typeof f.full_name === 'string' && f.full_name.trim().length > MAX_NAME_LENGTH) return `Name must be at most ${MAX_NAME_LENGTH} characters.`
+  if (typeof f.job_title === 'string' && f.job_title.trim().length > MAX_JOB_TITLE_LENGTH) return `Job title must be at most ${MAX_JOB_TITLE_LENGTH} characters.`
+  if (typeof f.employee_id === 'string' && f.employee_id.trim().length > MAX_EMPLOYEE_ID_LENGTH) return `Employee id must be at most ${MAX_EMPLOYEE_ID_LENGTH} characters.`
+  return null
+}
+
 export async function updateUserProfile(
   userId: string,
   fields: {
@@ -151,6 +175,10 @@ export async function updateUserProfile(
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'manager', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
+
+  // Length caps (audit A-22): these end up in headers, lists, e-mails and PDFs
+  const lengthError = profileTextLengthError(fields)
+  if (lengthError) return { error: lengthError }
 
   const admin = createAdminClient() as unknown as AnyClient
 
@@ -380,6 +408,8 @@ export async function inviteUser(fields: {
   if (!profile || !['admin','platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!fields.email.trim()) return { error: 'Email is required.' }
   if (!fields.full_name.trim()) return { error: 'Name is required.' }
+  const lengthError = profileTextLengthError(fields)
+  if (lengthError) return { error: lengthError }
   const roleError = assertCanAssignRole(profile.role, fields.role)
   if (roleError) return { error: roleError }
 
@@ -599,13 +629,12 @@ export async function bulkCreateUsers(
     remainingSeats = Math.max(0, org.seat_limit - (count ?? 0))
   }
 
-  const [{ data: departmentsData }, { data: locationsData }, { data: storesData }, { data: orgProfiles }, { data: orgMobileNumbers }, { data: authList }] = await Promise.all([
+  const [{ data: departmentsData }, { data: locationsData }, { data: storesData }, { data: orgProfiles }, { data: orgMobileNumbers }] = await Promise.all([
     admin.from('departments').select('id, name').eq('org_id', orgId),
     admin.from('locations').select('id, name').eq('org_id', orgId),
     admin.from('stores').select('id, code').eq('org_id', orgId),
     admin.from('profiles').select('id').eq('org_id', orgId),
     admin.from('profile_mobile_numbers').select('mobile_number').eq('org_id', orgId),
-    admin.auth.admin.listUsers({ perPage: 1000 }),
   ])
   const deptByName = new Map<string, string>(
     (departmentsData ?? []).map((d: { id: string; name: string }) => [d.name.trim().toLowerCase(), d.id])
@@ -616,12 +645,12 @@ export async function bulkCreateUsers(
   const storeByCode = new Map<string, string>(
     (storesData ?? []).map((s: { id: string; code: string }) => [s.code.trim().toUpperCase(), s.id])
   )
-  const orgProfileIds = new Set((orgProfiles ?? []).map((p: { id: string }) => p.id))
-  const emailToProfileId = new Map<string, string>(
-    ((authList?.users ?? []) as { id: string; email?: string }[])
-      .filter((u) => u.email && orgProfileIds.has(u.id))
-      .map((u) => [u.email!.trim().toLowerCase(), u.id])
-  )
+  const orgProfileIds = new Set<string>((orgProfiles ?? []).map((p: { id: string }) => p.id))
+  // Every sign-in account, every page (this used to read the first 1000 only, so an existing person beyond that was not recognised and the import tried
+  // to create a duplicate). If the list cannot be read to the end the import does not start: a half-known list would be the same mistake again.
+  const existingAccounts = await listAuthIdsByEmail(admin, orgProfileIds)
+  if (!existingAccounts.ok) return { error: `The list of existing accounts could not be read (${existingAccounts.error}). Nothing was imported; please try again.` }
+  const emailToProfileId = existingAccounts.value
   // Every mobile number already registered to ANY existing profile in this
   // org (regardless of how many numbers that profile already has) —
   // bulkCreateUsers() is create-only (an existing email is always skipped,
@@ -676,6 +705,8 @@ export async function bulkCreateUsers(
     const email = row.email?.trim().toLowerCase()
 
     if (!fullName) { errors.push(`${rowLabel}: name is required, skipped.`); continue }
+    const rowLengthError = profileTextLengthError({ full_name: fullName, job_title: row.job_title, employee_id: row.employee_id })
+    if (rowLengthError) { errors.push(`${rowLabel}: ${rowLengthError.replace(/\.$/, '')}, skipped.`); continue }
     if (!email) { errors.push(`${rowLabel}: email is required, skipped.`); continue }
     if (emailToProfileId.has(email)) { errors.push(`${rowLabel}: "${email}" already has an account, skipped.`); continue }
     if (imported >= remainingSeats) { errors.push(`${rowLabel}: seat limit reached, skipped.`); continue }
@@ -739,7 +770,8 @@ export async function bulkCreateUsers(
     }
 
     const givenPassword = row.password?.trim() || ''
-    if (givenPassword && givenPassword.length < 8) { errors.push(`${rowLabel}: password must be at least 8 characters, skipped.`); continue }
+    const givenPasswordError = givenPassword ? validateNewPassword(givenPassword) : null
+    if (givenPasswordError) { errors.push(`${rowLabel}: ${givenPasswordError}, skipped.`); continue }
     // a password typed in the file is used as is (and must be changed at first sign-in); otherwise the account gets its own random password
     const password = givenPassword || generateOneTimePassword()
 
@@ -847,16 +879,14 @@ export async function adminSendPasswordReset(email: string): Promise<{ error?: s
 // sign-in account, so this is the one place to change it; the password and everything else stay as they are. The new address is
 // marked confirmed (an admin is vouching for it), so the person can sign in with it straight away and the old address stops working.
 
-/** Whether any account (in any organisation: sign-in addresses are shared by the whole system) already uses this address. */
-async function emailInUse(admin: AnyClient, email: string): Promise<boolean> {
-  const perPage = 1000
-  for (let page = 1; page <= 50; page++) {
-    const { data } = await admin.auth.admin.listUsers({ page, perPage })
-    const users = (data?.users ?? []) as { email?: string | null }[]
-    if (users.some((u) => (u.email ?? '').toLowerCase() === email)) return true
-    if (users.length < perPage) return false
-  }
-  return false
+/**
+ * Whether any account (in any organisation: sign-in addresses are shared by the whole system) already uses this address.
+ * 'unknown' when the list could not be read to the end: the caller must then NOT go ahead (this used to answer "free" after 50 pages, i.e. failed open).
+ */
+async function emailInUse(admin: AnyClient, email: string): Promise<boolean | 'unknown'> {
+  const r = await findAuthUserByEmail(admin, email)
+  if (!r.ok) return 'unknown'
+  return r.value !== null
 }
 
 export async function updateUserEmail(userId: string, newEmail: string): Promise<{ error?: string; email?: string; warning?: string; updated?: string }> {
@@ -887,13 +917,17 @@ export async function updateUserEmail(userId: string, newEmail: string): Promise
   if (oldEmail === email) return { error: 'This is already their e-mail address.' }
 
   // the sign-in service answers a duplicate with a generic failure, so check it here to say what is wrong
-  if (await emailInUse(admin, email)) return { error: 'Another account already uses this e-mail address.' }
+  const taken = await emailInUse(admin, email)
+  if (taken === 'unknown') return { error: 'Could not check whether another account uses this e-mail address (the sign-in service did not give its list). Nothing was changed; please try again.' }
+  if (taken) return { error: 'Another account already uses this e-mail address.' }
 
   const { error } = await admin.auth.admin.updateUserById(userId, { email, email_confirm: true })
   if (error) {
     // (a second admin saving the same address at the same moment lands here too)
     return { error: 'The e-mail address could not be changed. If another account uses it, choose a different one.' }
   }
+  // Whoever was signed in under the old address (the previous owner of it, or a thief of a session) must not stay in (audit A-05).
+  const endedSessions = await revokeAllSessions(admin, userId)
 
   // the old address is now gone from the sign-in account: take it out of every other place that kept a copy as well
   let counts: EmailChangeCounts | null = null
@@ -909,10 +943,11 @@ export async function updateUserEmail(userId: string, newEmail: string): Promise
     metadata: { from: oldEmail, to: email, name: target.full_name ?? null, updated: counts, copyError },
   })
   revalidatePath('/admin/users')
+  const sessionWarning = endedSessions === null ? ' Their existing sessions could not be ended; ask them to sign out and in again.' : ''
   if (copyError) {
-    return { email, warning: 'The sign-in e-mail was changed, but the old address could not be replaced everywhere else (OEM lists, rules, reports). Please tell the system administrator.' }
+    return { email, warning: `The sign-in e-mail was changed, but the old address could not be replaced everywhere else (OEM lists, rules, reports). Please tell the system administrator.${sessionWarning}` }
   }
-  return { email, updated: describeEmailUpdates(counts) }
+  return { email, updated: describeEmailUpdates(counts), ...(sessionWarning ? { warning: sessionWarning.trim() } : {}) }
 }
 
 // ── adminSetPassword ─────────────────────────────────────────────────────────
@@ -921,11 +956,12 @@ export async function updateUserEmail(userId: string, newEmail: string): Promise
 // Also confirms the email: an unconfirmed user can't sign in even with a valid
 // password, and an admin directly setting a password is vouching for the account.
 
-export async function adminSetPassword(userId: string, newPassword: string): Promise<{ error?: string }> {
+export async function adminSetPassword(userId: string, newPassword: string): Promise<{ error?: string; warning?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
-  if (newPassword.length < 8) return { error: 'Password must be at least 8 characters.' }
+  const policyError = validateNewPassword(newPassword)
+  if (policyError) return { error: policyError }
 
   const admin = createAdminClient() as unknown as AnyClient
 
@@ -947,8 +983,11 @@ export async function adminSetPassword(userId: string, newPassword: string): Pro
   // own on next login before they can use the portal.
   await admin.from('profiles').update({ must_reset_password: true }).eq('id', userId)
 
-  await recordAudit({ category: 'security', action: 'user.password_set_by_admin', entityType: 'user', entityId: userId, message: 'An administrator set a temporary password; the person must choose their own', actorId: profile.id, orgId: profile.org_id })
-  return {}
+  // sessions opened with the OLD password must not live on after an administrator's reset (audit A-05)
+  const ended = await revokeAllSessions(admin, userId)
+
+  await recordAudit({ category: 'security', action: 'user.password_set_by_admin', entityType: 'user', entityId: userId, message: 'An administrator set a temporary password; the person must choose their own', detail: { sessionsEnded: ended }, actorId: profile.id, orgId: profile.org_id })
+  return ended === null ? { warning: "The password was set, but the person's existing sessions could not be ended." } : {}
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
@@ -980,13 +1019,10 @@ export async function exportUsersCsv(): Promise<string> {
   if (profiles.error) throw new Error('Failed to load users.')
 
   const orgProfileIds = new Set(((profiles.data ?? []) as { id: string }[]).map((p) => p.id))
-  const emailById = new Map<string, string>()
-  for (let page = 1; page <= 20; page++) {
-    const { data } = await admin.auth.admin.listUsers({ page, perPage: 1000 })
-    const users = (data?.users ?? []) as { id: string; email?: string }[]
-    for (const u of users) if (u.email && orgProfileIds.has(u.id)) emailById.set(u.id, u.email)
-    if (users.length < 1000) break
-  }
+  // every page of the account list; an export with missing e-mail addresses must not look complete
+  const emails = await listAuthEmails(admin, orgProfileIds)
+  if (!emails.ok) throw new Error('Failed to load users.')
+  const emailById = emails.value
 
   const mobileNumbersById = new Map<string, string[]>()
   for (const m of (mobiles.data ?? []) as { profile_id: string; mobile_number: string }[]) {
@@ -1042,14 +1078,17 @@ export async function listPasswordResetTargets(): Promise<{ error?: string; ids?
   return { ids: ((data ?? []) as { id: string }[]).map((r) => r.id) }
 }
 
+// Every account gets its OWN random temporary password (audit A-05): one password shared by many accounts meant that anyone who learned it could sign in to
+// every account that had not yet changed it, and then choose a new password there. The passwords are returned ONCE, in `credentials` (same shape as the
+// bulk import: e-mail, name, password) for the administrator to hand over; they are not stored or logged. The old `newPassword` argument is kept so existing
+// callers still compile, but it is no longer used.
 export async function resetPasswordsBatch(
   userIds: string[],
-  newPassword: string
-): Promise<{ error?: string; succeeded?: number; failed?: { id: string; name?: string; error: string }[] }> {
+  _newPassword?: string // eslint-disable-line @typescript-eslint/no-unused-vars -- deprecated, see above
+): Promise<{ error?: string; succeeded?: number; failed?: { id: string; name?: string; error: string }[]; credentials?: BulkCredential[]; warning?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
-  if (typeof newPassword !== 'string' || newPassword.length < 8) return { error: 'Password must be at least 8 characters.' }
   if (!Array.isArray(userIds) || userIds.length === 0) return { error: 'No users selected.' }
   if (userIds.length > BULK_RESET_BATCH_SIZE) return { error: `At most ${BULK_RESET_BATCH_SIZE} users per batch.` }
 
@@ -1071,12 +1110,16 @@ export async function resetPasswordsBatch(
     .filter((id) => !nameById.has(id))
     .map((id) => ({ id, error: 'Not eligible (must be an active user, agent or manager of this organisation).' }))
   const succeededIds: string[] = []
+  const issued = new Map<string, string>()   // id -> the password just set
+  const emailByAccount = await listAuthEmails(admin, allowed)
 
   for (let i = 0; i < allowed.length; i += BULK_RESET_CONCURRENCY) {
     const chunk = allowed.slice(i, i + BULK_RESET_CONCURRENCY)
     const results = await Promise.all(
       chunk.map(async (id) => {
-        const { error } = await admin.auth.admin.updateUserById(id, { password: newPassword, email_confirm: true })
+        const password = generateOneTimePassword()
+        const { error } = await admin.auth.admin.updateUserById(id, { password, email_confirm: true })
+        if (!error) issued.set(id, password)
         return { id, error: error?.message ?? null }
       })
     )
@@ -1090,6 +1133,9 @@ export async function resetPasswordsBatch(
     // They never chose this password — force each to set their own before using the portal.
     await inBatchesDo(succeededIds, (batch) => admin.from('profiles').update({ must_reset_password: true }).in('id', batch))
   }
+  // sessions opened with the old passwords end now (audit A-05)
+  let sessionsNotEnded = 0
+  for (const id of succeededIds) if ((await revokeAllSessions(admin, id)) === null) sessionsNotEnded++
 
   await logAdminAudit({
     orgId: profile.org_id, actorId: profile.id,
@@ -1097,5 +1143,13 @@ export async function resetPasswordsBatch(
     metadata: { requested: userIds.length, succeeded: succeededIds.length, failed: failed.length },
   })
   revalidatePath('/admin/users')
-  return { succeeded: succeededIds.length, failed }
+  const credentials: BulkCredential[] = succeededIds.map((id) => ({
+    email: emailByAccount.ok ? (emailByAccount.value.get(id) ?? '') : '',
+    full_name: nameById.get(id) ?? '',
+    password: issued.get(id) ?? '',
+  }))
+  return {
+    succeeded: succeededIds.length, failed, credentials,
+    ...(sessionsNotEnded > 0 ? { warning: `${sessionsNotEnded} account(s) could not have their existing sessions ended.` } : {}),
+  }
 }

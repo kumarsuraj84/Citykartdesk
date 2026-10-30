@@ -27,9 +27,10 @@ vi.mock('@/lib/observability/alert', () => ({ alertOperator: alertOperatorMock }
 type BizHourRow = { day_of_week: number; start_time: string; end_time: string; is_active: boolean }
 type HolidayRow = { date: string; is_recurring: boolean }
 
+// B-01: the calendar is read with the server's own (admin) client, so the signed-in user's client is made to fail loudly if it is ever used again
 function mockSupabaseWith(bizHours: BizHourRow[], holidays: HolidayRow[] = []) {
-  vi.doMock('@/lib/supabase/server', () => ({
-    createClient: async () => ({
+  vi.doMock('@/lib/supabase/admin', () => ({
+    createAdminClient: () => ({
       from: (table: string) => ({
         select: () => ({
           order: async () => ({ data: table === 'business_hours' ? bizHours : [] }),
@@ -37,6 +38,9 @@ function mockSupabaseWith(bizHours: BizHourRow[], holidays: HolidayRow[] = []) {
         }),
       }),
     }),
+  }))
+  vi.doMock('@/lib/supabase/server', () => ({
+    createClient: async () => { throw new Error('the SLA calendar must not be read with the cookie-bound client') },
   }))
 }
 
@@ -62,6 +66,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.doUnmock('@/lib/supabase/server')
+  vi.doUnmock('@/lib/supabase/admin')
 })
 
 describe('computeSLADeadline() — SLA business-hours misconfiguration guard', () => {
@@ -202,5 +207,82 @@ describe('lib/sla/resolve.ts — resolveSlaDeadlines folds a null computeSLADead
 
     expect(result.responseDueAt).toBeNull()
     expect(result.resolutionDueAt).toBeNull()
+  })
+})
+
+// F-28 / B-01 / F-13: all-day calendar, and the calendar read by a caller with no browser session
+const ALL_DAY: BizHourRow[] = [0, 1, 2, 3, 4, 5, 6].map((d) => ({ day_of_week: d, start_time: '00:00:00', end_time: '23:59:00', is_active: true }))
+
+describe('F-28: a 00:00-23:59 calendar is a full day, so no minute is lost at midnight', () => {
+  it('24 hours from 10:59:24 ends at 10:59 the next day (it used to end at 11:00)', async () => {
+    mockSupabaseWith(ALL_DAY)
+    const computeSLADeadline = await freshComputeSLADeadline()
+    const d = await computeSLADeadline(new Date(2026, 8, 14, 10, 59, 24), 24 * 60)
+    expect(d).not.toBeNull()
+    expect([d!.getDate(), d!.getHours(), d!.getMinutes()]).toEqual([15, 10, 59])
+  })
+
+  it('48 hours from 10:00 ends at exactly 10:00 two days later (it used to end at 10:02)', async () => {
+    mockSupabaseWith(ALL_DAY)
+    const computeSLADeadline = await freshComputeSLADeadline()
+    const d = await computeSLADeadline(new Date(2026, 8, 14, 10, 0, 0), 48 * 60)
+    expect([d!.getDate(), d!.getHours(), d!.getMinutes()]).toEqual([16, 10, 0])
+  })
+
+  it('1 hour from 23:59:30 ends at 00:59 (it used to end at 01:00)', async () => {
+    mockSupabaseWith(ALL_DAY)
+    const computeSLADeadline = await freshComputeSLADeadline()
+    const d = await computeSLADeadline(new Date(2026, 8, 14, 23, 59, 30), 60)
+    expect([d!.getDate(), d!.getHours(), d!.getMinutes()]).toEqual([15, 0, 59])
+  })
+
+  it('a real office-hours calendar is not changed: 09:00-18:00, 2 hours from 17:00 ends the next morning at 10:00', async () => {
+    mockSupabaseWith([0, 1, 2, 3, 4, 5, 6].map((d) => ({ day_of_week: d, start_time: '09:00:00', end_time: '18:00:00', is_active: true })))
+    const computeSLADeadline = await freshComputeSLADeadline()
+    const d = await computeSLADeadline(new Date(2026, 8, 14, 17, 0, 0), 120)
+    expect([d!.getDate(), d!.getHours(), d!.getMinutes()]).toEqual([15, 10, 0])
+  })
+
+  it('the elapsed business minutes of a whole 24 hours is 1440, not 1439', async () => {
+    mockSupabaseWith(ALL_DAY)
+    vi.resetModules()
+    const { computeElapsedBusinessMinutes } = await import('@/lib/sla/business-hours')
+    expect(await computeElapsedBusinessMinutes(new Date(2026, 8, 14, 10, 0, 0), new Date(2026, 8, 15, 10, 0, 0))).toBe(1440)
+  })
+})
+
+describe('B-01: the calendar is read with the server key, so a caller with no browser session still gets a deadline', () => {
+  it('computes a deadline although the cookie-bound client would throw', async () => {
+    mockSupabaseWith(NORMAL_WEEK)
+    const computeSLADeadline = await freshComputeSLADeadline()
+    const d = await computeSLADeadline(new Date(2026, 8, 14, 10, 0, 0), 120)
+    expect(d).not.toBeNull()
+    expect(d!.getHours()).toBe(12)
+  })
+})
+
+describe('F-13: a pause is credited in business time when the calendar has gaps, in plain time when it does not', () => {
+  it('always-on calendar: the credit is the wall-clock gap, and the deadline moves by exactly that', async () => {
+    mockSupabaseWith(ALL_DAY)
+    vi.resetModules()
+    const { pauseCreditMs, shiftDeadlineByCredit } = await import('@/lib/sla/business-hours')
+    const start = new Date(2026, 8, 14, 20, 0, 0)
+    const end = new Date(2026, 8, 15, 8, 0, 0)
+    const credit = await pauseCreditMs(start, end)
+    expect(credit).toBe(12 * 3_600_000)
+    const due = new Date(2026, 8, 20, 12, 0, 37)
+    expect((await shiftDeadlineByCredit(due, credit)).getTime()).toBe(due.getTime() + credit)
+  })
+
+  it('9-to-5 calendar: a night spent waiting on the user is NOT credited (only the working minutes inside the pause are)', async () => {
+    mockSupabaseWith(NORMAL_WEEK)
+    vi.resetModules()
+    const { pauseCreditMs, shiftDeadlineByCredit } = await import('@/lib/sla/business-hours')
+    // Monday 16:00 to Tuesday 10:00: one hour on Monday (16-17) and one on Tuesday (9-10) are working time
+    const credit = await pauseCreditMs(new Date(2026, 8, 14, 16, 0, 0), new Date(2026, 8, 15, 10, 0, 0))
+    expect(credit).toBe(2 * 3_600_000)
+    // a deadline of Wednesday 10:00 moves by 2 working hours, to Wednesday 12:00 (not by 18 wall-clock hours)
+    const moved = await shiftDeadlineByCredit(new Date(2026, 8, 16, 10, 0, 0), credit)
+    expect([moved.getDate(), moved.getHours(), moved.getMinutes()]).toEqual([16, 12, 0])
   })
 })

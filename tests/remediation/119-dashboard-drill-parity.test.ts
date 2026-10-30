@@ -53,8 +53,10 @@ function oldDefinition(f: DrawerFilter, win: { start: number; end: number } | nu
   if (f.priority) q += `&priority=eq.${f.priority}`
   if (f.teamId) q += `&team_id=eq.${f.teamId}`
   if (f.assignedTo) q += `&assigned_to=eq.${f.assignedTo}`
-  if (f.slaBreached) q += `&resolution_due_at=lt.${nowIso}&status=not.in.(resolved,closed,cancelled)`
-  if (f.frtBreached) q += '&responded_at=is.null&status=not.in.(resolved,closed,cancelled)'
+  // (a ticket whose clock is stopped - waiting on the user, on purchase from HO, on an approval - is not breached and has no first response overdue while it waits, audit F-02)
+  const paused = '&status=not.in.(waiting_user,hold_purchase_ho,pending_approval)'
+  if (f.slaBreached) q += `&resolution_due_at=lt.${nowIso}&status=not.in.(resolved,closed,cancelled)${paused}`
+  if (f.frtBreached) q += `&responded_at=is.null&status=not.in.(resolved,closed,cancelled)${paused}`
   if (f.createdInPeriod) q += `&created_at=gte.${a}&created_at=lte.${b}`
   if (f.closedInPeriod) q += `&closed_at=gte.${a}&closed_at=lte.${b}`
   if (f.resolvedInPeriod) q += `&or=(${encodeURIComponent(`and(resolved_at.gte.${a},resolved_at.lte.${b}),and(resolved_at.is.null,closed_at.gte.${a},closed_at.lte.${b}),and(resolved_at.is.null,closed_at.is.null,status.in.(resolved,closed),updated_at.gte.${a},updated_at.lte.${b})`)})`

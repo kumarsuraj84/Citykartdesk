@@ -4,7 +4,8 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Loader2, Inbox as InboxIcon } from 'lucide-react'
-import type { InboxMessage, IntakeChannel } from '@/lib/queries/intake'
+import type { InboxPageResult, IntakeChannel } from '@/lib/queries/intake'
+import type { InboxFolderKey, InboxSort } from '@/lib/intake/inbox-filters'
 import { loadReviewDetail, type ReviewDetailBundle } from '@/lib/actions/intake/detail'
 import { InboxList } from './InboxList'
 import { ReviewClient } from '../review/[id]/ReviewClient'
@@ -17,12 +18,13 @@ import { PipelineStatusBanner } from '@/components/intake/PipelineStatusBanner'
 // pane: the list, or — once a message is open — the reading view with a Back
 // button. Selection loads the review detail inline via a server action.
 export function InboxWorkspace({
-  messages, channels, initialFolder, initialChannel, profileId, isAdmin,
+  inbox, channels, query, profileId, isAdmin,
 }: {
-  messages: InboxMessage[]
+  /** the page of messages the server read, with the total, the folder / mailbox counts and any read error */
+  inbox: InboxPageResult
   channels: IntakeChannel[]
-  initialFolder?: string
-  initialChannel?: string
+  /** the filters in the address (folder, mailbox, classifier stage, search, sort) */
+  query: { folder: InboxFolderKey; channel: string | null; stage: string; q: string; sort: InboxSort }
   profileId: string
   isAdmin: boolean
 }) {
@@ -68,10 +70,9 @@ export function InboxWorkspace({
         <PipelineStatusBanner />
         <div className="min-h-0 flex-1 lg:overflow-y-auto lg:pr-1">
           <InboxList
-            messages={messages}
+            inbox={inbox}
             channels={channels}
-            initialFolder={initialFolder}
-            initialChannel={initialChannel}
+            query={query}
             onOpen={open}
             activeMessageId={activeMessageId}
           />

@@ -4,10 +4,12 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { PERMISSION_MATRIX_ENFORCED, PERMISSION_MATRIX_NOT_ENABLED_MESSAGE } from '@/lib/permissions/enforced'
 
 export async function savePermissionOverrides(
   overrides: { role_key: string; action_key: string; allowed: boolean }[]
 ): Promise<{ error?: string }> {
+  if (!PERMISSION_MATRIX_ENFORCED) return { error: PERMISSION_MATRIX_NOT_ENABLED_MESSAGE }   // nothing reads these rows yet (A-18)
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated' }
   if (!['admin', 'platform_owner'].includes(profile.role)) return { error: 'Insufficient permissions' }
@@ -48,6 +50,7 @@ export async function createCustomRole(data: {
   description: string
   base_role: string
 }): Promise<{ error?: string; id?: string }> {
+  if (!PERMISSION_MATRIX_ENFORCED) return { error: PERMISSION_MATRIX_NOT_ENABLED_MESSAGE }
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated' }
   if (!['admin', 'platform_owner'].includes(profile.role)) return { error: 'Insufficient permissions' }
@@ -81,6 +84,7 @@ export async function createCustomRole(data: {
 }
 
 export async function deleteCustomRole(roleId: string): Promise<{ error?: string }> {
+  if (!PERMISSION_MATRIX_ENFORCED) return { error: PERMISSION_MATRIX_NOT_ENABLED_MESSAGE }
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated' }
   if (!['admin', 'platform_owner'].includes(profile.role)) return { error: 'Insufficient permissions' }

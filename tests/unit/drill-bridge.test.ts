@@ -17,7 +17,7 @@ describe('a number clicked on the normal Dashboards page becomes a Smart Dashboa
     const r = drawerToDrill({ title: 'Resolved', resolvedInPeriod: true, period: '30d', sort: 'tat_desc' }, env())!
     expect(r.ctx.metric).toBe('resolved')
   })
-  it('a day or a span written as dates becomes that calendar window, in the browser time zone', () => {
+  it('a day or a span written as dates becomes that calendar window, in India time', () => {
     const c = drawerToDrill({ title: 'Created Today', createdInPeriod: true, period: { from: '2026-10-14', to: '2026-10-14' } }, env())!
     expect(c.ctx.win).toEqual({ start: new Date('2026-10-14T00:00:00').getTime(), end: new Date('2026-10-14T23:59:59.999').getTime() })
     expect(c.ctx.winLabel).toBe('2026-10-14')

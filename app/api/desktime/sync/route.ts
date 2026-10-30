@@ -3,9 +3,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { runDeskTimeSync } from '@/lib/desktime/sync'
 import { verifyCronSecret } from '@/lib/cron-auth'
 
-// Daily DeskTime pull for every connected org — see .claude/cron.md and
-// docs/RAILWAY-DEPLOYMENT.md for the scheduling convention this mirrors
-// (CRON_SECRET, checked via lib/cron-auth.ts — same as the other cron routes).
+// Daily DeskTime pull for every connected org — see .claude/cron.md for the scheduling convention this mirrors
+// (CRON_SECRET, checked via lib/cron-auth.ts — same as the other cron routes). On the production app server the other jobs run as Windows scheduled tasks
+// (docs/PRODUCTION-INFRASTRUCTURE-AND-MIGRATION.md); no task is set up for this one yet.
 export async function GET(req: NextRequest) {
   const verified = verifyCronSecret(req)
   if (verified === null) {

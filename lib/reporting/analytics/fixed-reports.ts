@@ -235,9 +235,11 @@ export function buildFixedReport(input: BuildInput): ReportTable {
     const buckets = usedBuckets(facts)
     const day = input.day
     dayWord = day?.word
-    const a = day?.start.toISOString() ?? ''
-    const b = day?.end.toISOString() ?? ''
-    const within = (iso: string | null) => !!iso && iso >= a && iso <= b
+    // compared as MOMENTS: the database writes "...+00:00" or "-07:00" and the boundaries are "...Z"; as text a ticket created between 00:00 and 06:59 India time
+    // fell on the wrong side (audit F-03)
+    const a = day ? day.start.getTime() : Number.NaN
+    const b = day ? day.end.getTime() : Number.NaN
+    const within = (iso: string | null) => { if (!iso) return false; const t = new Date(iso).getTime(); return t >= a && t <= b }
     const dayFacts = (input.dayFacts ?? []).filter((f) => f.status !== 'cancelled')
     lead = 2
     columns = [col('tech', 'Responsible', 140), col('cat', 'Category', 180), ...bucketCols(buckets),

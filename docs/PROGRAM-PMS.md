@@ -19,7 +19,8 @@ On the PMS date, **from 09:00 India time**, CK Desk makes **ONE ticket for the s
 
 - Only today's date is made, only from 09:00; a date in the past is never made, a date in the future waits.
 - `program_pms_log` keeps one row per program, store and date: a date never makes two tickets (even if two runs overlap), and a second run sends no second mail.
-- A store that is not in the store master, or has no active login, or a ticket that is refused: nothing is made, the reason is shown on the program screen (problems list), and the date is tried again at the next run of the same day.
+- A store that is not in the store master, or has no active login, or a ticket that is refused: nothing is made, the reason is shown on the program screen (problems list), the date is tried again at the next run of the same day, and it stays listed for 7 days (a past date is never made automatically). At most 150 tickets are made per run; the rest continue at the next run. PMS tickets are made even when the Google connection is broken.
+- If a run stops after the ticket exists but before it is recorded, the next run finds that ticket (by its store and date) and does not make a second one.
 - A date removed from the sheet later does not touch tickets already made.
 - A program that is switched off makes no PMS tickets. Removing the PMS sheet removes its copied dates and PMS problems and nothing else.
 - The old built-in AC PMS (one org-wide sheet) is not affected: it only looks at a PMS category that belongs to NO program.

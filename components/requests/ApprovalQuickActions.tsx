@@ -17,10 +17,13 @@ export function ApprovalQuickActions({ approvalId, onDecided, onCancel }: Props)
   const [isPending, startTransition] = useTransition()
   const [comment, setComment] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // which button was pressed: only that one changes its label while the call is running (both used to say "Rejecting…" / "Approving…" together)
+  const [action, setAction] = useState<'approve' | 'reject' | null>(null)
 
   function handleApprove() {
     setError(null)
     if (!comment.trim()) { setError('Please add a comment: it is required to approve or reject.'); return }
+    setAction('approve')
     startTransition(async () => {
       const result = await approveApproval(approvalId, comment.trim())
       if (result.error) setError(result.error)
@@ -31,6 +34,7 @@ export function ApprovalQuickActions({ approvalId, onDecided, onCancel }: Props)
   function handleReject() {
     setError(null)
     if (!comment.trim()) { setError('Please add a comment: it is required to approve or reject.'); return }
+    setAction('reject')
     startTransition(async () => {
       const result = await rejectApproval(approvalId, comment.trim())
       if (result.error) setError(result.error)
@@ -61,12 +65,12 @@ export function ApprovalQuickActions({ approvalId, onDecided, onCancel }: Props)
         <button type="button" onClick={handleReject} disabled={isPending || !comment.trim()}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60">
           <XCircle className="h-3.5 w-3.5" />
-          {isPending ? 'Rejecting…' : 'Reject'}
+          {isPending && action === 'reject' ? 'Rejecting…' : 'Reject'}
         </button>
         <button type="button" onClick={handleApprove} disabled={isPending || !comment.trim()}
           className="btn-success flex-1 py-1.5 text-xs">
           <CheckCircle2 className="h-3.5 w-3.5" />
-          {isPending ? 'Approving…' : 'Approve'}
+          {isPending && action === 'approve' ? 'Approving…' : 'Approve'}
         </button>
       </div>
     </div>

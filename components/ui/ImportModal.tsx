@@ -1,6 +1,8 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
+import { safely } from '@/lib/ui/safeAction'
+import { ModalFrame } from '@/components/ui/ModalFrame'
 import { toCSV, downloadCSV } from '@/lib/export/csv'
 import { parseCSV, rowsToObjects } from '@/lib/import/csv'
 
@@ -93,7 +95,7 @@ export function ImportModal({ title, sampleFilename, sampleColumns, sampleRows, 
     if (!parsedRows) return
     setError(null)
     startTransition(async () => {
-      const res = await onImport(parsedRows)
+      const res = await safely(() => onImport(parsedRows))
       if (res.error) { setError(res.error); return }
       setResult(res.data ?? { imported: 0, errors: [] })
       onDone()
@@ -101,7 +103,7 @@ export function ImportModal({ title, sampleFilename, sampleColumns, sampleRows, 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+    <ModalFrame label="Import" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-ink">Import {title}</h2>
@@ -168,6 +170,6 @@ export function ImportModal({ title, sampleFilename, sampleColumns, sampleRows, 
           )}
         </div>
       </div>
-    </div>
+    </ModalFrame>
   )
 }

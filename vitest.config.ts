@@ -12,6 +12,7 @@ export default defineConfig({
     // The remediation tests change data in the disposable audit database; they run only through vitest.remediation.config.ts
     // (which refuses anything but the audit stack), never in the default run against the developer database.
     exclude: ['**/node_modules/**', 'tests/remediation/**', 'tests/vapt/**'],
+    // env.ts also refuses to run when the Supabase address in the environment is not on this machine (tests/setup/local-guard.ts; ALLOW_NON_LOCAL_TESTS=1 overrides).
     setupFiles: ['tests/setup/env.ts'],
   },
   resolve: {

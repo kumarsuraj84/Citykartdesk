@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useTransition, useMemo } from 'react'
+import { safely } from '@/lib/ui/safeAction'
+import { ModalFrame } from '@/components/ui/ModalFrame'
 import { useRouter } from 'next/navigation'
 import { X, UserPlus, ChevronDown, Pencil, KeyRound, Send, MessageCircle } from 'lucide-react'
 import {
@@ -71,7 +73,7 @@ function EmailSection({ userId, email }: { userId: string; email: string | null 
   function save() {
     setMessage(null)
     startTransition(async () => {
-      const res = await updateUserEmail(userId, value)
+      const res = await safely(() => updateUserEmail(userId, value))
       if (res.error) { setMessage({ type: 'error', text: res.error }); return }
       if (res.warning) setMessage({ type: 'error', text: res.warning })
       else setMessage({ type: 'success', text: `E-mail changed to ${res.email}. They sign in with it from now on; their password is unchanged.${res.updated ? ` The old address was also replaced in: ${res.updated}.` : ' The old address was not used anywhere else.'}` })
@@ -141,7 +143,7 @@ function PasswordSection({ userId, email }: { userId: string; email: string | nu
   function handleSendReset() {
     setMessage(null)
     startTransition(async () => {
-      const result = await adminSendPasswordReset(email ?? '')
+      const result = await safely(() => adminSendPasswordReset(email ?? ''))
       setMessage(
         result.error
           ? { type: 'error', text: result.error }
@@ -153,7 +155,7 @@ function PasswordSection({ userId, email }: { userId: string; email: string | nu
   function handleSetPassword() {
     setMessage(null)
     startTransition(async () => {
-      const result = await adminSetPassword(userId, newPassword)
+      const result = await safely(() => adminSetPassword(userId, newPassword))
       if (result.error) {
         setMessage({ type: 'error', text: result.error })
         return
@@ -304,7 +306,7 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
     const check = normalizeMobileNumber(newMobileInput)
     if (!check.ok) { setMobileError(check.error); return }
     startMobileTransition(async () => {
-      const result = await addMobileNumber(user.id, newMobileInput)
+      const result = await safely(() => addMobileNumber(user.id, newMobileInput))
       if (result.error) { setMobileError(result.error); return }
       setMobileNumbers(prev => [...prev, check.normalized])
       setNewMobileInput('')
@@ -315,18 +317,28 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
   function handleRemoveMobile(number: string) {
     setMobileError(null)
     startMobileTransition(async () => {
-      const result = await removeMobileNumber(user.id, number)
+      const result = await safely(() => removeMobileNumber(user.id, number))
       if (result.error) { setMobileError(result.error); return }
       setMobileNumbers(prev => prev.filter(n => n !== number))
       router.refresh()
     })
   }
 
+  // A vendor / OEM account loses its vendor access when its role changes, so the server asks for a deliberate yes first (audit A-23): ask here, then send it again with the yes.
+  async function saveRole(): Promise<{ error?: string }> {
+    let r = await safely(() => updateUserRole(user.id, form.role))
+    if (r.needsConfirm) {
+      if (!confirm('This person is an OEM / vendor account. Changing the role removes their vendor access. Continue?')) return { error: 'The role was not changed.' }
+      r = await safely(() => updateUserRole(user.id, form.role, { confirmRemoveVendorAccess: true }))
+    }
+    return r
+  }
+
   function handleSave() {
     setError(null)
     startTransition(async () => {
       const [r1, r2, r3] = await Promise.all([
-        updateUserProfile(user.id, {
+        safely(() => updateUserProfile(user.id, {
           full_name:     form.full_name,
           job_title:     form.job_title || null,
           employee_id:   form.employee_id || null,
@@ -338,14 +350,14 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
           designation_id:form.designation_id || null,
           manager_id:    form.manager_id || null,
           whatsapp_enabled: whatsappEnabled,
-        }),
+        })),
         isAdmin && !isSelf && form.role !== user.role
-          ? updateUserRole(user.id, form.role)
+          ? saveRole()
           : Promise.resolve<{ error?: string }>({}),
         // A requester has no business being in a technician group — force-clear
         // rather than trust the hidden section's last state if they were just
         // demoted from a technician role in this same edit.
-        setUserTeams(user.id, form.role === 'user' ? [] : selectedTeams),
+        safely(() => setUserTeams(user.id, form.role === 'user' ? [] : selectedTeams)),
       ])
       const err = r1.error ?? r2.error ?? r3.error
       if (err) { setError(err); return }
@@ -359,7 +371,7 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-modal>
+    <ModalFrame label="Edit user" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} />
 
@@ -544,7 +556,7 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
           </div>
         </div>
       </div>
-    </div>
+    </ModalFrame>
   )
 }
 
@@ -556,7 +568,7 @@ function ToggleActiveButton({ user }: { user: UserWithTeams }) {
     if (user.is_active && !confirm(`Deactivate ${user.full_name}? They will no longer be able to log in.`)) return
     setError(null)
     startTransition(async () => {
-      const result = await toggleUserActive(user.id, !user.is_active)
+      const result = await safely(() => toggleUserActive(user.id, !user.is_active))
       if (result.error) { setError(result.error); return }
       router.refresh()
     })
@@ -623,7 +635,7 @@ function InviteModal({ departments, locations, stores, profiles, teams, onClose 
       return
     }
     startTransition(async () => {
-      const result = await inviteUser({
+      const result = await safely(() => inviteUser({
         email: form.email,
         full_name: form.full_name,
         role: form.role,
@@ -635,7 +647,7 @@ function InviteModal({ departments, locations, stores, profiles, teams, onClose 
         team_ids: form.role === 'user' ? [] : selectedTeams,
         mobile_number: form.mobile_number || null,
         whatsapp_enabled: whatsappEnabled,
-      })
+      }))
       if (result.error) { setError(result.error); return }
       router.refresh()
       // The account exists but its invitation email failed: keep the dialog open so the
@@ -646,7 +658,7 @@ function InviteModal({ departments, locations, stores, profiles, teams, onClose 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <ModalFrame label="Invite new user" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} />
       <div className="relative w-full max-w-md rounded-2xl bg-background shadow-2xl border border-border">
         {/* Header */}
@@ -794,7 +806,7 @@ function InviteModal({ departments, locations, stores, profiles, teams, onClose 
           </button>
         </div>
       </div>
-    </div>
+    </ModalFrame>
   )
 }
 

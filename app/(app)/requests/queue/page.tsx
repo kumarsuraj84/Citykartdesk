@@ -5,13 +5,16 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { redirect } from 'next/navigation'
 import { getCurrentProfile, getTeamMembersForTeams, getAgentTierProfiles } from '@/lib/queries/profiles'
 import { getRequests, getRequesterName } from '@/lib/queries/requests'
-import { getActiveServicesForReclassify, getServiceCategories, getServiceSubCategoriesForFilter } from '@/lib/queries/services'
+import { getRequestFilterTaxonomy } from '@/lib/queries/services'
+import { scopeTaxonomy } from '@/lib/requests/filter-taxonomy'
 import { RequestsTable } from '@/components/requests/RequestsTable'
 import { ColumnFilterSelect } from '@/components/requests/ColumnFilterSelect'
+import { SortSelect } from '@/components/requests/SortSelect'
 import { StatusFilterSelect } from '@/components/requests/StatusFilterSelect'
 import { RequestBoardView } from '@/components/requests/RequestBoardView'
 import { Pagination } from '@/components/ui/Pagination'
-import type { RequestStatus, RequestPriority } from '@/types'
+import { requireStaff } from '@/lib/ui/requireStaff'
+import type { RequestPriority } from '@/types'
 import type { AssignedToFilter } from '@/lib/queries/requests'
 import { resolveQueueStatusFilter } from '@/lib/requests/queue-status-filter'
 import { queueParams, queueTabParams } from '@/lib/requests/queue-url'
@@ -64,10 +67,18 @@ const PRIORITY_OPTIONS: { value: RequestPriority; label: string }[] = [
 ]
 
 const SORT_COLUMNS = ['updated_at', 'created_at', 'priority', 'status', 'request_no']
+const SORT_OPTIONS = [
+  { value: 'updated_at', label: 'Updated' },
+  { value: 'created_at', label: 'Created' },
+  { value: 'priority',   label: 'Priority' },
+  { value: 'status',     label: 'Status' },
+  { value: 'request_no', label: 'Request #' },
+]
 
 export default async function AgentRequestsPage({ searchParams }: PageProps) {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
+  requireStaff(profile, '/requests/queue')
 
   const isAgent =
     profile.role === 'agent' ||
@@ -109,13 +120,16 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
   const assignedTo: AssignedToFilter | undefined = rawAssigned || undefined
   const breachedOnly = params.sla === 'breached'
   const priorityFilter = PRIORITY_OPTIONS.some((p) => p.value === rawPriority) ? (rawPriority as RequestPriority) : undefined
-  const serviceFilter = rawService || undefined
-  const categoryFilter = rawCategory || undefined
-  const subCategoryFilter = rawSubCategory || undefined
+  // Service -> Category -> Sub Category are linked: each list offers only what fits the choice above it, and a choice that no longer fits is dropped
+  const taxonomy = await getRequestFilterTaxonomy()
+  const scoped = scopeTaxonomy(taxonomy, { service: rawService || undefined, category: rawCategory || undefined, subcategory: rawSubCategory || undefined })
+  const serviceFilter = scoped.effective.service
+  const categoryFilter = scoped.effective.category
+  const subCategoryFilter = scoped.effective.subcategory
 
   const isBoard = layout === 'board'
 
-  const [result, serviceOptions, categoryOptions, subCategoryOptions, requesterRow] = await Promise.all([
+  const [result, requesterRow] = await Promise.all([
     getRequests({
       view: 'queue',
       userId: profile.id,
@@ -133,9 +147,6 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
       sort: sortCol,
       dir: sortDir,
     }),
-    getActiveServicesForReclassify(),
-    getServiceCategories(),
-    getServiceSubCategoriesForFilter(),
     requesterParam ? getRequesterName(requesterParam) : Promise.resolve(null),
   ])
   const requests = result.data
@@ -288,6 +299,10 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
             {serviceFilter && <input type="hidden" name="service" value={serviceFilter} />}
             {categoryFilter && <input type="hidden" name="category" value={categoryFilter} />}
             {subCategoryFilter && <input type="hidden" name="subcategory" value={subCategoryFilter} />}
+            {layout === 'board' && <input type="hidden" name="layout" value="board" />}
+            {breachedOnly && <input type="hidden" name="sla" value="breached" />}
+            {params.sort && <input type="hidden" name="sort" value={params.sort} />}
+            {params.dir && <input type="hidden" name="dir" value={params.dir} />}
             <input
               type="search"
               name="q"
@@ -315,29 +330,32 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
           currentSearch={currentSearch}
         />
         <ColumnFilterSelect
+          paramName="service"
+          value={serviceFilter ?? ''}
+          options={taxonomy.services.map((s) => ({ value: s.id, label: s.name }))}
+          placeholder="Any service…"
+          pathname="/requests/queue"
+          currentSearch={currentSearch}
+          clearParams={['category', 'subcategory']}
+        />
+        <ColumnFilterSelect
           paramName="category"
           value={categoryFilter ?? ''}
-          options={categoryOptions.map((c) => ({ value: c.id, label: c.name }))}
+          options={scoped.categories.map((c) => ({ value: c.id, label: c.name }))}
           placeholder="Any category…"
           pathname="/requests/queue"
           currentSearch={currentSearch}
+          clearParams={['subcategory']}
         />
         <ColumnFilterSelect
           paramName="subcategory"
           value={subCategoryFilter ?? ''}
-          options={subCategoryOptions.map((s) => ({ value: s.id, label: `${s.name} (${s.category_name})` }))}
+          options={scoped.subCategories.map((s) => ({ value: s.id, label: categoryFilter ? s.name : `${s.name} (${s.category_name})` }))}
           placeholder="Any sub category…"
           pathname="/requests/queue"
           currentSearch={currentSearch}
         />
-        <ColumnFilterSelect
-          paramName="service"
-          value={serviceFilter ?? ''}
-          options={serviceOptions.map((s) => ({ value: s.id, label: s.name }))}
-          placeholder="Any service…"
-          pathname="/requests/queue"
-          currentSearch={currentSearch}
-        />
+        <SortSelect value={sortCol} dir={sortDir} options={SORT_OPTIONS} pathname="/requests/queue" currentSearch={currentSearch} />
         {rawTab === 'team' && assignableUsers.length > 0 && (
           <ColumnFilterSelect
             paramName="assigned"
@@ -366,6 +384,20 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
           {requesterParam && (!rawStatus || rawStatus === 'active') && (
             <span className="text-muted-foreground">Only active tickets are shown. Choose &quot;All&quot; in the status filter to include resolved and closed ones.</span>
           )}
+        </div>
+      )}
+
+      {/* The board loads only the first 200 tickets and has no page buttons: say so, with the real total, instead of showing short column counts as if they were complete. */}
+      {isBoard && result.total > requests.length && (
+        <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-[12px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+          <span className="font-semibold">Showing the first {requests.length} of {result.total} tickets.</span>
+          <span>Switch to table view to see all.</span>
+          <Link
+            href={(() => { const p = currentParams(); p.delete('layout'); p.delete('page'); const s = p.toString(); return s ? `/requests/queue?${s}` : '/requests/queue' })()}
+            className="ml-auto rounded-md border border-amber-400/60 px-2 py-0.5 text-[11px] font-semibold hover:bg-amber-100 dark:hover:bg-amber-500/20"
+          >
+            Switch to table view
+          </Link>
         </div>
       )}
 

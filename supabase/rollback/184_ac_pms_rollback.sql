@@ -9,4 +9,5 @@ ALTER TABLE public.master_sources DROP CONSTRAINT IF EXISTS master_sources_kind_
 ALTER TABLE public.master_sources ADD CONSTRAINT master_sources_kind_check CHECK (kind = ANY (ARRAY['ac'::text, 'genset'::text, 'cvm'::text]));
 ALTER TABLE public.master_issues DROP CONSTRAINT IF EXISTS master_issues_kind_check;
 ALTER TABLE public.master_issues ADD CONSTRAINT master_issues_kind_check CHECK (kind = ANY (ARRAY['ac'::text, 'genset'::text, 'cvm'::text]));
+DELETE FROM auth.schema_migrations WHERE version = '20240101000184';
 COMMIT;

@@ -15,6 +15,9 @@ describe('one-time passwords (VAPT-003: no shared default password)', () => {
     expect(seen.size).toBe(5000)
     expect([...seen].some((p) => p.toLowerCase().startsWith('welcome'))).toBe(false)
   })
+  it('never start with a symbol, so the CSV formula guard can never alter one when the passwords are handed over', () => {
+    for (let i = 0; i < 2000; i++) expect(generateOneTimePassword()).toMatch(/^[A-Za-z0-9]/)
+  })
   it('a requested length below 12 is raised to 12', () => {
     expect(generateOneTimePassword(4).length).toBe(12)
   })

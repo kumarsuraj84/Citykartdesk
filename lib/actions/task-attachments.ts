@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { ALLOWED_MIME_SET as ALLOWED_MIME_TYPES, ALLOWED_EXTENSIONS, MAX_FILE_SIZE_BYTES as MAX_FILE_SIZE } from '@/lib/attachments/validate'
-import { uploadAllowed, UPLOAD_LIMIT_MESSAGE } from '@/lib/attachments/quota'
+import { uploadAllowed, uploadBytesAllowed, UPLOAD_LIMIT_MESSAGE, UPLOAD_BYTES_MESSAGE } from '@/lib/attachments/quota'
 import { validateAttachmentServer } from '@/lib/attachments/validate-server'
 
 
@@ -62,6 +62,9 @@ export async function uploadTaskAttachment(
     profile.team_members.some((m) => m.team_id === task.team_id)
 
   if (!canAttach) return { error: 'You do not have permission to attach files to this task.' }
+
+  // The person's daily size budget (checked last, so a refused file does not use it up). A task has no per-ticket total.
+  if (!(await uploadBytesAllowed(profile.id, file.size))) return { error: UPLOAD_BYTES_MESSAGE }
 
   const admin = createAdminClient()
   const safeName = sanitizeName(file.name)

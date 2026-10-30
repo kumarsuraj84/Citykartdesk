@@ -1,3 +1,4 @@
+BEGIN;
 -- ROLLBACK for migration 160 (system log). Removes the audit triggers, the functions and BOTH tables, including everything recorded in them
 -- (the original audit tables were left untouched by the migration, so only rows written to system_log since are lost).
 -- LOCAL; NOT run on production. If the log must be kept, export it first (admin screen: System Log -> Export) or copy the tables.
@@ -63,3 +64,5 @@ END;
 $function$;
 REVOKE ALL ON FUNCTION public.owner_delete_org(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.owner_delete_org(uuid) TO service_role;
+DELETE FROM auth.schema_migrations WHERE version = '20240101000160';
+COMMIT;

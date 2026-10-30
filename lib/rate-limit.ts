@@ -71,3 +71,45 @@ export async function getClientIp(): Promise<string | null> {
   const parts = ((await headers()).get('x-forwarded-for') ?? '').split(',').map((s) => s.trim()).filter(Boolean)
   return parts.length >= hops ? parts[parts.length - hops] : null
 }
+
+// ── Progressive delay per account (audit A-04 / G-09) ──────────────────────────────────────────────────────────────────────────────────
+// Without a trusted client address (TRUSTED_PROXY_HOPS not set) the only thing a sign-in limit can follow is the account being tried. A hard 10-minute lock
+// after 10 wrong tries then lets ANY stranger who knows a login name lock that person (a store login, an administrator) out for 10 minutes, again and again.
+// Instead each further wrong try doubles a short wait (30 s, 1 min, 2 min, 4 min, then at most 5 min), and the wait ends by itself; nothing stays locked.
+// The first `free` - 1 wrong tries cost nothing (the 10th starts the first wait, the same allowance as before). Whether the account exists is never part of the answer: the key is simply whatever was typed.
+type Progressive = { fails: number; lastAt: number; until: number }
+const progressive = new Map<string, Progressive>()
+const PROGRESSIVE_FORGET_MS = 30 * 60_000          // a quiet half hour clears the count
+
+function progressiveCleanup(now: number) {
+  if (progressive.size <= MAX_KEYS) return
+  for (const [k, v] of progressive) if (now - v.lastAt > PROGRESSIVE_FORGET_MS) progressive.delete(k)
+  for (const k of progressive.keys()) { if (progressive.size <= MAX_KEYS) break; progressive.delete(k) }
+}
+
+/** Milliseconds still to wait before this key may try again (0 = free to try). Does not count anything. */
+export function progressiveWaitMs(key: string, now = Date.now()): number {
+  key = key.length > 200 ? key.slice(0, 200) : key
+  const e = progressive.get(key)
+  return e && e.until > now ? e.until - now : 0
+}
+
+/** Count one failure; once `free` failures have happened a wait starts and every further failure doubles it (baseMs, 2x, 4x ... up to maxMs). Returns the wait that now applies. */
+export function recordProgressiveFailure(key: string, opts: { free?: number; baseMs?: number; maxMs?: number } = {}, now = Date.now()): number {
+  key = key.length > 200 ? key.slice(0, 200) : key
+  const { free = 10, baseMs = 30_000, maxMs = 300_000 } = opts
+  progressiveCleanup(now)
+  let e = progressive.get(key)
+  if (!e || now - e.lastAt > PROGRESSIVE_FORGET_MS) e = { fails: 0, lastAt: now, until: 0 }
+  e.fails++
+  e.lastAt = now
+  const over = e.fails - free + 1                       // the `free`-th failure already starts the first wait
+  e.until = over > 0 ? now + Math.min(baseMs * 2 ** (over - 1), maxMs) : 0
+  progressive.set(key, e)
+  return e.until > now ? e.until - now : 0
+}
+
+/** A correct sign-in ends the count. */
+export function clearProgressive(key: string): void {
+  progressive.delete(key.length > 200 ? key.slice(0, 200) : key)
+}

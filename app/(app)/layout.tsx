@@ -7,7 +7,6 @@ import { getCurrentProfileForPasswordReset, getEnabledModules, getTrialInfo, get
 import { getNotifications } from '@/lib/queries/notifications'
 import { getActionableApprovalsForUser } from '@/lib/queries/approvals'
 import { TrialBanner } from '@/components/layout/TrialBanner'
-import { DemoBanner } from '@/components/layout/DemoBanner'
 import { EventTracker } from '@/components/EventTracker'
 import type { NavVisibility } from '@/types'
 
@@ -74,12 +73,9 @@ export default async function AppLayout({
     enabledModules,
   }
 
-  const isDemo = profile.id === 'ca8dbf6c-3a17-4ceb-81b5-2de57a6daa44'
-
   return (
     <>
       <EventTracker />
-      {isDemo && <DemoBanner />}
       {trialInfo?.isTrial && !trialInfo.isExpired && trialInfo.daysLeft <= 7 && (
         <TrialBanner daysLeft={trialInfo.daysLeft} />
       )}

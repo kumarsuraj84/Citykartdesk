@@ -5,7 +5,7 @@ import { splitRecipients } from '@/lib/masters/emails'
 import type { PoMailBase } from './po-mail'
 import { getRequestItems, type VendorRequestItemRow, type VendorRequestRow } from './requests'
 import { totalOf, type RequestLine } from './lines'
-import { liveApproverEmails, loadProgramAsset, type ProgramAsset } from './asset'
+import { liveApproverEmails, loadProgramAsset, vendorNameOfTicket, type ProgramAsset } from './asset'
 
 // The PO side of the vendor module that needs the database: who approves, what a PO is about, and the e-mail to the OEM. Server only.
 
@@ -13,8 +13,7 @@ import { liveApproverEmails, loadProgramAsset, type ProgramAsset } from './asset
 type Db = { from: (t: string) => any; auth: any; storage: any }
 const db = (): Db => createAdminClient() as unknown as Db
 
-/** Krishan approves purchase orders unless an administrator names somebody else (Admin > Vendors). */
-export const DEFAULT_PO_APPROVER_EMAIL = 'krishan.patel@citykartstores.com'
+/** The person who decides the AC / Genset purchase orders is the one an administrator names (Admin > Vendors). There is NO built-in person: until one is named, a vendor cannot ask for a PO. */
 export const PO_APPROVER_SETTING = 'vendor_po_approver_id'
 
 const APPROVER_ROLES = ['agent', 'manager', 'admin', 'platform_owner']
@@ -27,23 +26,13 @@ async function approverIfValid(orgId: string, id: string): Promise<PoApprover | 
   return { id: data.id, full_name: data.full_name }
 }
 
-/** The person who decides PO requests: the one set by an administrator, else the default (Krishan), else nobody. */
+/** The person who decides PO requests: the one an administrator set (Admin > Vendors), else nobody. (No fixed person and no scan of the login accounts: it is a setting.) */
 export async function resolvePoApprover(orgId: string): Promise<PoApprover | null> {
   const d = db()
   const { data: setting } = await d.from('app_settings').select('value').eq('key', PO_APPROVER_SETTING).maybeSingle()
   const chosen = (setting?.value ?? '').trim()
-  if (chosen) {
-    const ok = await approverIfValid(orgId, chosen)
-    if (ok) return ok
-  }
-  for (let page = 1; page <= 5; page++) {
-    const { data } = await d.auth.admin.listUsers({ page, perPage: 1000 })
-    const users = (data?.users ?? []) as { id: string; email?: string }[]
-    const hit = users.find((u) => (u.email ?? '').toLowerCase() === DEFAULT_PO_APPROVER_EMAIL)
-    if (hit) return approverIfValid(orgId, hit.id)
-    if (users.length < 1000) break
-  }
-  return null
+  if (!chosen) return null
+  return approverIfValid(orgId, chosen)
 }
 
 export type PoApprovers = { people: PoApprover[]; /** true when the AC sheet named them, false when the default approver is used */ fromSheet: boolean }
@@ -64,7 +53,7 @@ export async function resolveApproversFor(orgId: string, requestId: string): Pro
     if (live) emails = (live.approver_emails as string[] | null) ?? []
   } else if (!snap) {
     // a ticket of a Vendor Program: the approvers are the program row's "Quote Approval Mail To"
-    programAsset = await loadProgramAsset(d, requestId)
+    programAsset = await loadProgramAsset(d, requestId, { vendorName: await vendorNameOfTicket(d, requestId) })
     if (programAsset) emails = await liveApproverEmails(d, programAsset)
   }
   if (emails.length) {
@@ -154,7 +143,7 @@ export async function loadPoContext(vendorRequestId: string): Promise<PoContext 
   ])
   let unit = (Array.isArray(snap?.snapshot) ? snap.snapshot[0] : null) as Unit
   // no AC row: a ticket of a Vendor Program uses its saved sheet row (vendor, ticket / PO / approver addresses)
-  const asset = snap ? null : await loadProgramAsset(d, vendorRequest.request_id)
+  const asset = snap ? null : await loadProgramAsset(d, vendorRequest.request_id, { vendorName: company?.name ?? null })
   if (asset?.row) unit = { emails: asset.row.emails, po_emails: asset.row.po_emails, approver_emails: asset.row.approver_emails }
   const assetKind = asset ? asset.programName : 'AC'
   const lines: RequestLine[] = items.map((i) => ({ item_name: i.item_name, qty: i.qty, price_excl_gst: i.price_excl_gst }))
@@ -197,6 +186,27 @@ export async function sendPoMailToOem(ctx: PoContext, mail: { subject: string; h
     console.error('[sendPoMailToOem] failed', e)
     return { error: 'The e-mail to the OEM could not be sent.' }
   }
+}
+
+/**
+ * Sends one mail about a PO / quote and NEVER lets a failure pass unseen: a mail that comes back with an error (or throws) is logged and an internal note is left on the ticket
+ * saying who has to be told by hand. Returns true when the mail went out. Never throws.
+ */
+export async function sendMailOrNote(p: {
+  to: string | string[]; cc?: string[]; mail: { subject: string; html: string; text: string }; attachments?: { filename: string; content: string }[]
+  request: { id: string; request_no: string }; noteAuthorId: string
+  /** who the mail was for, in plain words: "the PO approver", "the vendor" */
+  whom: string
+}): Promise<boolean> {
+  try {
+    const sent = await sendEmail({ to: p.to, cc: p.cc, subject: p.mail.subject, html: p.mail.html, text: p.mail.text, attachments: p.attachments, threadRequestNo: p.request.request_no })
+    if (!sent.error) return true
+    console.error('[vendor mail] not sent', p.whom, p.request.request_no, sent.error)
+  } catch (e) {
+    console.error('[vendor mail] failed', p.whom, p.request.request_no, e)
+  }
+  await internalNote(p.request.id, p.noteAuthorId, `The e-mail to ${p.whom} ("${p.mail.subject}") could not be sent. Please tell them yourself.`).catch((e) => console.error('[vendor mail] could not leave the note', e))
+  return false
 }
 
 /** A note on the ticket for Citykart staff only (for example "the OEM could not be e-mailed, please tell them yourself"). */

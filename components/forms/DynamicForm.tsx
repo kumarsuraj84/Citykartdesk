@@ -3,13 +3,15 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, Send, UserSearch, X } from 'lucide-react'
+import { CheckCircle2, Loader2, Send, UserSearch, X } from 'lucide-react'
 import { FieldRenderer, isShortField } from './FieldRenderer'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { createRequest, searchOrgMembers } from '@/lib/actions/requests'
-import { uploadAttachment } from '@/lib/actions/attachments'
+import { uploadAttachment, confirmRequiredFiles } from '@/lib/actions/attachments'
 import { validateFields } from '@/lib/validation/formFields'
 import { resolveServiceFormSections, filterFieldsForRequester, filterSectionsForCategory } from '@/lib/forms/sections'
+import { useBusy } from '@/lib/ui/busy'
+import { useUnsavedGuard } from '@/lib/ui/useUnsavedGuard'
 import type { AllowedSubCategory, FormField, FormSection, ServiceWithRelations } from '@/types'
 
 interface DynamicFormProps {
@@ -45,6 +47,8 @@ export interface DynamicFormHandle {
 
 type OrgMember = { id: string; full_name: string }
 
+type UploadItem = { id: number; file: File; status: 'waiting' | 'uploading' | 'done' | 'failed'; error?: string }
+
 // ── "Book on behalf of" picker ─────────────────────────────────────────────────
 // Same debounced-search-then-pick pattern as RequestSidebarPanel's Collaborators
 // picker (searchOrgMembers is shared with that feature).
@@ -70,8 +74,12 @@ function RequesterOnBehalfPicker({ value, onChange }: { value: OrgMember | null;
     const t = setTimeout(async () => {
       if (!q) { setResults([]); setSearching(false); return }
       setSearching(true)
-      const found = await searchOrgMembers(q)
-      if (!cancelled) { setResults(found); setSearching(false) }
+      try {
+        const found = await searchOrgMembers(q)
+        if (!cancelled) { setResults(found); setSearching(false) }
+      } catch {
+        if (!cancelled) { setResults([]); setSearching(false) }
+      }
     }, q ? 250 : 0)
     return () => { cancelled = true; clearTimeout(t) }
   }, [query])
@@ -279,8 +287,13 @@ export const DynamicForm = forwardRef<DynamicFormHandle, DynamicFormProps>(funct
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [serverError, setServerError] = useState<string | null>(null)
-  const [attachmentWarning, setAttachmentWarning] = useState<string | null>(null)
-  const [createdRequestId, setCreatedRequestId] = useState<string | null>(null)
+  // Set the moment the ticket exists. From then on the form is replaced by a "Request created" screen, so the same
+  // request can never be sent a second time from here; it only offers to (re)try the files.
+  const [created, setCreated] = useState<{ id: string; no?: string } | null>(null)
+  const [uploads, setUploads] = useState<UploadItem[]>([])
+  const [uploading, setUploading] = useState(false)
+  // Labels of required file fields that still have no file on the ticket (B-16: the server cannot check this while the ticket is made, so it is checked after the files were sent)
+  const [missingFiles, setMissingFiles] = useState<string[]>([])
   const [onBehalfOf, setOnBehalfOf] = useState<OrgMember | null>(null)
 
   // Built-in Category / Sub-category — a submission-time field, not inherited
@@ -327,6 +340,46 @@ export const DynamicForm = forwardRef<DynamicFormHandle, DynamicFormProps>(funct
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  // Files are still going up: leaving the page now (closing the tab, clicking a menu link, Back) would leave the ticket without them.
+  useUnsavedGuard(uploading, 'Your files are still uploading. If you leave now, they may not be added to the request. Leave anyway?')
+  useBusy(uploading)
+
+  function patchUpload(id: number, patch: Partial<UploadItem>) {
+    setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)))
+  }
+
+  // Sends the files one after the other. A file that fails (network drop, too big, server restarted) is marked failed
+  // and the rest carry on; nothing thrown here is allowed to escape.
+  async function runUploads(requestId: string, items: UploadItem[]) {
+    setUploading(true)
+    let failedCount = 0
+    for (const item of items) {
+      patchUpload(item.id, { status: 'uploading', error: undefined })
+      try {
+        const fd = new FormData()
+        fd.append('file', item.file)
+        const res = await uploadAttachment(requestId, fd)
+        if (res.error) { failedCount++; patchUpload(item.id, { status: 'failed', error: res.error }) }
+        else patchUpload(item.id, { status: 'done' })
+      } catch {
+        failedCount++
+        patchUpload(item.id, { status: 'failed', error: 'Could not upload. Check your internet and try again.' })
+      }
+    }
+    // Once the files are sent, ask the server whether a required file is still missing; it leaves a staff-only note and the answer is shown below.
+    let missing: string[] = []
+    try { missing = (await confirmRequiredFiles(requestId)).missing } catch { /* the check is a safety net: failing to run it must not trap the person on this screen */ }
+    setMissingFiles(missing)
+    setUploading(false)
+    if (failedCount === 0 && missing.length === 0) router.push(`/requests/${requestId}`)
+  }
+
+  function retryFailedUploads() {
+    if (!created || uploading) return
+    const items = uploads.filter((u) => u.status === 'failed')
+    if (items.length > 0) void runUploads(created.id, items)
+  }
+
   function handleChange(fieldId: string, val: FieldValue) {
     setValues((prev) => ({ ...prev, [fieldId]: val }))
     if (errors[fieldId]) setErrors((prev) => ({ ...prev, [fieldId]: '' }))
@@ -345,7 +398,6 @@ export const DynamicForm = forwardRef<DynamicFormHandle, DynamicFormProps>(funct
     setCategoryError(categoryValid ? null : 'Category is required.')
     if (!fieldsValid || !categoryValid) return
     setServerError(null)
-    setAttachmentWarning(null)
 
     // File-type field values are File[] — they can't be JSON-serialized into
     // form_data, and request_attachments.request_id is a NOT NULL FK, so files
@@ -365,61 +417,105 @@ export const DynamicForm = forwardRef<DynamicFormHandle, DynamicFormProps>(funct
     if (onBehalfOf) formData.set('requester_id', onBehalfOf.id)
 
     startTransition(async () => {
-      const result = await createRequest(formData)
+      let result: Awaited<ReturnType<typeof createRequest>>
+      try {
+        result = await createRequest(formData)
+      } catch {
+        // The answer never came back (internet dropped, the server restarted after an update). The ticket may or may not exist,
+        // so do not tell the person to just send it again.
+        setServerError('We could not confirm that your request was sent. Please look in My Requests before sending it again, so it is not created twice.')
+        return
+      }
       if (result.error) {
         setServerError(result.error)
         return
       }
-      if (!result.requestId) return
-
-      const pendingFiles = fileFields.flatMap((f) => (values[f.id] as File[] | undefined) ?? [])
-      if (pendingFiles.length === 0) {
-        router.push(`/requests/${result.requestId}`)
+      if (!result.requestId) {
+        setServerError('We could not confirm that your request was created. Please look in My Requests before sending it again.')
         return
       }
 
-      const failures: string[] = []
-      for (const file of pendingFiles) {
-        const fd = new FormData()
-        fd.append('file', file)
-        const uploadResult = await uploadAttachment(result.requestId, fd)
-        if (uploadResult.error) failures.push(`${file.name}: ${uploadResult.error}`)
+      const pendingFiles = fileFields.flatMap((f) => (values[f.id] as File[] | undefined) ?? [])
+      if (pendingFiles.length === 0) {
+        // no file was chosen: when the form asked for one anyway (the browser check was bypassed), say so on the "Request created" screen instead of moving on silently
+        let missing: string[] = []
+        try { missing = (await confirmRequiredFiles(result.requestId)).missing } catch { /* see runUploads */ }
+        if (missing.length === 0) {
+          router.push(`/requests/${result.requestId}`)
+          return
+        }
+        setMissingFiles(missing)
+        setCreated({ id: result.requestId, no: result.requestNo })
+        return
       }
 
-      if (failures.length > 0) {
-        setCreatedRequestId(result.requestId)
-        setAttachmentWarning(
-          `Request created, but ${failures.length} attachment${failures.length === 1 ? '' : 's'} failed to upload — ${failures.join('; ')}. You can retry from the request page.`
-        )
-      } else {
-        router.push(`/requests/${result.requestId}`)
-      }
+      // the ticket exists: switch to the "Request created" screen and send the files from there
+      const items: UploadItem[] = pendingFiles.map((file, i) => ({ id: i, file, status: 'waiting' }))
+      setCreated({ id: result.requestId, no: result.requestNo })
+      setUploads(items)
+      void runUploads(result.requestId, items)
     })
   }
 
   const isEmpty = allFields.length === 0
 
+  if (created) {
+    const failed = uploads.filter((u) => u.status === 'failed')
+    const doneCount = uploads.filter((u) => u.status === 'done').length
+    return (
+      <div className="space-y-4" role="status" aria-live="polite">
+        <div className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 text-sm text-emerald-700 dark:text-emerald-400">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-semibold">Request created{created.no ? ` (${created.no})` : ''}</p>
+            <p className="text-xs">
+              {uploading
+                ? `Adding your files (${doneCount} of ${uploads.length} done). Please keep this page open.`
+                : failed.length > 0
+                  ? `${failed.length} file${failed.length === 1 ? '' : 's'} could not be added. You can try again, or add them later on the request page.`
+                  : uploads.length > 0 ? 'Your files were added.' : null}
+            </p>
+            {!uploading && missingFiles.length > 0 && (
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                A required file is still missing ({missingFiles.join(', ')}). The team has been told. Please add it on the request page.
+              </p>
+            )}
+          </div>
+        </div>
+        <ul className="divide-y divide-border rounded-lg border border-border text-sm">
+          {uploads.map((u) => (
+            <li key={u.id} className="flex items-center justify-between gap-3 px-3 py-2">
+              <span className="min-w-0 truncate">{u.file.name}</span>
+              <span className={`shrink-0 text-xs ${u.status === 'failed' ? 'text-destructive' : u.status === 'done' ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                {u.status === 'waiting' && 'Waiting'}
+                {u.status === 'uploading' && <span className="inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Uploading…</span>}
+                {u.status === 'done' && 'Added'}
+                {u.status === 'failed' && (u.error ?? 'Failed')}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <div className="flex flex-wrap items-center gap-2">
+          {failed.length > 0 && !uploading && (
+            <button type="button" onClick={retryFailedUploads} className="btn-gradient">Try the failed files again</button>
+          )}
+          <Link
+            href={`/requests/${created.id}`}
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
+          >
+            {failed.length > 0 && !uploading ? 'Continue without them' : 'Open the request'}
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {serverError && (
-        <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">
+        <div role="alert" className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">
           <span className="shrink-0">⚠</span>
           {serverError}
-        </div>
-      )}
-
-      {attachmentWarning && createdRequestId && (
-        <div className="flex flex-col gap-2 rounded-lg border border-amber-400/40 bg-amber-500/5 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-400">
-          <div className="flex items-start gap-2">
-            <span className="shrink-0">⚠</span>
-            {attachmentWarning}
-          </div>
-          <Link
-            href={`/requests/${createdRequestId}`}
-            className="self-start text-xs font-semibold underline underline-offset-2"
-          >
-            Continue to request →
-          </Link>
         </div>
       )}
 

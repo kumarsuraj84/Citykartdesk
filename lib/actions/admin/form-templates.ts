@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
-import { resolveServiceFormSections, cloneSectionsWithFreshIds } from '@/lib/forms/sections'
+import { cloneSectionsWithFreshIds } from '@/lib/forms/sections'
 import { syncSectionsWithLibrary } from '@/lib/forms/library'
 import { toLibraryDef } from '@/lib/queries/field-library'
 import { logAdminAudit } from './audit'
@@ -342,112 +342,4 @@ export async function deleteFormTemplate(id: string): Promise<ActionResult> {
 
   revalidatePath('/admin/form-templates')
   return {}
-}
-
-// ── tagServiceTemplate ────────────────────────────────────────────────────────
-// Sets or clears a service's template tag on its own — used by the "Change
-// template" control on a tagged service's Form Builder page, without needing
-// to reopen the full Edit Service modal.
-
-export async function tagServiceTemplate(
-  serviceId: string,
-  templateId: string | null
-): Promise<ActionResult> {
-  const guard = await requireAdmin()
-  if ('error' in guard) return guard
-
-  const supabase = await createClient()
-  const { error } = await supabase
-    .from('services')
-    .update({ template_id: templateId })
-    .eq('id', serviceId)
-
-  if (error) {
-    console.error('[tagServiceTemplate]', error.message)
-    return { error: 'Failed to update template tag.' }
-  }
-
-  await logAdminAudit({
-    orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
-    entityType: 'service', entityId: serviceId, action: 'service_template_tagged',
-    metadata: { template_id: templateId },
-  })
-
-  revalidatePath(`/admin/services/${serviceId}`)
-  revalidatePath('/admin/services')
-  revalidatePath('/services')
-  return {}
-}
-
-// ── convertServiceFormToTemplate ─────────────────────────────────────────────
-// Migration helper for an existing, untagged service: lifts its current
-// resolved form (own form_sections, or the legacy form_fields migrated into a
-// section) into a brand-new template, then tags the service to it. The
-// service's own form_sections column is left untouched afterward — harmless
-// once template_id is set (resolveServiceFormSections() ignores it in favor
-// of the template), and it means removing the tag later doesn't lose data.
-
-export async function convertServiceFormToTemplate(
-  serviceId: string,
-  templateName: string
-): Promise<ActionResult & { templateId?: string }> {
-  const guard = await requireAdmin()
-  if ('error' in guard) return guard
-
-  if (!templateName?.trim()) return { error: 'Template name is required.' }
-
-  const supabase = await createClient()
-
-  const { data: service, error: fetchError } = await supabase
-    .from('services')
-    .select('form_sections, form_fields, template_id')
-    .eq('id', serviceId)
-    .single()
-
-  if (fetchError || !service) return { error: 'Service not found.' }
-  if (service.template_id) return { error: 'This service is already tagged to a template.' }
-
-  const sections = resolveServiceFormSections(service)
-  if (sections.length === 0) {
-    return { error: 'This service has no submitted-form fields to convert.' }
-  }
-
-  const { data: templateRow, error: createError } = await supabase
-    .from('form_templates')
-    .insert({
-      org_id: guard.profile!.org_id!,
-      name: templateName.trim(),
-      form_sections: sections,
-      created_by: guard.profile!.id,
-    })
-    .select('id')
-    .single()
-
-  if (createError) {
-    console.error('[convertServiceFormToTemplate] create', createError.message)
-    return { error: 'Failed to create template.' }
-  }
-
-  const { error: tagError } = await supabase
-    .from('services')
-    .update({ template_id: templateRow.id })
-    .eq('id', serviceId)
-
-  if (tagError) {
-    console.error('[convertServiceFormToTemplate] tag', tagError.message)
-    return { error: 'Template created, but tagging the service failed. Tag it manually from Form Builder.' }
-  }
-
-  await logAdminAudit({
-    orgId: guard.profile!.org_id!, actorId: guard.profile!.id,
-    entityType: 'form_template', entityId: templateRow.id, action: 'form_template_created',
-    metadata: { name: templateName.trim(), converted_from_service: serviceId },
-  })
-
-  revalidatePath('/admin/form-templates')
-  revalidatePath(`/admin/services/${serviceId}`)
-  revalidatePath('/admin/services')
-  revalidatePath('/services')
-
-  return { templateId: templateRow.id }
 }

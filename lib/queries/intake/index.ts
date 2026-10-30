@@ -1,5 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { prepareMailHtml } from '@/lib/intake/mail-html'
+import {
+  INBOX_FOLDER_KEYS, INBOX_PAGE_SIZE, applyInboxFolder, applyInboxSearch, applyInboxSort, cleanInboxSearch,
+  type InboxFolderKey, type InboxSort,
+} from '@/lib/intake/inbox-filters'
 
 // Intake Intelligence — Phase A read queries.
 // All RLS-respecting (user-session client); org isolation enforced by RLS.
@@ -527,6 +531,104 @@ export async function getInboxMessages(opts: {
     return { ...rest, review, snippet }
   })
   return { data: normalised as InboxMessage[], page, pageSize }
+}
+
+export type InboxPageOptions = {
+  page?: number
+  pageSize?: number
+  folder?: InboxFolderKey
+  /** one mailbox (channel id), or null/undefined for all */
+  channel?: string | null
+  /** 'rule' | 'local_model' | 'premium_ai', or 'all' */
+  stage?: string
+  /** search text (subject, sender, department, mailbox) */
+  q?: string
+  sort?: InboxSort
+  /** the mailboxes the page shows, so each can get its own count */
+  channelIds?: string[]
+}
+
+export type InboxPageResult = {
+  data: InboxMessage[]
+  /** rows matching the folder / mailbox / stage / search (all pages) */
+  total: number
+  page: number
+  pageSize: number
+  /** messages per folder, over the whole inbox (not narrowed by mailbox, stage or search) */
+  counts: Record<InboxFolderKey, number>
+  /** messages per mailbox, over the whole inbox */
+  channelCounts: Record<string, number>
+  /** set when the list itself could not be read: the page must say so instead of showing an empty inbox */
+  error: string | null
+}
+
+const emptyCounts = (): Record<InboxFolderKey, number> => Object.fromEntries(INBOX_FOLDER_KEYS.map((k) => [k, 0])) as Record<InboxFolderKey, number>
+
+/**
+ * One page of the inbox, read from the view intake_inbox_v (migration 195). The folder, mailbox, stage, search and sort are all applied by the database, only
+ * the 50 rows of the page are returned (each with a short preview, never the full body), and the folder / mailbox counts come from count-only queries, so
+ * nothing silently disappears beyond a fixed number of messages and the numbers are the real ones. A failed read is reported in `error`.
+ */
+export async function getInboxPage(opts: InboxPageOptions = {}): Promise<InboxPageResult> {
+  const supabase = (await createClient()) as unknown as AnyClient
+  const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? INBOX_PAGE_SIZE))
+  const page = Math.max(1, Math.floor(opts.page ?? 1))
+  const folder = opts.folder ?? 'all'
+  const search = cleanInboxSearch(opts.q)
+  const from = (page - 1) * pageSize
+
+  let query = supabase.from('intake_inbox_v').select('*', { count: 'exact' })
+  query = applyInboxFolder(query, folder)
+  if (opts.channel) query = query.eq('channel_id', opts.channel)
+  if (opts.stage && opts.stage !== 'all') query = query.eq('stage', opts.stage)
+  query = applyInboxSearch(query, search)
+  query = applyInboxSort(query, opts.sort ?? 'priority_smart').range(from, from + pageSize - 1)
+
+  const countOf = async (build: (q: unknown) => unknown): Promise<number> => {
+    const { count, error } = await (build(supabase.from('intake_inbox_v').select('id', { count: 'exact', head: true })) as Promise<{ count: number | null; error: unknown }>)
+    return error ? 0 : (count ?? 0)
+  }
+  const [{ data, error, count }, folderCounts, channelCountList] = await Promise.all([
+    query,
+    Promise.all(INBOX_FOLDER_KEYS.map((k) => countOf((q) => applyInboxFolder(q, k)))),
+    Promise.all((opts.channelIds ?? []).map((id) => countOf((q) => (q as { eq: (c: string, v: string) => unknown }).eq('channel_id', id)))),
+  ])
+
+  const counts = emptyCounts()
+  INBOX_FOLDER_KEYS.forEach((k, i) => { counts[k] = folderCounts[i] })
+  const channelCounts: Record<string, number> = {}
+  ;(opts.channelIds ?? []).forEach((id, i) => { channelCounts[id] = channelCountList[i] })
+
+  if (error) {
+    // A page number past the last page (the inbox shrank, or an old link): show the first page instead of an error.
+    if (page > 1 && (error.code === 'PGRST103' || /range/i.test(String(error.message)))) return getInboxPage({ ...opts, page: 1 })
+    console.error('[getInboxPage] query failed - is migration 195 (intake_inbox_v) applied?', error.message)
+    return { data: [], total: 0, page, pageSize, counts, channelCounts, error: 'The inbox could not be loaded. Please try again in a moment.' }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows: InboxMessage[] = (data ?? []).map((m: any) => ({
+    id: m.id,
+    subject: m.subject,
+    from_address: m.from_address,
+    to_addresses: m.to_addresses,
+    received_at: m.received_at,
+    snippet: m.snippet || null,
+    status: m.status,
+    is_read: m.is_read,
+    is_archived: m.is_archived,
+    thread_id: m.thread_id,
+    recipient_type: m.recipient_type,
+    channel: m.channel_id ? { id: m.channel_id, name: m.channel_name ?? '', type: m.channel_type ?? '' } : null,
+    review: m.review_id
+      ? {
+          id: m.review_id, state: m.review_state, suggested_type: m.suggested_type, suggested_department: m.suggested_department,
+          suggested_priority: m.suggested_priority, suggested_confidence: m.suggested_confidence, is_starred: !!m.is_starred, is_escalated: !!m.is_escalated,
+          escalation_note: m.escalation_note, created_request_id: m.created_request_id, created_task_id: m.created_task_id, stage: m.stage, provider: m.provider,
+        }
+      : null,
+  }))
+  return { data: rows, total: count ?? rows.length, page, pageSize, counts, channelCounts, error: null }
 }
 
 export type InboxMessageDetail = {

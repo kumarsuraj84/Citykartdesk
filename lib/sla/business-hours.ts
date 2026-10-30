@@ -1,5 +1,5 @@
 import { cache } from 'react'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { logger } from '@/lib/observability/logger'
 import { alertOperator } from '@/lib/observability/alert'
 
@@ -10,6 +10,11 @@ type Holiday = { date: string; is_recurring: boolean }
  * Load the business-hours calendar once per request. business_hours/holidays change
  * rarely, so React.cache dedupes repeated reads within a single server request (e.g. when
  * more than one SLA deadline is computed in the same action).
+ *
+ * B-01: read with the server's own key, not the signed-in person's session. These two tables
+ * allow SELECT only to a signed-in user, so the AC-PMS job, WhatsApp, scheduled rules and the
+ * CSAT e-mail reopen (no browser session) read ZERO rows and every ticket they made or re-timed
+ * got no due dates. The calendar is not private data, so the server key is safe here.
  */
 const getSLACalendar = cache(async (): Promise<{
   scheduleMap: Map<number, DaySchedule>
@@ -24,7 +29,7 @@ const getSLACalendar = cache(async (): Promise<{
    *  misconfiguration alert. */
   loadError: boolean
 }> => {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const [{ data: bizHours, error: bizHoursError }, { data: holidaysData, error: holidaysError }] = await Promise.all([
     supabase.from('business_hours').select('*').order('day_of_week'),
     supabase.from('holidays').select('*'),
@@ -74,6 +79,19 @@ function timeToMinutes(t: string): number {
   return h * 60 + m
 }
 
+const MINUTES_PER_DAY = 24 * 60
+
+/**
+ * The working window of one day, in minutes since midnight. F-28: a day set up as 00:00-23:59 means "all day", but read literally every midnight lost one minute
+ * (24 hours from 10:59 ended at 11:00 the next day, 48 hours from 10:00 at 10:02). A window that starts at 00:00 and ends at 23:59 therefore runs to 24:00.
+ * Any other window (a real office day such as 09:00-18:00) is used exactly as written.
+ */
+function windowOf(schedule: DaySchedule): { startMin: number; endMin: number } {
+  const startMin = timeToMinutes(schedule.start_time)
+  const endMin = timeToMinutes(schedule.end_time)
+  return { startMin, endMin: startMin === 0 && endMin === MINUTES_PER_DAY - 1 ? MINUTES_PER_DAY : endMin }
+}
+
 /**
  * Compute the SLA deadline `slaDurationMinutes` business-minutes after `startAt`, honoring
  * configured business hours and holidays.
@@ -106,8 +124,7 @@ export async function computeSLADeadline(
     const schedule = scheduleMap.get(cursor.getDay())
 
     if (schedule && schedule.is_active && !isHoliday(cursor, holidays)) {
-      const startMin = timeToMinutes(schedule.start_time)
-      const endMin = timeToMinutes(schedule.end_time)
+      const { startMin, endMin } = windowOf(schedule)
 
       // On day 0 we start from the request time; later days start at midnight (0).
       const cursorMin = dayCount === 0 ? cursor.getHours() * 60 + cursor.getMinutes() : 0
@@ -183,8 +200,7 @@ export async function computeElapsedBusinessMinutes(startAt: Date, endAt: Date):
     const schedule = scheduleMap.get(cursor.getDay())
 
     if (schedule && schedule.is_active && !isHoliday(cursor, holidays)) {
-      const startMin = timeToMinutes(schedule.start_time)
-      const endMin = timeToMinutes(schedule.end_time)
+      const { startMin, endMin } = windowOf(schedule)
       const dayWindowStart = new Date(cursor)
       dayWindowStart.setHours(Math.floor(startMin / 60), startMin % 60, 0, 0)
       const dayWindowEnd = new Date(cursor)
@@ -202,4 +218,41 @@ export async function computeElapsedBusinessMinutes(startAt: Date, endAt: Date):
   }
 
   return total
+}
+
+/**
+ * True when the clock never stops: every weekday is on for the whole day and no holiday is set. Then a pause of N wall-clock hours is also exactly N business hours, so the
+ * simple "add the paused time to the deadline" is exact. A calendar that failed to load or is empty also counts (no better answer exists, and the old wall-clock credit is kept).
+ */
+function isAlwaysOn(scheduleMap: Map<number, DaySchedule>, holidays: Holiday[], loadError: boolean): boolean {
+  if (loadError || scheduleMap.size === 0) return true
+  if (holidays.length > 0) return false
+  for (let day = 0; day < 7; day++) {
+    const schedule = scheduleMap.get(day)
+    if (!schedule || !schedule.is_active) return false
+    const { startMin, endMin } = windowOf(schedule)
+    if (startMin !== 0 || endMin < MINUTES_PER_DAY) return false
+  }
+  return true
+}
+
+/**
+ * F-13 / B-08: how much a pause between two moments must add to a deadline, in milliseconds. Deadlines are counted in BUSINESS minutes, so a pause is credited in
+ * business time too (a night spent waiting on the user must not push a 9-to-6 deadline by the whole night). For an always-on calendar this is the plain wall-clock gap,
+ * exactly what was credited before. Whoever stores the result in `paused_ms_total` and in the deadline uses the same number, so the two can never disagree.
+ */
+export async function pauseCreditMs(pauseStart: Date, pauseEnd: Date): Promise<number> {
+  const wallMs = Math.max(0, pauseEnd.getTime() - pauseStart.getTime())
+  if (wallMs === 0) return 0
+  const { scheduleMap, holidays, loadError } = await getSLACalendar()
+  if (isAlwaysOn(scheduleMap, holidays, loadError)) return wallMs
+  return Math.round((await computeElapsedBusinessMinutes(pauseStart, pauseEnd)) * 60_000)
+}
+
+/** Moves a deadline later by a pause credit from pauseCreditMs(): plain addition for an always-on calendar, otherwise by that many business minutes. */
+export async function shiftDeadlineByCredit(dueAt: Date, creditMs: number): Promise<Date> {
+  if (!(creditMs > 0)) return dueAt
+  const { scheduleMap, holidays, loadError } = await getSLACalendar()
+  if (isAlwaysOn(scheduleMap, holidays, loadError)) return new Date(dueAt.getTime() + creditMs)
+  return (await computeSLADeadline(dueAt, Math.round(creditMs / 60_000))) ?? new Date(dueAt.getTime() + creditMs)
 }

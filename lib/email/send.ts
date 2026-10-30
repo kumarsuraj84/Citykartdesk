@@ -80,10 +80,24 @@ function applyThreadTag(p: EmailPayload, setup: EmailSetup): { subject: string; 
   return { subject, replyTo }
 }
 
+/** The bare address of "Name <a@b.com>" or "a@b.com", lower-cased, for comparing with what the mail server reports back. */
+export function bareAddress(a: string): string {
+  const m = /<([^>]+)>/.exec(a)
+  return (m ? m[1] : a).trim().toLowerCase()
+}
+
+/** The To recipients the server refused. nodemailer reports a refused recipient in `info.rejected` (strings, or objects with an `address`) and still resolves,
+ *  so without reading it a mail that reached nobody counted as sent. */
+export function rejectedToRecipients(to: string | string[], rejected: unknown): string[] {
+  if (!Array.isArray(rejected) || rejected.length === 0) return []
+  const refused = new Set(rejected.map((r) => bareAddress(typeof r === 'string' ? r : String((r as { address?: string })?.address ?? ''))))
+  return (Array.isArray(to) ? to : [to]).map(bareAddress).filter((a) => refused.has(a))
+}
+
 async function sendViaSmtp(p: EmailPayload, setup: EmailSetup): Promise<{ error?: string }> {
   const from = await getEmailFrom(setup)
   const { subject, replyTo } = applyThreadTag(p, setup)
-  await getTransporter(setup.smtp!).sendMail({
+  const info = await getTransporter(setup.smtp!).sendMail({
     from,
     to: p.to,
     ...(p.cc && p.cc.length ? { cc: p.cc } : {}),
@@ -95,6 +109,10 @@ async function sendViaSmtp(p: EmailPayload, setup: EmailSetup): Promise<{ error?
     headers: { 'Auto-Submitted': 'auto-generated', 'X-Auto-Response-Suppress': 'All' },
     attachments: p.attachments?.map((a) => ({ filename: a.filename, content: a.content, encoding: 'base64' })),
   })
+  // A refused To recipient is a failed send for that person even though the call itself succeeded. (Other recipients of the same message may have received it:
+  // the caller is told which address failed so a retry can be aimed at it.)
+  const refused = rejectedToRecipients(p.to, info?.rejected)
+  if (refused.length > 0) return { error: `The mail server refused these recipients: ${refused.join(', ')}` }
   return {}
 }
 
@@ -124,19 +142,28 @@ async function sendViaResend(p: EmailPayload, setup: EmailSetup): Promise<{ erro
   return {}
 }
 
-export async function sendEmail(p: EmailPayload): Promise<{ error?: string }> {
+/** `skipped` is set when nothing was even tried because no mail provider is set up: that is NOT a sent mail, and a caller must not report it as one. */
+export type SendResult = { error?: string; skipped?: boolean }
+
+export const MAIL_NOT_SET_UP = 'E-mail is not set up (no mail provider is configured), so this message was not sent.'
+
+export async function sendEmail(p: EmailPayload): Promise<SendResult> {
   try {
     const sinkDir = process.env.NODE_ENV !== 'production' ? (process.env.MAIL_SINK_DIR ?? '').trim() : ''
     if (sinkDir) { await writeToSink(path.resolve(sinkDir), p); return {} }
     const setup = await getEmailSetup()
     if (!setup.provider) {
+      // Used to return success here, so callers posted "Ticket sent to OEM", moved the ticket on and never told anyone that no mail had gone out.
       console.log('[EMAIL DISABLED] To:', recipientsLabel(p.to), ' Subject:', p.subject)
-      return {}
+      await logEmailAttempt(p, MAIL_NOT_SET_UP)
+      return { error: MAIL_NOT_SET_UP, skipped: true }
     }
     const result = setup.provider === 'smtp' ? await sendViaSmtp(p, setup) : await sendViaResend(p, setup)
     await logEmailAttempt(p, result.error)
     return result
   } catch (e) {
+    // A timeout can happen AFTER the mail server accepted the message, so an error here does not prove nothing was delivered: a caller that retries a
+    // timed-out send can deliver the same mail twice. Callers that must not duplicate (OEM mails) keep their own "already sent" record.
     const error = e instanceof Error ? e.message : String(e)
     await logEmailAttempt(p, error)
     return { error }

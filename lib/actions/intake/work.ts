@@ -3,7 +3,10 @@
 import { revalidatePath } from 'next/cache'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { canReview, logIntakeAudit } from './_shared'
+import { canReview, logIntakeAudit, loggedWriteError } from './_shared'
+import { logger } from '@/lib/observability/logger'
+import { logActivity } from '@/lib/activity'
+import { notify } from '@/lib/notifications'
 import { requireModuleEnabled } from '@/lib/actions/moduleGuard'
 import { createRequestCore } from '@/lib/requests/create-request-core'
 import { collectFields, buildFormData } from '@/lib/intake/autofill'
@@ -93,6 +96,47 @@ function buildSourceMetadata(review: {
 // client-side for a live "what's still missing" preview, instead of
 // duplicating this logic.
 
+// Tells whoever decides the first step of the workflow that an approval is waiting (a named person, or every active manager / admin for an "any manager" step).
+async function notifyFirstApprovers(
+  admin: AnyClient,
+  p: { workflowId: string; requestId: string; title: string; senderId: string },
+): Promise<void> {
+  const { data: firstStep } = await admin
+    .from('approval_workflow_steps')
+    .select('approver_type, approver_user_id')
+    .eq('workflow_id', p.workflowId)
+    .order('step_order', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  let approverIds: string[] = []
+  if (firstStep?.approver_type === 'specific_user' && firstStep.approver_user_id) {
+    approverIds = [firstStep.approver_user_id]
+  } else if (firstStep?.approver_type === 'any_manager') {
+    // B-21: only managers of THIS ticket's organisation (the sender's organisation when the ticket cannot be read), and the same roles that may decide an
+    // "any manager" step: manager, administrator and platform owner.
+    const { data: ticket } = await admin.from('requests').select('org_id').eq('id', p.requestId).maybeSingle()
+    const { data: me } = ticket?.org_id ? { data: null } : await admin.from('profiles').select('org_id').eq('id', p.senderId).maybeSingle()
+    const { data: managers } = await admin.from('profiles').select('id').in('role', ['manager', 'admin', 'platform_owner']).eq('is_active', true).eq('org_id', ticket?.org_id ?? me?.org_id ?? '')
+    approverIds = (managers ?? []).map((m: { id: string }) => m.id)
+  }
+  for (const id of approverIds) {
+    if (id === p.senderId) continue
+    notify({
+      recipientId: id,
+      actorId: p.senderId,
+      type: 'approval_requested',
+      title: 'Approval required',
+      body: `${p.title} has been submitted for your approval.`,
+      requestId: p.requestId,
+      link: `/requests/${p.requestId}?tab=approvals`,
+    }).catch(() => {})
+  }
+  if (approverIds.length > 0) {
+    const { data: people } = await admin.from('profiles').select('full_name').in('id', approverIds)
+    await logActivity({ requestId: p.requestId, actorId: p.senderId, action: 'approval_requested', metadata: { approver_names: (people ?? []).map((x: { full_name: string }) => x.full_name) } })
+  }
+}
+
 // ── Main action ───────────────────────────────────────────────────────────────
 
 // Approves a review and optionally creates a work item in one atomic operation.
@@ -134,15 +178,16 @@ export async function approveAndCreate(
 
   // ── 1. Claim if still pending ──────────────────────────────────────────────
   if (review.state === 'pending') {
-    await admin.from('intake_reviews').update({
+    loggedWriteError('work.ts#claimReview', await admin.from('intake_reviews').update({
       state: 'in_review',
       assigned_reviewer_id: profile.id,
-    }).eq('id', reviewId)
+    }).eq('id', reviewId))
   }
 
   // ── 2. No-work types (informational / ignore): approve, create nothing ─────
   if (payload.type === 'informational' || payload.type === 'ignore') {
-    await admin.from('intake_reviews').update({
+    // a decision that could not be saved is reported, not shown as done
+    const noWorkErr = loggedWriteError('work.ts#approveNoWork', await admin.from('intake_reviews').update({
       state: 'approved',
       final_type:        decision.final_type,
       final_department:  decision.final_department,
@@ -153,8 +198,9 @@ export async function approveAndCreate(
       was_overridden:    wasOverridden,
       reviewed_by:       profile.id,
       reviewed_at:       now,
-    }).eq('id', reviewId)
-    await admin.from('intake_messages').update({ status: 'actioned' }).eq('id', review.message_id)
+    }).eq('id', reviewId))
+    if (noWorkErr) return { ok: false, error: 'Could not save the decision. Please try again.' }
+    loggedWriteError('work.ts#markMessageActioned', await admin.from('intake_messages').update({ status: 'actioned' }).eq('id', review.message_id))
     await logIntakeAudit({
       orgId: review.org_id, actorId: profile.id, entityId: reviewId,
       action: 'review_approved', metadata: { final_type: decision.final_type, work: 'none' },
@@ -184,12 +230,29 @@ export async function approveAndCreate(
     // this fetch exists only to feed buildFormData(), a purely intake-specific
     // pre-processing step the core knows nothing about.
     const [{ data: svc }, { data: team }, { data: cls }] = await Promise.all([
-      admin.from('services').select('id, name, team_id, form_fields, form_sections, template:form_templates(form_sections)').eq('id', payload.service_id).maybeSingle(),
+      admin.from('services').select('id, name, team_id, approval_workflow_id, form_fields, form_sections, template:form_templates(form_sections)').eq('id', payload.service_id).maybeSingle(),
       admin.from('teams').select('id').eq('id', payload.team_id).maybeSingle(),
       admin.from('intake_classifications').select('entities').eq('message_id', review.message_id).eq('is_final', true).maybeSingle(),
     ])
     if (!svc) return { ok: false, error: 'Selected service not found.' }
     if (!team) return { ok: false, error: 'Selected technician group not found.' }
+
+    // An approval ticket needs a real approval route. It is checked BEFORE the ticket exists, so a refusal leaves nothing half made. Only the service's OWN
+    // workflow counts: picking "any workflow of the organisation" used to land on another ticket's ad-hoc route, whose approvers would then gain access to this
+    // ticket (the same hole VA-TKT-05 closed in submitForApproval), and a workflow with no steps would park the ticket for good with nobody able to decide it.
+    let approvalWorkflowId: string | null = null
+    if (payload.type === 'approval') {
+      approvalWorkflowId = (svc as { approval_workflow_id?: string | null }).approval_workflow_id ?? null
+      if (!approvalWorkflowId) {
+        return { ok: false, error: 'This service has no approval workflow. Pick another service or ask an admin to set up an approval workflow for it, or convert the e-mail to a normal request.' }
+      }
+      const { data: wf } = await admin.from('approval_workflows').select('id').eq('id', approvalWorkflowId).eq('org_id', review.org_id).maybeSingle()
+      const { count: stepCount } = await admin.from('approval_workflow_steps').select('id', { count: 'exact', head: true }).eq('workflow_id', approvalWorkflowId)
+      if (!wf || !stepCount) {
+        logger.error({ event: 'approvals.workflow_configuration_incomplete', message: 'Intake approval conversion blocked: the service workflow is missing or has no steps', route: 'intake/work.ts#approveAndCreate', errorCode: 'approval_workflow_no_steps', context: { workflowId: approvalWorkflowId } })
+        return { ok: false, error: 'The approval workflow of this service is not fully set up (no approval steps). Ask an admin to complete it, or convert the e-mail to a normal request.' }
+      }
+    }
 
     // Autofill the service's fields from extracted entities + the email text,
     // then layer the reviewer's own answers for whatever the autofill
@@ -270,46 +333,41 @@ export async function approveAndCreate(
 
     let approvalId: string | null = null
 
-    if (payload.type === 'approval') {
-      // Find a workflow (prefer service's workflow, fall back to default).
-      const { data: svcWithWf } = await admin
-        .from('services')
-        .select('approval_workflow_id')
-        .eq('id', payload.service_id)
-        .maybeSingle()
-
-      const workflowId =
-        (svcWithWf as { approval_workflow_id?: string | null } | null)?.approval_workflow_id ??
-        (await admin.from('approval_workflows').select('id').eq('org_id', review.org_id).limit(1).maybeSingle()).data?.id ??
-        null
-
-      if (workflowId) {
-        const { data: appr } = await admin
-          .from('approvals')
-          .insert({ request_id: req.id, workflow_id: workflowId, status: 'pending' })
-          .select('id')
-          .single()
-        approvalId = appr?.id ?? null
-        // createRequestCore() always creates the ticket 'open' (matching the
-        // portal's own createRequest(), which never auto-enters approval
-        // either — see its doc comment). The 'approval' payload type's extra
-        // "start life already pending_approval" behavior is specific to this
-        // one channel, so it's applied here as a follow-up, exactly the way
-        // the portal's own submitForApproval() is already a separate step
-        // from creation, not folded into the shared core.
-        if (approvalId) {
-          const { error: holdErr } = await admin.from('requests').update({ status: 'pending_approval' }).eq('id', req.id)
-          if (holdErr) {
-            // the ticket did not move to "pending approval": withdraw the approval so the ticket is not blocked by one nobody can decide (D-045)
-            await admin.from('approvals').delete().eq('id', approvalId)
-            approvalId = null
-          }
+    if (payload.type === 'approval' && approvalWorkflowId) {
+      // createRequestCore() always creates the ticket 'open' (matching the portal's own createRequest(), which never auto-enters approval either). The
+      // 'approval' payload type's extra "start life already pending_approval" behaviour is specific to this channel, so it is applied here as a follow-up, the
+      // way the portal's submitForApproval() is a separate step. It does what submitForApproval does: who sent it, the status it had, the SLA pause, the
+      // history entry and the approver's notification.
+      const { data: fresh } = await admin.from('requests').select('status, waiting_since').eq('id', req.id).maybeSingle()
+      const priorStatus: string = fresh?.status ?? 'open'
+      const { data: appr, error: apprErr } = await admin
+        .from('approvals')
+        .insert({ request_id: req.id, workflow_id: approvalWorkflowId, status: 'pending', requested_by: profile.id })
+        .select('id')
+        .single()
+      if (apprErr || !appr) {
+        loggedWriteError('work.ts#insertApproval', { error: apprErr })
+      } else {
+        const { data: held, error: holdErr } = await admin.from('requests').update({
+          status: 'pending_approval',
+          pre_approval_status: priorStatus,
+          updated_at: new Date().toISOString(),
+          waiting_since: fresh?.waiting_since ?? new Date().toISOString(),
+        }).eq('id', req.id).eq('status', priorStatus).select('id')
+        if (holdErr || !held?.length) {
+          // the ticket did not move to "pending approval": withdraw the approval so the ticket is not blocked by one nobody can decide (D-045)
+          loggedWriteError('work.ts#holdForApproval', { error: holdErr ?? { message: 'The ticket changed while it was being sent for approval.', code: 'STATUS_RACE' } })
+          loggedWriteError('work.ts#withdrawApproval', await admin.from('approvals').delete().eq('id', appr.id))
+        } else {
+          approvalId = appr.id
+          await logActivity({ requestId: req.id, actorId: profile.id, action: 'status_changed', metadata: { from: priorStatus, to: 'pending_approval', via: 'email_intake' } })
+          await notifyFirstApprovers(admin, { workflowId: approvalWorkflowId, requestId: req.id, title: payload.title, senderId: profile.id })
         }
       }
     }
 
     // Update review: mark converted, store reverse links, persist final classification.
-    await admin.from('intake_reviews').update({
+    loggedWriteError('work.ts#markConverted', await admin.from('intake_reviews').update({
       state:              'converted',
       final_type:         decision.final_type,
       final_department:   decision.final_department,
@@ -322,9 +380,9 @@ export async function approveAndCreate(
       reviewed_at:        now,
       created_request_id: req.id,
       created_approval_id: approvalId,
-    }).eq('id', reviewId)
+    }).eq('id', reviewId))
 
-    await admin.from('intake_messages').update({ status: 'actioned' }).eq('id', review.message_id)
+    loggedWriteError('work.ts#markMessageActioned', await admin.from('intake_messages').update({ status: 'actioned' }).eq('id', review.message_id))
     await logIntakeAudit({
       orgId: review.org_id, actorId: profile.id, entityId: reviewId,
       action: 'review_converted', metadata: { work_type: payload.type, request_id: req.id, approval_id: approvalId },
@@ -369,7 +427,7 @@ export async function approveAndCreate(
 
     if (taskErr || !task) return { ok: false, error: taskErr?.message ?? 'Failed to create task.' }
 
-    await admin.from('intake_reviews').update({
+    loggedWriteError('work.ts#markConvertedTask', await admin.from('intake_reviews').update({
       state:           'converted',
       final_type:       decision.final_type,
       final_department: decision.final_department,
@@ -381,9 +439,9 @@ export async function approveAndCreate(
       reviewed_by:      profile.id,
       reviewed_at:      now,
       created_task_id:  task.id,
-    }).eq('id', reviewId)
+    }).eq('id', reviewId))
 
-    await admin.from('intake_messages').update({ status: 'actioned' }).eq('id', review.message_id)
+    loggedWriteError('work.ts#markMessageActioned', await admin.from('intake_messages').update({ status: 'actioned' }).eq('id', review.message_id))
     await logIntakeAudit({
       orgId: review.org_id, actorId: profile.id, entityId: reviewId,
       action: 'review_converted', metadata: { work_type: 'task', task_id: task.id },
@@ -502,7 +560,7 @@ export async function reclassifyReview(
   const newType = newDecision.final_type ?? oldType
 
   // Update the review with new classification
-  await admin
+  const reclassErr = loggedWriteError('work.ts#reclassifyReview', await admin
     .from('intake_reviews')
     .update({
       final_type:        newType,
@@ -512,7 +570,8 @@ export async function reclassifyReview(
       final_subcategory: newDecision.final_subcategory ?? review.final_subcategory,
       decision_notes:    newDecision.decision_notes ?? null,
     })
-    .eq('id', reviewId)
+    .eq('id', reviewId))
+  if (reclassErr) return { ok: false, error: 'Could not save the new classification. Please try again.' }
 
   // Log the reclassification
   await logIntakeAudit({

@@ -8,13 +8,26 @@ import { errorCodeOfBody, judgeResponse, sourceOfUrl } from '@/lib/syslog/shape'
 
 const CLICKABLE = 'button, a, [role="button"], [role="menuitem"], [role="tab"], input[type="submit"], input[type="checkbox"], summary'
 
-/** Best-effort label for a clicked control — its visible text/aria label only, never field values. */
-function labelFor(el: Element): string {
-  const aria = el.getAttribute('aria-label') || el.getAttribute('title')
-  const text = (aria || (el as HTMLElement).innerText || el.getAttribute('name') || '').replace(/\s+/g, ' ').trim()
+/**
+ * A stable name for a clicked control, never its visible text: that text can hold people's names and ticket titles,
+ * and a link's address can hold search words or filters. Uses data-track, then the aria-label, then the tag and (for links)
+ * the path of the address without its query string.
+ */
+export function labelFor(el: Element): string {
   const tag = el.tagName.toLowerCase()
-  const href = tag === 'a' ? el.getAttribute('href') : null
-  return `${tag}:${text.slice(0, 60)}${href ? ` -> ${href.slice(0, 80)}` : ''}`
+  const track = el.getAttribute('data-track')
+  if (track) return `${tag}:${track.slice(0, 60)}`
+  const aria = el.getAttribute('aria-label')
+  if (aria) return `${tag}:${aria.slice(0, 60)}`
+  if (tag === 'a') {
+    const href = el.getAttribute('href') ?? ''
+    // keep only the path: no ?query, no #fragment, and ids in the path are not the point
+    const path = href.split('#')[0].split('?')[0].replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ':id')
+    return `a:${path.slice(0, 80)}`
+  }
+  const role = el.getAttribute('role')
+  const type = el.getAttribute('type')
+  return role ? `${tag}[${role}]` : type ? `${tag}[${type}]` : tag
 }
 
 /** Records page views, clicks and browser errors so problems can be traced afterwards. */

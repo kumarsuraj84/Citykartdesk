@@ -70,9 +70,8 @@ describe('bulk password reset', () => {
     expect(po.ids).not.toContain(fx.admin.id)
   })
 
-  it('validates the password and the batch size', async () => {
+  it('validates the batch size (the typed password argument is deprecated: every account gets its own random one)', async () => {
     actAs(fx.admin)
-    expect((await resetPasswordsBatch([fx.requesterA.id], 'short')).error).toMatch(/at least 8/i)
     expect((await resetPasswordsBatch([], TEMP)).error).toMatch(/no users/i)
     const many = Array.from({ length: 41 }, () => fx.requesterA.id)
     expect((await resetPasswordsBatch(many, TEMP)).error).toMatch(/at most/i)
@@ -87,15 +86,20 @@ describe('bulk password reset', () => {
     expect(await canSignIn(fx.admin.email, TEMP)).toBe(false)
   })
 
-  it('resets eligible users: they can sign in with the temporary password and must change it', async () => {
+  it('resets eligible users: each gets its OWN temporary password, they can sign in with it and must change it (A-05)', async () => {
     actAs(fx.admin)
     const r = await resetPasswordsBatch([fx.requesterA.id, fx.agentA.id], TEMP)
     expect(r.error).toBeUndefined()
     expect(r.succeeded).toBe(2)
     expect(r.failed).toEqual([])
 
-    expect(await canSignIn(fx.requesterA.email, TEMP)).toBe(true)
-    expect(await canSignIn(fx.agentA.email, TEMP)).toBe(true)
+    const cred = (email: string) => r.credentials?.find((c) => c.email === email.toLowerCase())?.password
+    expect(cred(fx.requesterA.email)).toBeTruthy()
+    expect(cred(fx.agentA.email)).toBeTruthy()
+    expect(cred(fx.requesterA.email)).not.toBe(cred(fx.agentA.email))   // never one shared password
+    expect(await canSignIn(fx.requesterA.email, cred(fx.requesterA.email)!)).toBe(true)
+    expect(await canSignIn(fx.agentA.email, cred(fx.agentA.email)!)).toBe(true)
+    expect(await canSignIn(fx.agentA.email, cred(fx.requesterA.email)!)).toBe(false)
 
     const { data } = await admin.from('profiles').select('id, must_reset_password').in('id', [fx.requesterA.id, fx.agentA.id])
     expect((data ?? []).every((p) => p.must_reset_password === true)).toBe(true)

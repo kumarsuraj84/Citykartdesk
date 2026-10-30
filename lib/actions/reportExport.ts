@@ -120,15 +120,11 @@ export async function exportReportXlsx(
       })
     }
 
+    // the "Total" column: the value field's own aggregate over all the row's records (not the cells added together: 5 + 7 is not the average of the two groups)
     function sumRowTotal(row: PivotRow): number | string {
       if (valueCount !== 1) return ''
-      let total = 0
-      let any = false
-      for (const cell of row.cells) {
-        const v = cell[0]
-        if (typeof v === 'number') { total += v; any = true }
-      }
-      return any ? total : ''
+      const v = row.rowTotal[0]
+      return v === null || v === undefined ? '' : v
     }
 
     function writeRow(row: PivotRow) {
@@ -155,7 +151,7 @@ export async function exportReportXlsx(
         grandTotalCells.push(v === null || v === undefined ? '' : v)
       }
     }
-    grandTotalCells.push(valueCount === 1 ? result.grandTotal.reduce((sum: number, c) => (typeof c[0] === 'number' ? sum + (c[0] as number) : sum), 0) : '')
+    grandTotalCells.push(valueCount === 1 ? (result.grandRowTotal[0] ?? '') : '')
     const grandRow = sheet.addRow(grandTotalCells)
     grandRow.eachCell((cell) => { cell.font = { bold: true }; cell.fill = TOTAL_FILL })
 

@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { Search } from 'lucide-react'
 import { getServices, searchServices } from '@/lib/queries/services'
+import { getCurrentProfile } from '@/lib/queries/profiles'
+import { requireStaff } from '@/lib/ui/requireStaff'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { CategoryIcon } from '@/components/admin/CategoryIcon'
@@ -73,6 +75,8 @@ async function SearchResults({ query }: { query: string }) {
 
 export default async function ServicesPage({ searchParams }: PageProps) {
   const { q } = await searchParams
+  // the app layout does not run again when moving between pages, so an OEM engineer is turned away here as well
+  requireStaff(await getCurrentProfile(), '/services')
   const isSearching = Boolean(q?.trim())
   const services = await getServices()
 

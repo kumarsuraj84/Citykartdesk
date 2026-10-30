@@ -1,6 +1,8 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
+import { safely } from '@/lib/ui/safeAction'
+import { ModalFrame } from '@/components/ui/ModalFrame'
 import { previewStoreMaster, applyStoreMaster, downloadStoreMasterSample, type StoreMasterPreview, type StoreMasterResult } from '@/lib/actions/admin/storeMaster'
 import { downloadXlsxBase64 } from '@/lib/export/xlsx'
 
@@ -30,7 +32,7 @@ export function StoreMasterUploadModal({ onClose }: { onClose: () => void }) {
     setFile(f); setPreview(null); setResult(null); setError(null)
     if (!f) return
     start(async () => {
-      const res = await previewStoreMaster(formFor(f))
+      const res = await safely(() => previewStoreMaster(formFor(f)))
       if (res.error || !res.data) { setError(res.error ?? 'Could not read the file.'); return }
       setPreview(res.data)
     })
@@ -40,7 +42,7 @@ export function StoreMasterUploadModal({ onClose }: { onClose: () => void }) {
     if (!file) return
     setError(null)
     start(async () => {
-      const res = await applyStoreMaster(formFor(file))
+      const res = await safely(() => applyStoreMaster(formFor(file)))
       if (res.error || !res.data) { setError(res.error ?? 'Could not update the stores.'); return }
       setResult(res.data); setPreview(null)
       if (input.current) input.current.value = ''
@@ -50,7 +52,7 @@ export function StoreMasterUploadModal({ onClose }: { onClose: () => void }) {
   function sample() {
     setError(null)
     start(async () => {
-      const res = await downloadStoreMasterSample()
+      const res = await safely(() => downloadStoreMasterSample())
       if (res.error || !res.data) { setError(res.error ?? 'Could not create the sample file.'); return }
       downloadXlsxBase64(res.data.filename, res.data.data)
     })
@@ -59,7 +61,7 @@ export function StoreMasterUploadModal({ onClose }: { onClose: () => void }) {
   const nothingToDo = preview && preview.willChange === 0 && !(addMissing && preview.missing.length > 0)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+    <ModalFrame label="Upload Store Master" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
       <div className="max-h-[90vh] w-full max-w-xl space-y-4 overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-2xl">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-ink">Upload Store Master</h2>
@@ -136,6 +138,6 @@ export function StoreMasterUploadModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
       </div>
-    </div>
+    </ModalFrame>
   )
 }

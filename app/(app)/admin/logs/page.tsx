@@ -29,7 +29,11 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const { data: profilesData } = await admin.from('profiles').select('id, full_name').eq('org_id', profile.org_id ?? '').order('full_name', { ascending: true })
   const users = (profilesData ?? []) as Pick<Profile, 'id' | 'full_name'>[]
   const showActivity = resolved.tab === 'system' && resolved.view === 'activity'
-  const auditResult = showActivity ? (await getAuditLogs({ perPage: 50 })).data : []
+  let auditResult: Awaited<ReturnType<typeof getAuditLogs>>['data'] = []
+  let auditError: string | null = null
+  if (showActivity) {
+    try { auditResult = (await getAuditLogs({ perPage: 50 })).data } catch { auditError = 'The activity log could not be read just now. Please reload the page in a moment.' }
+  }
 
   const tabs = [{ key: 'system', label: 'System Log' }, ...(resolved.isAdmin ? [{ key: 'events', label: 'Event Log' }] : [])]
   const views = [{ key: 'all', label: 'All records', href: '/admin/logs?tab=system' }, { key: 'activity', label: 'Ticket and task activity', href: '/admin/logs?tab=system&view=activity' }]
@@ -58,7 +62,8 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
         </div>
       )}
       {resolved.tab === 'system' && resolved.view === 'all' && <SystemLogClient users={users} />}
-      {showActivity && <div className="max-w-6xl"><AuditLogClient initialEntries={auditResult} profiles={users} /></div>}
+      {showActivity && auditError && <p role="alert" className="max-w-6xl rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">{auditError}</p>}
+      {showActivity && !auditError && <div className="max-w-6xl"><AuditLogClient initialEntries={auditResult} profiles={users} /></div>}
       {resolved.tab === 'events' && <EventLogClient users={users} />}
     </div>
   )

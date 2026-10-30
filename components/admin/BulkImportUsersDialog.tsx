@@ -6,8 +6,7 @@ import { Upload, Download, KeyRound } from 'lucide-react'
 import { ImportModal } from '@/components/ui/ImportModal'
 import { bulkCreateUsers, type BulkCredential, type BulkOnboarding } from '@/lib/actions/admin/users'
 
-// A CSV cell that starts with = + - @ is read as a formula by spreadsheet programs: neutralise it (passwords can start with such a character)
-const cell = (v: string) => `"${(/^[=+\-@\t\r]/.test(v) ? `'${v}` : v).replace(/"/g, '""')}"`
+import { toCSV, downloadCSV } from '@/lib/export/csv'
 
 export function BulkImportUsersDialog() {
   const router = useRouter()
@@ -17,13 +16,10 @@ export function BulkImportUsersDialog() {
 
   function downloadCredentials() {
     if (!credentials) return
-    const csv = ['email,full_name,one_time_password', ...credentials.map((c) => [c.email, c.full_name, c.password].map(cell).join(','))].join('\r\n')
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'new-users-one-time-passwords.csv'
-    a.click()
-    URL.revokeObjectURL(url)
+    // the shared CSV writer (lib/export/csv.ts) also stops a cell from being read as a formula by Excel / Sheets
+    downloadCSV('new-users-one-time-passwords.csv', toCSV(credentials, [
+      { key: 'email', label: 'email' }, { key: 'full_name', label: 'full_name' }, { key: 'password', label: 'one_time_password' },
+    ]))
   }
 
   return (

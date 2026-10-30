@@ -36,7 +36,7 @@ const btnPrimary = 'rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-p
 
 export function ProgramEditorClient({ data, subject: subject0, body: body0, customTemplate }: { data: ProgramEditorData; subject: string; body: string; customTemplate: boolean }) {
   const router = useRouter()
-  const { program, categories, issues, extraHeadings, readiness, staff } = data
+  const { program, categories, issues, issueTotal, extraHeadings, readiness, staff } = data
   const [pending, start] = useTransition()
 
   const [name, setName] = useState(program.name)
@@ -187,7 +187,7 @@ export function ProgramEditorClient({ data, subject: subject0, body: body0, cust
         {program.last_status === 'error' && program.last_error && <p role="alert" className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{program.last_error} CK Desk keeps working from the last good copy.</p>}
         {issues.length > 0 && (
           <details className="mt-3">
-            <summary className="cursor-pointer text-xs font-medium text-foreground">See the {issues.length} problem{issues.length === 1 ? '' : 's'} in the sheet</summary>
+            <summary className="cursor-pointer text-xs font-medium text-foreground">See the {issueTotal > issues.length ? `first ${issues.length} of ${issueTotal}` : issues.length} problem{issueTotal === 1 ? '' : 's'} in the sheet</summary>
             <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto text-xs">
               {issues.map((i, k) => <li key={k} className={i.severity === 'error' ? 'text-red-700' : 'text-amber-800'}>{i.message}</li>)}
             </ul>

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import {
   CheckSquare,
   Square,
@@ -25,7 +26,11 @@ import { downloadCSV } from '@/lib/export/csv'
 import { StatusBadge, PriorityBadge, ReopenedBadge, SourceBadge } from '@/components/requests/RequestBadges'
 import { SLABadge } from '@/components/requests/SLABadge'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelativeTime, formatDateTime } from '@/lib/utils'
+import { useBusy } from '@/lib/ui/busy'
+import { pruneSelection } from '@/lib/ui/bulk'
+import { useModalA11y } from '@/components/ui/useModalA11y'
+import { checkResolutionNote, RESOLUTION_NOTE_HINT, RESOLUTION_NOTE_PLACEHOLDER } from '@/lib/requests/resolution-note'
 import type { RequestWithRelations, RequestStatus } from '@/types'
 
 const BULK_STATUSES: { value: RequestStatus; label: string }[] = [
@@ -34,6 +39,16 @@ const BULK_STATUSES: { value: RequestStatus; label: string }[] = [
   { value: 'resolved',     label: 'Resolved' },
   { value: 'cancelled',    label: 'Cancelled' },
 ]
+
+// These three need a written message (the same rule as changing one ticket): the message is posted on every ticket.
+type RemarkStatus = 'waiting_user' | 'resolved' | 'cancelled'
+const REMARK_STATUSES: RequestStatus[] = ['waiting_user', 'resolved', 'cancelled']
+const plural = (n: number) => `${n} ticket${n === 1 ? '' : 's'}`
+const REMARK_CONFIG: Record<RemarkStatus, { heading: (n: number) => string; placeholder: string; cta: string; hint?: string }> = {
+  waiting_user: { heading: (n) => `Ask the requester for details (${plural(n)})`, placeholder: 'e.g. Please confirm your extension number…', cta: 'Set to Waiting on User' },
+  resolved:     { heading: (n) => `Mark ${plural(n)} as resolved`, placeholder: RESOLUTION_NOTE_PLACEHOLDER, cta: 'Mark Resolved', hint: RESOLUTION_NOTE_HINT },
+  cancelled:    { heading: (n) => `Cancel ${plural(n)}`, placeholder: 'Why are these tickets being cancelled?', cta: 'Cancel tickets' },
+}
 
 // createRequest() stores title as "ServiceName: Subject" (or just "ServiceName"
 // when the form had no title-worthy field) — the Title column should read as a
@@ -75,6 +90,7 @@ function BulkCollaboratorPicker({ onPick, disabled }: { onPick: (userId: string)
   const [searching, setSearching] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  useBusy(open)
 
   useEffect(() => {
     if (!open) return
@@ -90,8 +106,13 @@ function BulkCollaboratorPicker({ onPick, disabled }: { onPick: (userId: string)
     const t = setTimeout(async () => {
       if (!q) { setResults([]); setSearching(false); return }
       setSearching(true)
-      const found = await searchOrgMembers(q)
-      if (!cancelled) { setResults(found); setSearching(false) }
+      try {
+        const found = await searchOrgMembers(q)
+        if (!cancelled) { setResults(found); setSearching(false) }
+      } catch {
+        // a failed search just shows "No matches"; it must not become an unhandled error
+        if (!cancelled) { setResults([]); setSearching(false) }
+      }
     }, q ? 250 : 0)
     return () => { cancelled = true; clearTimeout(t) }
   }, [query])
@@ -102,6 +123,7 @@ function BulkCollaboratorPicker({ onPick, disabled }: { onPick: (userId: string)
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={disabled}
+        aria-expanded={open}
         className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors disabled:opacity-50"
       >
         <UserPlus className="h-3.5 w-3.5" />
@@ -115,6 +137,7 @@ function BulkCollaboratorPicker({ onPick, disabled }: { onPick: (userId: string)
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search people…"
+              aria-label="Search people"
               className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
           </div>
@@ -140,6 +163,49 @@ function BulkCollaboratorPicker({ onPick, disabled }: { onPick: (userId: string)
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Message box for bulk Resolved / Cancelled / Waiting on User ──────────────────
+
+function BulkRemarkDialog({ status, count, busy, onConfirm, onCancel }: {
+  status: RemarkStatus; count: number; busy: boolean; onConfirm: (remark: string) => void; onCancel: () => void
+}) {
+  const cfg = REMARK_CONFIG[status]
+  const [text, setText] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const dialog = useModalA11y({ onClose: () => { if (!busy) onCancel() }, label: cfg.heading(count) })
+
+  function submit() {
+    if (!text.trim()) { setError('This message is required.'); return }
+    if (status === 'resolved') { const problem = checkResolutionNote(text); if (problem) { setError(problem); return } }
+    onConfirm(text.trim())
+  }
+
+  return (
+    <div {...dialog.props} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={() => !busy && onCancel()}>
+      <div className="w-full max-w-md space-y-3 rounded-2xl border border-border bg-card p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-sm font-semibold text-foreground">{cfg.heading(count)}</h3>
+        <p className="text-xs text-muted-foreground">This message is added to the conversation of every selected ticket.</p>
+        <textarea
+          autoFocus
+          value={text}
+          onChange={(e) => { setText(e.target.value); setError(null) }}
+          placeholder={cfg.placeholder}
+          aria-label="Message"
+          rows={4}
+          className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+        {cfg.hint && !error && <p className="text-[11px] leading-snug text-muted-foreground">{cfg.hint}</p>}
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onCancel} disabled={busy} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50">Back</button>
+          <button type="button" onClick={submit} disabled={busy} className="btn-gradient px-3 py-1.5 text-xs disabled:opacity-50">
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : cfg.cta}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -172,11 +238,22 @@ export function RequestsTable({
   const [bulkError, setBulkError] = useState<string | null>(null)
   const [assignOpen, setAssignOpen] = useState(false)
   const [statusOpen, setStatusOpen] = useState(false)
+  const [remarkFor, setRemarkFor] = useState<RemarkStatus | null>(null)
+  // What happened to the last bulk action: kept on screen until the person closes it, with the ticket numbers and reasons that failed.
+  const [bulkSummary, setBulkSummary] = useState<{ title: string; failures: { requestNo: string; error: string }[] } | null>(null)
 
-  // Selection doesn't survive a fresh set of rows (new page/filter/sort) — stale
-  // ids pointing at rows no longer on screen would silently no-op on bulk actions.
-  const [prevRequests, setPrevRequests] = useState(requests)
-  if (prevRequests !== requests) { setPrevRequests(requests); setSelected(new Set()) }
+  // The page re-reads its data in the background, which hands this component a new array every time.
+  // Only drop ticked rows that are really gone from the screen (new page, filter or search) — a stale id pointing
+  // at a row no longer shown would silently do nothing — but keep the selection when the same rows are still there.
+  const idsKey = requests.map((r) => r.id).join(',')
+  const [prevIdsKey, setPrevIdsKey] = useState(idsKey)
+  if (prevIdsKey !== idsKey) {
+    setPrevIdsKey(idsKey)
+    setSelected((prev) => pruneSelection(prev, requests.map((r) => r.id)))
+  }
+
+  // While rows are ticked or a menu / message box is open, the background refresh waits (see lib/ui/busy).
+  useBusy(selected.size > 0 || assignOpen || statusOpen || remarkFor !== null || bulkSummary !== null)
 
   const allSelected = requests.length > 0 && selected.size === requests.length
   const someSelected = selected.size > 0 && !allSelected
@@ -187,6 +264,15 @@ export function RequestsTable({
   const backHref = `${pathname}${currentSearch ? `?${currentSearch}` : ''}`
   function rowHref(id: string) {
     return `/requests/${id}?from=${encodeURIComponent(backHref)}`
+  }
+
+  // The whole row is a click target for convenience, but links, buttons and boxes inside it do their own thing,
+  // and Ctrl / Shift / middle click or selecting text must not navigate.
+  function onRowClick(e: React.MouseEvent, id: string) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    if ((e.target as Element).closest('a, button, input, select, textarea, label, [role="button"]')) return
+    if (typeof window !== 'undefined' && window.getSelection()?.toString()) return
+    router.push(rowHref(id))
   }
 
   function toggleOne(id: string) {
@@ -205,26 +291,65 @@ export function RequestsTable({
   function clearSelection() {
     setSelected(new Set())
     setBulkError(null)
+    setBulkSummary(null)
     setAssignOpen(false); setStatusOpen(false)
   }
+
+  const numberOf = (id: string) => requests.find((r) => r.id === id)?.request_no ?? 'A ticket'
+
+  // Shows what happened. Tickets that worked leave the selection; tickets that failed stay ticked so they can be tried again.
+  function finishBulk(what: string, ok: number, failed: { id: string; error: string }[]) {
+    if (failed.length === 0) {
+      toast.success(`${ok} request${ok === 1 ? '' : 's'} updated.`)
+      setBulkSummary(null)
+      clearSelection()
+      return
+    }
+    setBulkSummary({
+      title: `${failed.length} of ${ok + failed.length} request${ok + failed.length === 1 ? '' : 's'} could not be updated (${what}).`,
+      failures: failed.map((f) => ({ requestNo: f.id ? numberOf(f.id) : 'All selected', error: f.error })),
+    })
+    setSelected(new Set(failed.map((f) => f.id).filter(Boolean)))
+    setAssignOpen(false); setStatusOpen(false)
+  }
+
+  // A thrown error (network drop, server restarted) must not escape: say so plainly and keep the selection.
+  const BULK_NETWORK_ERROR = 'Could not reach the server. Check your internet and try again.'
 
   function handleBulkAssign(assigneeId: string | null) {
     const ids = Array.from(selected)
     setAssignOpen(false); setBulkError(null)
     startTransition(async () => {
-      const result = await bulkAssignRequests(ids, assigneeId)
-      if (result.failed.length > 0) setBulkError(`${result.failed.length} request(s) could not be updated.`)
-      else clearSelection()
+      try {
+        const result = await bulkAssignRequests(ids, assigneeId)
+        finishBulk('assign', result.succeeded.length, result.failed)
+      } catch { setBulkError(BULK_NETWORK_ERROR) }
     })
   }
 
   function handleBulkStatus(status: RequestStatus) {
-    const ids = Array.from(selected)
     setStatusOpen(false); setBulkError(null)
+    // Resolved / Cancelled / Waiting on User need a written message, exactly like changing one ticket: ask for it first.
+    if (REMARK_STATUSES.includes(status)) { setRemarkFor(status as RemarkStatus); return }
+    const ids = Array.from(selected)
     startTransition(async () => {
-      const result = await bulkUpdateStatus(ids, status)
-      if (result.failed.length > 0) setBulkError(`${result.failed.length} request(s) could not be updated.`)
-      else clearSelection()
+      try {
+        const result = await bulkUpdateStatus(ids, status)
+        finishBulk('change status', result.succeeded.length, result.failed)
+      } catch { setBulkError(BULK_NETWORK_ERROR) }
+    })
+  }
+
+  // One call for all the tickets: the server applies the message to each of them the way the single-ticket screen does.
+  function handleBulkStatusWithRemark(status: RemarkStatus, remark: string) {
+    const ids = Array.from(selected)
+    setBulkError(null)
+    startTransition(async () => {
+      try {
+        const result = await bulkUpdateStatus(ids, status, remark)
+        setRemarkFor(null)
+        finishBulk('change status', result.succeeded.length, result.failed)
+      } catch { setBulkError(BULK_NETWORK_ERROR) }
     })
   }
 
@@ -232,9 +357,10 @@ export function RequestsTable({
     const ids = Array.from(selected)
     setBulkError(null)
     startTransition(async () => {
-      const result = await bulkAddCollaborators(ids, userId)
-      if (result.failed.length > 0) setBulkError(`${result.failed.length} request(s) could not be updated.`)
-      else clearSelection()
+      try {
+        const result = await bulkAddCollaborators(ids, userId)
+        finishBulk('add collaborator', result.succeeded.length, result.failed)
+      } catch { setBulkError(BULK_NETWORK_ERROR) }
     })
   }
 
@@ -242,9 +368,11 @@ export function RequestsTable({
     const ids = Array.from(selected)
     setBulkError(null)
     startExport(async () => {
-      const result = await bulkExportRequests(ids)
-      if (result.error || !result.csv) { setBulkError(result.error ?? 'Export failed.'); return }
-      downloadCSV(`requests-${ids.length}.csv`, result.csv)
+      try {
+        const result = await bulkExportRequests(ids)
+        if (result.error || !result.csv) { setBulkError(result.error ?? 'Export failed.'); return }
+        downloadCSV(`requests-${ids.length}.csv`, result.csv)
+      } catch { setBulkError('Export failed. Check your internet and try again.') }
     })
   }
 
@@ -259,11 +387,11 @@ export function RequestsTable({
   return (
     <div className="relative">
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-        <table className="w-full min-w-[880px] border-collapse text-xs">
+        <table className="w-full min-w-[1000px] border-collapse text-xs">
           <thead>
             <tr className="border-b border-border bg-muted/30">
               <th className="w-8 px-3 py-2">
-                <button type="button" onClick={toggleAll} className="text-muted-foreground hover:text-primary transition-colors" aria-label="Select all">
+                <button type="button" onClick={toggleAll} className="text-muted-foreground hover:text-primary transition-colors" aria-label="Select all on this page" title="Select all on this page">
                   {allSelected ? <CheckSquare className="h-4 w-4 text-primary" /> : someSelected ? <MinusSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
                 </button>
               </th>
@@ -278,6 +406,7 @@ export function RequestsTable({
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Sub Category</th>
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Service</th>
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">SLA</th>
+              <SortableTh label="Created" col="created_at" sortCol={sortCol} sortDir={sortDir} pathname={pathname} currentSearch={currentSearch} />
               <SortableTh label="Updated" col="updated_at" sortCol={sortCol} sortDir={sortDir} pathname={pathname} currentSearch={currentSearch} />
             </tr>
           </thead>
@@ -287,16 +416,20 @@ export function RequestsTable({
               return (
                 <tr
                   key={req.id}
-                  onClick={() => router.push(rowHref(req.id))}
+                  onClick={(e) => onRowClick(e, req.id)}
                   className={`cursor-pointer border-b border-border/60 last:border-0 transition-colors ${isSelected ? 'bg-primary/[0.04]' : 'hover:bg-muted/30'}`}
                 >
                   <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                    <button type="button" onClick={() => toggleOne(req.id)} className="text-muted-foreground hover:text-primary transition-colors" aria-label={isSelected ? 'Deselect' : 'Select'}>
+                    <button type="button" onClick={() => toggleOne(req.id)} className="text-muted-foreground hover:text-primary transition-colors" aria-label={`${isSelected ? 'Deselect' : 'Select'} ${req.request_no}`} aria-pressed={isSelected}>
                       {isSelected ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
                     </button>
                   </td>
-                  <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground whitespace-nowrap">{req.request_no}</td>
-                  <td className="max-w-[240px] truncate px-3 py-2 font-medium text-foreground">{requestSubject(req)}</td>
+                  <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                    <Link href={rowHref(req.id)} className="hover:text-primary hover:underline underline-offset-2">{req.request_no}</Link>
+                  </td>
+                  <td className="max-w-[240px] truncate px-3 py-2 font-medium text-foreground">
+                    <Link href={rowHref(req.id)} className="hover:text-primary hover:underline underline-offset-2">{requestSubject(req)}</Link>
+                  </td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap items-center gap-1">
                       <StatusBadge status={req.status} size="sm" />
@@ -326,6 +459,7 @@ export function RequestsTable({
                   <td className="px-3 py-2">
                     <SLABadge resolutionDueAt={req.resolution_due_at} responseDueAt={req.response_due_at} status={req.status} showLabel />
                   </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground" suppressHydrationWarning>{formatDateTime(req.created_at)}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-muted-foreground" suppressHydrationWarning>{formatRelativeTime(req.updated_at)}</td>
                 </tr>
               )
@@ -333,6 +467,30 @@ export function RequestsTable({
           </tbody>
         </table>
       </div>
+
+      {remarkFor && selected.size > 0 && (
+        <BulkRemarkDialog
+          status={remarkFor}
+          count={selected.size}
+          busy={isPending}
+          onConfirm={(remark) => handleBulkStatusWithRemark(remarkFor, remark)}
+          onCancel={() => setRemarkFor(null)}
+        />
+      )}
+
+      {/* What happened to the last bulk action, kept until it is closed */}
+      {bulkSummary && (
+        <div role="alert" className="sticky bottom-20 z-20 mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800 shadow-lg dark:border-red-900 dark:bg-red-950/60 dark:text-red-200">
+          <div className="flex items-start justify-between gap-3">
+            <p className="font-semibold">{bulkSummary.title}</p>
+            <button type="button" onClick={() => setBulkSummary(null)} aria-label="Close this message" className="rounded p-0.5 hover:bg-red-100 dark:hover:bg-red-900/50"><X className="h-3.5 w-3.5" /></button>
+          </div>
+          <ul className="mt-1.5 max-h-32 space-y-0.5 overflow-y-auto">
+            {bulkSummary.failures.map((f, i) => <li key={i}><span className="font-mono">{f.requestNo}</span>: {f.error}</li>)}
+          </ul>
+          <p className="mt-1.5 text-[11px] opacity-80">The tickets that failed are still ticked, so you can try again.</p>
+        </div>
+      )}
 
       {/* Bulk action bar — sticks to bottom when items selected */}
       {selected.size > 0 && (

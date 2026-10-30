@@ -20,8 +20,8 @@ import { describe, it, expect } from 'vitest'
 import { NextRequest } from 'next/server'
 import { proxy } from '@/proxy'
 
-function requestFor(pathname: string): NextRequest {
-  return new NextRequest(new URL(pathname, 'http://localhost:3210'))
+function requestFor(pathname: string, headers: Record<string, string> = {}): NextRequest {
+  return new NextRequest(new URL(pathname, 'http://localhost:3210'), { headers })
 }
 
 describe('proxy() — public API route allowlist', () => {
@@ -48,9 +48,21 @@ describe('proxy() — public API route allowlist', () => {
     }
   })
 
-  it('an ordinary protected API route (not on the allowlist) still redirects to /login with no session — the allowlist did not become a blanket bypass', async () => {
-    const response = await proxy(requestFor('/api/admin/audit'))
-    const location = response.headers.get('location')
-    expect(location).toContain('/login')
+  it('an ordinary protected API route (not on the allowlist) is still refused with no session — the allowlist did not become a blanket bypass', async () => {
+    // a browser opening the link (a download, a preview) is still sent to the login page
+    const nav = await proxy(requestFor('/api/admin/audit', { 'sec-fetch-mode': 'navigate', accept: 'text/html,application/xhtml+xml' }))
+    expect(nav.headers.get('location')).toContain('/login')
+    // G-22: a script (the 8-second poll) gets a 401 it can read instead of the login page's HTML
+    for (const headers of [{}, { 'sec-fetch-mode': 'same-origin', accept: '*/*' }, { accept: 'application/json' }] as Record<string, string>[]) {
+      const res = await proxy(requestFor('/api/notifications/new', headers))
+      expect(res.status).toBe(401)
+      expect(res.headers.get('location')).toBeNull()
+      expect(await res.json()).toEqual({ error: 'unauthorized' })
+    }
+  })
+
+  it('pages still redirect to /login with no session', async () => {
+    const res = await proxy(requestFor('/home'))
+    expect(res.headers.get('location')).toContain('/login')
   })
 })

@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { safely } from '@/lib/ui/safeAction'
+import { ModalFrame } from '@/components/ui/ModalFrame'
 import { Plus, Pencil, Archive, ArchiveRestore, Trash2, Link2 } from 'lucide-react'
 import {
   createLibraryField,
@@ -47,7 +49,7 @@ function FieldModal({ field, onClose }: { field: LibraryFieldRow | null; onClose
     setError('')
     const data = { label, type, placeholder, help_text: helpText, options: isOptionType(type) ? options : undefined }
     startTransition(async () => {
-      const result = isEdit ? await updateLibraryField(field!.id, data) : await createLibraryField(data)
+      const result = isEdit ? await safely(() => updateLibraryField(field!.id, data)) : await safely(() => createLibraryField(data))
       if (result.error) {
         setError(result.error)
         return
@@ -62,7 +64,7 @@ function FieldModal({ field, onClose }: { field: LibraryFieldRow | null; onClose
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <ModalFrame label="Library field" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-card shadow-xl">
         <div className="border-b border-border px-4 py-3">
           <h2 className="text-base font-semibold text-foreground">{isEdit ? 'Edit library field' : 'New library field'}</h2>
@@ -130,7 +132,7 @@ function FieldModal({ field, onClose }: { field: LibraryFieldRow | null; onClose
           </div>
         </form>
       </div>
-    </div>
+    </ModalFrame>
   )
 }
 
@@ -190,7 +192,7 @@ export default function FieldLibraryClient({
   function addToLibrary(keys: string[]) {
     setMessage(null)
     startTransition(async () => {
-      const r = await linkFieldGroups(keys)
+      const r = await safely(() => linkFieldGroups(keys))
       if (r.error) {
         setMessage({ kind: 'error', text: r.error })
         return

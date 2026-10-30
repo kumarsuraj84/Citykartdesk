@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ChevronRight, Clock, Users, ShieldCheck } from 'lucide-react'
 import { getServiceBySlug, getAllowedSubCategoriesForService } from '@/lib/queries/services'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { requireStaff } from '@/lib/ui/requireStaff'
 import { getRequesterServiceShortcuts } from '@/lib/queries/requests'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -20,6 +21,7 @@ export default async function ServiceDetailPage({ params }: PageProps) {
   const [service, profile] = await Promise.all([getServiceBySlug(slug), getCurrentProfile()])
 
   if (!service) notFound()
+  requireStaff(profile, `/services/${slug}`)
 
   const allowedSubCategories = await getAllowedSubCategoriesForService(service.id)
 

@@ -65,7 +65,7 @@ export type ClaimOutcome =
    *  event being marked 'completed', so "still processing/failed" can only
    *  mean the conversation was never touched by the earlier attempt). Safe
    *  to reprocess from scratch using the same eventId. */
-  | { status: 'in_flight'; eventId: string }
+  | { status: 'in_flight'; eventId: string; /** how long ago the event was first claimed, in ms (0 when unknown) */ ageMs: number }
 
 /**
  * Atomically claims `externalMessageId` for this org+channel — a single
@@ -93,7 +93,7 @@ export async function claimEvent(params: {
   if (error?.code === '23505') {
     const { data: existing, error: lookupError } = await admin
       .from('conversation_events')
-      .select('id, status, result')
+      .select('id, status, result, created_at')
       .eq('org_id', orgId)
       .eq('channel_type', channelType)
       .eq('external_message_id', externalMessageId)
@@ -103,7 +103,8 @@ export async function claimEvent(params: {
     if (existing.status === 'completed' && existing.result) {
       return { status: 'completed', eventId: existing.id, result: existing.result as ConversationResult }
     }
-    return { status: 'in_flight', eventId: existing.id }
+    const createdMs = existing.created_at ? new Date(existing.created_at).getTime() : NaN
+    return { status: 'in_flight', eventId: existing.id, ageMs: Number.isFinite(createdMs) ? Math.max(0, Date.now() - createdMs) : 0 }
   }
 
   throw new Error(`[conversations] failed to claim event: ${error?.message}`)

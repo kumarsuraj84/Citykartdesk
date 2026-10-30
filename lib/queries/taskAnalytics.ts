@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { resolvePeriodParam, type PeriodParam } from '@/lib/queries/analytics'
-import { istDay, istWeekStart } from '@/lib/reporting/ist'
+import { resolvePeriodParam, TREND_DAILY_MAX_DAYS, type PeriodParam } from '@/lib/queries/analytics'
+import { istDay, istWeekStart, isOverdueDate } from '@/lib/reporting/ist'
+import { fetchAllPages } from '@/lib/queries/paging'
 
 function avg(arr: number[]): number | null {
   if (!arr.length) return null
@@ -58,26 +59,28 @@ export async function getTaskAnalytics(orgId: string, period: PeriodParam): Prom
   const now    = new Date()
 
   // Admin client bypasses RLS — every query below scopes to orgId explicitly.
+  // The database answers at most 1000 rows per request, so tasks and people are read page by page (an error on any page throws instead of showing smaller numbers).
   const [
-    { data: allTasks },
-    { data: teamsData },
-    { data: profilesData },
+    { rows: tasks },
+    { rows: teamsData },
+    { rows: profilesData },
   ] = await Promise.all([
-    admin.from('tasks').select('id,title,status,priority,task_type,assignee_id,team_id,request_id,created_at,completed_at,due_date').eq('org_id', orgId),
-    admin.from('teams').select('id,name').eq('org_id', orgId),
-    admin.from('profiles').select('id,full_name').eq('org_id', orgId),
+    fetchAllPages<{ id: string; title: string; status: string; priority: string; task_type: string; assignee_id: string | null; team_id: string | null; request_id: string | null; created_at: string; completed_at: string | null; due_date: string | null }>(
+      (from, to) => admin.from('tasks').select('id,title,status,priority,task_type,assignee_id,team_id,request_id,created_at,completed_at,due_date').eq('org_id', orgId).order('id', { ascending: true }).range(from, to)),
+    fetchAllPages<{ id: string; name: string }>((from, to) => admin.from('teams').select('id,name').eq('org_id', orgId).order('id', { ascending: true }).range(from, to)),
+    fetchAllPages<{ id: string; full_name: string }>((from, to) => admin.from('profiles').select('id,full_name').eq('org_id', orgId).order('id', { ascending: true }).range(from, to)),
   ])
 
-  const tasks      = allTasks ?? []
-  const teamMap    = Object.fromEntries((teamsData ?? []).map((t) => [t.id, t.name]))
-  const profileMap = Object.fromEntries((profilesData ?? []).map((p) => [p.id, p.full_name]))
+  const teamMap    = Object.fromEntries(teamsData.map((t) => [t.id, t.name]))
+  const profileMap = Object.fromEntries(profilesData.map((p) => [p.id, p.full_name]))
 
   type TaskRow = (typeof tasks)[number]
 
   const inPeriod   = (d: string) => new Date(d) >= startDate && new Date(d) <= endDate
   const isOpen     = (t: TaskRow) => !['done','cancelled'].includes(t.status)
   const isDone     = (t: TaskRow) => t.status === 'done'
-  const isOverdue  = (t: TaskRow) => t.due_date != null && new Date(t.due_date) < now && isOpen(t)
+  // overdue = the due DAY is before today (India); a task due today is not overdue (the same rule on every screen, audit F-11)
+  const isOverdue  = (t: TaskRow) => isOverdueDate(t.due_date) && isOpen(t)
 
   const periodTasks     = tasks.filter((t) => inPeriod(t.created_at))
   const completedPeriod = tasks.filter((t) => t.completed_at && inPeriod(t.completed_at))
@@ -164,7 +167,7 @@ export async function getTaskAnalytics(orgId: string, period: PeriodParam): Prom
   // Trend
   const buckets: Record<string, { created: number; completed: number }> = {}
   // (a day is the India day, not the UTC day)
-  const bucketKey = (d: string) => (days <= 30 ? istDay(d) : istWeekStart(d))
+  const bucketKey = (d: string) => (days <= TREND_DAILY_MAX_DAYS ? istDay(d) : istWeekStart(d))
   for (const t of tasks) {
     if (inPeriod(t.created_at)) {
       const k = bucketKey(t.created_at)

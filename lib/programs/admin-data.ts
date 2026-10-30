@@ -1,5 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { fetchAllPages } from '@/lib/queries/paging'
 import { allowedFields, programTemplate, unknownFields } from './mail'
 import { programReadiness, type ReadinessItem } from './readiness'
 import type { ProgramRecord } from './types'
@@ -33,7 +34,9 @@ export type ProgramEditorData = {
   staff: StaffChoice[]
   program: ProgramRecord
   categories: CategoryChoice[]
+  /** the first 300 problems (the screen lists these); the readiness counts and issueTotal cover ALL of them */
   issues: ProgramIssueView[]
+  issueTotal: number
   extraHeadings: string[]
   activeRows: number
   readiness: { items: ReadinessItem[]; ready: boolean }
@@ -44,10 +47,11 @@ export async function loadProgramEditor(orgId: string, id: string): Promise<Prog
   const { data: program } = await db.from('vendor_programs').select('*').eq('org_id', orgId).eq('id', id).maybeSingle()
   if (!program) return null
   const p = program as ProgramRecord
+  // The readiness counts (rows without a mail address, unknown stores) are counted over EVERY problem and the extra headings over EVERY row: read in pages, because one answer is cut at 1000 rows without any error
   const [cats, issues, rows, activeCount, programs, noApprover, staffRes] = await Promise.all([
     db.from('service_categories').select('id, name, program_id, auto_oem_kind, is_pms').eq('org_id', orgId).order('name', { ascending: true }),
-    db.from('program_issues').select('severity, code, store_code, sheet_row, message').eq('program_id', id).order('severity').limit(300),
-    db.from('program_rows').select('extra').eq('program_id', id).is('removed_at', null).limit(1000),
+    fetchAllPages<ProgramIssueView>((from, to) => db.from('program_issues').select('severity, code, store_code, sheet_row, message').eq('program_id', id).order('severity').order('sheet_row', { ascending: true }).order('id', { ascending: true }).range(from, to), { maxRows: 20000 }),
+    fetchAllPages<{ extra: Record<string, string> | null }>((from, to) => db.from('program_rows').select('extra').eq('program_id', id).is('removed_at', null).order('id', { ascending: true }).range(from, to), { maxRows: 50000 }),
     db.from('program_rows').select('id', { count: 'exact', head: true }).eq('program_id', id).is('removed_at', null).eq('is_active', true),
     db.from('vendor_programs').select('id, name').eq('org_id', orgId),
     db.from('program_rows').select('id', { count: 'exact', head: true }).eq('program_id', id).is('removed_at', null).eq('is_active', true).eq('approver_emails', '{}'),
@@ -63,11 +67,11 @@ export async function loadProgramEditor(orgId: string, id: string): Promise<Prog
     old_kind: !c.program_id && !c.is_pms && (c.auto_oem_kind === 'ac' || c.auto_oem_kind === 'genset') ? c.auto_oem_kind : null,
   }))
   const extra = new Set<string>()
-  for (const r of (rows.data ?? []) as { extra: Record<string, string> | null }[]) for (const k of Object.keys(r.extra ?? {})) extra.add(k)
+  for (const r of rows.rows) for (const k of Object.keys(r.extra ?? {})) extra.add(k)
   const extraHeadings = [...extra].sort()
   // a program that works in the vendor portal needs its own list of resolutions
   const portal = p.level === 'portal' ? { resolutions: (p.resolution_options ?? []).length, defaultApprovers: (p.default_approver_ids ?? []).length, rowsWithoutApprover: noApprover.count ?? 0 } : undefined
-  const issueList = (issues.data ?? []) as ProgramIssueView[]
+  const issueList = issues.rows
   const tpl = programTemplate(p)
   const readiness = programReadiness({
     categories: categories.filter((c) => c.in_program).length,
@@ -80,5 +84,5 @@ export async function loadProgramEditor(orgId: string, id: string): Promise<Prog
     unknownFields: unknownFields(`${tpl.subject} ${tpl.body}`, allowedFields(extraHeadings)),
     portal,
   })
-  return { staff: (staffRes.data ?? []) as StaffChoice[], program: p, categories, issues: issueList, extraHeadings, activeRows: activeCount.count ?? 0, readiness }
+  return { staff: (staffRes.data ?? []) as StaffChoice[], program: p, categories, issues: issueList.slice(0, 300), issueTotal: issueList.length, extraHeadings, activeRows: activeCount.count ?? 0, readiness }
 }

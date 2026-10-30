@@ -21,6 +21,7 @@ import { updateRequestStatus } from '@/lib/actions/requests'
 import { AGENT_TRANSITIONS } from '@/lib/constants/request-transitions'
 import { StatusBadge, PriorityBadge, ReopenedBadge, SourceBadge } from '@/components/requests/RequestBadges'
 import { SLABadge } from '@/components/requests/SLABadge'
+import { useModalA11y } from '@/components/ui/useModalA11y'
 import { checkResolutionNote, RESOLUTION_NOTE_HINT, RESOLUTION_NOTE_PLACEHOLDER } from '@/lib/requests/resolution-note'
 import type { RequestWithRelations, RequestStatus } from '@/types'
 
@@ -69,7 +70,7 @@ function SortableCard({
         {...attributes}
         {...listeners}
         onClick={(e) => e.preventDefault()}
-        className="absolute right-2 top-2.5 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity touch-none"
+        className="absolute right-2 top-2.5 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity touch-none"
       >
         <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50" />
       </div>
@@ -177,6 +178,8 @@ export function RequestBoardView({
   const [pendingDropText, setPendingDropText] = useState('')
   const [pendingDropError, setPendingDropError] = useState<string | null>(null)
   const [pendingDropSaving, setPendingDropSaving] = useState(false)
+  // Escape cancels the message box, Tab stays inside it, and the background refresh waits while it is open
+  const dropDialog = useModalA11y({ onClose: () => { if (!pendingDropSaving) cancelPendingDrop() }, label: pendingDrop?.heading ?? 'Add a message', enabled: pendingDrop !== null })
   // Guards against a slow, now-superseded drag's error rollback clobbering a
   // status set by a later action on the same card (e.g. a second drag before
   // the first's request resolves) — keyed per request id.
@@ -329,7 +332,7 @@ export function RequestBoardView({
       </DndContext>
 
       {pendingDrop && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={() => !pendingDropSaving && cancelPendingDrop()}>
+        <div {...dropDialog.props} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={() => !pendingDropSaving && cancelPendingDrop()}>
           <div className="w-full max-w-md space-y-3 rounded-2xl border border-border bg-card p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-sm font-semibold text-foreground">{pendingDrop.heading}</h3>
             <textarea

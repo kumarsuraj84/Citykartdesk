@@ -4,7 +4,9 @@ import { redirect } from 'next/navigation'
 import { safeNextPath } from '@/lib/auth/safe-next'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { rateLimit, getClientIp, isOverLimit, recordEvent } from '@/lib/rate-limit'
+import { rateLimit, getClientIp, isOverLimit, recordEvent, progressiveWaitMs, recordProgressiveFailure, clearProgressive } from '@/lib/rate-limit'
+import { validateNewPassword } from '@/lib/security/password-policy'
+import { redactLoginName } from '@/lib/security/login-name'
 import { getCurrentProfileForPasswordReset } from '@/lib/queries/profiles'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { emailPasswordResetLink } from '@/lib/email/auth-mail'
@@ -30,10 +32,14 @@ export async function signInWithPassword(formData: FormData) {
   // count against the stranger's address and that account together, so they cannot lock the real person out from somewhere else. Without a trusted address
   // (TRUSTED_PROXY_HOPS not set) the account alone is counted. Separately, one address trying many different accounts (password spraying) is slowed down.
   const failKey = ip ? `login-fail:${email}|${ip}` : `login-fail:${email}`
+  // What goes into the (append-only) audit trail is never the raw text typed in the e-mail box: people sometimes type their password there (A-16).
+  const typedName = redactLoginName(email)
+  // Without a trusted address the account is the only thing to follow, and a hard 10-minute lock would let anyone lock a known account out for good. There the wait
+  // grows with each wrong try and then ends by itself (progressive delay, A-04); with a trusted address the old per-address-and-account limit stays.
   const attempts = await rateLimit(`login:${email}`, 60, 60_000)           // raw speed of tries on one account (protects the sign-in service)
   const spraying = !!ip && isOverLimit(`login-fail-ip:${ip}`, 40)
-  if (attempts.limited || spraying || isOverLimit(failKey, 10)) {
-    await recordAudit({ category: 'security', source: 'auth', action: 'auth.login_rate_limited', outcome: 'denied', severity: 'warning', message: 'Too many sign-in attempts', after: { email } })
+  if (attempts.limited || spraying || (ip ? isOverLimit(failKey, 10) : progressiveWaitMs(failKey) > 0)) {
+    await recordAudit({ category: 'security', source: 'auth', action: 'auth.login_rate_limited', outcome: 'denied', severity: 'warning', message: 'Too many sign-in attempts', after: { email: typedName } })
     return { error: 'Too many login attempts. Please wait a minute.' }
   }
 
@@ -46,15 +52,18 @@ export async function signInWithPassword(formData: FormData) {
   }
 
   if (error) {
-    recordEvent(failKey, 10 * 60_000)
+    if (ip) recordEvent(failKey, 10 * 60_000)
+    else recordProgressiveFailure(failKey)
     if (ip) recordEvent(`login-fail-ip:${ip}`, 10 * 60_000)
     // many different accounts failing in a short time, from anywhere: report it once per window so someone looks (password spraying, any address)
     if (recordEvent('login-fail-global', 10 * 60_000) === 200) {
       await recordAudit({ category: 'security', source: 'auth', action: 'auth.spray_suspected', outcome: 'denied', severity: 'warning', message: 'About 200 failed sign-ins in 10 minutes across the whole site' })
     }
-    await recordAudit({ category: 'security', source: 'auth', action: 'auth.login_failed', outcome: 'failure', severity: 'warning', message: 'Sign-in refused', after: { email } })
+    await recordAudit({ category: 'security', source: 'auth', action: 'auth.login_failed', outcome: 'failure', severity: 'warning', message: 'Sign-in refused', after: { email: typedName } })
     return { error: sanitizeError(error, { route: 'auth.ts#signInWithPassword', fallback: 'Invalid login credentials.' }) }
   }
+
+  if (!ip) clearProgressive(failKey)      // a correct sign-in ends the wait count
 
   // D-010: a deactivated account does not get a session (accounts deactivated before sign-in was blocked at the authentication service)
   if (signedIn?.user?.id) {
@@ -101,7 +110,7 @@ export async function forgotPassword(formData: FormData) {
   const floorMs = Number(process.env.FORGOT_PASSWORD_MIN_MS ?? (process.env.NODE_ENV === 'production' ? 1500 : 0))
   const wait = floorMs - (Date.now() - started)
   if (wait > 0) await new Promise((r) => setTimeout(r, wait))
-  await recordAudit({ category: 'security', source: 'auth', action: 'auth.password_reset_requested', outcome: error ? 'failure' : 'success', after: { email }, message: error ? 'The reset e-mail could not be sent' : null })
+  await recordAudit({ category: 'security', source: 'auth', action: 'auth.password_reset_requested', outcome: error ? 'failure' : 'success', after: { email: redactLoginName(email) }, message: error ? 'The reset e-mail could not be sent' : null })
   if (error) return { error }
 
   return { success: true }
@@ -112,9 +121,8 @@ export async function resetPassword(formData: FormData) {
   // This is the exact path a bulk-imported user hits when leaving the shared
   // DEFAULT_BULK_PASSWORD (admin/users.ts) — it must not be allowed to land
   // on something weaker than what an admin is even permitted to set directly.
-  if (!password || password.length < 8) {
-    return { error: 'Password must be at least 8 characters.' }
-  }
+  const policyError = validateNewPassword(password)
+  if (policyError) return { error: policyError }
 
   const supabase = await createClient()
 
@@ -159,7 +167,8 @@ export async function changeOwnPassword(formData: FormData): Promise<{ error?: s
   const currentPassword = formData.get('currentPassword') as string
   const newPassword = formData.get('newPassword') as string
   if (!currentPassword) return { error: 'Enter your current password.' }
-  if (!newPassword || newPassword.length < 8) return { error: 'New password must be at least 8 characters.' }
+  const policyError = validateNewPassword(newPassword)
+  if (policyError) return { error: policyError }
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

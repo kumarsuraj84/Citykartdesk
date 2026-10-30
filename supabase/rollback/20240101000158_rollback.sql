@@ -1,3 +1,4 @@
+BEGIN;
 -- ROLLBACK for migration 158 (ticket row-security performance). Restores the previous policies and removes the added index. LOCAL; NOT run on production.
 
 DROP INDEX IF EXISTS public.idx_requests_org_updated;
@@ -35,3 +36,5 @@ DROP FUNCTION IF EXISTS public.request_identity_unchanged(uuid, uuid, uuid, uuid
 
 DROP FUNCTION IF EXISTS public.current_user_collab_request_ids();
 DROP FUNCTION IF EXISTS public.current_user_approver_request_ids();
+DELETE FROM auth.schema_migrations WHERE version = '20240101000158';
+COMMIT;

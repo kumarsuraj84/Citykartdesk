@@ -9,6 +9,7 @@ import { buildCreateRequestInputFromDraft } from '@/lib/requests/questionnaire/a
 import type { RequestDraft } from '@/lib/requests/questionnaire/types'
 import { createRequestCore } from '@/lib/requests/create-request-core'
 import { transitionConversation } from './state-machine'
+import { recoverStaleSubmitting } from './recovery'
 import {
   claimEvent,
   completeEventOnly,
@@ -42,6 +43,9 @@ const CONVERSATION_INACTIVITY_HOURS = 24
  *  loudly instead of spinning forever under a pathological, unexpected
  *  contention pattern. */
 const MAX_COMMIT_ATTEMPTS = 5
+
+/** A claimed-but-unfinished event younger than this is still being handled by the first delivery (see processConversationInbound). */
+const IN_FLIGHT_GRACE_MS = 60_000
 
 /** Thrown whenever an optimistic-version commit loses its race. Carries the
  *  conversation id so the retry loop in processConversationInbound() can
@@ -225,6 +229,14 @@ export async function processConversationInbound(input: ConversationInbound, dep
   const claim = await claimEvent({ admin, orgId: input.orgId, channelType: input.channelType, externalMessageId: input.externalMessageId })
   if (claim.status === 'completed') return { ...claim.result, duplicate: true }
 
+  // The same message claimed a moment ago and still being worked on: Meta re-delivers when it is slow to get our answer. Working on it a second time
+  // would apply the same reply twice (the answer to question 3 taken as the answer to question 4). Only a claim old enough to have been abandoned
+  // (a crash before it finished) is redone.
+  if (claim.status === 'in_flight' && claim.ageMs < IN_FLIGHT_GRACE_MS) {
+    const active = await findActiveConversation({ admin, orgId: input.orgId, channelType: input.channelType, channelIdentity: input.channelIdentity })
+    return { conversationId: active?.id ?? '', state: active?.state ?? 'expired', prompt: { type: 'error', message: 'Still working on your previous message.' }, duplicate: true }
+  }
+
   const eventId = claim.eventId
 
   // Tracks the conversation id a losing attempt was actually working with
@@ -280,6 +292,25 @@ async function processOnce(admin: AnyClient, input: ConversationInbound, eventId
   }
 
   const command = input.kind !== 'file' && input.text ? parseCommand(input.text) : null
+
+  // A submission that died half way (restart, crash) must not lock this phone out for ever: repair it before anything else (see recovery.ts).
+  if (conversation && conversation.state === 'submitting') {
+    const recovery = await recoverStaleSubmitting({ admin, conversation, nextFrom })
+    conversation = recovery.conversation
+    if (recovery.outcome === 'completed') {
+      // the ticket WAS created: say so, unless the person is starting a new request (the finished conversation no longer blocks that)
+      if (command !== 'new') {
+        const result: ConversationResult = {
+          conversationId: recovery.conversation.id,
+          state: 'completed',
+          prompt: { type: 'completed', message: `Your request was created (${recovery.requestNo ?? recovery.requestId}). Send NEW to start another.` },
+        }
+        await completeEventOnly({ admin, eventId, result })
+        return result
+      }
+      conversation = null
+    }
+  }
 
   if (command === 'new') return handleNew(admin, input, eventId, conversation)
   if (command === 'cancel') return handleCancel(admin, input, eventId, conversation)
@@ -891,7 +922,8 @@ async function handleCreate(admin: AnyClient, input: ConversationInbound, eventI
   }
 
   try {
-    const created = await createRequestCore({ client: admin, ...adapted.input })
+    // the conversation id goes into the ticket's source_metadata, so a conversation left in 'submitting' by a crash can find out whether its ticket was made
+    const created = await createRequestCore({ client: admin, ...adapted.input, sourceMetadata: { ...(adapted.input.sourceMetadata ?? {}), conversation_id: conversation.id } })
     if (created.error || !created.requestId) {
       return failCreation(admin, submitting.conversation, eventId, created.error ?? 'Failed to create request.')
     }

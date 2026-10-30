@@ -23,8 +23,42 @@ export function oemNoteRecipients(body: string): string[] {
   return (line[1].match(/[^\s,;<>"']+@[^\s,;<>"']+/g) ?? []).map((a) => a.toLowerCase())
 }
 
+/** An address is covered when it is one of the mailed addresses, or sits on the same company domain as one (a shared mail domain such as gmail.com never counts as one company). */
+function coveredByMailed(email: string, mailed: string[]): boolean {
+  if (mailed.includes(email)) return true
+  const domain = domainOfAddress(email)
+  return !!domain && !SHARED_MAIL_DOMAINS.has(domain) && mailed.some((a) => domainOfAddress(a) === domain)
+}
+
+/**
+ * Who the OEM contacts of a ticket are, from the records the system itself wrote when it mailed the ticket (C-24): the program snapshot (to and cc) and the AC /
+ * Genset snapshot (to). Returns null when the ticket has no such record at all (a ticket from before the snapshots existed).
+ * The public comment "Ticket sent to the ... OEM" used to be the only source, and anybody who can post a public comment could forge it.
+ */
+export async function snapshotMailedAddresses(admin: AnyClient, ticketId: string): Promise<string[] | null> {
+  const [prog, master] = await Promise.all([
+    admin.from('request_program_snapshots').select('mailed_to, mailed_cc').eq('request_id', ticketId),
+    admin.from('request_master_snapshots').select('mailed_to').eq('request_id', ticketId),
+  ])
+  const progRows = (prog?.data ?? []) as { mailed_to: string[] | null; mailed_cc: string[] | null }[]
+  const masterRows = (master?.data ?? []) as { mailed_to: string[] | null }[]
+  if (progRows.length === 0 && masterRows.length === 0) return null
+  const all = [
+    ...progRows.flatMap((r) => [...(r.mailed_to ?? []), ...(r.mailed_cc ?? [])]),
+    ...masterRows.flatMap((r) => r.mailed_to ?? []),
+  ]
+  return all.map((a) => a.trim().toLowerCase()).filter(Boolean)
+}
+
 export async function senderMayReply(admin: AnyClient, ticket: ReplyTicket, sender: ReplySender): Promise<boolean> {
   if (sender.kind === 'oem') {
+    // The system's own record of who the ticket was mailed to decides when there is one. Only a ticket with no such record (older than the snapshots) falls
+    // back to the wording of the "Ticket sent to ..." comment below.
+    const mailed = await snapshotMailedAddresses(admin, ticket.id)
+    if (mailed) {
+      const who = (sender.email ?? '').trim().toLowerCase()
+      return !!who && coveredByMailed(who, mailed)
+    }
     // an older note reads "Ticket sent to <OEM name> (...)"
     const { data } = await admin.from('request_comments').select('id').eq('request_id', ticket.id).ilike('body', `%Ticket sent to ${escapeLike(sender.name)}%`).limit(1)
     if ((data ?? []).length > 0) return true

@@ -1,6 +1,7 @@
 'use client'
 
 import { AlertTriangle } from 'lucide-react'
+import { useModalA11y } from './useModalA11y'
 
 /** A plain "OK-only" popup for something the user needs to actively
  *  acknowledge (not just a toast they might miss) — e.g. a rejected
@@ -10,8 +11,9 @@ export function AlertModal({ title, message, onOk }: {
   message: string
   onOk: () => void
 }) {
+  const dialog = useModalA11y({ onClose: onOk, label: title })
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div {...dialog.props} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-sm rounded-2xl border border-border bg-card shadow-xl">
         <div className="flex items-start gap-3 px-4 pt-4">
           <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" />

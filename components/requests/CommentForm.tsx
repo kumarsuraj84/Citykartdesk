@@ -35,6 +35,8 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
   const [cc, setCc]                          = useState<CcChip[]>([])
   const [attachPdf, setAttachPdf]            = useState(true)
   const [ccNotice, setCcNotice]              = useState<{ ok: boolean; text: string } | null>(null)
+  // Set when the comment itself was posted but some of its files did not go up: the failed files stay in the list and "Retry upload" sends them to this comment.
+  const [retryCommentId, setRetryCommentId]  = useState<string | null>(null)
   const [showCanned, setShowCanned]          = useState(false)
   const [cannedSearch, setCannedSearch]      = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -43,20 +45,20 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
 
   const addFiles = useCallback(async (incoming: File[]) => {
     setFileError(null)
+    // One bad file in a multi-select must not throw away the good ones: keep the valid files, report the others.
+    const valid: File[] = []
+    const tooLarge: string[] = []
+    const problems: string[] = []
     for (const file of incoming) {
       const result = await validateAttachment(file)
-      if (!result.valid) {
-        if (result.code === 'too_large') {
-          // Never added to `files` in the first place — this popup is the
-          // "reattach within the limit" prompt, not a removal step.
-          setTooLargeFileName(file.name)
-        } else {
-          setFileError(`"${file.name}": ${result.error ?? 'Invalid file.'}`)
-        }
-        return
-      }
+      if (result.valid) valid.push(file)
+      else if (result.code === 'too_large') tooLarge.push(file.name)
+      else problems.push(`"${file.name}": ${result.error ?? 'Invalid file.'}`)
     }
-    setFiles((cur) => [...cur, ...incoming])
+    // Too-large files are never added to `files` — this popup is the "reattach within the limit" prompt, not a removal step.
+    if (tooLarge.length > 0) setTooLargeFileName(tooLarge.join('", "'))
+    if (problems.length > 0) setFileError(problems.join(' · '))
+    if (valid.length > 0) setFiles((cur) => [...cur, ...valid])
   }, [])
 
   function onFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -66,7 +68,26 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
   }
 
   function removeFileAt(index: number) {
-    setFiles((cur) => cur.filter((_, i) => i !== index))
+    const next = files.filter((_, i) => i !== index)
+    setFiles(next)
+    if (next.length === 0) setRetryCommentId(null)
+  }
+
+  // Sends the files one after the other and returns the ones that did not go up. A thrown error (network drop, server restarted)
+  // counts as a failed file; it never escapes.
+  async function uploadAll(commentId: string, list: File[]): Promise<File[]> {
+    const failed: File[] = []
+    for (const file of list) {
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await uploadAttachment(requestId, fd, commentId)
+        if (res.error) failed.push(file)
+      } catch {
+        failed.push(file)
+      }
+    }
+    return failed
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -82,27 +103,32 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
     }
     const pendingFiles = files
     startTransition(async () => {
+     try {
+      // The comment is already posted; only its files are sent again (to the same comment).
+      if (retryCommentId && !pendingBody && pendingFiles.length > 0) {
+        const stillFailed = await uploadAll(retryCommentId, pendingFiles)
+        setFiles(stillFailed)
+        if (stillFailed.length === 0) { setRetryCommentId(null); setError(null) }
+        else setError(`${stillFailed.length} of ${pendingFiles.length} file(s) still could not be uploaded. Press "Retry upload" to try again, or remove them.`)
+        return
+      }
+      setRetryCommentId(null)
+
       const result = await addComment(requestId, body, isInternal, pendingFiles.length > 0)
       if (result.error || !result.commentId) {
         setError(result.error ?? 'Failed to post comment.')
         return
       }
 
-      let uploadFailures = 0
-      for (const file of pendingFiles) {
-        const fd = new FormData()
-        fd.append('file', file)
-        const uploadResult = await uploadAttachment(requestId, fd, result.commentId)
-        if (uploadResult.error) uploadFailures++
-      }
+      const failedFiles = await uploadAll(result.commentId, pendingFiles)
+      const uploadFailures = failedFiles.length
 
       // Nothing but attachments were posted and every one failed — the comment
       // is now an empty bubble with nothing to show, so remove it instead of
-      // leaving it behind.
+      // leaving it behind. The files stay in the list so the person can just press Post again.
       if (!pendingBody && uploadFailures === pendingFiles.length && pendingFiles.length > 0) {
-        await deleteEmptyComment(result.commentId)
-        setError('Attachment(s) failed to upload. Nothing was posted.')
-        setFiles([])
+        try { await deleteEmptyComment(result.commentId) } catch { /* the empty comment is cleaned up later; nothing to tell the person */ }
+        setError('The files could not be uploaded, so nothing was posted. They are still listed below: press Post to try again.')
         textareaRef.current?.focus()
         return
       }
@@ -127,26 +153,34 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
 
       setBody('')
       setIsInternal(false)
-      setFiles([])
+      // files that did not go up stay in the list, with a retry
+      setFiles(failedFiles)
       if (uploadFailures > 0) {
+        setRetryCommentId(result.commentId)
         setError(
           uploadFailures === pendingFiles.length
-            ? 'Comment posted, but the attachment(s) failed to upload.'
-            : `Comment posted, but ${uploadFailures} of ${pendingFiles.length} attachment(s) failed to upload.`
+            ? 'Comment posted, but the file(s) could not be uploaded. They are still listed below: press "Retry upload" to try again.'
+            : `Comment posted, but ${uploadFailures} of ${pendingFiles.length} file(s) could not be uploaded. They are still listed below: press "Retry upload" to try again.`
         )
       }
       textareaRef.current?.focus()
+     } catch {
+      // The answer never came back (internet dropped, server restarted). Typed text and files are kept.
+      setError('Could not send. Check your internet and try again. If your comment already shows in the conversation, do not send it again.')
+     }
     })
   }
 
+  // A template is added after what the person has already typed; it never replaces it.
   function insertCanned(text: string) {
-    setBody(text)
+    const next = body.trim() ? `${body.replace(/\s+$/, '')}\n\n${text}` : text
+    setBody(next)
     setShowCanned(false)
     setCannedSearch('')
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus()
-        textareaRef.current.setSelectionRange(text.length, text.length)
+        textareaRef.current.setSelectionRange(next.length, next.length)
       }
     }, 0)
   }
@@ -195,7 +229,7 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
         <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
           <span className="flex-1">{fileError}</span>
-          <button type="button" onClick={() => setFileError(null)} className="shrink-0 rounded-sm hover:text-red-900">
+          <button type="button" onClick={() => setFileError(null)} aria-label="Dismiss this message" className="shrink-0 rounded-sm hover:text-red-900">
             <X className="h-3 w-3" />
           </button>
         </div>
@@ -214,6 +248,7 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
               <button
                 type="button"
                 onClick={() => removeFileAt(i)}
+                aria-label={`Remove ${file.name}`}
                 className="shrink-0 rounded-sm text-muted-foreground hover:text-destructive"
               >
                 <X className="h-3.5 w-3.5" />
@@ -366,7 +401,7 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
           ) : (
             <Send className="h-3.5 w-3.5" />
           )}
-          {isPending ? 'Posting…' : 'Post'}
+          {isPending ? 'Posting…' : retryCommentId && !body.trim() ? 'Retry upload' : 'Post'}
         </button>
       </div>
 

@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { ModalFrame } from '@/components/ui/ModalFrame'
 import { Check, Minus, Plus, X, ChevronDown, Trash2, AlertTriangle } from 'lucide-react'
 import { savePermissionOverrides, createCustomRole, deleteCustomRole } from '@/lib/actions/admin/permissions'
 import { ROLE_LABELS } from '@/lib/constants/roles'
+import { PERMISSION_MATRIX_ENFORCED } from '@/lib/permissions/enforced'
 
 // D-02: this screen writes real rows to permission_overrides/custom_roles,
 // but nothing in the app reads either table to make an authorization
@@ -15,7 +17,7 @@ import { ROLE_LABELS } from '@/lib/constants/roles'
 // no recorded resolution. Until that decision is made, editing is disabled
 // and the screen is clearly labelled as not enforced, so an admin can't be
 // misled into thinking a toggle here changed anything.
-const PERMISSION_MATRIX_ENFORCED = false
+// (The switch itself lives in lib/permissions/enforced.ts, the same one the server actions check, so the two can never disagree.)
 
 type Perm = boolean | 'partial'
 
@@ -100,7 +102,9 @@ function NewRoleModal({ onClose, onCreated }: {
     if (!name.trim()) { setErr('Role name is required'); return }
     setErr('')
     start(async () => {
-      const res = await createCustomRole({ name, description: desc, base_role: base })
+      let res: Awaited<ReturnType<typeof createCustomRole>>
+      try { res = await createCustomRole({ name, description: desc, base_role: base }) }
+      catch { setErr('Could not create the role. Check your internet and try again.'); return }
       if (res.error) { setErr(res.error); return }
       onCreated({ id: res.id!, name: name.trim(), description: desc, base_role: base })
       onClose()
@@ -108,11 +112,11 @@ function NewRoleModal({ onClose, onCreated }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <ModalFrame label="Add custom role" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card shadow-2xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground">Add Custom Role</h2>
-          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button type="button" onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground transition-colors">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -169,7 +173,7 @@ function NewRoleModal({ onClose, onCreated }: {
           </button>
         </div>
       </div>
-    </div>
+    </ModalFrame>
   )
 }
 
@@ -187,6 +191,9 @@ export function PermissionMatrixClient({ matrix, overrides, customRoles: initial
   const [showModal, setShowModal]  = useState(false)
   const [customRoles, setCustomRoles] = useState<CustomRole[]>(initialCustom)
   const [delPending, startDel]     = useTransition()
+  // the role waiting for "are you sure?", and the last thing the server refused (shown above the matrix)
+  const [deleteTarget, setDeleteTarget] = useState<CustomRole | null>(null)
+  const [actionError, setActionError]   = useState('')
 
   // All role keys in order: system first, then custom
   const allRoles = [
@@ -227,9 +234,15 @@ export function PermissionMatrixClient({ matrix, overrides, customRoles: initial
       const parts = key.split('::')
       return { role_key: parts[2], action_key: key, allowed }
     })
+    setActionError('')
     startTransition(async () => {
-      const res = await savePermissionOverrides(rows)
-      if (!res.error) { setDirty(false); setSaved(true) }
+      try {
+        const res = await savePermissionOverrides(rows)
+        if (res.error) { setActionError(res.error); return }
+        setDirty(false); setSaved(true)
+      } catch {
+        setActionError('Could not save. Check your internet and try again.')
+      }
     })
   }
 
@@ -249,15 +262,25 @@ export function PermissionMatrixClient({ matrix, overrides, customRoles: initial
     setSaved(false)
   }
 
+  // Called only after the person confirmed. The role leaves the screen only when the server really deleted it.
   function handleDeleteRole(id: string, name: string) {
+    setActionError('')
     startDel(async () => {
-      await deleteCustomRole(id)
+      try {
+        const res = await deleteCustomRole(id)
+        if (res?.error) { setActionError(res.error); setDeleteTarget(null); return }
+      } catch {
+        setActionError('Could not delete the role. Check your internet and try again.')
+        setDeleteTarget(null)
+        return
+      }
       setCustomRoles(prev => prev.filter(r => r.id !== id))
       setPerms(prev => {
         const next = { ...prev }
         for (const row of matrix) delete next[actionKey(row, name)]
         return next
       })
+      setDeleteTarget(null)
     })
   }
 
@@ -287,6 +310,10 @@ export function PermissionMatrixClient({ matrix, overrides, customRoles: initial
             </p>
           </div>
         </div>
+      )}
+
+      {actionError && (
+        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{actionError}</p>
       )}
 
       {/* Top bar */}
@@ -338,12 +365,13 @@ export function PermissionMatrixClient({ matrix, overrides, customRoles: initial
                 {custom && canEdit && (
                   <button
                     type="button"
-                    onClick={() => handleDeleteRole(custom.id, custom.name)}
+                    onClick={() => setDeleteTarget(custom)}
                     disabled={delPending}
-                    className="text-muted-foreground/30 hover:text-red-500 transition-colors mt-0.5"
-                    title={`Remove ${custom.name}`}
+                    className="mt-0.5 rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40"
+                    title={`Delete role ${custom.name}`}
+                    aria-label={`Delete role ${custom.name}`}
                   >
-                    <Trash2 className="h-2.5 w-2.5" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 )}
               </div>
@@ -410,6 +438,21 @@ export function PermissionMatrixClient({ matrix, overrides, customRoles: initial
 
       {showModal && (
         <NewRoleModal onClose={() => setShowModal(false)} onCreated={handleRoleCreated} />
+      )}
+
+      {deleteTarget && (
+        <ModalFrame label="Delete role" onClose={() => { if (!delPending) setDeleteTarget(null) }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-2xl">
+            <h2 className="text-sm font-semibold text-foreground">Delete the role &ldquo;{deleteTarget.name}&rdquo;?</h2>
+            <p className="mt-1.5 text-xs text-muted-foreground">Its saved access settings are removed too. This cannot be undone.</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setDeleteTarget(null)} disabled={delPending} className="btn-glossy-light btn-glossy-light-hover text-xs">Cancel</button>
+              <button type="button" onClick={() => handleDeleteRole(deleteTarget.id, deleteTarget.name)} disabled={delPending} className="btn-danger text-xs disabled:opacity-60">
+                {delPending ? 'Deleting…' : 'Delete role'}
+              </button>
+            </div>
+          </div>
+        </ModalFrame>
       )}
     </div>
   )

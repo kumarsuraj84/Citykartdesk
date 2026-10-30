@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { logActivity } from '@/lib/activity'
 import { notify } from '@/lib/notifications'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { stopOpenTimeEntries } from '@/lib/requests/status-change'
 import type { RequestStatus } from '@/types'
 
 type Db = ReturnType<typeof createAdminClient>
@@ -82,8 +83,11 @@ export async function createAdHocApproval(
     return { error: sanitizeError(stErr, { route: 'approvals/adhoc.ts#createAdHocApproval', fallback: 'Failed to update request status.' }) }
   }
 
-  await logActivity({ requestId: req.id, actorId: p.senderId, action: 'status_changed', metadata: { from: req.status, to: 'pending_approval' } }).catch(() => {})
-  await logActivity({ requestId: req.id, actorId: p.senderId, action: 'approval_requested', metadata: { approver_names: p.approvers.map((a) => a.full_name) } }).catch(() => {})
+  // the ticket is parked waiting for the approval, so nobody is working on it: running timers stop (B-07)
+  await stopOpenTimeEntries(req.id, new Date().toISOString())
+
+  await logActivity({ requestId: req.id, actorId: p.senderId, action: 'status_changed', metadata: { from: req.status, to: 'pending_approval' } })
+  await logActivity({ requestId: req.id, actorId: p.senderId, action: 'approval_requested', metadata: { approver_names: p.approvers.map((a) => a.full_name) } })
 
   // Notify all approvers at once
   for (const uid of approverIds) {

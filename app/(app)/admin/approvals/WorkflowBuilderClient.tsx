@@ -17,6 +17,7 @@ import {
 } from '@/lib/actions/admin/workflows'
 import type { ApprovalWorkflowSummary, ApprovalWorkflowStep } from '@/lib/queries/admin'
 import { ROLE_LABELS } from '@/lib/constants/roles'
+import { useUnsavedGuard } from '@/lib/ui/useUnsavedGuard'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -160,10 +161,11 @@ function StepRow({
           </span>
           <p className="text-sm text-foreground truncate">{approverLabel}</p>
         </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
           <button
             onClick={() => onMoved(step.id, 'up')}
             disabled={step.step_order === 1 || isPending}
+            aria-label="Move step up"
             className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30"
           >
             <ArrowUp className="h-3 w-3" />
@@ -171,12 +173,14 @@ function StepRow({
           <button
             onClick={() => onMoved(step.id, 'down')}
             disabled={step.step_order === totalSteps || isPending}
+            aria-label="Move step down"
             className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30"
           >
             <ArrowDown className="h-3 w-3" />
           </button>
           <button
             onClick={() => setEditing(true)}
+            aria-label="Edit step"
             className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
           >
             <Edit2 className="h-3 w-3" />
@@ -224,6 +228,9 @@ function WorkflowCard({
   const [bindError, setBindError]   = useState('')
   const [isPending, start]          = useTransition()
 
+  // a half-typed new name or a step being added counts as unsaved work
+  useUnsavedGuard((editingName && name.trim() !== workflow.name) || (showAddStep && newApproverUserId !== ''))
+
   function toggleExpanded() {
     const next = !expanded
     setExpanded(next)
@@ -242,10 +249,9 @@ function WorkflowCard({
     if (!name.trim() || name === workflow.name) { setEditingName(false); return }
     start(async () => {
       const result = await updateWorkflow(workflow.id, name)
-      if (!result.error) {
-        setWorkflow((prev) => ({ ...prev, name }))
-        setEditingName(false)
-      }
+      if (result.error) { toast.error(result.error); return }
+      setWorkflow((prev) => ({ ...prev, name }))
+      setEditingName(false)
     })
   }
 
@@ -565,6 +571,8 @@ export function WorkflowBuilderClient({
   const [newName, setNewName]     = useState('')
   const [createError, setCreateError] = useState('')
   const [isPending, start]        = useTransition()
+
+  useUnsavedGuard(showForm && newName.trim() !== '')
 
   function handleCreate() {
     if (!newName.trim()) return

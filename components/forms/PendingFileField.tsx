@@ -39,20 +39,20 @@ export function PendingFileField({ id, value, onChange, multiple = true, disable
       setError(null)
       setValidating(true)
       try {
+        // One bad file in a multi-select must not throw away the good ones: keep the valid files, report the others.
+        const valid: File[] = []
+        const tooLarge: string[] = []
+        const problems: string[] = []
         for (const file of incoming) {
           const result = await validateAttachment(file)
-          if (!result.valid) {
-            if (result.code === 'too_large') {
-              // Never added to `value` in the first place — this popup is the
-              // "reattach within the limit" prompt, not a removal step.
-              setTooLargeFileName(file.name)
-            } else {
-              setError(`"${file.name}": ${result.error ?? 'Invalid file.'}`)
-            }
-            return
-          }
+          if (result.valid) valid.push(file)
+          else if (result.code === 'too_large') tooLarge.push(file.name)
+          else problems.push(`"${file.name}": ${result.error ?? 'Invalid file.'}`)
         }
-        onChange(multiple ? [...value, ...incoming] : incoming.slice(0, 1))
+        // Too-large files are never added to `value` — this popup is the "reattach within the limit" prompt, not a removal step.
+        if (tooLarge.length > 0) setTooLargeFileName(tooLarge.join('", "'))
+        if (problems.length > 0) setError(problems.join(' · '))
+        if (valid.length > 0) onChange(multiple ? [...value, ...valid] : valid.slice(0, 1))
       } finally {
         setValidating(false)
       }
@@ -132,7 +132,7 @@ export function PendingFileField({ id, value, onChange, multiple = true, disable
         <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
           <span className="flex-1">{error}</span>
-          <button type="button" onClick={() => setError(null)} className="shrink-0 rounded-sm hover:text-red-900">
+          <button type="button" onClick={() => setError(null)} aria-label="Dismiss this message" className="shrink-0 rounded-sm hover:text-red-900">
             <X className="h-3 w-3" />
           </button>
         </div>
@@ -151,6 +151,7 @@ export function PendingFileField({ id, value, onChange, multiple = true, disable
               <button
                 type="button"
                 onClick={() => removeAt(i)}
+                aria-label={`Remove ${file.name}`}
                 className="shrink-0 rounded-sm text-muted-foreground hover:text-destructive"
               >
                 <X className="h-3.5 w-3.5" />

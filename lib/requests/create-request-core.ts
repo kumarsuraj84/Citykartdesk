@@ -17,6 +17,7 @@ import { runMasterOemRouting, saveMasterSnapshot } from '@/lib/requests/master-r
 import { findSelectedUnit, loadActiveAcUnits, loadCvmEmail, type AcUnitRecord } from '@/lib/masters/resolve'
 import { loadCvmCandidates } from '@/lib/cvm/load'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { logger } from '@/lib/observability/logger'
 import type { FormField, RequestPriority } from '@/types'
 import { isLocationRuleExempt, isServiceVisibleToLocation } from '@/lib/services/location-visibility'
 import { markAutomationFinished, markAutomationStarted, markRulesRan } from '@/lib/automation/rerun'
@@ -89,14 +90,17 @@ export type CreateRequestCoreParams = {
    *  session bound to `requesterId` — the web "book on behalf of" case, and
    *  always true for a channel with no browser session at all. */
   useAdminForWrites?: boolean
-  /** Web-only: a plain 'user' role submitting a request for a service
-   *  restricted to specific Locations is blocked, matching the catalog
-   *  page's own filter — re-checked here as defense-in-depth against a
-   *  direct call using a known service_id. Agent-tier actors are exempt.
-   *  Pass the ACTING user's role/location (not the requester's — an agent
-   *  booking on behalf of someone at a different location is still exempt,
-   *  matching the original behavior). Omit for a channel where this
-   *  particular check doesn't apply the same way. */
+  /** Web-only: a person submitting a request for a service restricted to
+   *  specific Locations is blocked unless they are exempt — re-checked here as
+   *  defense-in-depth against a direct call using a known service_id.
+   *  ONLY an administrator and a platform owner are exempt (isLocationRuleExempt
+   *  in lib/services/location-visibility.ts, as decided by the product owner); a
+   *  technician (agent) or manager is checked like anybody else.
+   *  Pass the ACTING user's role/location, also for "book on behalf of": the
+   *  rule is about who is sitting at the screen, not about the requester they
+   *  book for, so a technician booking for someone at another location is
+   *  checked against the TECHNICIAN's own location. Omit for a channel where
+   *  this particular check doesn't apply the same way. */
   actingUserRoleForLocationCheck?: string | null
   actingUserLocationId?: string | null
   /** Email Intake lets a reviewer route a converted ticket to a different
@@ -333,10 +337,16 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   }
 
   // ── Mandatory-field completion gate — the same check every channel must
-  // pass before a ticket can be created (Stage 1C). File-field required-ness
-  // stays client-side-only for now (see validateRequesterFormCompletion's
-  // own doc comment) — request_attachments.request_id is a NOT NULL FK, so
-  // no channel can have a real file value in formData at this point anyway.
+  // pass before a ticket can be created (Stage 1C).
+  // A REQUIRED FILE FIELD cannot be checked here (B-16): request_attachments.request_id is a NOT NULL
+  // foreign key, so a file can only be stored AFTER this ticket exists, and the web form uploads
+  // its files in a second step once createRequest() has returned the new id. At this point
+  // there is nothing to count, on any channel. The check belongs to the step that finishes the upload
+  // (see validateRequesterFormCompletion's own doc comment). For the web form that step is confirmRequiredFiles()
+  // (lib/actions/attachments.ts, called by the "Request created" screen once the files were sent): when the form asked for a file and the ticket
+  // has none, it leaves one internal note "A required file was not attached" and the screen tells the requester. The other channels (e-mail, WhatsApp,
+  // intake) do not use it: WhatsApp asks for the file before the ticket is made (lib/conversations), and the others keep their files with the message.
+  // Any attachment on the ticket counts (a file is not tied to one field).
   const completion = validateRequesterFormCompletion({ service, formData: parsedFormData, categoryId })
   if (!completion.valid) {
     const firstIssue = completion.missingFields[0] ?? completion.invalidFields[0]
@@ -372,9 +382,10 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   // title on the created ticket" holds exactly. Falls back to the existing
   // form-derived title when absent/unusable, unchanged from before this
   // parameter existed.
+  // Both forms are one line and at most 200 characters (B-28): a long or multi-line answer used as the title ("Service: <answer>") was stored as typed.
   const title =
     sanitizeTrustedTitle(titleOverride) ??
-    (titleValue ? (titleIsSubject ? subjectToTitle(titleValue) : `${service.name}: ${titleValue}`) : service.name)
+    (titleValue ? subjectToTitle(titleIsSubject ? titleValue : `${service.name}: ${titleValue}`) : service.name)
 
   // For the OEM auto-routing email — pulled straight from whichever fields
   // this template happens to have, since there's no fixed
@@ -393,6 +404,26 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   // passed human review (see its own doc comment).
   const priority = (priorityOverride ?? subCategoryResolution.slaPriority ?? service.default_priority) as RequestPriority
   const now = new Date()
+
+  // A-13: the project the ticket is filed under. The insert is made with the server's key (no row security), so a project id of ANOTHER organisation - or one the person
+  // may not see - would be stored as given. It must belong to this organisation, and on the web channel the person at the screen must be allowed to see it
+  // (can_view_project uses their own session). An invalid one is ignored: the ticket is raised without a project.
+  let validProjectId: string | null = null
+  if (projectId) {
+    const { data: proj } = await admin.from('projects').select('id').eq('id', projectId).eq('org_id', orgId).maybeSingle()
+    if (proj) {
+      if (source === 'web') {
+        const rpc = (client as unknown as { rpc?: (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown }> }).rpc
+        const { data: canView } = typeof rpc === 'function' ? await rpc.call(client, 'can_view_project', { p_project_id: projectId }) : { data: false }
+        validProjectId = canView === true ? projectId : null
+      } else {
+        validProjectId = projectId
+      }
+    }
+    if (!validProjectId) {
+      logger.warn({ event: 'create_request.project_ignored', message: 'The project given with a new ticket is not in this organisation or not visible to the person; the ticket was raised without it', route: 'create-request-core.ts#createRequestCore', actorId: actingUserId, orgId })
+    }
+  }
 
   const servicePolicy = service.sla_policy as unknown as { config: import('@/types').SLAConfig } | null
   const { responseDueAt, resolutionDueAt } = await resolveSlaDeadlines(client, {
@@ -447,9 +478,10 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
       // Section snapshot — the resolved form actually shown/asked to the
       // requester (template's sections if tagged, else the service's own).
       form_sections_snapshot: sections as Json,
-      // response_due_at / resolution_due_at are written below with the server's own client: the database (migration 157, D-008) refuses SLA
-      // deadlines in an insert made as the signed-in user, so a requester cannot choose their own deadline.
-      project_id: projectId,
+      // The database (migration 157, D-008) refuses SLA deadlines in an insert made as the signed-in user, so a requester cannot choose their own deadline.
+      // With the server's key (every channel today) they go IN the insert (B-26), so a ticket never exists without them; otherwise they are written right after, below.
+      ...(useAdminForWrites ? { response_due_at: responseDueAt, resolution_due_at: resolutionDueAt } : {}),
+      project_id: validProjectId,
       intake_message_id: intakeMessageId,
       source_metadata: mergedSourceMetadata as Json | undefined,
     })
@@ -464,12 +496,34 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   // from the ticket ("Run automation again") or by the 15-minute retry. Never fails the ticket.
   await markAutomationStarted(admin as never, orgId, request.id)
 
-  if (responseDueAt || resolutionDueAt) {
-    const { error: slaError } = await admin
-      .from('requests')
-      .update({ response_due_at: responseDueAt, resolution_due_at: resolutionDueAt })
-      .eq('id', request.id)
-    if (slaError) sanitizeError(slaError, { route: 'create-request-core.ts#setSlaDeadlines', fallback: 'Failed to set SLA deadlines.' }) // logged; the ticket itself exists
+  // B-26: if the deadlines could not be put in the insert, or the policy has hours for this priority but no deadline came out (the business-hours calendar could not be
+  // read: already logged and alerted at its source), the ticket exists WITHOUT an SLA. That is logged as an error with the ticket id, and the ticket is NOT marked as
+  // "automation finished", so it stays visible as interrupted instead of looking complete.
+  let slaIncomplete = false
+  if (!useAdminForWrites && (responseDueAt || resolutionDueAt)) {
+    let slaError: unknown = null
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await admin
+        .from('requests')
+        .update({ response_due_at: responseDueAt, resolution_due_at: resolutionDueAt })
+        .eq('id', request.id)
+      slaError = res.error
+      if (!slaError) break
+    }
+    if (slaError) slaIncomplete = true
+  }
+  const policyTier = servicePolicy?.config?.[priority]
+  if ((policyTier?.response_hours != null && !responseDueAt) || (policyTier?.resolution_hours != null && !resolutionDueAt)) slaIncomplete = true
+  if (slaIncomplete) {
+    logger.error({
+      event: 'create_request.sla_missing',
+      message: 'The ticket was created without (all of) its SLA deadlines',
+      route: 'create-request-core.ts#createRequestCore',
+      requestId: request.id,
+      orgId,
+      errorCode: 'sla_deadlines_missing',
+      context: { priority, hadResponse: !!responseDueAt, hadResolution: !!resolutionDueAt },
+    })
   }
 
   // The AC the requester chose (if the form has the AC-number field) is saved with the ticket as it was at this moment (before the rules run, so a rule can route by the AC's vendor, brand and region).
@@ -505,7 +559,7 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     action: 'created',
   })
   if (activityResult.error) {
-    console.error('[createRequestCore] Activity log failed for request', request.id)
+    logger.error({ event: 'create_request.activity_missing', message: 'The ticket was created but its "created" history entry could not be written', route: 'create-request-core.ts#createRequestCore', requestId: request.id, orgId, errorCode: 'activity_insert_failed' })
   }
 
   // OEM auto-routing from the master sheets: a category set to "auto-send to the AC / Genset OEM" mails the ticket to the addresses of the store's rows in that
@@ -609,12 +663,15 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
     }).catch(() => {})
   }
 
-  // Notify team members about the new request.
+  // Notify team members about the new request. The Business Rules ("created") may have moved the ticket to another team (set_team), so the team is read again:
+  // the pre-rule team would be told about a ticket that is no longer theirs, and the real one would hear nothing (B-26).
   {
+    const { data: nowRow } = await admin.from('requests').select('team_id').eq('id', request.id).maybeSingle()
+    const notifyTeamId = (nowRow?.team_id as string | undefined) ?? teamId
     const { data: teamMembers } = await admin
       .from('team_members')
       .select('user_id')
-      .eq('team_id', teamId)
+      .eq('team_id', notifyTeamId)
     for (const member of (teamMembers ?? []) as { user_id: string }[]) {
       if (member.user_id !== actingUserId && member.user_id !== requesterId) {
         notify({
@@ -637,6 +694,6 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   // (or, for Email Intake's 'approval' payload type, as an explicit
   // follow-up step in lib/actions/intake/work.ts) — never auto-created here.
 
-  await markAutomationFinished(admin as never, request.id)
+  if (!slaIncomplete) await markAutomationFinished(admin as never, request.id)
   return { requestId: request.id, requestNo: request.request_no }
 }

@@ -44,7 +44,10 @@ export function VendorsClient({ companies, people }: { companies: VendorCompanyR
                 <span className="ml-3 text-xs text-muted-foreground">{c.technicians} technician{c.technicians === 1 ? '' : 's'}, {c.managers} manager{c.managers === 1 ? '' : 's'}</span>
               </div>
               <button type="button" className="text-xs text-primary hover:underline" disabled={pending}
-                onClick={() => run(() => setVendorCompanyActive(c.id, !c.is_active), c.is_active ? 'Switched off.' : 'Switched on.')}>
+                title={c.is_active
+                  ? 'Switch off: this company\'s engineers can no longer open the vendor pages or act on tickets, and it is not offered for new logins. Tickets already given to them stay with them until you give those to somebody else.'
+                  : 'Switch on: this company\'s engineers can sign in to the vendor pages again.'}
+                onClick={() => run(() => setVendorCompanyActive(c.id, !c.is_active), c.is_active ? 'Switched off: its engineers can no longer use the vendor pages.' : 'Switched on: its engineers can use the vendor pages again.')}>
                 {c.is_active ? 'Switch off' : 'Switch on'}
               </button>
             </li>

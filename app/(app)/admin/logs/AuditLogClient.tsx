@@ -1,5 +1,6 @@
 'use client'
 
+import { formatDateAndTime } from '@/lib/ui/formatDate'
 import { useState } from 'react'
 import { Download, ChevronDown, Copy, Check } from 'lucide-react'
 import type { AuditEntry } from '@/lib/queries/admin'
@@ -124,14 +125,7 @@ function AuditDetailsCell({ metadata }: { metadata: Record<string, unknown> }) {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
+  return formatDateAndTime(iso)
 }
 
 export function AuditLogClient({ initialEntries, profiles }: AuditLogClientProps) {

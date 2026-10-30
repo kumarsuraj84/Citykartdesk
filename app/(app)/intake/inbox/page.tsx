@@ -1,12 +1,13 @@
 import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/queries/profiles'
-import { getInboxMessages, getIntakeChannels } from '@/lib/queries/intake'
+import { getInboxPage, getIntakeChannels } from '@/lib/queries/intake'
+import { INBOX_PAGE_SIZE, cleanInboxSearch, parseInboxFolder, parseInboxSort, parseInboxStage } from '@/lib/intake/inbox-filters'
 import { InboxWorkspace } from './InboxWorkspace'
 
 const INTAKE_ROLES = ['agent', 'manager', 'admin', 'platform_owner']
 
 interface PageProps {
-  searchParams: Promise<{ folder?: string; channel?: string }>
+  searchParams: Promise<{ folder?: string; channel?: string; stage?: string; q?: string; sort?: string; page?: string }>
 }
 
 export default async function InboxPage({ searchParams }: PageProps) {
@@ -21,15 +22,24 @@ export default async function InboxPage({ searchParams }: PageProps) {
   const isAdmin = profile.role === 'admin' || profile.role === 'platform_owner'
 
   const sp = await searchParams
+  const folder = parseInboxFolder(sp.folder)
+  const sort = parseInboxSort(sp.sort)
+  const stage = parseInboxStage(sp.stage)
+  const q = cleanInboxSearch(sp.q)
+  const channel = sp.channel && /^[0-9a-f-]{36}$/i.test(sp.channel) ? sp.channel : null
+  const pageNo = Math.max(1, Math.floor(Number(sp.page) || 1))
 
-  // Fetch the full set (archived included) so the folder rail + search/sort run
-  // instantly client-side. Folders reslice this one dataset.
-  const [{ data }, channels] = await Promise.all([
-    getInboxMessages({ page: 1, pageSize: 2000 }),
-    getIntakeChannels(),
-  ])
+  // One page at a time, filtered, searched and sorted by the database (not the newest 2000 sorted in the browser), with the real folder and mailbox counts.
+  const channels = await getIntakeChannels()
+  const inbox = await getInboxPage({ page: pageNo, pageSize: INBOX_PAGE_SIZE, folder, channel, stage, q, sort, channelIds: channels.map((c) => c.id) })
 
   return (
-    <InboxWorkspace messages={data} channels={channels} initialFolder={sp.folder} initialChannel={sp.channel} profileId={profile.id} isAdmin={isAdmin} />
+    <InboxWorkspace
+      inbox={inbox}
+      channels={channels}
+      query={{ folder, channel, stage, q, sort }}
+      profileId={profile.id}
+      isAdmin={isAdmin}
+    />
   )
 }

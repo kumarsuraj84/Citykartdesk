@@ -29,6 +29,8 @@
 // historical/compliance report and a live ops dashboard have genuinely
 // different, both-correct questions to answer.
 
+import { CLOSED_LIKE_REQUEST_STATUSES, PAUSED_SLA_STATUSES, isClosedLikeStatus, isSlaPausedStatus } from '@/lib/constants/requests'
+
 export type ResolutionBreachInput = {
   resolution_due_at: string | null
   status: string
@@ -47,14 +49,24 @@ export type EverResponseBreachedInput = {
 
 /** Statuses that mean "no longer actively worked" — a ticket in one of these
  *  can never be "currently breached," only "ever breached" (see below). */
-export const CLOSED_LIKE_STATUSES = ['resolved', 'closed', 'cancelled'] as const
+export const CLOSED_LIKE_STATUSES = CLOSED_LIKE_REQUEST_STATUSES
+
+/** Whether a timestamp is later than another, as real instants. F-03: the database can return the same moment as '...Z' or '...+05:30'/'-07:00', and comparing
+ *  those as TEXT flagged tickets that were hours away from their deadline as breached. */
+function isLater(a: string, b: string): boolean {
+  const x = new Date(a).getTime()
+  const y = new Date(b).getTime()
+  return Number.isFinite(x) && Number.isFinite(y) && x > y
+}
 
 /** Category A: open right now AND past its resolution deadline. Excludes
- *  anything already resolved/closed/cancelled, however late it was. */
+ *  anything already resolved/closed/cancelled, however late it was, and anything
+ *  whose SLA clock is paused (waiting on the user, on a purchase, on an approval):
+ *  its deadline moves out by the pause when it resumes, so it is not breached. */
 export function isCurrentlyBreached(row: ResolutionBreachInput, now: Date = new Date()): boolean {
   if (!row.resolution_due_at) return false
-  if ((CLOSED_LIKE_STATUSES as readonly string[]).includes(row.status)) return false
-  return new Date(row.resolution_due_at) < now
+  if (isClosedLikeStatus(row.status) || isSlaPausedStatus(row.status)) return false
+  return new Date(row.resolution_due_at).getTime() < now.getTime()
 }
 
 /** The "ever breached" view: still-open tickets are breached the moment
@@ -65,13 +77,13 @@ export function isCurrentlyBreached(row: ResolutionBreachInput, now: Date = new 
 export function isEverBreached(row: EverBreachedInput, now: Date = new Date()): boolean {
   if (!row.resolution_due_at) return false
   const closedLike = row.resolved_at ?? row.closed_at
-  return closedLike ? closedLike > row.resolution_due_at : now.toISOString() > row.resolution_due_at
+  return closedLike ? isLater(closedLike, row.resolution_due_at) : isLater(now.toISOString(), row.resolution_due_at)
 }
 
 /** Same "ever breached" shape, for the separate first-response SLA. */
 export function isEverResponseBreached(row: EverResponseBreachedInput, now: Date = new Date()): boolean {
   if (!row.response_due_at) return false
-  return row.responded_at ? row.responded_at > row.response_due_at : now.toISOString() > row.response_due_at
+  return row.responded_at ? isLater(row.responded_at, row.response_due_at) : isLater(now.toISOString(), row.response_due_at)
 }
 
 /** Query-builder equivalent of isCurrentlyBreached(), for the two call
@@ -86,5 +98,5 @@ export function applyCurrentlyBreachedFilter<T extends { lt: (...args: any[]) =>
 ): T {
   return query
     .lt('resolution_due_at', nowIso)
-    .not('status', 'in', `(${CLOSED_LIKE_STATUSES.map((s) => `"${s}"`).join(',')})`)
+    .not('status', 'in', `(${[...CLOSED_LIKE_REQUEST_STATUSES, ...PAUSED_SLA_STATUSES].map((s) => `"${s}"`).join(',')})`)
 }

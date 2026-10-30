@@ -12,4 +12,5 @@ DROP TABLE IF EXISTS public.master_sources;
 DELETE FROM vault.secrets WHERE name LIKE 'masters-google-%';
 DROP FUNCTION IF EXISTS public.masters_store_credential(uuid, text);
 DROP FUNCTION IF EXISTS public.masters_read_credential(uuid);
+DELETE FROM auth.schema_migrations WHERE version = '20240101000175';
 COMMIT;

@@ -1,5 +1,7 @@
 # One pass of the System Log shipper: copies new PROBLEM lines from the service logs into the Citykart Desk System Log.
 # Reads the shared secret from the app's .env.local (SYSTEM_LOG_INGEST_SECRET, else CRON_SECRET) so it is never stored in the task.
+# Set SYSTEM_LOG_INGEST_SECRET in .env.local (16+ characters, the app must have the same value): the app accepts the CRON_SECRET only for the cron runner's
+# own 'cron' entries, so a shipper using only the cron secret is refused (unless the app runs with the transitional ALLOW_SHARED_SECRET_FALLBACK=1).
 # Usage: run-log-shipper.ps1 [-LogDir <folder with CkDeskPostgrest.err.log ...>] [-Target http://127.0.0.1:3210]
 param([string]$LogDir = '', [string]$Target = 'http://127.0.0.1:3210')
 
@@ -9,13 +11,16 @@ $envFile = Join-Path $appDir '.env.local'
 if (-not (Test-Path $envFile)) { Write-Error ".env.local not found at $envFile"; exit 1 }
 
 $secret = $null
+$usedOwn = $false
 foreach ($line in Get-Content $envFile) {
   if ($line -match '^\s*(CRON_SECRET|SYSTEM_LOG_INGEST_SECRET)\s*=\s*(.+?)\s*$') {
     $v = $Matches[2].Trim('"').Trim("'")
-    if ($Matches[1] -eq 'SYSTEM_LOG_INGEST_SECRET' -or -not $secret) { $secret = $v }
+    if ($Matches[1] -eq 'SYSTEM_LOG_INGEST_SECRET' -and $v) { $secret = $v; $usedOwn = $true }
+    elseif (-not $secret) { $secret = $v }
   }
 }
 if (-not $secret) { Write-Error 'Neither SYSTEM_LOG_INGEST_SECRET nor CRON_SECRET is set in .env.local'; exit 1 }
+if (-not $usedOwn) { Write-Warning 'SYSTEM_LOG_INGEST_SECRET is not set in .env.local: using CRON_SECRET, which the app refuses for shipped service-log lines. Add SYSTEM_LOG_INGEST_SECRET to the app .env.local and to app\standalone\.env.local.' }
 
 $env:SYSTEM_LOG_INGEST_SECRET = $secret
 $env:SYSTEM_LOG_TARGET_URL = $Target

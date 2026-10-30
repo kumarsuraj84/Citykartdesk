@@ -87,6 +87,8 @@ export type StoredProgramRow = {
   machineNo: string | null
   serial: string | null
   vendor: string | null
+  /** the sheet row it was on at the last copy (the tiebreaker when several rows look the same) */
+  sheetRow?: number | null
   removedAt: string | null
   missingSince: string | null
 }

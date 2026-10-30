@@ -2,8 +2,9 @@
 // ticket (see lib/queries/executive-dashboard.ts) and these functions work out every number, ranking, trend and
 // comparison in the browser, so a click on any bar or name re-filters the whole page instantly.
 
-import { AGE_BUCKETS, ageBucketFor } from '@/lib/reporting/aging'
-import { STATUS_LABELS as REQUEST_STATUS_LABELS } from '@/lib/constants/requests'
+import { AGE_BUCKETS, ageBucketFor, ageInDays as wholeAgeDays } from '@/lib/reporting/aging'
+import { STATUS_LABELS as REQUEST_STATUS_LABELS, isSlaPausedStatus } from '@/lib/constants/requests'
+import { istDay, istDayStartMs, istParts } from '@/lib/reporting/ist'
 
 export const UNASSIGNED = 'Unassigned'
 export const NO_CATEGORY = '(No category)'
@@ -145,13 +146,16 @@ export const capitalize = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : 
 
 /** Still being worked on: the status is not resolved, closed or cancelled (a cancelled ticket was created but is no work to do). */
 export const isOpen = (t: ExecTicket) => t.status !== 'resolved' && t.status !== 'closed' && t.status !== 'cancelled'
+// (A ticket that was resolved and later re-opened has its resolved time cleared, so for a moment BEFORE the re-open it looks open since the day it was created. The database keeps no
+// earlier resolved time to restore, so a historical backlog / breach count - and the "previous period" comparison built on it - counts such a ticket as open for the time it was
+// really resolved. This is a known limit of the data, audit F-30.)
 export const openAt = (t: ExecTicket, at: number) => t.status !== 'cancelled' && t.created <= at && (t.resolved === null || t.resolved > at)
-/** Open and past its resolution deadline at that moment ("Currently breached" on the normal dashboard). */
-export const breachedAt = (t: ExecTicket, at: number) => openAt(t, at) && t.due !== null && t.due < at
+/** Open and past its resolution deadline at that moment ("Currently breached" on the normal dashboard). A ticket whose clock is stopped (waiting on the user, on purchase from HO, on an approval) is not breached while it waits (audit F-02). */
+export const breachedAt = (t: ExecTicket, at: number) => openAt(t, at) && t.due !== null && t.due < at && !(t.resolved === null && isSlaPausedStatus(t.status))
 
-/** Backlog-age bucket of a still-open ticket: the same buckets and the same fractional-day age as the normal dashboard's Backlog Aging. */
+/** Backlog-age bucket of a still-open ticket: the same buckets and the same whole-elapsed-day age as every other report (lib/reporting/aging.ts, audit F-16). */
 export function ageBucketOf(t: ExecTicket, now: number): string {
-  return ageBucketFor((now - t.created) / DAY).label
+  return ageBucketFor(wholeAgeDays(t.created, now)).label
 }
 export const AGE_BUCKET_LABELS = [...AGE_BUCKETS.map((b) => b.label), RESOLVED_BUCKET]
 
@@ -248,24 +252,26 @@ export interface CustomRange { start: string; end: string }
 export interface Win { start: number; end: number }
 export const inWin = (ms: number, w: Win) => ms >= w.start && ms <= w.end
 
+// The dashboard works in INDIA days (fixed +05:30) in the browser and on the server alike: the browser's own zone made "today", "this month" and the hour of the day different
+// for a viewer outside India, and the server's own zone different again (audit F-29).
+/** 00:00 India time of the India day that holds this moment. */
 export function startOfDay(ms: number): number {
-  const d = new Date(ms)
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
+  return istDayStartMs(istDay(ms))
 }
-const addDays = (ms: number, n: number) => { const d = new Date(ms); d.setDate(d.getDate() + n); return d.getTime() }
+const addDays = (ms: number, n: number) => ms + n * DAY // (India has no daylight saving: a day is always 24 hours)
 
-/** yyyy-mm-dd → local midnight, or NaN when it is not a real date. */
+/** yyyy-mm-dd → 00:00 India time of that day, or NaN when it is not a real date. */
 export function parseDay(iso: string): number {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
   if (!m) return NaN
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
-  return d.getFullYear() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3]) ? d.getTime() : NaN
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
+  return d.getUTCFullYear() === Number(m[1]) && d.getUTCMonth() === Number(m[2]) - 1 && d.getUTCDate() === Number(m[3]) ? istDayStartMs(iso) : NaN
 }
+/** The India day of a moment, yyyy-mm-dd. */
 export function isoDay(ms: number): string {
-  const d = new Date(ms)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return istDay(ms)
 }
+const ymd = (y: number, m0: number, d: number) => new Date(Date.UTC(y, m0, d)).toISOString().slice(0, 10)
 
 /** The window a period covers, ending now (a chosen date range ends at the end of its last day, but never in the future). A financial year starts on 1 April. */
 export function periodWindow(period: Period, now: number, custom?: CustomRange): Win {
@@ -276,9 +282,9 @@ export function periodWindow(period: Period, now: number, custom?: CustomRange):
     period = '30d'
   }
   if (period === 'fy') {
-    const d = new Date(now)
-    const year = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1
-    return { start: new Date(year, 3, 1).getTime(), end: now }
+    const [y, m] = istDay(now).split('-').map(Number)
+    const year = m >= 4 ? y : y - 1
+    return { start: istDayStartMs(`${year}-04-01`), end: now }
   }
   // "Last N days" = N calendar days including today (so 30 days is today and the 29 days before it).
   const n = period === '60d' ? 60 : period === '90d' ? 90 : period === '120d' ? 120 : 30
@@ -287,24 +293,19 @@ export function periodWindow(period: Period, now: number, custom?: CustomRange):
 
 /** Ready-made date ranges for the custom-date pop-up, worked out from today. */
 export function quickRanges(now: number): { label: string; start: string; end: string }[] {
-  const d = new Date(now)
   const today = isoDay(now)
-  const monthStart = new Date(d.getFullYear(), d.getMonth(), 1)
-  const lastMonthStart = new Date(d.getFullYear(), d.getMonth() - 1, 1)
-  const lastMonthEnd = new Date(d.getFullYear(), d.getMonth(), 0)
-  const fyYear = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1
-  const qStartMonth = Math.floor(((d.getMonth() + 9) % 12) / 3) * 3 // months since April, in steps of 3
-  const quarterStart = new Date(fyYear, 3 + qStartMonth, 1)
-  const prevQuarterStart = new Date(fyYear, 3 + qStartMonth - 3, 1)
-  const prevQuarterEnd = new Date(quarterStart.getTime() - DAY)
+  const [y, m1] = today.split('-').map(Number)
+  const m0 = m1 - 1
+  const fyYear = m0 >= 3 ? y : y - 1
+  const qStartMonth = Math.floor(((m0 + 9) % 12) / 3) * 3 // months since April, in steps of 3
   return [
     { label: 'Last 14 days', start: isoDay(addDays(startOfDay(now), -13)), end: today },
-    { label: 'This month', start: isoDay(monthStart.getTime()), end: today },
-    { label: 'Last month', start: isoDay(lastMonthStart.getTime()), end: isoDay(lastMonthEnd.getTime()) },
-    { label: 'This financial quarter', start: isoDay(quarterStart.getTime()), end: today },
-    { label: 'Last financial quarter', start: isoDay(prevQuarterStart.getTime()), end: isoDay(prevQuarterEnd.getTime()) },
-    { label: 'This financial year', start: isoDay(new Date(fyYear, 3, 1).getTime()), end: today },
-    { label: 'Last financial year', start: isoDay(new Date(fyYear - 1, 3, 1).getTime()), end: isoDay(new Date(fyYear, 2, 31).getTime()) },
+    { label: 'This month', start: ymd(y, m0, 1), end: today },
+    { label: 'Last month', start: ymd(y, m0 - 1, 1), end: ymd(y, m0, 0) },
+    { label: 'This financial quarter', start: ymd(fyYear, 3 + qStartMonth, 1), end: today },
+    { label: 'Last financial quarter', start: ymd(fyYear, 3 + qStartMonth - 3, 1), end: ymd(fyYear, 3 + qStartMonth, 0) },
+    { label: 'This financial year', start: ymd(fyYear, 3, 1), end: today },
+    { label: 'Last financial year', start: ymd(fyYear - 1, 3, 1), end: ymd(fyYear, 3, 0) },
   ]
 }
 
@@ -379,7 +380,8 @@ export function series(ts: ExecTicket[], w: Win, m: Measure): (number | null)[] 
 
 export function formatMeasure(m: Measure, v: number | null): string {
   if (v === null || v === undefined || Number.isNaN(v)) return '-'
-  if (m === 'sla') return `${v.toFixed(0)}%`
+  // (99.6 must not show as 100%: 100 means every single one - so below 100 it shows one decimal, 99.6%, audit F-31)
+  if (m === 'sla') return v < 100 && Math.round(v) === 100 ? `${(Math.floor(v * 10) / 10).toFixed(1)}%` : `${v.toFixed(0)}%`
   if (m === 'tat' || m === 'frt') return v < 48 ? `${v.toFixed(1)}h` : `${(v / 24).toFixed(1)}d`
   if (m === 'csat') return v.toFixed(1)
   return String(Math.round(v))
@@ -457,8 +459,8 @@ export function heatmap(ts: ExecTicket[], w: Win): { cells: Map<string, number>;
   let max = 0
   for (const t of ts) {
     if (!inWin(t.created, w)) continue
-    const d = new Date(t.created)
-    const k = `${d.getDay()}_${d.getHours()}`
+    const p = istParts(t.created) // (India weekday and hour, not the browser's)
+    const k = `${p.weekday}_${p.hour}`
     const n = (cells.get(k) ?? 0) + 1
     cells.set(k, n)
     if (n > max) max = n
@@ -475,7 +477,8 @@ export function heatmap(ts: ExecTicket[], w: Win): { cells: Map<string, number>;
 export type SliceOnly = 'closed' | 'no_response'
 export function ticketsBehindOnly(ts: ExecTicket[], w: Win, only: SliceOnly): ExecTicket[] {
   if (only === 'closed') return ts.filter((t) => t.closed !== null && inWin(t.closed, w)).sort((a, b) => b.created - a.created)
-  return ts.filter((t) => isOpen(t) && t.frH === null).sort((a, b) => a.created - b.created)
+  // (not a ticket whose clock is stopped: it waits for somebody else and no first response is overdue, as on the Dashboards page)
+  return ts.filter((t) => isOpen(t) && t.frH === null && !isSlaPausedStatus(t.status)).sort((a, b) => a.created - b.created)
 }
 
 /**
@@ -510,7 +513,7 @@ export function ticketsBehind(ts: ExecTicket[], w: Win, m: Measure, onlyOpen = f
 }
 
 export function ageInDays(t: ExecTicket, now: number): number {
-  return Math.floor(((t.resolved ?? now) - t.created) / DAY)
+  return wholeAgeDays(t.created, t.resolved ?? now)
 }
 export const hoursTaken = (t: ExecTicket, now: number) => ((t.resolved ?? now) - t.created) / HOUR
 

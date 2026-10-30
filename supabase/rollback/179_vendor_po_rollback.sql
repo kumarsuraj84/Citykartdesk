@@ -18,4 +18,5 @@ ALTER TABLE public.vendor_requests DROP COLUMN IF EXISTS po_attachment_id;
 ALTER TABLE public.vendor_requests DROP COLUMN IF EXISTS po_date;
 ALTER TABLE public.vendor_requests DROP COLUMN IF EXISTS po_number;
 ALTER TABLE public.vendor_requests DROP COLUMN IF EXISTS approver_id;
+DELETE FROM auth.schema_migrations WHERE version = '20240101000179';
 COMMIT;

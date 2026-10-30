@@ -38,20 +38,48 @@ export interface ReminderResult {
   listed: number
   /** a sample was sent (to the address asked for) instead of the day's reminders */
   sampleOf?: string
+  /** approvers left out because their reminder for today had already been sent by an earlier or overlapping pass */
+  alreadySent?: number
 }
 
-/** Claims today's run: true for the one call that gets it. */
-async function claimToday(admin: AnyClient, today: string): Promise<{ claimed: boolean; previous: string | null }> {
-  const { data: row } = await admin.from('app_settings').select('value').eq('key', LAST_RUN_KEY).maybeSingle()
+/** One entry per approver: the day this approver's reminder was last claimed. */
+export const approverKey = (approverId: string) => `approval_reminder_sent:${approverId}`
+
+/**
+ * Claims today's reminder for ONE approver: true for the one call that gets it. The claim is made before the e-mail is sent (so two overlapping runs cannot both
+ * send it) and given back if the send fails. This replaces a single claim for the whole day, which was released only when nothing at all had been sent: a run that
+ * died half way (a restart, a crash) left the rest of the approvers without their reminder until tomorrow (G-21). Now a later call the same day carries on with
+ * exactly the approvers who have not had theirs.
+ */
+async function claimApprover(admin: AnyClient, approverId: string, today: string): Promise<{ claimed: boolean; previous: string | null }> {
+  const key = approverKey(approverId)
+  const { data: row } = await admin.from('app_settings').select('value').eq('key', key).maybeSingle()
   const previous: string | null = row?.value ?? null
   if (previous === today) return { claimed: false, previous }
   if (previous === null) {
-    const { error } = await admin.from('app_settings').insert({ key: LAST_RUN_KEY, value: today })
+    const { error } = await admin.from('app_settings').insert({ key, value: today })
     return { claimed: !error, previous }
   }
-  // only the call that still sees yesterday's value changes it
-  const { data: updated } = await admin.from('app_settings').update({ value: today }).eq('key', LAST_RUN_KEY).eq('value', previous).select('key')
+  // only the call that still sees the earlier day's value changes it
+  const { data: updated } = await admin.from('app_settings').update({ value: today }).eq('key', key).eq('value', previous).select('key')
   return { claimed: (updated?.length ?? 0) > 0, previous }
+}
+
+async function releaseApprover(admin: AnyClient, approverId: string, previous: string | null): Promise<void> {
+  const key = approverKey(approverId)
+  if (previous) await admin.from('app_settings').update({ value: previous }).eq('key', key)
+  else await admin.from('app_settings').delete().eq('key', key)
+}
+
+/** Has today's pass been finished? Written only when every approver has had their reminder (or needed none). */
+async function dayIsDone(admin: AnyClient, today: string): Promise<boolean> {
+  const { data: row } = await admin.from('app_settings').select('value').eq('key', LAST_RUN_KEY).maybeSingle()
+  return row?.value === today
+}
+async function markDayDone(admin: AnyClient, today: string): Promise<void> {
+  const { data: row } = await admin.from('app_settings').select('value').eq('key', LAST_RUN_KEY).maybeSingle()
+  if (row) await admin.from('app_settings').update({ value: today }).eq('key', LAST_RUN_KEY)
+  else await admin.from('app_settings').insert({ key: LAST_RUN_KEY, value: today })
 }
 
 export async function sendApprovalReminders(admin: AnyClient, deps: ReminderDeps = {}): Promise<ReminderResult> {
@@ -62,15 +90,10 @@ export async function sendApprovalReminders(admin: AnyClient, deps: ReminderDeps
   const result: ReminderResult = { approvers: 0, sent: 0, skippedFresh: 0, failed: 0, listed: 0 }
 
   const sample = deps.sampleTo
-  const { claimed, previous } = sample ? { claimed: true, previous: null as string | null } : await claimToday(admin, today)
-  if (!claimed) return { ...result, alreadyRan: true }
-  const release = async () => {
-    if (sample) return
-    if (previous) await admin.from('app_settings').update({ value: previous }).eq('key', LAST_RUN_KEY)
-    else await admin.from('app_settings').delete().eq('key', LAST_RUN_KEY)
-  }
+  // a finished pass today: nothing more to do (a call that finds it unfinished carries on with the approvers who have not had theirs)
+  if (!sample && (await dayIsDone(admin, today))) return { ...result, alreadyRan: true }
 
-  try {
+  {
     // the people who are asked to decide something that is still waiting
     const { data: pending } = await admin.from('approvals').select('id, workflow_id').eq('status', 'pending').limit(5000)
     const workflowIds = [...new Set(((pending ?? []) as { workflow_id: string }[]).map((a) => a.workflow_id))]
@@ -111,13 +134,23 @@ export async function sendApprovalReminders(admin: AnyClient, deps: ReminderDeps
 
       if (sample) { if (!best || waiting.length > best.waiting.length) best = { p, waiting }; continue }
 
+      // this approver's reminder was already claimed today (an earlier or overlapping pass): not sent twice
+      const claim = await claimApprover(admin, p.id, today)
+      if (!claim.claimed) { result.alreadySent = (result.alreadySent ?? 0) + 1; continue }
+
       const { data: u } = await admin.auth.admin.getUserById(p.id)
       const to: string | undefined = u?.user?.email
-      if (!to) { result.failed++; continue }
+      if (!to) { result.failed++; await releaseApprover(admin, p.id, claim.previous); continue }
 
       const mail = compose(p, waiting)
-      const res = await send({ to, subject: mail.subject, html: mail.html, text: mail.text })
-      if (res.error) result.failed++
+      let res: { error?: string }
+      try {
+        res = await send({ to, subject: mail.subject, html: mail.html, text: mail.text })
+      } catch (e) {
+        await releaseApprover(admin, p.id, claim.previous)   // the next call tries this approver again
+        throw e
+      }
+      if (res.error) { result.failed++; await releaseApprover(admin, p.id, claim.previous) }
       else { result.sent++; result.listed += waiting.length }
     }
     // a test: ONE sample, to the address asked for
@@ -128,11 +161,8 @@ export async function sendApprovalReminders(admin: AnyClient, deps: ReminderDeps
       if (res.error) result.failed++
       else { result.sent++; result.listed += best.waiting.length }
     }
-    // nothing could be sent at all: let the next call today try again
-    if (result.sent === 0 && result.failed > 0) await release()
-  } catch (e) {
-    await release()
-    throw e
+    // The day is used up only when nobody's reminder failed; otherwise the next call today tries again, and only for those who have not had theirs.
+    if (!sample && result.failed === 0) await markDayDone(admin, today)
   }
   return result
 }

@@ -517,8 +517,13 @@ describe('Stage 1 — shared ticket-creation core (web / core-direct / Email Int
       { final_type: 'approval', final_department: null, final_category: null, final_subcategory: null, final_priority: 'medium' },
       { type: 'approval', title: 'Never stuck', description: '', service_id: fx.intakeServiceId, team_id: fx.teamId }
     )
-    expect(result.ok).toBe(true)
-    if (!result.ok || result.workType !== 'approval') throw new Error('expected an approval-type request')
+    // A service with no (or a step-less) approval workflow is now refused with a clear message instead of creating a ticket nobody can decide (audit B-21 / VA-TKT-05):
+    // that also never leaves a ticket stuck in pending_approval.
+    if (!result.ok) {
+      expect(result.error).toMatch(/approval workflow/i)
+      return
+    }
+    if (result.workType !== 'approval') throw new Error('expected an approval-type request')
 
     const { data: row } = await admin.from('requests').select('status, response_due_at').eq('id', result.workId).single()
     const { data: approvals } = await admin.from('approvals').select('id').eq('request_id', result.workId)

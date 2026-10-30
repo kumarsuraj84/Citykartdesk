@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useTransition, useMemo } from 'react'
+import { safely } from '@/lib/ui/safeAction'
+import { ModalFrame } from '@/components/ui/ModalFrame'
 import { Plus, Pencil, Archive, Tag, Trash2, Copy, CheckSquare, MinusSquare, Square, Search } from 'lucide-react'
 import {
   createService,
@@ -202,8 +204,8 @@ function ServiceModal({
 
     startTransition(async () => {
       const result: { error?: string; id?: string } = isEdit
-        ? await updateService(existing!.id, data)
-        : await createService(data)
+        ? await safely(() => updateService(existing!.id, data))
+        : await safely(() => createService(data))
 
       if (result.error) {
         setError(result.error)
@@ -217,8 +219,9 @@ function ServiceModal({
       // duplicate of it isn't left with an empty form.
       if (mode.type === 'duplicate' && result.id && !mode.source.template_id) {
         const sourceSections = resolveServiceFormSections(mode.source)
+        const newServiceId = result.id
         if (sourceSections.length > 0) {
-          const formResult = await saveFormSections(result.id, sourceSections)
+          const formResult = await safely(() => saveFormSections(newServiceId, sourceSections))
           if (formResult.error) {
             setError(`Service created, but copying the form failed: ${formResult.error}`)
             return
@@ -231,7 +234,7 @@ function ServiceModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <ModalFrame label="Service" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-lg rounded-2xl border border-border bg-card shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="border-b border-border px-4 py-3 sticky top-0 bg-card z-10">
           <h2 className="text-base font-semibold text-foreground">
@@ -637,7 +640,7 @@ function ServiceModal({
           </div>
         </form>
       </div>
-    </div>
+    </ModalFrame>
   )
 }
 
@@ -767,7 +770,7 @@ export default function ServicesAdminClient({ services, categoryTree, teams, pro
     if (!archiveTarget) return
     setArchiveError('')
     startArchive(async () => {
-      const result = await archiveService(archiveTarget.id)
+      const result = await safely(() => archiveService(archiveTarget.id))
       if (result.error) {
         setArchiveError(result.error)
       } else {
@@ -780,7 +783,7 @@ export default function ServicesAdminClient({ services, categoryTree, teams, pro
     if (!deleteTarget) return
     setDeleteError('')
     startDelete(async () => {
-      const result = await deleteService(deleteTarget.id)
+      const result = await safely(() => deleteService(deleteTarget.id))
       if (result.error) {
         setDeleteError(result.error)
       } else {
@@ -842,7 +845,7 @@ export default function ServicesAdminClient({ services, categoryTree, teams, pro
 
       {/* Archive confirmation dialog */}
       {archiveTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <ModalFrame label="Archive service" onClose={() => setArchiveTarget(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl">
             <h3 className="text-base font-semibold text-foreground">Archive service?</h3>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -867,12 +870,12 @@ export default function ServicesAdminClient({ services, categoryTree, teams, pro
               </button>
             </div>
           </div>
-        </div>
+        </ModalFrame>
       )}
 
       {/* Delete confirmation dialog */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <ModalFrame label="Delete service" onClose={() => { setDeleteTarget(null); setDeleteError('') }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl">
             <h3 className="text-base font-semibold text-destructive">Delete service permanently?</h3>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -898,7 +901,7 @@ export default function ServicesAdminClient({ services, categoryTree, teams, pro
               </button>
             </div>
           </div>
-        </div>
+        </ModalFrame>
       )}
     </div>
   )

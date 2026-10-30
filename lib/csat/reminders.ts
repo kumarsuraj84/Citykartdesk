@@ -14,46 +14,60 @@ export async function sendDueCsatReminders(admin: AnyClient, limit = 100): Promi
   if (!settings.enabled || settings.reminderDays <= 0) return 0
 
   const dueBefore = new Date(Date.now() - settings.reminderDays * DAY).toISOString()
-  const { data: surveys, error } = await admin
-    .from('csat_surveys')
-    .select('id, request_id, requester_id, sent_at')
-    .is('submitted_at', null)
-    .is('reminder_sent_at', null)
-    .lt('sent_at', dueBefore)
-    .order('sent_at', { ascending: true })
-    .limit(limit)
-  // the reminder column arrives with a migration; until it exists there is simply nothing to send
-  if (error || !surveys?.length) return 0
-
   let sent = 0
-  for (const s of surveys as { id: string; request_id: string; requester_id: string; sent_at: string }[]) {
-    const { data: req } = await admin
-      .from('requests')
-      .select('id, request_no, title, status, reopen_deadline_at, resolved_at')
-      .eq('id', s.request_id)
-      .maybeSingle()
-    // only while the ticket is still waiting on the requester's verdict (not reopened, not closed)
-    if (!req || req.status !== 'resolved') {
-      await admin.from('csat_surveys').update({ reminder_sent_at: new Date().toISOString() }).eq('id', s.id)
-      continue
+  // A survey whose reminder cannot be sent (no e-mail address for the requester, mail down) is released and stays "due". Always reading the first `limit` rows
+  // by sent_at then let such rows sit at the head for ever and starve every survey behind them (F-38). So the pages are walked with an offset that skips the
+  // rows that stayed due, and `limit` counts the reminders sent in this run.
+  let stillDue = 0
+  // `limit` bounds the reminders SENT in one run; the failed attempts are bounded by the number of pages walked, so a pile of undeliverable ones cannot use up the budget either.
+  for (let page = 0; page < MAX_PAGES && sent < limit; page++) {
+    const { data: surveys, error } = await admin
+      .from('csat_surveys')
+      .select('id, request_id, requester_id, sent_at')
+      .is('submitted_at', null)
+      .is('reminder_sent_at', null)
+      .lt('sent_at', dueBefore)
+      .order('sent_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(stillDue, stillDue + PAGE - 1)
+    // the reminder column arrives with a migration; until it exists there is simply nothing to send
+    if (error || !surveys?.length) break
+
+    for (const s of surveys as { id: string; request_id: string; requester_id: string; sent_at: string }[]) {
+      if (sent >= limit) break
+      const { data: req } = await admin
+        .from('requests')
+        .select('id, request_no, title, status, reopen_deadline_at, resolved_at')
+        .eq('id', s.request_id)
+        .maybeSingle()
+      // only while the ticket is still waiting on the requester's verdict (not reopened, not closed)
+      if (!req || req.status !== 'resolved') {
+        const { error: markError } = await admin.from('csat_surveys').update({ reminder_sent_at: new Date().toISOString() }).eq('id', s.id)
+        if (markError) stillDue++
+        continue
+      }
+      // D-063: claim the reminder BEFORE sending it (only the run that finds reminder_sent_at empty gets it), so two overlapping runs cannot both
+      // e-mail the requester. If sending fails the claim is released and the next run tries again.
+      const { data: claimed } = await admin.from('csat_surveys').update({ reminder_sent_at: new Date().toISOString() }).eq('id', s.id).is('reminder_sent_at', null).select('id')
+      if (!claimed?.length) continue
+      const release = () => admin.from('csat_surveys').update({ reminder_sent_at: null }).eq('id', s.id)
+      let ok = false
+      try {
+        ok = await sendCsatReminder(admin, {
+          surveyId: s.id, requestId: req.id, requestNo: req.request_no, title: req.title, requesterId: s.requester_id,
+          resolvedAtMs: new Date(req.resolved_at ?? s.sent_at).getTime(), reopenDeadlineIso: req.reopen_deadline_at,
+        })
+      } catch (e) {
+        await release()
+        throw e
+      }
+      if (ok) sent++
+      else { await release(); stillDue++ }
     }
-    // D-063: claim the reminder BEFORE sending it (only the run that finds reminder_sent_at empty gets it), so two overlapping runs cannot both
-    // e-mail the requester. If sending fails the claim is released and the next run tries again.
-    const { data: claimed } = await admin.from('csat_surveys').update({ reminder_sent_at: new Date().toISOString() }).eq('id', s.id).is('reminder_sent_at', null).select('id')
-    if (!claimed?.length) continue
-    const release = () => admin.from('csat_surveys').update({ reminder_sent_at: null }).eq('id', s.id)
-    let ok = false
-    try {
-      ok = await sendCsatReminder(admin, {
-        surveyId: s.id, requestId: req.id, requestNo: req.request_no, title: req.title, requesterId: s.requester_id,
-        resolvedAtMs: new Date(req.resolved_at ?? s.sent_at).getTime(), reopenDeadlineIso: req.reopen_deadline_at,
-      })
-    } catch (e) {
-      await release()
-      throw e
-    }
-    if (ok) sent++
-    else await release()
+    if (surveys.length < PAGE) break
   }
   return sent
 }
+
+const PAGE = 100
+const MAX_PAGES = 20

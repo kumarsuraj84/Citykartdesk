@@ -1,3 +1,4 @@
+BEGIN;
 -- ROLLBACK for migration 157 (post-audit High database fixes). Restores the previous policies, grants and helper functions exactly as the
 -- audit found them. Using it re-opens the audited weaknesses (D-004, D-006, D-008, D-010, D-014, D-015, D-054): it exists only so the change can
 -- be undone if it ever causes a problem. LOCAL, prepared for review; NOT run on production.
@@ -64,3 +65,5 @@ GRANT ALL ON public.business_hours, public.holidays, public.sla_escalation_rules
 
 CREATE POLICY "Authenticated download only" ON storage.objects FOR SELECT TO authenticated USING (bucket_id = 'request-attachments');
 CREATE POLICY "storage_request_attachments_insert" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'request-attachments' AND auth.uid() IS NOT NULL);
+DELETE FROM auth.schema_migrations WHERE version = '20240101000157';
+COMMIT;

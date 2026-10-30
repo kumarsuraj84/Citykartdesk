@@ -21,5 +21,11 @@ export function generateOneTimePassword(length = 14): string {
     const j = randomInt(0, i + 1)
     ;[chars[i], chars[j]] = [chars[j], chars[i]]
   }
+  // Never start with a symbol: the passwords are handed over in a CSV file, and a leading @ would be changed by the CSV writer's formula guard (the person would then see
+  // a different password from the real one). A letter or digit is swapped to the front instead; the password is just as random.
+  if (SYMBOL.includes(chars[0])) {
+    const k = chars.findIndex((c) => !SYMBOL.includes(c))
+    ;[chars[0], chars[k]] = [chars[k], chars[0]]
+  }
   return chars.join('')
 }

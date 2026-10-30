@@ -34,3 +34,16 @@ export function safePublicStoragePath(bucket: string, segments: string[]): strin
 export function contentTypeForPath(path: string): string {
   return CONTENT_TYPE_BY_EXT[path.split('.').pop()!.toLowerCase()] ?? 'application/octet-stream'
 }
+
+/**
+ * Is this text the address of THIS person's own avatar file (`/api/storage/public/avatars/<their id>/avatar.<ext>`, exactly what uploadAvatar writes)?
+ * An empty value is also accepted (it clears the picture). Nothing else is: not an outside address, not another person's folder (audit A-15).
+ */
+export function isOwnAvatarUrl(value: unknown, userId: string): boolean {
+  if (value === '') return true
+  if (typeof value !== 'string' || !new RegExp(`^${UUID}$`, 'i').test(userId)) return false
+  const prefix = '/api/storage/public/avatars/'
+  if (!value.startsWith(prefix)) return false
+  const rest = value.slice(prefix.length)
+  return rest.toLowerCase().startsWith(`${userId.toLowerCase()}/`) && SHAPES.avatars.test(rest)
+}

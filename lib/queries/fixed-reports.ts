@@ -22,7 +22,7 @@ type AnyClient = { from: (t: string) => any }
 /** Safety cap: the open tickets of the whole company never get near this; it only stops a runaway query. */
 const MAX_TICKETS = 50_000
 
-const FACT_SELECT = 'id, request_no, title, status, priority, created_at, resolved_at, closed_at, form_data, service:services(id, name, auto_oem_routing), category:service_categories(name), sub_category:service_sub_categories(name), assignee:profiles!requests_assigned_to_fkey(full_name), requester:profiles!requests_requester_id_fkey(full_name, store:stores!profiles_store_id_fkey(id, code, city, state, cluster, region, priority_list, festival, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, zenatix, open_date))'
+const FACT_SELECT = 'id, request_no, title, status, priority, created_at, resolved_at, closed_at, cancellation_reason, form_data, service:services(id, name, auto_oem_routing), category:service_categories(name), sub_category:service_sub_categories(name), assignee:profiles!requests_assigned_to_fkey(full_name), requester:profiles!requests_requester_id_fkey(full_name, store:stores!profiles_store_id_fkey(id, code, city, state, cluster, region, priority_list, festival, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, zenatix, open_date))'
 
 const statusLabel = (s: string) => (STATUS_LABELS as Record<string, string>)[s] ?? s
 

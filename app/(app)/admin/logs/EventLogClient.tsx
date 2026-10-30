@@ -1,5 +1,6 @@
 'use client'
 
+import { formatDateTimeSeconds } from '@/lib/ui/formatDate'
 import { useCallback, useEffect, useState, useTransition } from 'react'
 import { Download, Loader2, RefreshCw } from 'lucide-react'
 import { listEvents, exportEventsCsv, type EventRow, type EventFilters } from '@/lib/actions/admin/events'
@@ -132,7 +133,7 @@ export function EventLogClient({ users }: { users: { id: string; full_name: stri
               <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">No events match.</td></tr>
             ) : rows.map((r) => (
               <tr key={r.id} className="border-b border-[#EEF2F8] last:border-0 align-top hover:bg-[#FAFBFF]">
-                <td className="px-3 py-2 whitespace-nowrap text-[#1A1F36]">{new Date(r.created_at).toLocaleString()}</td>
+                <td className="px-3 py-2 whitespace-nowrap text-[#1A1F36]">{formatDateTimeSeconds(r.created_at)}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{r.user_name || '—'}</td>
                 <td className="px-3 py-2">
                   <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${KIND_STYLES[r.kind] ?? ''}`}>{r.kind}</span>

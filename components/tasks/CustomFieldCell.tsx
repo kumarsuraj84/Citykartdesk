@@ -1,5 +1,6 @@
 'use client'
 
+import { formatDateOnly } from '@/lib/ui/formatDate'
 import { useState, useTransition, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
@@ -206,7 +207,7 @@ export function CustomFieldCell({ taskId, field, value, onUpdate }: Props) {
     const dateVal = typeof localVal === 'string' ? localVal : ''
     if (!editing) {
       const label = dateVal
-        ? new Date(dateVal + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        ? formatDateOnly(dateVal, { year: false })
         : null
       return (
         <td

@@ -23,9 +23,10 @@ function fakeAdmin(o: { pending: { id: string; workflow_id: string }[]; steps: {
     auth: { admin: { getUserById: async (id: string) => ({ data: { user: emails[id] ? { email: emails[id] } : null } }) } },
     from(table: string) {
       const rows = table === 'approvals' ? o.pending : table === 'approval_workflow_steps' ? o.steps : table === 'profiles' ? o.people : []
+      let readKey = LAST_RUN_KEY
       const chain: Record<string, unknown> = {
-        select: () => chain, eq: () => chain, in: () => chain, limit: () => chain,
-        maybeSingle: async () => ({ data: settings[LAST_RUN_KEY] !== undefined ? { value: settings[LAST_RUN_KEY] } : null }),
+        select: () => chain, eq: (c: string, v: string) => { if (c === 'key') readKey = v; return chain }, in: () => chain, limit: () => chain,
+        maybeSingle: async () => ({ data: settings[readKey] !== undefined ? { value: settings[readKey] } : null }),
         insert: async (row: { key: string; value: string }) => {
           if (settings[row.key] !== undefined) return { error: { code: '23505' } }
           settings[row.key] = row.value
@@ -139,6 +140,36 @@ describe('the daily approval reminder', () => {
     expect(send).toHaveBeenCalledTimes(1)
     const tomorrow = await sendApprovalReminders(admin as never, { now: new Date('2026-10-16T10:00:00+05:30'), getPending, send })
     expect(tomorrow.sent).toBe(1)
+  })
+
+  it('a run that died half way carries on the same day with the approvers who have not had their reminder (G-21)', async () => {
+    const bela: Person = { id: 'bela', full_name: 'Bela Rao', role: 'user', org_id: 'o1', is_active: true }
+    const admin = fakeAdmin({ pending: [{ id: 'a1', workflow_id: 'w1' }], steps: [{ workflow_id: 'w1', approver_user_id: 'ankur' }, { workflow_id: 'w1', approver_user_id: 'bela' }], people: [ankur, bela] })
+    const getPending = vi.fn().mockResolvedValue([item(1, ago(2))])
+    // the first pass is cut off while sending to the second approver (a crash / restart)
+    send.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('process killed'))
+    await expect(sendApprovalReminders(admin as never, { now, getPending, send })).rejects.toThrow('process killed')
+    expect(admin.settings[LAST_RUN_KEY]).toBeUndefined()   // the day is NOT used up
+    send.mockReset().mockResolvedValue({})
+    const second = await sendApprovalReminders(admin as never, { now, getPending, send })
+    expect(second).toMatchObject({ sent: 1, alreadySent: 1 })
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send.mock.calls[0][0].to).toBe('bela@citykart.test')
+    // and now the day is finished
+    expect((await sendApprovalReminders(admin as never, { now, getPending, send })).alreadyRan).toBe(true)
+  })
+
+  it('an approver whose e-mail failed is tried again on the next call; the one who got theirs is not e-mailed twice', async () => {
+    const bela: Person = { id: 'bela', full_name: 'Bela Rao', role: 'user', org_id: 'o1', is_active: true }
+    const admin = fakeAdmin({ pending: [{ id: 'a1', workflow_id: 'w1' }], steps: [{ workflow_id: 'w1', approver_user_id: 'ankur' }, { workflow_id: 'w1', approver_user_id: 'bela' }], people: [ankur, bela] })
+    const getPending = vi.fn().mockResolvedValue([item(1, ago(2))])
+    send.mockResolvedValueOnce({}).mockResolvedValueOnce({ error: 'smtp down' })
+    const first = await sendApprovalReminders(admin as never, { now, getPending, send })
+    expect(first).toMatchObject({ sent: 1, failed: 1 })
+    send.mockReset().mockResolvedValue({})
+    const second = await sendApprovalReminders(admin as never, { now, getPending, send })
+    expect(second).toMatchObject({ sent: 1, alreadySent: 1 })
+    expect(send.mock.calls[0][0].to).toBe('bela@citykart.test')
   })
 
   it('if nothing could be sent, the day is not used up (the next call tries again)', async () => {

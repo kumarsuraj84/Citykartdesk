@@ -56,3 +56,26 @@ describe('the note written when a ticket is resolved', () => {
     })
   })
 })
+
+describe('B-34: ordinary technical notes are not mistaken for a password', () => {
+  it.each([
+    'Replaced switch#10 and tested all the ports',
+    'Moved the printer to Gate@12 and checked the cable',
+    'Password is reset and shared with the requester on the phone',
+    'password - done, the requester can log in now',
+    'Fixed the issue on port Gi0/1 of the switch at store 4521',
+    'Changed pass through setting in the firewall rule 17',
+  ])('%s', (note) => {
+    expect(looksLikePassword(note), note).toBe(false)
+    expect(checkResolutionNote(note), note).toBeNull()
+  })
+
+  it.each([
+    'pwd: Qwerty12345 for the new id',
+    'Password changed to Abcd@1234, please change it',
+    'ID created with Welcome#2026 as the first login',
+    'pass=Zx9#kLm2',
+  ])('but a credential is still refused: %s', (note) => {
+    expect(looksLikePassword(note), note).toBe(true)
+  })
+})

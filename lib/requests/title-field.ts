@@ -32,9 +32,11 @@ export function pickTitleField<F extends TitleFieldLike>(
   )
   if (subject) return { field: subject, isSubject: true }
 
+  // the first field that actually has an answer (B-28): a blank text box in front of the filled one used to be picked, and the title fell back to the service name
+  const answered = (f: F) => textValue(formData[f.id]) !== ''
   const field =
-    fields.find((f) => f.type === 'text') ??
-    fields.find((f) => f.type === 'textarea') ??
+    fields.find((f) => f.type === 'text' && answered(f)) ??
+    fields.find((f) => f.type === 'textarea' && answered(f)) ??
     fields.find((f) => (f.type === 'select' || f.type === 'radio') && formData[f.id]) ??
     fields.find((f) => f.type === 'multiselect' && Array.isArray(formData[f.id]) && (formData[f.id] as string[]).length > 0)
   return { field, isSubject: false }

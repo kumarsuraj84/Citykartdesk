@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition, useRef, useEffect } from 'react'
+import { ModalFrame } from '@/components/ui/ModalFrame'
 import { createPortal } from 'react-dom'
 import {
   Plus, X, Type, Hash, Calendar, List,
@@ -103,7 +104,7 @@ function AddColumnModal({
   const needsOptions = fieldType === 'dropdown' || fieldType === 'multi_select'
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+    <ModalFrame label="Add field" onClose={onClose} className="fixed inset-0 z-[70] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 w-full max-w-[420px] rounded-2xl border border-border bg-card shadow-2xl overflow-hidden">
 
@@ -221,7 +222,7 @@ function AddColumnModal({
           </div>
         )}
       </div>
-    </div>,
+    </ModalFrame>,
     document.body
   )
 }
@@ -275,7 +276,7 @@ function EditFieldModal({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+    <ModalFrame label="Edit field" onClose={onClose} className="fixed inset-0 z-[70] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 w-full max-w-[380px] rounded-2xl border border-border bg-card shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
@@ -327,7 +328,7 @@ function EditFieldModal({
           </div>
         </div>
       </div>
-    </div>,
+    </ModalFrame>,
     document.body
   )
 }

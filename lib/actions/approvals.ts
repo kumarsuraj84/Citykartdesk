@@ -13,7 +13,9 @@ import { notify } from '@/lib/notifications'
 import { rateLimit } from '@/lib/rate-limit'
 import { firstBarredApprover } from '@/lib/approvals/separation'
 import { createAdHocApproval } from '@/lib/approvals/adhoc'
+import { recallApprovalCore } from '@/lib/approvals/recall'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { findAuthUserByEmail } from '@/lib/auth/emails'
 import type { RequestPriority, RequestStatus } from '@/types'
 
 type ActionResult = { error?: string }
@@ -80,15 +82,13 @@ export async function searchManagersForApproval(
   const { limited } = await rateLimit(`approval-search-email:${profile.id}`, 20, 60_000)
   if (limited) return byName as { id: string; full_name: string; role: string }[] ?? []
 
-  // Looks like (or might be) an email — cross-reference auth.users.
-  const { data: authData } = await admin.auth.admin.listUsers({ perPage: 1000 })
+  // An address is matched only when it is typed in full: typing "pri" or "psharma@" must not reveal who owns which address. Text without an @ cannot be an
+  // address, so the (expensive) account scan is not even started for it.
   const qLower = q.toLowerCase()
-  // an address is matched only when it is typed in full: typing "pri" or "psharma@" must not reveal who owns which address
-  const matchingIds = new Set(
-    (authData?.users ?? [])
-      .filter((u) => qLower.includes('@') && u.email?.toLowerCase() === qLower)
-      .map((u) => u.id)
-  )
+  if (!qLower.includes('@')) return byName as { id: string; full_name: string; role: string }[] ?? []
+  // looks up the account across ALL pages of sign-in accounts (lib/auth/emails.ts), not only the first 1000
+  const found = await findAuthUserByEmail(admin, qLower)
+  const matchingIds = new Set<string>(found.ok && found.value ? [found.value.id] : [])
   if (matchingIds.size === 0) return byName as { id: string; full_name: string; role: string }[] ?? []
 
   const { data: byEmail } = await admin
@@ -281,6 +281,15 @@ export async function approveApproval(approvalId: string, comment?: string): Pro
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
   return decideApproval('approve', approvalId, profile, (await createClient()) as unknown as ApprovalDb, comment, 'portal')
+}
+
+// ── Recall ────────────────────────────────────────────────────────────────────
+// Withdraws a pending approval and puts the ticket back to the status it had before it was sent (B-05: a ticket on "Pending approval" had no way out).
+export async function recallApproval(requestId: string, reason?: string): Promise<ActionResult> {
+  const profile = await getCurrentProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+  if (typeof requestId !== 'string' || requestId.length > 64) return { error: 'Request not found.' }
+  return recallApprovalCore(createAdminClient(), { id: profile.id, role: profile.role, full_name: profile.full_name, org_id: profile.org_id }, requestId, typeof reason === 'string' ? reason.slice(0, 500) : undefined)
 }
 
 // ── Delegate ──────────────────────────────────────────────────────────────────

@@ -15,15 +15,15 @@ describe('login-service settings check (VAPT-023)', () => {
 })
 
 describe('deployment templates ship with the safe settings', () => {
-  it('the production template disables sign-up and sets a minimum password length of 8', () => {
+  it('the production template disables sign-up and sets a minimum password length of 10 (A-09)', () => {
     const env = readFileSync('deploy/windows/config/auth.env.example', 'utf8')
     expect(env).toMatch(/GOTRUE_DISABLE_SIGNUP="true"/)
-    expect(env).toMatch(/GOTRUE_PASSWORD_MIN_LENGTH="8"/)
+    expect(env).toMatch(/GOTRUE_PASSWORD_MIN_LENGTH="10"/)
   })
-  it('the development template disables sign-up and asks for 8+ characters with mixed characters', () => {
+  it('the development template disables sign-up and asks for 10+ characters with mixed characters', () => {
     const toml = readFileSync('supabase/config.toml', 'utf8')
     expect((toml.match(/enable_signup = true/g) ?? []).length).toBe(0)
-    expect(toml).toMatch(/minimum_password_length = 8/)
+    expect(toml).toMatch(/minimum_password_length = 10/)
     expect(toml).toMatch(/password_requirements = "lower_upper_letters_digits"/)
   })
 })

@@ -304,13 +304,6 @@ async function linkGroups(groupKeys: string[]): Promise<LinkResult> {
   return { linked, groups: groupsLinked, skipped }
 }
 
-export async function linkDuplicateFieldGroup(groupKey: string): Promise<LinkResult> {
-  const result = await linkGroups([groupKey])
-  if (result.error) return result
-  const skip = result.skipped?.[0]
-  return skip ? { error: skip.reason } : result
-}
-
 export async function linkFieldGroups(groupKeys: string[]): Promise<LinkResult> {
   if (!Array.isArray(groupKeys) || groupKeys.length === 0) return { error: 'Nothing selected.' }
   return linkGroups(groupKeys.slice(0, 500))

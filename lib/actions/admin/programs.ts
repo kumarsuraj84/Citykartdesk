@@ -206,8 +206,10 @@ export async function updateProgramNow(id: string): Promise<ActionResult & { sum
   revalidatePath(`/admin/programs/${id}`); revalidatePath('/admin/programs')
   if ('error' in report) return { error: report.error }
   if (report.status === 'error') return { error: report.message ?? 'The sheet could not be read.' }
+  // the copy did not run because another copy of this sheet holds the lock: that is NOT "up to date"
+  if (report.status === 'unchanged' && /already running/i.test(report.message ?? '')) return { error: 'Another update of this sheet is already running, so this one was not done. Please look again in a minute.' }
   const base = report.status === 'unchanged' ? 'The sheet is up to date (nothing changed).' : `The sheet is up to date: ${report.added ?? 0} added, ${report.changed ?? 0} changed, ${report.removed ?? 0} removed.`
-  const pms = report.pms ? (report.pms.status === 'error' ? ` The PMS sheet could not be read: ${report.pms.message ?? 'unknown problem'}.` : ` The PMS sheet was read (${report.pms.rows ?? 0} dates).`) : ''
+  const pms = report.pms ? (report.pms.status === 'error' ? ` The PMS sheet could not be read: ${report.pms.message ?? 'unknown problem'}.` : /already running/i.test(report.pms.message ?? '') ? ' The PMS sheet was not updated because another update of it is already running.' : ` The PMS sheet was read (${report.pms.rows ?? 0} dates).`) : ''
   return { summary: base + pms }
 }
 
@@ -392,9 +394,13 @@ export async function deleteProgram(id: string): Promise<ActionResult> {
   if (!prog) return { error: 'Program not found.' }
   const { count } = await db().from('request_program_snapshots').select('request_id', { count: 'exact', head: true }).eq('program_id', id)
   if ((count ?? 0) > 0) return { error: 'Tickets have already been mailed through this program, so it cannot be deleted. Switch it off instead.' }
-  await db().from('service_categories').update({ program_id: null }).eq('program_id', id).eq('org_id', guard.orgId)
+  // A program that is switched on, or that still has categories, is not deleted: the categories would lose their mail to the vendor at once, and if the delete then failed the program
+  // would stay on with no categories. Switch it off and take the categories out first; nothing is changed before the delete itself.
+  if (prog.is_active) return { error: 'This program is switched on. Switch it off first, then delete it.' }
+  const { count: catCount } = await db().from('service_categories').select('id', { count: 'exact', head: true }).eq('program_id', id).eq('org_id', guard.orgId)
+  if ((catCount ?? 0) > 0) return { error: `${catCount} categor${catCount === 1 ? 'y still belongs' : 'ies still belong'} to this program. Take ${catCount === 1 ? 'it' : 'them'} out of the program first (the Categories card), then delete it.` }
   const { error } = await db().from('vendor_programs').delete().eq('id', id).eq('org_id', guard.orgId)
-  if (error) return { error: 'Could not delete the program.' }
+  if (error) return { error: 'Could not delete the program. Nothing was changed.' }
   await logAdminAudit({ orgId: guard.orgId, actorId: guard.profile.id, entityType: 'vendor_program', entityId: id, action: 'vendor_program.deleted', metadata: { name: prog.name } })
   revalidatePath('/admin/programs')
   return {}

@@ -79,3 +79,6 @@ supabase/.temp
 # a copy of live data made for testing on this PC: never commit
 /local-testing/*.dump
 /local-testing/*.csv
+
+# local Claude Code permissions (pre-approves git/docker/npm commands): never commit. It is tracked from the past: run `git rm --cached .claude/settings.local.json` once.
+/.claude/settings.local.json

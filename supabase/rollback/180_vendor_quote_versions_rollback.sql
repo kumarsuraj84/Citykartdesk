@@ -11,4 +11,5 @@ ALTER TABLE public.vendor_requests DROP COLUMN IF EXISTS revision_note;
 ALTER TABLE public.vendor_requests DROP COLUMN IF EXISTS quote_attachment_ids;
 ALTER TABLE public.vendor_requests DROP COLUMN IF EXISTS replaces_id;
 ALTER TABLE public.vendor_requests DROP COLUMN IF EXISTS version;
+DELETE FROM auth.schema_migrations WHERE version = '20240101000180';
 COMMIT;

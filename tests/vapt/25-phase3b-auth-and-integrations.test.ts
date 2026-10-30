@@ -4,6 +4,8 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextRequest } from 'next/server'
 import { execFileSync } from 'node:child_process'
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { flushSystemLog } from '@/lib/syslog/record'
 import { setupD03Fixtures, clientForToken, getAdmin, seedRequestLike, createTestUser, type D03Fixtures } from '../setup/fixtures-d03'
 import { http } from '../remediation/helpers'
@@ -297,13 +299,54 @@ describe('VAPT-042: webhooks', () => {
   it('Gmail: the shared token is still required', async () => {
     expect((await gmailPost(gmailReq(pushBody(key('g0')), {}, 'wrong-token'))).status).toBe(401)
   })
+  // A small worker on this machine that answers the hand-over (the route waits for its answer), and one Gmail and one Outlook channel for it to find.
+  const handed: string[] = []
+  let workerStatus = 200
+  let worker: Server | null = null
+  const channelIds: string[] = []
+  beforeAll(async () => {
+    worker = createServer((req, res) => { handed.push(req.url ?? ''); req.resume(); res.statusCode = workerStatus; res.end('{}') })
+    await new Promise<void>((resolve) => worker!.listen(0, '127.0.0.1', () => resolve()))
+    process.env.INTAKE_WORKER_URL = `http://127.0.0.1:${(worker!.address() as AddressInfo).port}`
+    process.env.GMAIL_PUSH_ALLOW_TOKEN_ONLY = 'true'   // with a Gmail channel the route otherwise insists on Google's signed token (checked in the next-but-one test)
+    const gmail = await anyAdmin().from('intake_channels').insert({ org_id: fx.orgId, type: 'email', name: `${tag} gmail`, provider: 'gmail', status: 'active', config: { user: `nobody-${tag}@example.test` } }).select('id').single()
+    expect(gmail.error).toBeNull()
+    const outlook = await anyAdmin().from('intake_channels').insert({ org_id: fx.orgId, type: 'email', name: `${tag} outlook`, provider: 'm365', status: 'active', config: { graph_subscription_id: 'sub-x' } }).select('id').single()
+    expect(outlook.error).toBeNull()
+    channelIds.push(gmail.data.id, outlook.data.id)
+  })
+  afterAll(async () => {
+    delete process.env.INTAKE_WORKER_URL
+    delete process.env.GMAIL_PUSH_ALLOW_TOKEN_ONLY
+    if (channelIds.length) await anyAdmin().from('intake_channels').delete().in('id', channelIds)
+    await new Promise<void>((resolve) => (worker ? worker.close(() => resolve()) : resolve()))
+  })
+
   it('Gmail: a repeat of the same message id is dropped, and an old delivery is ignored', async () => {
+    workerStatus = 200; handed.length = 0
     const id = key('gmail-msg')
     expect((await gmailPost(gmailReq(pushBody(id)))).status).toBe(200)
+    expect(handed).toHaveLength(1)                                           // handed to the worker, which answered
     expect(await firstDelivery(`gmail:${id}`, 3600)).toBe(false)             // the first call recorded it
+    expect((await gmailPost(gmailReq(pushBody(id)))).status).toBe(200)
+    expect(handed).toHaveLength(1)                                           // the repeat was not handed over again
     const old = key('gmail-old')
     expect((await gmailPost(gmailReq(pushBody(old, new Date(Date.now() - 3 * 3600_000).toISOString())))).status).toBe(200)
+    expect(handed).toHaveLength(1)
     expect(await firstDelivery(`gmail:${old}`, 3600)).toBe(true)             // not even recorded: it was ignored before that
+  })
+  it('Gmail: with a Gmail channel and no signed-token setting, the route refuses (503) unless the shared token alone is allowed on purpose', async () => {
+    delete process.env.GMAIL_PUSH_ALLOW_TOKEN_ONLY
+    try {
+      expect((await gmailPost(gmailReq(pushBody(key('g-nooidc'))))).status).toBe(503)
+    } finally { process.env.GMAIL_PUSH_ALLOW_TOKEN_ONLY = 'true' }
+  })
+  it('Gmail: when the worker cannot take it the answer is an error and the seen mark is taken back, so Google\'s retry is acted on', async () => {
+    workerStatus = 500; handed.length = 0
+    const id = key('gmail-fail')
+    expect((await gmailPost(gmailReq(pushBody(id)))).status).toBe(503)
+    expect(await firstDelivery(`gmail:${id}`, 3600)).toBe(true)              // the mark is not kept
+    workerStatus = 200
   })
   it('Gmail: once Google\'s signed token is configured, a delivery without a valid one is refused', async () => {
     process.env.GMAIL_PUSH_OIDC_AUDIENCE = 'https://desk.example.test/api/intake/webhook/gmail'
@@ -323,14 +366,24 @@ describe('VAPT-042: webhooks', () => {
     }
   })
   it('Outlook: a notification delivered twice is handled once', async () => {
-    process.env.INTAKE_WORKER_URL = 'http://127.0.0.1:9'
+    workerStatus = 200; handed.length = 0
     const msg = key('outlook-msg')
     const body = { value: [{ changeType: 'created', resourceData: { id: msg }, subscriptionId: 'sub-x', clientState: process.env.INTAKE_WEBHOOK_TOKEN }] }
     const post = () => outlookPost(new NextRequest('http://localhost/api/intake/webhook/outlook', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }))
     expect((await post()).status).toBe(200)
+    expect(handed).toHaveLength(1)
     expect(await firstDelivery(`outlook:sub-x:${msg}`, 3600)).toBe(false)
     expect((await post()).status).toBe(200)
-    delete process.env.INTAKE_WORKER_URL
+    expect(handed).toHaveLength(1)                                           // the second delivery was not handed over again
+  })
+  it('Outlook: when the worker cannot take it the answer is an error and the seen mark is taken back', async () => {
+    workerStatus = 500; handed.length = 0
+    const msg = key('outlook-fail')
+    const body = { value: [{ changeType: 'created', resourceData: { id: msg }, subscriptionId: 'sub-x', clientState: process.env.INTAKE_WEBHOOK_TOKEN }] }
+    const res = await outlookPost(new NextRequest('http://localhost/api/intake/webhook/outlook', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }))
+    expect(res.status).toBe(503)
+    expect(await firstDelivery(`outlook:sub-x:${msg}`, 3600)).toBe(true)
+    workerStatus = 200
   })
   it('WhatsApp: an unknown verify token gets 403; a flood of challenge requests is slowed down', async () => {
     const url = (t: string) => `http://localhost/api/intake/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=${t}&hub.challenge=12345`

@@ -1,6 +1,9 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notify, getRequestAudience } from '@/lib/notifications'
 import { logActivity } from '@/lib/activity'
+import { logger } from '@/lib/observability/logger'
+import { applyStatusChange } from '@/lib/requests/status-change'
+import type { ProfileWithTeams } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -54,7 +57,10 @@ export async function appendEmailReplyComment(params: {
   if (insertError || !inserted) return { error: insertError?.message ?? 'Failed to store the reply.' }
 
   const actorProfileId = isProfileAuthor ? author.profileId : null
-  await logActivity({ requestId, actorId: actorProfileId, action: 'comment_added', metadata: { via: 'email' } })
+  // A reply to a ticket that is already finished is still stored (nobody's words are lost) but the history says so, so a technician does not mistake it
+  // for an answer to live work.
+  const lateStatus = ['resolved', 'closed', 'cancelled'].includes(request.status) ? request.status : null
+  await logActivity({ requestId, actorId: actorProfileId, action: 'comment_added', metadata: { via: 'email', ...(lateStatus ? { ticket_status: lateStatus } : {}) } })
 
   // Same recipients addComment() notifies for a public comment: requester + assignee +
   // collaborators, minus whoever just wrote it (only possible when they're a known portal user).
@@ -92,7 +98,37 @@ export async function appendEmailReplyComment(params: {
       update.paused_ms_total = Number(request.paused_ms_total ?? 0) + pausedMs
     }
     // only while it is still waiting: a technician who has moved it on meanwhile must not be overruled (D-044)
-    await admin.from('requests').update(update).eq('id', requestId).eq('status', 'waiting_user')
+    const { data: resumed, error: resumeError } = await admin.from('requests').update(update).eq('id', requestId).eq('status', 'waiting_user').select('id')
+    if (resumeError) {
+      logger.error({ event: 'email_reply.resume_failed', message: 'A requester e-mail reply could not move the ticket back to In Progress.', requestId, errorCode: resumeError.code, error: resumeError })
+    } else if (resumed && resumed.length > 0) {
+      // addComment() writes this history entry for the same move; without it the ticket silently changed status and the timeline did not show why.
+      await logActivity({ requestId, actorId: author.profileId, action: 'status_changed', metadata: { from: 'waiting_user', to: 'in_progress', via: 'email' } })
+    }
+  }
+
+  // The requester replying to a RESOLVED ticket means "it is not fixed": reopen it through the same path the screen and the e-mail link use, which checks
+  // the reopen window, restarts the SLA clock and tells the technician. Outside the window the reply simply stays in the conversation. A closed or
+  // cancelled ticket is never reopened by an e-mail (the history entry above carries ticket_status for that).
+  if (isProfileAuthor && author.profileId === request.requester_id && request.status === 'resolved') {
+    try {
+      const { data: requester } = await admin
+        .from('profiles')
+        .select('*, team_members(team_id, is_lead, joined_at, team:teams(*))')
+        .eq('id', author.profileId)
+        .maybeSingle()
+      if (requester) {
+        const res = await applyStatusChange(
+          { supabase: admin as never, profile: requester as unknown as ProfileWithTeams },
+          requestId,
+          'open',
+          'Reopened because the requester replied by e-mail after the ticket was resolved.',
+        )
+        if (res.error) logger.info({ event: 'email_reply.reopen_skipped', message: 'A requester e-mail reply on a resolved ticket did not reopen it.', requestId, context: { reason: res.error } })
+      }
+    } catch (e) {
+      logger.error({ event: 'email_reply.reopen_failed', message: 'Reopening a resolved ticket after a requester e-mail reply failed.', requestId, error: e })
+    }
   }
 
   return { commentId: inserted.id }

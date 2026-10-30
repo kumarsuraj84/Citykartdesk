@@ -8,27 +8,18 @@ import { isNsoStore, DEFAULT_RED_FLAG_PERCENT } from '@/lib/reporting/analytics/
 import { loadAcContext } from '@/lib/queries/store-ac-stats'
 import { levelFor, type DashLevel } from '@/lib/reporting/executive/levels'
 import { createShortCache } from '@/lib/cache/short-ttl'
+import { fetchAllPages } from '@/lib/queries/paging'
+import { isSlaPausedStatus } from '@/lib/constants/requests'
 import type { ProfileWithTeams } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
 
-const PAGE = 1000
-/** Safety cap: a runaway query stops here and the page says so. */
+/** Safety cap: a runaway query stops here and the page says so (the page then shows a banner: "there are more tickets than this page can load"). */
 const MAX_ROWS = 30_000
 
-/** Pages through a query (PostgREST returns at most 1000 rows per request). Unlike the report helpers it does not hide errors: a broken query must show up, not as an empty dashboard. */
-async function fetchAll<T>(build: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<{ rows: T[]; truncated: boolean }> {
-  const rows: T[] = []
-  for (let offset = 0; ; offset += PAGE) {
-    const { data, error } = await build(offset, offset + PAGE - 1)
-    if (error) throw new Error(error.message)
-    const page = (data ?? []) as T[]
-    rows.push(...page)
-    if (page.length < PAGE) return { rows, truncated: false }
-    if (rows.length >= MAX_ROWS) return { rows, truncated: true }
-  }
-}
+/** Pages through a query (the database returns at most 1000 rows per request). It does not hide errors: a broken query must show up, not as an empty dashboard. */
+const fetchAll = <T,>(build: (from: number, to: number) => PromiseLike<{ data: unknown; error?: { message: string } | null }>) => fetchAllPages<T>(build, { maxRows: MAX_ROWS })
 
 /** How far back tickets are loaded (enough for "this FY" and its previous period). Still-open tickets are always loaded. */
 const LOOKBACK_DAYS = 800
@@ -57,6 +48,8 @@ interface Raw {
   resolution_due_at: string | null
   updated_at: string
   reopen_count: number
+  /** set when the approval flow cancelled the ticket (the auto-close then moves it to "closed" without ever resolving it) */
+  cancellation_reason?: string | null
   source_metadata: { created_via?: string } | null
   team: { name: string } | null
   assignee: { full_name: string } | null
@@ -79,7 +72,7 @@ interface Raw {
 }
 
 const SELECT = [
-  'id, request_no, title, status, priority, created_at, updated_at, resolved_at, closed_at, responded_at, resolution_due_at, reopen_count, source_metadata',
+  'id, request_no, title, status, priority, created_at, updated_at, resolved_at, closed_at, responded_at, resolution_due_at, reopen_count, source_metadata, cancellation_reason',
   'team:teams(name)',
   'assignee:profiles!requests_assigned_to_fkey(full_name)',
   'requester:profiles!requests_requester_id_fkey(full_name, department:departments!profiles_department_id_fkey(name), location:locations(name), store:stores!profiles_store_id_fkey(code, name, state, cluster, region, priority_list, ac_total, ac_brand, ac_amc_brand, ac_amc_vendor, open_date))',
@@ -108,10 +101,15 @@ export function oemBrand(oemName: string): string {
 export function toExecTicket(r: Raw, now: number, openAcByStore: ReadonlyMap<string, number> = new Map()): ExecTicket {
   const created = new Date(r.created_at).getTime()
   // resolved time: resolved_at, else closed_at; a ticket whose status says resolved/closed but has neither stamp falls back to its last update
-  const doneIso = r.resolved_at ?? r.closed_at ?? (r.status === 'resolved' || r.status === 'closed' ? r.updated_at : null)
+  // A ticket the approval flow cancelled and the auto-close then closed was never resolved (no resolved_at): it is a cancelled ticket here, not a resolved one, so it is in no
+  // "resolved", turnaround or SLA figure (audit F-12).
+  const neverResolved = !!r.cancellation_reason && !r.resolved_at
+  const status = neverResolved ? 'cancelled' : r.status
+  const doneIso = neverResolved ? null : (r.resolved_at ?? r.closed_at ?? (r.status === 'resolved' || r.status === 'closed' ? r.updated_at : null))
   const resolved = doneIso ? new Date(doneIso).getTime() : null
   const due = r.resolution_due_at ? new Date(r.resolution_due_at).getTime() : null
-  const breached = due === null || r.status === 'cancelled' ? false : (resolved ?? now) > due
+  // (a ticket whose clock is stopped - waiting on the user, on purchase from HO, on an approval - is not breached while it waits)
+  const breached = due === null || status === 'cancelled' || (resolved === null && isSlaPausedStatus(status)) ? false : (resolved ?? now) > due
   const tat = resolved !== null ? (resolved - created) / 3_600_000 : null
   const rating = (Array.isArray(r.csat) ? r.csat : r.csat ? [r.csat] : []).map((c) => c.rating).filter((x): x is number => typeof x === 'number')
   // The store's OEM only matters for equipment requests (a service with OEM routing switched on, such as an AC repair). An IT or HR
@@ -157,7 +155,7 @@ export function toExecTicket(r: Raw, now: number, openAcByStore: ReadonlyMap<str
     acPct,
     src: via ? (SOURCE_LABEL[via] ?? titleCase(via)) : 'Portal',
     prio: r.priority,
-    status: r.status,
+    status,
     created,
     resolved,
     closed: r.closed_at ? new Date(r.closed_at).getTime() : null,

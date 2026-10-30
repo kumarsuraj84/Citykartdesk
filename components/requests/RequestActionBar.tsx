@@ -36,7 +36,6 @@ export function RequestActionBar({
   isAssignedToViewer,
   isTerminal,
   status,
-  activeTimer: initialTimer,
   responseDueAt,
   resolutionDueAt,
   respondedAt,
@@ -57,7 +56,6 @@ export function RequestActionBar({
   const [localStatus, setLocalStatus]          = useState(status)
   const [actionError, setActionError]          = useState<string | null>(null)
   const [actionSuccess, setActionSuccess]      = useState<string | null>(null)
-  const [activeTimer, setActiveTimer]          = useState(initialTimer ?? null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const approvalSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const approvalSearchSeq = useRef(0)
@@ -69,11 +67,6 @@ export function RequestActionBar({
   // page auto-started/stopped the timer) without discarding pending local edits.
   const [prevStatus, setPrevStatus] = useState(status)
   if (prevStatus !== status) { setPrevStatus(status); setLocalStatus(status) }
-  const [prevActiveTimerId, setPrevActiveTimerId] = useState(initialTimer?.id ?? null)
-  if (prevActiveTimerId !== (initialTimer?.id ?? null)) {
-    setPrevActiveTimerId(initialTimer?.id ?? null)
-    setActiveTimer(initialTimer ?? null)
-  }
 
   const canStartWorking = localStatus === 'open' || localStatus === 'assigned'
   // Start Working is mandatory before a request can go for approval — it
@@ -131,11 +124,7 @@ export function RequestActionBar({
       const result = await updateRequestStatus(requestId, 'in_progress')
       if (result?.error) { setStartWorkError(result.error); return }
       setLocalStatus('in_progress')
-      // updateRequestStatus auto-starts a time entry server-side — reflect it
-      // immediately rather than waiting for the next prop sync. The entry's real id
-      // is unused client-side (nothing manually stops it anymore), so a placeholder
-      // is fine here.
-      setActiveTimer({ id: 'pending', started_at: new Date().toISOString() })
+      // (updateRequestStatus also starts a time entry on the server; nothing on this bar shows it, so there is nothing to update here)
     })
   }
 

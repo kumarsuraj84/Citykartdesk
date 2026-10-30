@@ -8,12 +8,14 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { logActivity } from '@/lib/activity'
 import { notifyRequesterOfAssignment } from '@/lib/requests/notify-requester'
 import { notify, getRequestAudience, parseMentions } from '@/lib/notifications'
-import { applyStatusChange } from '@/lib/requests/status-change'
+import { applyStatusChange, stopOpenTimeEntries } from '@/lib/requests/status-change'
+import { pauseCreditMs, shiftDeadlineByCredit } from '@/lib/sla/business-hours'
+import { isClosedLikeStatus } from '@/lib/constants/requests'
 import { autoCloseDueRequests } from '@/lib/requests/auto-close'
-import { notifyLowRating } from '@/lib/csat/alerts'
+import { notifyLowRating, LOW_CSAT_MAX } from '@/lib/csat/alerts'
 import { getEnabledModules } from '@/lib/queries/profiles'
 import { validateFieldValue } from '@/lib/validation/formFields'
-import { resolveSlaDeadlines } from '@/lib/sla/resolve'
+import { resolveSlaDeadlines, slaClockStart } from '@/lib/sla/resolve'
 import { requesterCanSet } from '@/lib/forms/sections'
 import { toCSV } from '@/lib/export/csv'
 import { mapWithConcurrency } from '@/lib/async/concurrency'
@@ -32,27 +34,6 @@ type RequestUpdate = Database['public']['Tables']['requests']['Update']
 
 type ActionResult = { error?: string }
 
-/**
- * Applies accumulated pause credit — every completed waiting_user/
- * pending_approval pause this request has ever had (paused_ms_total), plus
- * one currently in progress, if any — on top of a freshly-recomputed due
- * date. Without this, recomputing a due date from created_at (priority
- * change, reclassify, category change) silently discards every pause that
- * had already completed before the change, not just the active one.
- */
-function withPauseCredit(
-  dueAtIso: string | null,
-  pausedMsTotal: number | string | null | undefined,
-  currentlyWaitingSince: string | null
-): string | null {
-  if (!dueAtIso) return null
-  const creditMs =
-    Number(pausedMsTotal ?? 0) +
-    (currentlyWaitingSince ? Date.now() - new Date(currentlyWaitingSince).getTime() : 0)
-  if (creditMs === 0) return dueAtIso
-  return new Date(new Date(dueAtIso).getTime() + creditMs).toISOString()
-}
-
 // ── Create request ────────────────────────────────────────────────────────────
 // The actual business logic (service/template resolution, mandatory-field
 // validation, title/priority/SLA derivation, insert, Business Rules,
@@ -63,9 +44,10 @@ function withPauseCredit(
 // session, resolve "book on behalf of", parse the submitted FormData, then
 // hand off to the core.
 
+// requestNo is the ticket number the "Request created" screen shows next to the confirmation (absent only when it could not be read)
 type CreateRequestResult =
-  | { requestId: string; error?: never }
-  | { error: string; requestId?: never }
+  | { requestId: string; requestNo?: string; error?: never }
+  | { error: string; requestId?: never; requestNo?: never }
 
 export async function createRequest(formData: FormData): Promise<CreateRequestResult> {
   const supabase = await createClient()
@@ -142,7 +124,10 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
   const submissionId = submissionKey({ requesterId, serviceId, subCategoryId: submittedSubCategoryId, projectId, formData: parsedFormData })
   if (!(await claimSubmission(submissionId))) {
     const existing = await findSubmittedTicket(requesterId, submissionId)
-    if (existing) return { requestId: existing }
+    if (existing) {
+      const { data: first } = await createAdminClient().from('requests').select('request_no').eq('id', existing).maybeSingle()
+      return { requestId: existing, ...(first?.request_no ? { requestNo: first.request_no } : {}) }
+    }
     return { error: 'Your request is already being submitted. Please wait a moment and check My Requests.' }
   }
 
@@ -175,7 +160,7 @@ export async function createRequest(formData: FormData): Promise<CreateRequestRe
   revalidatePath('/requests')
   revalidatePath('/home')
 
-  return { requestId }
+  return { requestId, ...(result.requestNo ? { requestNo: result.requestNo } : {}) }
 }
 
 // ── Update request status ─────────────────────────────────────────────────────
@@ -247,14 +232,29 @@ export async function assignRequest(
   // The new assignee must be an active member of staff of this organisation (VAPT VAPT-055): a manager could name anybody, even a plain requester
   // or a deactivated person, who then could not even open the ticket.
   if (assigneeId) {
-    const { data: target } = await createAdminClient().from('profiles').select('id, role, is_active, org_id').eq('id', assigneeId).maybeSingle()
+    const admin = createAdminClient()
+    const { data: target } = await admin.from('profiles').select('id, role, is_active, org_id').eq('id', assigneeId).maybeSingle()
     if (!target || !target.is_active || target.org_id !== profile.org_id || !['agent', 'manager', 'admin', 'platform_owner'].includes(target.role as string)) {
       return { error: 'A ticket can only be assigned to an active technician or manager of this organisation.' }
     }
+    // B-11: a technician who is not in the ticket's group cannot open the ticket (row security follows the group), so assigning it to them hides it from its own owner.
+    // Managers, administrators and platform owners see every ticket of the organisation, so they are fine.
+    if (target.role === 'agent') {
+      const { count: inGroup } = await admin
+        .from('team_members')
+        .select('user_id', { count: 'exact', head: true })
+        .eq('team_id', request.team_id)
+        .eq('user_id', assigneeId)
+      if (!inGroup) return { error: 'This technician is not in the technician group of the ticket and could not open it. Add them to the group first, or choose a member of the group.' }
+    }
   }
 
+  // A ticket that loses its owner while it is "assigned" or "in progress" goes back to "open" (B-10 / B-12, like the VA-TKT-11 rule on re-classifying): it used to stay
+  // "assigned"/"in progress" with nobody, and the old technician's timer kept running.
   const newStatus: RequestStatus =
-    request.status === 'open' && assigneeId ? 'assigned' : (request.status as RequestStatus)
+    request.status === 'open' && assigneeId ? 'assigned'
+    : !assigneeId && (request.status === 'assigned' || request.status === 'in_progress') ? 'open'
+    : (request.status as RequestStatus)
 
   // Guard against two concurrent assignments racing (e.g. one tech "Pick
   // up"-ing while a manager reassigns to someone else in the same instant) —
@@ -278,16 +278,20 @@ export async function assignRequest(
     return { error: 'This request was just changed by someone else — please refresh and try again.' }
   }
 
+  // The previous owner's running timer stops: it is no longer their ticket (B-12).
+  if (request.assigned_to && request.assigned_to !== assigneeId) {
+    await stopOpenTimeEntries(requestId, new Date().toISOString(), request.assigned_to)
+  }
+
+  // B-15: the change is saved. A failed history entry is already logged by logActivity(); the person must not be told "error" for something that happened
+  // (they would retry it), so carry on.
   const action = assigneeId ? 'assigned' : 'unassigned'
-  const activityResult = await logActivity({
+  await logActivity({
     requestId,
     actorId: profile.id,
     action,
     metadata: assigneeId ? { assigned_to: assigneeId } : {},
   })
-  if (activityResult.error) {
-    return { error: activityResult.error }
-  }
 
   // Notify new assignee (skip if self-assigning)
   if (assigneeId && assigneeId !== profile.id) {
@@ -370,13 +374,18 @@ export async function bulkAssignRequests(
 
 // ── Bulk status update ────────────────────────────────────────────────────────
 
+// remark: the message the person wrote for resolving / cancelling / waiting on the user. It goes through the same single-ticket path, so it is checked and posted as a
+// public comment on every ticket exactly as when one ticket is changed.
 export async function bulkUpdateStatus(
   requestIds: string[],
-  newStatus: RequestStatus
+  newStatus: RequestStatus,
+  remark?: string
 ): Promise<BulkResult> {
   const picked = cleanBulkIds(requestIds)
   if ('error' in picked) return bulkRefused(picked.error)
-  const settled = await mapWithConcurrency(picked.ids, BULK_ACTION_CONCURRENCY, async (id) => ({ id, r: await updateRequestStatus(id, newStatus) }))
+  const message = typeof remark === 'string' && remark.trim() ? remark.trim() : undefined
+  if (message && message.length > 5000) return bulkRefused('The message is too long (at most 5000 characters).')
+  const settled = await mapWithConcurrency(picked.ids, BULK_ACTION_CONCURRENCY, async (id) => ({ id, r: await updateRequestStatus(id, newStatus, message) }))
   const result: BulkResult = { succeeded: [], failed: [] }
   for (const { id, r } of settled) {
     if (r.error) result.failed.push({ id, error: r.error })
@@ -680,6 +689,9 @@ export async function removeCollaborator(
 
 // ── Add comment ───────────────────────────────────────────────────────────────
 
+/** The longest comment or note accepted (A-22): a huge body is stored, mailed and shown to everyone on the ticket. */
+const MAX_COMMENT_LENGTH = 20_000
+
 export async function addComment(
   requestId: string,
   body: string,
@@ -688,6 +700,7 @@ export async function addComment(
 ): Promise<ActionResult & { commentId?: string }> {
   const trimmed = body.trim()
   if (!trimmed && !hasAttachments) return { error: 'Comment cannot be empty.' }
+  if (trimmed.length > MAX_COMMENT_LENGTH) return { error: `The comment is too long (${MAX_COMMENT_LENGTH.toLocaleString('en-US')} characters at most).` }
 
   const supabase = await createClient()
   const profile = await getCurrentProfile()
@@ -710,15 +723,6 @@ export async function addComment(
   // Only agents/managers may post internal notes
   const internal = isInternal && isAgent
 
-  // First public agent comment on this request → record responded_at
-  if (isAgent && !internal && !request.responded_at) {
-    await createAdminClient()
-      .from('requests')
-      .update({ responded_at: new Date().toISOString() })
-      .eq('id', requestId)
-      .is('responded_at', null)
-  }
-
   const { data: insertedComment, error: insertError } = await supabase
     .from('request_comments')
     .insert({
@@ -732,14 +736,25 @@ export async function addComment(
 
   if (insertError || !insertedComment) return { error: sanitizeError(insertError, { route: 'requests.ts#addComment', fallback: 'Failed to post comment.' }) }
 
-  const commentActivity = await logActivity({
+  // First public agent comment on this request → record responded_at. Only AFTER the comment exists (B-29): when the comment failed, the ticket used to
+  // count as "responded" with nothing said; and a failed stamp is now logged, not ignored.
+  if (isAgent && !internal && !request.responded_at) {
+    const { error: respondedError } = await createAdminClient()
+      .from('requests')
+      .update({ responded_at: new Date().toISOString() })
+      .eq('id', requestId)
+      .is('responded_at', null)
+    if (respondedError) {
+      logger.error({ event: 'comment.responded_at_failed', message: 'The first-response time could not be recorded after a comment', route: 'requests.ts#addComment', requestId, errorCode: 'responded_at_update_failed', error: respondedError })
+    }
+  }
+
+  // B-15: the comment is saved; a failed history entry is logged by logActivity() and must not make the person post it again (a duplicate comment).
+  await logActivity({
     requestId,
     actorId: profile.id,
     action: 'comment_added',
   })
-  if (commentActivity.error) {
-    return { error: commentActivity.error }
-  }
 
   // Notify request audience about the new comment/note
   {
@@ -824,20 +839,16 @@ export async function addComment(
       waiting_since: null,
     }
 
-    // Extend SLA deadlines for time spent waiting
+    // Extend SLA deadlines for time spent waiting (credited in business time when the calendar has gaps - the same way as lib/requests/status-change.ts)
     if (request.waiting_since) {
-      const pausedMs = now.getTime() - new Date(request.waiting_since).getTime()
+      const creditMs = await pauseCreditMs(new Date(request.waiting_since), now)
       if (request.response_due_at) {
-        autoUpdatePayload.response_due_at = new Date(
-          new Date(request.response_due_at).getTime() + pausedMs
-        ).toISOString()
+        autoUpdatePayload.response_due_at = (await shiftDeadlineByCredit(new Date(request.response_due_at), creditMs)).toISOString()
       }
       if (request.resolution_due_at) {
-        autoUpdatePayload.resolution_due_at = new Date(
-          new Date(request.resolution_due_at).getTime() + pausedMs
-        ).toISOString()
+        autoUpdatePayload.resolution_due_at = (await shiftDeadlineByCredit(new Date(request.resolution_due_at), creditMs)).toISOString()
       }
-      autoUpdatePayload.paused_ms_total = Number(request.paused_ms_total ?? 0) + pausedMs
+      autoUpdatePayload.paused_ms_total = Number(request.paused_ms_total ?? 0) + creditMs
     }
 
     // Only while it is STILL waiting on the user (D-044): if the technician moved it on in the meantime (hold, resolved...), this must not
@@ -852,17 +863,14 @@ export async function addComment(
       .maybeSingle()
 
     if (transitionError) {
-      console.error('[addComment] Auto-transition failed', transitionError.message)
+      logger.error({ event: 'comment.auto_resume_failed', message: 'The requester replied but the ticket could not be moved back to in progress', route: 'requests.ts#addComment', requestId, errorCode: 'auto_resume_failed', error: transitionError })
     } else if (resumed) {
-      const transitionActivity = await logActivity({
+      await logActivity({
         requestId,
         actorId: profile.id,
         action: 'status_changed',
         metadata: { from: 'waiting_user', to: 'in_progress' },
       })
-      if (transitionActivity.error) {
-        console.error('[addComment] Auto-transition activity log failed', transitionActivity.error)
-      }
     }
   }
 
@@ -893,13 +901,24 @@ export async function deleteEmptyComment(commentId: string): Promise<ActionResul
   if (!comment) return {}
   if (comment.author_id !== profile.id || comment.body.trim() !== '') return { error: 'Cannot remove this comment.' }
 
-  const { count } = await supabase
+  const { count, error: countError } = await supabase
     .from('request_attachments')
     .select('id', { count: 'exact', head: true })
     .eq('comment_id', commentId)
+  if (countError) return { error: sanitizeError(countError, { route: 'requests.ts#deleteEmptyComment', fallback: 'Could not remove the empty comment.' }) }
   if (count && count > 0) return {}
 
-  await supabase.from('request_comments').delete().eq('id', commentId)
+  // D-14: comments cannot be deleted by a signed-in user (the policy comments_immutable allows no delete), so this used to do nothing and still answer "done".
+  // The server removes it, only if it is this person's own comment, still has the empty body that was just checked, and (checked above) carries no attachment.
+  const { data: removed, error: deleteError } = await createAdminClient()
+    .from('request_comments')
+    .delete()
+    .eq('id', commentId)
+    .eq('author_id', profile.id)
+    .eq('body', comment.body)
+    .select('id')
+  if (deleteError) return { error: sanitizeError(deleteError, { route: 'requests.ts#deleteEmptyComment', fallback: 'Could not remove the empty comment.' }) }
+  if (!removed || removed.length === 0) return { error: 'The empty comment could not be removed.' }
   revalidatePath(`/requests/${comment.request_id}`)
   return {}
 }
@@ -951,7 +970,7 @@ export async function updateRequestCategory(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, status, service_id, team_id, priority, created_at, waiting_since, sub_category_id, assigned_to, paused_ms_total, response_due_at, resolution_due_at, service:services(sla_policy:sla_policies(config))')
+    .select('id, status, service_id, team_id, priority, created_at, waiting_since, sub_category_id, assigned_to, paused_ms_total, reopen_count, form_data, form_sections_snapshot, form_schema_snapshot, response_due_at, resolution_due_at, service:services(sla_policy:sla_policies(config))')
     .eq('id', requestId)
     .single()
 
@@ -968,7 +987,7 @@ export async function updateRequestCategory(
   if (request.sub_category_id === subCategoryId) return {}
 
   // A finished ticket is not re-classified: it would move deadlines and priority of work that is already done (VAPT-056 / VA-TKT-12).
-  if (['resolved', 'closed', 'cancelled'].includes(request.status)) return { error: 'A resolved, closed or cancelled ticket cannot be re-classified. Re-open it first.' }
+  if (isClosedLikeStatus(request.status)) return { error: 'A resolved, closed or cancelled ticket cannot be re-classified. Re-open it first.' }
 
   // Validate the new sub-category is actually tagged to this request's service.
   const { data: tag } = await supabase
@@ -986,38 +1005,39 @@ export async function updateRequestCategory(
   const oldPriority = request.priority as RequestPriority
   const newPriority = subCat.sla_priority ?? oldPriority
 
-  const createdAt = new Date(request.created_at)
+  const admin = createAdminClient()
   const requestService = request.service as unknown as { sla_policy?: { config?: SLAConfig } | null } | null
-  let { responseDueAt: newResponseDue, resolutionDueAt: newResolutionDue } = await resolveSlaDeadlines(supabase, {
+
+  // The form the ticket was submitted with (as updateRequestFormData reads it): without it a field-level SLA tier chosen on the form was dropped by a re-classification (F-13).
+  const snapshotSections = Array.isArray(request.form_sections_snapshot) ? (request.form_sections_snapshot as unknown as FormSection[]) : null
+  const snapshotLegacy = Array.isArray(request.form_schema_snapshot) ? (request.form_schema_snapshot as unknown as FormField[]) : []
+  const allFields: FormField[] = snapshotSections
+    ? [...snapshotSections].sort((a, b) => a.order - b.order).flatMap((sec) => [...sec.fields].sort((a, b) => a.order - b.order))
+    : snapshotLegacy
+
+  // Deadlines are counted from when the SLA clock started (the creation, or the last reopen), plus the pauses that already ended. A pause that is still going on is NOT
+  // added here: it is credited once, when it ends (adding it here as well counted it twice).
+  const startedAt = await slaClockStart(admin, request)
+  const { responseDueAt: newResponseDue, resolutionDueAt: newResolutionDue } = await resolveSlaDeadlines(admin, {
     serviceId: request.service_id,
     priority: newPriority,
     servicePolicyConfig: requestService?.sla_policy?.config ?? null,
-    from: createdAt,
+    allFields,
+    formData: (request.form_data ?? {}) as Record<string, unknown>,
+    from: startedAt,
+    pauseCreditMs: Number(request.paused_ms_total ?? 0),
   })
 
-  newResponseDue = withPauseCredit(newResponseDue, request.paused_ms_total, request.waiting_since)
-  newResolutionDue = withPauseCredit(newResolutionDue, request.paused_ms_total, request.waiting_since)
-
-  // The old assignment was made for the OLD category (directly or via a
-  // Business Rule) and may not make sense for the new one — e.g. Kaushlesh
-  // covers IT H/W & S/W, not Genisys, so reclassifying into Genisys must not
-  // leave it sitting in his queue. Clear it first and let the Business Rules
-  // re-run below decide the new owner from scratch: a matching rule
-  // reassigns it, and if nothing matches it's left unassigned rather than
-  // silently stuck with whoever had it before.
-  const admin = createAdminClient()
+  // The assignee stays (B-10): the Business Rules below may give the ticket to someone else (allowReassign), and if no rule matches the new category it keeps its owner
+  // instead of silently ending up in nobody's queue. A deadline that could not be worked out is not written over the existing one (B-01).
   const { data: updated, error: updateError } = await admin
     .from('requests')
     .update({
       category_id: subCat.category_id,
       sub_category_id: subCat.id,
       priority: newPriority,
-      response_due_at: newResponseDue,
-      resolution_due_at: newResolutionDue,
-      assigned_to: null,
-      // An "assigned" ticket that loses its owner goes back to "open" (VAPT-055 / VA-TKT-11) instead of staying "assigned" to nobody;
-      // the Business Rules below then decide the new owner.
-      ...(request.status === 'assigned' ? { status: 'open' as const } : {}),
+      ...(newResponseDue ? { response_due_at: newResponseDue } : {}),
+      ...(newResolutionDue ? { resolution_due_at: newResolutionDue } : {}),
     })
     .eq('id', requestId)
     // only if nobody changed the status since it was read (VAPT-058 / VA-TKT-15)
@@ -1027,7 +1047,8 @@ export async function updateRequestCategory(
   if (!updateError && (!updated || updated.length === 0)) return { error: 'The ticket was changed by someone else just now. Please refresh and try again.' }
   if (updateError) return { error: sanitizeError(updateError, { route: 'requests.ts#updateRequestCategory', fallback: 'Failed to update category.' }) }
 
-  const activityResult = await logActivity({
+  // (B-15: the change is saved; a failed history entry is logged by logActivity() and does not turn this into an error)
+  await logActivity({
     requestId,
     actorId: profile.id,
     action: 'reclassified',
@@ -1038,32 +1059,16 @@ export async function updateRequestCategory(
         reason: why,
         ...(newPriority !== oldPriority ? { priority_from: oldPriority, priority_to: newPriority } : {}),
         // the deadlines before and after, so a change of deadline through re-classification can always be seen (VAPT-056)
-        response_due_from: request.response_due_at, response_due_to: newResponseDue,
-        resolution_due_from: request.resolution_due_at, resolution_due_to: newResolutionDue,
+        response_due_from: request.response_due_at, response_due_to: newResponseDue ?? request.response_due_at,
+        resolution_due_from: request.resolution_due_at, resolution_due_to: newResolutionDue ?? request.resolution_due_at,
       },
   })
-  if (activityResult.error) return { error: activityResult.error }
 
   try {
     const { runRulesForTrigger } = await import('@/lib/rules/run')
-    await runRulesForTrigger('updated', requestId)
+    await runRulesForTrigger('updated', requestId, { allowReassign: true })
   } catch (e) {
-    console.error('[updateRequestCategory] Business rules (updated) failed', e)
-  }
-
-  // No rule matched the new category and reassigned it — surface the
-  // unassignment explicitly instead of leaving it implicit in the diff
-  // between "before" and "after" screens.
-  if (request.assigned_to) {
-    const { data: after } = await admin.from('requests').select('assigned_to').eq('id', requestId).single()
-    if (!after?.assigned_to) {
-      await logActivity({
-        requestId,
-        actorId: profile.id,
-        action: 'assigned',
-        metadata: { assigned_to: null, reason: 'category_changed_no_matching_rule' },
-      })
-    }
+    logger.error({ event: 'reclassify.rules_failed', message: 'The ticket was re-classified but the Business Rules (updated) failed', route: 'requests.ts#updateRequestCategory', requestId, errorCode: 'business_rules_failed', error: e })
   }
 
   revalidatePath(`/requests/${requestId}`)
@@ -1163,12 +1168,12 @@ export async function updateRequestFormData(
 
   if (updateError) return { error: sanitizeError(updateError, { route: 'requests.ts#updateRequestFormData', fallback: 'Failed to update request.' }) }
 
-  const activityResult = await logActivity({
+  // (B-15: the edit is saved; a failed history entry is logged by logActivity() and does not turn this into an error)
+  await logActivity({
     requestId,
     actorId: profile.id,
     action: 'form_data_updated',
   })
-  if (activityResult.error) return { error: activityResult.error }
 
   try {
     const { runRulesForTrigger } = await import('@/lib/rules/run')
@@ -1190,11 +1195,16 @@ export async function autoCloseRequests(): Promise<{ closed: number }> {
   // data just because it was incidentally triggered by someone in a different org.
   if (!profile.org_id) return { closed: 0 }
 
-  // Finalizes both reopenable-terminal-state cases once their window lapses (resolved: admin-configurable window,
-  // see getResolvedReopenWindowHours; cancelled-via-approval-rejection: fixed 48h). The sweep itself now lives in
+  // Closes a resolved ticket once its reopen window lapses (admin-configurable window, see getResolvedReopenWindowHours;
+  // a ticket cancelled by a rejected approval stays cancelled, B-13). The sweep itself now lives in
   // lib/requests/auto-close.ts, shared with the scheduled job (/api/csat/run) so tickets close on time even when
   // no manager opens Home.
-  const closed = await autoCloseDueRequests(createAdminClient(), profile.org_id, 50)
+  let closed = 0
+  try {
+    closed = await autoCloseDueRequests(createAdminClient(), profile.org_id, 50)
+  } catch (e) {
+    logger.error({ event: 'auto_close.failed', message: 'The automatic close of resolved tickets failed', route: 'requests.ts#autoCloseRequests', orgId: profile.org_id, errorCode: 'auto_close_failed', error: e })
+  }
   if (closed > 0) {
     revalidatePath('/requests')
     revalidatePath('/home')
@@ -1208,17 +1218,37 @@ export async function autoCloseRequests(): Promise<{ closed: number }> {
 export async function duplicateRequest(requestId: string): Promise<{ id?: string; error?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !profile.org_id) return { error: 'Not authenticated.' }
+  // like createRequest(): an OEM engineer (vendor login) works tickets; he does not raise them (a copy is a new ticket)
+  if (isVendor(profile)) return { error: 'A vendor login cannot raise requests.' }
 
   const supabase = await createClient()
 
   // The caller must be able to see the original ticket (row-level security); nothing else of it is trusted.
   const { data: src } = await supabase
     .from('requests')
-    .select('title, service_id, sub_category_id, form_data')
+    .select('title, service_id, sub_category_id, form_data, requester_id')
     .eq('id', requestId)
     .single()
 
   if (!src) return { error: 'Request not found.' }
+
+  // Whose ticket is the copy? When a technician / manager / administrator copies it, it stays the ORIGINAL requester's (the same store, the same person to inform),
+  // as if booked on their behalf; it used to become the copier's own ticket, so the store never saw it. A person copying their own ticket, or a requester
+  // copying one they can see, gets it as their own. If the original requester is no longer active in this organisation, the copier takes it.
+  let requesterId = profile.id
+  if (src.requester_id !== profile.id && ['agent', 'manager', 'admin', 'platform_owner'].includes(profile.role)) {
+    const { data: original } = await createAdminClient().from('profiles').select('id').eq('id', src.requester_id).eq('org_id', profile.org_id).eq('is_active', true).maybeSingle()
+    if (original) requesterId = src.requester_id
+  }
+
+  // Double-click protection, the same as createRequest(): the same copy asked twice within a few seconds gives the first copy back instead of a second one.
+  const formData = (src.form_data ?? {}) as Record<string, unknown>
+  const submissionId = submissionKey({ requesterId, serviceId: src.service_id, subCategoryId: src.sub_category_id ?? null, projectId: null, formData: { ...formData, __duplicated_from: requestId } })
+  if (!(await claimSubmission(submissionId))) {
+    const existing = await findSubmittedTicket(requesterId, submissionId)
+    if (existing) return { id: existing }
+    return { error: 'Your copy is already being made. Please wait a moment and check My Requests.' }
+  }
 
   // A copy is a NEW ticket, so it goes through the same creation path as any other (VAPT-054 / VA-TKT-10): the service must still exist and be
   // allowed for this person, the form is re-validated, and priority and deadlines are worked out again from the service and sub-category. It no
@@ -1227,22 +1257,24 @@ export async function duplicateRequest(requestId: string): Promise<{ id?: string
   const result = await createRequestCore({
     client: supabase,
     orgId: profile.org_id,
-    requesterId: profile.id,
+    requesterId,
     actingUserId: profile.id,
     serviceId: src.service_id,
     subCategoryId: src.sub_category_id ?? null,
-    formData: (src.form_data ?? {}) as Record<string, unknown>,
+    formData,
     source: 'web',
-    sourceMetadata: { duplicated_from: requestId },
+    sourceMetadata: { duplicated_from: requestId, submission_key: submissionId },
     useAdminForWrites: true,
     actingUserRoleForLocationCheck: profile.role,
     actingUserLocationId: profile.location_id ?? null,
     titleOverride: title,
   })
-  if (result.error || !result.requestId) return { error: result.error ?? 'Failed to duplicate.' }
+  if (result.error || !result.requestId) {
+    await releaseSubmission(submissionId)
+    return { error: result.error ?? 'Failed to duplicate.' }
+  }
 
-  await logActivity({ requestId: result.requestId, actorId: profile.id, action: 'created', metadata: { duplicated_from: requestId } }).catch(() => {})
-
+  // (createRequestCore already wrote the "created" history entry; a second one here showed the creation twice)
   revalidatePath('/requests')
   return { id: result.requestId }
 }
@@ -1258,7 +1290,7 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
 
   const { data: req } = await supabase
     .from('requests')
-    .select('id, title, status, service_id, team_id, requester_id, waiting_since, services(approval_workflow_id)')
+    .select('id, title, status, service_id, team_id, requester_id, org_id, waiting_since, services(approval_workflow_id)')
     .eq('id', requestId)
     .single()
 
@@ -1269,7 +1301,7 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
   if (!['manager', 'admin', 'platform_owner'].includes(profile.role) && !onTeam)
     return { error: 'Unauthorized.' }
 
-  if (['resolved', 'closed', 'cancelled', 'pending_approval'].includes(req.status))
+  if (isClosedLikeStatus(req.status) || req.status === 'pending_approval')
     return { error: 'Request cannot be submitted for approval in its current state.' }
 
   const workflowId = req.services?.approval_workflow_id ?? null
@@ -1369,12 +1401,15 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
     return { error: sanitizeError(stErr, { route: 'requests.ts#submitForApproval', fallback: 'Failed to submit for approval.' }) }
   }
 
+  // the ticket is parked waiting for the approval, so nobody is working on it: running timers stop (B-07)
+  await stopOpenTimeEntries(requestId, new Date().toISOString())
+
   await logActivity({
     requestId,
     actorId: profile.id,
     action: 'status_changed',
     metadata: { from: req.status, to: 'pending_approval' },
-  }).catch(() => {})
+  })
 
   // Notify approvers that their review is needed
   {
@@ -1405,10 +1440,12 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
           }).catch(() => {})
         }
       } else if (firstStep?.approver_type === 'any_manager') {
+        // B-21: only managers of THIS ticket's organisation, and the same roles that may decide an "any manager" step (manager, administrator, platform owner)
         const { data: managers } = await admin
           .from('profiles')
           .select('id, full_name')
-          .in('role', ['manager', 'admin'])
+          .eq('org_id', req.org_id ?? profile.org_id ?? '')
+          .in('role', ['manager', 'admin', 'platform_owner'])
           .eq('is_active', true)
         approverNames = (managers ?? []).map((m) => m.full_name)
         for (const mgr of managers ?? []) {
@@ -1432,7 +1469,7 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
           actorId: profile.id,
           action: 'approval_requested',
           metadata: { approver_names: approverNames },
-        }).catch(() => {})
+        })
       }
     }
   }
@@ -1482,15 +1519,29 @@ export async function addRelatedRequest(
 
   const supabase = await createClient()
 
-  // Resolve the related request by request_no or partial title
-  const safe = query.replace(/[%_]/g, '\\$&')
-  const { data: found } = await supabase
+  // Resolve the related request by request_no or partial title. The exact request number wins (B-33): "IT-000001" must not link IT-0000012 just because it matched first.
+  const cleaned = String(query ?? '').trim()
+  if (!cleaned) return { error: 'No matching request found. Try using the request number (e.g. IT-000001).' }
+  const { data: exact } = await supabase
     .from('requests')
     .select('id, request_no, title, status, priority')
-    .or(`request_no.ilike.%${safe}%,title.ilike.%${safe}%`)
+    .ilike('request_no', cleaned.replace(/[%_\\]/g, '\\$&'))
     .neq('id', requestId)
     .limit(1)
-    .single()
+    .maybeSingle()
+  // The text goes into a PostgREST filter string: a comma or a bracket would end or change the filter (A-12), and % and _ are wildcards; they are removed / escaped.
+  const safe = cleaned.replace(/[,()]/g, ' ').replace(/[%_\\]/g, '\\$&').replace(/\s+/g, ' ').trim()
+  const { data: partial } = exact || !safe
+    ? { data: null }
+    : await supabase
+        .from('requests')
+        .select('id, request_no, title, status, priority')
+        .or(`request_no.ilike.%${safe}%,title.ilike.%${safe}%`)
+        .neq('id', requestId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+  const found = exact ?? partial
 
   if (!found) return { error: 'No matching request found. Try using the request number (e.g. IT-000001).' }
 
@@ -1560,14 +1611,24 @@ export async function submitCsatRating(
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
 
-  if (rating < 1 || rating > 5) return { error: 'Rating must be between 1 and 5.' }
+  // a whole number of stars from 1 to 5 (a NaN or 4.5 used to pass the old range check), and a comment for 1-2 stars, the same rule as the e-mail link (lib/actions/csatPublic.ts)
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) return { error: 'Rating must be a whole number between 1 and 5.' }
+  const note = typeof comment === 'string' ? comment.trim() : ''
+  if (note.length > 2000) return { error: 'The comment is too long (2,000 characters at most).' }
+  if (rating <= LOW_CSAT_MAX && !note) return { error: 'Please tell us what went wrong so we can fix it.' }
 
   const supabase = await createClient()
+  // only a ticket that is resolved or closed can be rated (a survey of a reopened ticket is no longer open for a rating)
+  const { data: survey } = await supabase.from('csat_surveys').select('request_id').eq('id', surveyId).eq('requester_id', profile.id).maybeSingle()
+  if (!survey) return { error: 'This survey was not found.' }
+  const { data: ticket } = await createAdminClient().from('requests').select('status').eq('id', survey.request_id).maybeSingle()
+  if (!ticket || (ticket.status !== 'resolved' && ticket.status !== 'closed')) return { error: 'This request is not resolved, so it cannot be rated now.' }
+
   const { data: saved, error } = await supabase
     .from('csat_surveys')
     .update({
       rating,
-      comment: comment.trim() || null,
+      comment: note || null,
       submitted_at: new Date().toISOString(),
     })
     .eq('id', surveyId)
@@ -1577,7 +1638,7 @@ export async function submitCsatRating(
     .maybeSingle()
 
   if (error) return { error: sanitizeError(error, { route: 'requests.ts#submitCsatRating', fallback: 'Failed to submit rating.' }) }
-  if (saved) await notifyLowRating(createAdminClient(), { requestId: saved.request_id, rating, comment, requesterId: profile.id })
+  if (saved) await notifyLowRating(createAdminClient(), { requestId: saved.request_id, rating, comment: note, requesterId: profile.id })
   return {}
 }
 

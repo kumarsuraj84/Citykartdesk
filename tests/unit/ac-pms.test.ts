@@ -53,9 +53,9 @@ describe('when a PMS date becomes a ticket', () => {
   it('uses India time: 08:59 is still the morning before, 09:00 opens the day', () => {
     expect(istNow(new Date('2026-10-26T03:29:00Z'))).toEqual({ date: '2026-10-26', minutes: 8 * 60 + 59 })
     const before = pmsDueRange(new Date('2026-10-26T03:29:00Z'))
-    expect(before).toEqual({ from: '2026-10-26', to: '2026-10-25', todayOpen: false })   // from is after to: nothing is due before 09:00
+    expect(before).toEqual({ from: '2026-10-26', to: '2026-10-25', todayOpen: false, today: '2026-10-26' })   // from is after to: nothing is due before 09:00
     const at = pmsDueRange(new Date('2026-10-26T03:30:00Z'))
-    expect(at).toEqual({ from: '2026-10-26', to: '2026-10-26', todayOpen: true })
+    expect(at).toEqual({ from: '2026-10-26', to: '2026-10-26', todayOpen: true, today: '2026-10-26' })
   })
 
   it('only today is due: a date of yesterday or the day before is never made', () => {

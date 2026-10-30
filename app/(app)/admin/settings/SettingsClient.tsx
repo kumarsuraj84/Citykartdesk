@@ -1,5 +1,6 @@
 'use client'
 
+import { formatDateAndTime } from '@/lib/ui/formatDate'
 import Link from 'next/link'
 import { useState, useSyncExternalStore, useTransition } from 'react'
 import { Save, Check, AlertTriangle, Circle, Mail, MessageSquare, ChevronDown, ExternalLink, Send } from 'lucide-react'
@@ -669,9 +670,9 @@ function WhatsAppCard({ channel }: { channel: WhatsAppChannelSummary }) {
               <p className="text-sm font-medium text-foreground">Meta connection verified</p>
               <p className="text-xs text-muted-foreground/80 font-mono">
                 {r.metaConnectionVerified
-                  ? `Verified ${r.metaConnectionLastTestedAt ? new Date(r.metaConnectionLastTestedAt).toLocaleString() : ''}${r.metaDisplayPhoneNumber ? ` — ${r.metaDisplayPhoneNumber}` : ''}`
+                  ? `Verified ${r.metaConnectionLastTestedAt ? formatDateAndTime(r.metaConnectionLastTestedAt) : ''}${r.metaDisplayPhoneNumber ? ` — ${r.metaDisplayPhoneNumber}` : ''}`
                   : r.metaConnectionLastTestedAt
-                    ? `Last attempt failed (${new Date(r.metaConnectionLastTestedAt).toLocaleString()}): ${r.metaConnectionLastError ?? 'unknown error'}`
+                    ? `Last attempt failed (${formatDateAndTime(r.metaConnectionLastTestedAt)}): ${r.metaConnectionLastError ?? 'unknown error'}`
                     : 'Never tested — credentials being present does not mean Meta has accepted them.'}
               </p>
             </div>

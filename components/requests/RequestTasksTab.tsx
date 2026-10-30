@@ -1,5 +1,6 @@
 'use client'
 
+import { formatDateOnly } from '@/lib/ui/formatDate'
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import {
@@ -222,7 +223,7 @@ export function RequestTasksTab({
                   {task.due_date && (
                     <span className={`flex items-center gap-1 text-[11px] tabular-nums ${new Date(task.due_date) < new Date() && !isDone ? 'text-red-500' : 'text-muted-foreground'}`}>
                       <CalendarDays className="h-3 w-3" />
-                      {new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {formatDateOnly(task.due_date, { year: false })}
                     </span>
                   )}
                   {task.assignee ? (

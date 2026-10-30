@@ -21,7 +21,13 @@ export async function getTicketAutomation(requestId: string): Promise<Automation
   const db = createAdminClient() as unknown as Db
   const { data: r } = await db.from('requests').select('org_id').eq('id', requestId).maybeSingle()
   if (!r || r.org_id !== profile.org_id) return null
-  return (await diagnoseTickets(db, [requestId]))[0] ?? null
+  try {
+    return (await diagnoseTickets(db, [requestId]))[0] ?? null
+  } catch (e) {
+    // a table that could not be read is "could not check", never "nothing is missing"
+    console.error('[automation] could not check the ticket', e)
+    return null
+  }
 }
 
 /** The "Run automation again" button: runs only what is missing on this ticket. */

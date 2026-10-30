@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { OPEN_REQUEST_STATUSES } from '@/lib/constants/requests'
 import { getActionableApprovalsForUser } from '@/lib/queries/approvals'
+import { fetchAllPages } from '@/lib/queries/paging'
 import type { ModuleSlug, ProfileWithTeams, UserRole } from '@/types'
 
 const PROFILE_SELECT = `
@@ -88,13 +89,15 @@ export const getCurrentProfileForPasswordReset = cache(() => loadCurrentProfile(
 
 export async function getAllProfiles(): Promise<{ id: string; full_name: string }[]> {
   const supabase = await createClient()
-  // RLS already scopes to current org; select only needed columns, cap at 100
-  const { data } = await supabase
+  // RLS already scopes to current org; select only needed columns. Every page is read: the pickers used to stop at the first 100 names alphabetically,
+  // so everyone after them could not be chosen as an assignee / owner (audit E-27). The id is the tie-breaker that keeps the pages stable.
+  const { rows } = await fetchAllPages<{ id: string; full_name: string }>((from, to) => supabase
     .from('profiles')
     .select('id, full_name')
     .order('full_name')
-    .limit(100)
-  return (data ?? []) as { id: string; full_name: string }[]
+    .order('id')
+    .range(from, to))
+  return rows
 }
 
 /** Org-wide fallback for the Assignee column filter/bulk Assign-To picker when
@@ -102,13 +105,14 @@ export async function getAllProfiles(): Promise<{ id: string; full_name: string 
  *  agent-tier roles since a plain 'user' can't actually be assigned a request. */
 export async function getAgentTierProfiles(): Promise<{ id: string; full_name: string }[]> {
   const supabase = await createClient()
-  const { data } = await supabase
+  const { rows } = await fetchAllPages<{ id: string; full_name: string }>((from, to) => supabase
     .from('profiles')
     .select('id, full_name')
     .in('role', ['agent', 'manager', 'admin', 'platform_owner'])
     .order('full_name')
-    .limit(100)
-  return (data ?? []) as { id: string; full_name: string }[]
+    .order('id')
+    .range(from, to))
+  return rows
 }
 
 export async function searchProfiles(query: string): Promise<{ id: string; full_name: string }[]> {

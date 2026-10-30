@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { containsPattern } from '@/lib/ui/likePattern'
 
 export type SearchResult = {
   id: string
@@ -32,7 +33,8 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
 
   const q = query.trim()
   const ql = q.toLowerCase()
-  const like = `%${q}%`
+  // (the typed words are cleaned before they go into the filter: , ( ) " would break it, and % _ are escaped)
+  const like = containsPattern(q)
 
   // RLS-scoped client, NOT the admin client — search results must never surface
   // a request/task/project/approval the viewer isn't otherwise allowed to see.
@@ -243,7 +245,8 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
       type: 'approval' as const,
       title: req?.title ?? 'Approval',
       subtitle: req?.request_no,
-      href: `/approvals/${a.id}`,
+      // there is no page for one approval: it lives on the ticket's Approvals tab
+      href: `/requests/${a.request_id}?tab=approvals`,
       meta: a.status,
     }))
 

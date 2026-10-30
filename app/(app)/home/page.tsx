@@ -8,7 +8,6 @@ import {
 import { redirect } from 'next/navigation'
 import { isVendor } from '@/lib/vendor/access'
 import { getCurrentProfile, getEnabledModules } from '@/lib/queries/profiles'
-import { autoCloseRequests } from '@/lib/actions/requests'
 import { createClient } from '@/lib/supabase/server'
 import { StatusBadge } from '@/components/requests/RequestBadges'
 import { StoreSnapshotCard } from '@/components/home/StoreSnapshotCard'
@@ -16,6 +15,7 @@ import { resolveReportAccess, type ReportViewerScope } from '@/lib/reporting/acc
 import { SLABadge } from '@/components/requests/SLABadge'
 import { getHomeProjectsSummary, type HomeProjectsSummary } from '@/lib/queries/projects'
 import { getAssignedWorkCounts } from '@/lib/queries/requests'
+import { istParts } from '@/lib/reporting/ist'
 import { AGENT_QUEUE_PATH, REQUESTS_PATH, ticketHref } from '@/lib/requests/origin'
 import { ProjectStatusBadge } from '@/components/projects/ProjectStatusBadge'
 import type { RequestStatus, RequestPriority } from '@/types'
@@ -175,7 +175,7 @@ function TaskRow({ task, bucket }: {
     on_hold:     { cls: 'text-warning' },
   }
   const dueLabel = task.due_date
-    ? new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    ? new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) // (a date with no time: shown as the day it is, in any zone)
     : null
 
   const bucketChip = {
@@ -331,6 +331,8 @@ async function DashboardBody({
   const myRequests     = dashData?.my_requests     ?? []
   const needsAttention = dashData?.needs_attention ?? []
   const myQueue        = dashData?.my_queue        ?? []
+  // my_queue is only a preview of the newest 10: the KPI and the tab badge show the real size of the queue (an older database function has no count: fall back to the preview)
+  const myQueueCount   = counts.my_queue_count ?? myQueue.length
 
   const myOpenCount             = counts.my_open            ?? 0
   const resolvedCount           = counts.resolved           ?? 0
@@ -350,6 +352,11 @@ async function DashboardBody({
   const todayTaskItems    = dashData?.tasks_today    ?? []
   const upcomingTaskItems = dashData?.tasks_upcoming ?? []
   const openTaskItems     = dashData?.tasks_open     ?? []
+  // each task list shows at most 6 rows; the headers show the real totals
+  const overdueTaskTotal  = counts.tasks_overdue_total  ?? overdueTaskItems.length
+  const todayTaskTotal    = counts.tasks_today_total    ?? todayTaskItems.length
+  const upcomingTaskTotal = counts.tasks_upcoming_total ?? upcomingTaskItems.length
+  const openTaskTotal     = counts.tasks_no_due_total   ?? openTaskItems.length
 
   const hasUrgentRequests = slaBreachedCount > 0 || pendingApprovalCount > 0 || needsAttentionCount > 0
   const hasUrgentTasks    = myTasksOverdue > 0 || myTasksDueToday > 0
@@ -362,7 +369,7 @@ async function DashboardBody({
 
   const TABS = [
     { id: 'requests' as const, label: 'Requests', icon: FileText, show: hasRequests,
-      badge: isAgent ? myQueue.length : myOpenCount },
+      badge: isAgent ? myQueueCount : myOpenCount },
     { id: 'tasks' as const, label: 'Tasks', icon: ListTodo, show: hasTasks && (isAgent || isManager),
       badge: myTasksOverdue + myTasksDueToday },
     { id: 'projects' as const, label: 'Projects', icon: FolderKanban, show: hasProjects,
@@ -481,7 +488,7 @@ async function DashboardBody({
                     {/* These four tiles are the technician's WORK (tickets assigned to him) and open
                         Agent Requests. Requests he raised himself are listed further down under
                         "Requests I Raised" and open Requests. */}
-                    <KpiCard label="My Queue"     value={myQueue.length}             sublabel="Assigned to me"    accent="#1B2559" href={AGENT_QUEUE_PATH} />
+                    <KpiCard label="My Queue"     value={myQueueCount}             sublabel="Assigned to me"    accent="#1B2559" href={AGENT_QUEUE_PATH} />
                     <KpiCard label="Currently Breached" value={slaBreachedCount}     sublabel="Overdue resolution" accent="#EF4444" href={`${AGENT_QUEUE_PATH}?sla=breached`} danger />
                     <KpiCard label="Waiting on User" value={workCounts.waitingOnUser} sublabel="Tickets I'm working" accent="#F97316" href={`${AGENT_QUEUE_PATH}?status=waiting_user`} />
                     <KpiCard label="Resolved"     value={workCounts.resolved}        sublabel="Assigned to me, all time" accent="#10B981" href={`${AGENT_QUEUE_PATH}?status=resolved`} />
@@ -506,7 +513,7 @@ async function DashboardBody({
 
                 {isAgent && (myQueue.length > 0 || !isManager) && (
                   <div className="overflow-hidden rounded-xl border border-border bg-card">
-                    <SectionHeader icon={Inbox} title="My Queue" count={myQueue.length} href={AGENT_QUEUE_PATH} />
+                    <SectionHeader icon={Inbox} title="My Queue" count={myQueueCount} href={AGENT_QUEUE_PATH} />
                     {myQueue.length > 0 ? (
                       <div className="divide-y divide-border">
                         {myQueue.map(r => <RequestRow key={r.id} req={r} showRequester origin={AGENT_QUEUE_PATH} />)}
@@ -598,22 +605,22 @@ async function DashboardBody({
                     </div>
                   ) : (
                     <div>
-                      <TaskBucket label="Overdue" count={overdueTaskItems.length} accent="#EF4444">
+                      <TaskBucket label="Overdue" count={overdueTaskTotal} accent="#EF4444">
                         <div className="divide-y divide-border">
                           {overdueTaskItems.map(t => <TaskRow key={t.id} task={t} bucket="overdue" />)}
                         </div>
                       </TaskBucket>
-                      <TaskBucket label="Due Today" count={todayTaskItems.length} accent="#F97316">
+                      <TaskBucket label="Due Today" count={todayTaskTotal} accent="#F97316">
                         <div className="divide-y divide-border">
                           {todayTaskItems.map(t => <TaskRow key={t.id} task={t} bucket="today" />)}
                         </div>
                       </TaskBucket>
-                      <TaskBucket label="Upcoming — next 7 days" count={upcomingTaskItems.length} accent="#3B82F6">
+                      <TaskBucket label="Upcoming — next 7 days" count={upcomingTaskTotal} accent="#3B82F6">
                         <div className="divide-y divide-border">
                           {upcomingTaskItems.map(t => <TaskRow key={t.id} task={t} bucket="upcoming" />)}
                         </div>
                       </TaskBucket>
-                      <TaskBucket label="Open — no due date" count={openTaskItems.length} accent="#94A3B8">
+                      <TaskBucket label="Open — no due date" count={openTaskTotal} accent="#94A3B8">
                         <div className="divide-y divide-border">
                           {openTaskItems.map(t => <TaskRow key={t.id} task={t} bucket="open" />)}
                         </div>
@@ -690,7 +697,7 @@ async function DashboardBody({
                             <ProjectStatusBadge status={p.status} size="sm" />
                             {p.target_date && (
                               <span className="text-[10px] text-destructive font-semibold">
-                                Target {new Date(p.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — passed
+                                Target {new Date(p.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })} — passed
                               </span>
                             )}
                           </div>
@@ -931,7 +938,7 @@ export default async function HomePage({
   if (!profile) redirect('/login?retry=1')
   if (isVendor(profile)) redirect('/vendor')   // an OEM engineer's home is his own ticket dashboard
 
-  autoCloseRequests().catch(() => {})
+  // (The sweep that closes resolved tickets after their reopen window used to run here on every page view and every 12-second refresh. The scheduled job /api/csat/run does it.)
 
   const isManager   = profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'
   const isAgent     = profile.role === 'agent' || isManager
@@ -950,9 +957,9 @@ export default async function HomePage({
   // Compute greeting immediately — no DB call needed
   const now      = new Date()
   const firstName = profile.full_name.split(' ')[0]
-  const hour      = now.getHours()
+  const hour      = istParts(now).hour // India time of day, not the server's
   const greeting  = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
-  const dayLabel  = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+  const dayLabel  = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'Asia/Kolkata' })
 
   // Start the RPC without awaiting — it resolves while React streams the shell
   const supabase    = await createClient()

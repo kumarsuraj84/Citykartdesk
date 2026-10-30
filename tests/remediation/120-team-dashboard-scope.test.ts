@@ -56,8 +56,9 @@ describe("the Dashboard of a person with a team counts exactly the team's ticket
     const end = new Date(a.periodWindow.end).toISOString()
     expect(a.totalCreated).toBe(await count(`${team}&created_at=gte.${start}&created_at=lte.${end}`))
     expect(a.totalOpenNow).toBe(await count(`${team}&status=not.in.(resolved,closed,cancelled)`))
-    const midnight = new Date(); midnight.setHours(0, 0, 0, 0); midnight.setDate(midnight.getDate() - 30)
-    expect(a.requestFlow.inflow.last30d).toBe(await count(`${team}&created_at=gte.${midnight.toISOString()}`))
+    // the rolling 30 days are exactly the last 30 x 24 hours counted back from this moment (they used to start at midnight, which made them 31 days, audit F-21)
+    const rollingStart = new Date(Date.now() - 30 * 86_400_000)
+    expect(a.requestFlow.inflow.last30d).toBe(await count(`${team}&created_at=gte.${rollingStart.toISOString()}`))
     expect(a.totalCreated).toBeGreaterThan(0)
   })
 

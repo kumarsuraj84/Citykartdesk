@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getOrgDeskTimeApiKey, fetchEmployees, fetchEmployeeProjects, fetchEmployeeApps, isoDate } from './api'
+import { fetchAllPages } from '@/lib/queries/paging'
 import type { Database } from '@/types/database'
 
 type TimeLogInsert = Database['public']['Tables']['desktime_time_logs']['Insert']
@@ -121,12 +122,16 @@ export async function runDeskTimeSync(orgId: string, days: number, triggeredBy: 
       }
     }
 
-    for (let i = 0; i < rows.length; i += 500) {
-      const { error } = await admin.from('desktime_time_logs').upsert(rows.slice(i, i + 500), { onConflict: 'work_date,desktime_user_id,desktime_project_id' })
+    // One upsert may not name the same row twice ("ON CONFLICT DO UPDATE command cannot affect row a second time" aborted the whole sync when DeskTime listed the same
+    // project or app twice for a person and day): rows with the same key are joined, their minutes added (audit F-39).
+    const uniqueRows = mergeByKey(rows, (r) => `${r.work_date}|${r.desktime_user_id}|${r.desktime_project_id}`)
+    const uniqueAppRows = mergeByKey(appRows, (r) => `${r.work_date}|${r.desktime_user_id}|${r.app_name}`)
+    for (let i = 0; i < uniqueRows.length; i += 500) {
+      const { error } = await admin.from('desktime_time_logs').upsert(uniqueRows.slice(i, i + 500), { onConflict: 'work_date,desktime_user_id,desktime_project_id' })
       if (error) throw new Error(error.message)
     }
-    for (let i = 0; i < appRows.length; i += 500) {
-      const { error } = await admin.from('desktime_app_logs').upsert(appRows.slice(i, i + 500), { onConflict: 'work_date,desktime_user_id,app_name' })
+    for (let i = 0; i < uniqueAppRows.length; i += 500) {
+      const { error } = await admin.from('desktime_app_logs').upsert(uniqueAppRows.slice(i, i + 500), { onConflict: 'work_date,desktime_user_id,app_name' })
       if (error) throw new Error(error.message)
     }
 
@@ -167,6 +172,18 @@ export async function runDeskTimeSync(orgId: string, days: number, triggeredBy: 
   }
 }
 
+/** Rows that share a key become one row (the first row, with the minutes of all added). */
+export function mergeByKey<T extends { minutes?: number }>(list: T[], keyOf: (r: T) => string): T[] {
+  const by = new Map<string, T>()
+  for (const r of list) {
+    const k = keyOf(r)
+    const hit = by.get(k)
+    if (hit) hit.minutes = (hit.minutes ?? 0) + (r.minutes ?? 0)
+    else by.set(k, { ...r })
+  }
+  return [...by.values()]
+}
+
 // Re-applies the current manual mapping + name matching to all stored
 // project time, without re-fetching from DeskTime (used after an admin
 // edits the Project mapping tab).
@@ -176,17 +193,19 @@ export async function remapDeskTimeProjects(orgId: string): Promise<{ updated: n
   const { data: maps, error } = await admin.from('desktime_project_map').select('desktime_key, project_id').eq('org_id', orgId)
   if (error) throw new Error(error.message)
 
-  const { data: logs, error: lErr } = await admin
+  // every page (the database answers at most 1000 rows per request; the rows past the first 1000 were never re-mapped)
+  const { rows: logs } = await fetchAllPages<{ id: string; desktime_project_name: string; project_id: string | null }>((from, to) => admin
     .from('desktime_time_logs')
     .select('id, desktime_project_name, project_id')
     .eq('org_id', orgId)
-  if (lErr) throw new Error(lErr.message)
+    .order('id', { ascending: true })
+    .range(from, to))
 
   const manual = new Map<string, string | null>()
   for (const row of maps ?? []) manual.set(row.desktime_key, row.project_id)
 
   let updated = 0
-  for (const log of logs ?? []) {
+  for (const log of logs) {
     const key = normalizeName(log.desktime_project_name)
     if (!manual.has(key)) continue
     const target = manual.get(key) ?? null

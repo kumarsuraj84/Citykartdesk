@@ -2,6 +2,7 @@
 
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { recordAudit } from '@/lib/syslog/audit'
+import { countCsvRecords } from '@/lib/export/csv'
 import {
   exportRequestsCSV,
   exportTasksCSV,
@@ -13,7 +14,8 @@ import {
 
 /** Every export of organization data is an audit event: who took which data out, with which filters, and how many rows. */
 async function auditExport(profile: { id: string; org_id: string | null }, what: string, csv: string, filters?: unknown): Promise<string> {
-  const rows = Math.max(0, csv.split(/\r?\n/).length - 1)
+  // (records, not lines: a quoted cell can hold line breaks of its own)
+  const rows = Math.max(0, countCsvRecords(csv) - 1)
   await recordAudit({ category: 'security', action: `data.exported.${what}`, entityType: what, message: `${rows} rows exported`, after: { rows, filters: filters ?? null }, actorId: profile.id, orgId: profile.org_id })
   return csv
 }

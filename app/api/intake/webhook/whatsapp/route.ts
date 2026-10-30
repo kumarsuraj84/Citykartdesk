@@ -4,6 +4,7 @@ import { verifyWebhookChallenge } from '@/lib/whatsapp/config'
 import { processWhatsAppWebhookPayload } from '@/lib/whatsapp/webhook-handler'
 import { getClientIp, rateLimit } from '@/lib/rate-limit'
 import { sharedRateLimited } from '@/lib/security/shared-limits'
+import { readCappedBody } from '@/lib/intake/webhook-forward'
 
 // Meta's challenge is a short number. Only a short plain value is echoed back, as text (VAPT-042).
 const CHALLENGE_SHAPE = /^[A-Za-z0-9_-]{1,200}$/
@@ -66,10 +67,16 @@ export async function POST(req: NextRequest) {
   if (ip && (await rateLimit(`wa-webhook:${ip}`, MAX_REQUESTS_PER_MINUTE_PER_CALLER, 60_000)).limited) {
     return NextResponse.json({ error: 'too many requests' }, { status: 429 })
   }
-  const declared = Number(req.headers.get('content-length') ?? 0)
-  if (declared > MAX_BODY_BYTES) return NextResponse.json({ error: 'payload too large' }, { status: 413 })
-  const rawBody = await req.text()
-  if (rawBody.length > MAX_BODY_BYTES) return NextResponse.json({ error: 'payload too large' }, { status: 413 })
+  // The same limits, shared by every application process and kept across a restart (the counter above is per process): one caller address, and the whole
+  // endpoint. The signature can only be checked after the body is read and the channel looked up, so this is what stops an unsigned flood (G-08/G-09).
+  if (ip && (await sharedRateLimited(`wa-webhook-ip:${ip}`, MAX_REQUESTS_PER_MINUTE_PER_CALLER, 60))) {
+    return NextResponse.json({ error: 'too many requests' }, { status: 429 })
+  }
+  if (await sharedRateLimited('wa-webhook', 6000, 60)) return NextResponse.json({ error: 'too many requests' }, { status: 429 })
+  // The size limit is applied while the body is read: Content-Length is 0 or missing on a chunked request, and req.text() would read all of it first.
+  const read = await readCappedBody(req, MAX_BODY_BYTES)
+  if (!read.ok) return NextResponse.json({ error: 'payload too large' }, { status: 413 })
+  const rawBody = read.text
   const signatureHeader = req.headers.get('x-hub-signature-256')
 
   const admin = createAdminClient() as unknown as AnyClient

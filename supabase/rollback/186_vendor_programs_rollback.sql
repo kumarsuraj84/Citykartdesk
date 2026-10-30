@@ -7,4 +7,5 @@ DROP TABLE IF EXISTS public.request_program_snapshots;
 DROP TABLE IF EXISTS public.program_issues;
 DROP TABLE IF EXISTS public.program_rows;
 DROP TABLE IF EXISTS public.vendor_programs;
+DELETE FROM auth.schema_migrations WHERE version = '20240101000186';
 COMMIT;

@@ -6,6 +6,7 @@ import {
 } from './engine'
 import type { KpiKey } from './kpi-context'
 import { dateTimeLabel } from './labels'
+import { neutraliseFormula } from '@/lib/export/csv'
 
 /** The tickets behind the selected number, narrowed by the dashboard filters. */
 export function explorerBase(tickets: ExecTicket[], approvals: ApprovalRow[], filters: Filters, W: Win, now: number, metric: KpiKey): ExecTicket[] {
@@ -20,7 +21,8 @@ export function explorerBase(tickets: ExecTicket[], approvals: ApprovalRow[], fi
 
 export { matchesSearch }
 
-const csvCell = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`
+// (subject, requester, store, technician ... are typed by people: the same formula guard as every other CSV in the app, audit H-08)
+const csvCell = (v: string | number) => `"${neutraliseFormula(v).replace(/"/g, '""')}"`
 
 export function ticketsToCsv(ts: ExecTicket[], now: number): string {
   const head = ['Ticket', 'Subject', 'Requester', 'Store', 'Cluster', 'Region', 'State', 'Store type', 'OEM', 'AC health', 'Group', 'Technician', 'Category', 'Priority', 'Status', 'Created', 'Resolved', 'Age (days)', 'SLA']

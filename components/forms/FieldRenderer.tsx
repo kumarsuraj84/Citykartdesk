@@ -2,6 +2,7 @@
 
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { PendingFileField } from '@/components/forms/PendingFileField'
+import { normalizePhoneInput } from '@/lib/ui/phone'
 import type { FormField } from '@/types'
 
 interface FieldRendererProps {
@@ -76,8 +77,10 @@ export function FieldRenderer({ field, value, onChange, error, disabled }: Field
             // in lib/validation/formFields.ts. Filtered on keystroke rather
             // than left to submit-time validation so invalid characters and
             // over-length input are never enterable in the first place.
-            onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, 10))}
-            maxLength={10}
+            // A pasted "+91 98765 43210" or "0 98765 43210" loses its +91 / 0 (see normalizePhoneInput) instead of
+            // being cut to the wrong first 10 digits. There is no maxLength on the box on purpose: the browser would
+            // cut a long paste before this code could see it.
+            onChange={(e) => onChange(normalizePhoneInput(e.target.value))}
             className={inputCls}
             disabled={disabled}
           />

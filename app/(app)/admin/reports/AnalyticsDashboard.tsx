@@ -19,6 +19,7 @@ import {
   PRIORITY_COLORS, STATUS_COLORS, STATUS_LABELS,
 } from '@/components/analytics/Charts'
 import { fmtHours } from '@/lib/utils/fmt'
+import { istToday, istAddDays, istDay } from '@/lib/reporting/ist'
 import { DetailDrawer } from '@/components/analytics/DetailDrawer'
 import { useRequestDrill } from '@/components/analytics/useRequestDrill'
 import { StoreMasterWidget } from '@/components/analytics/StoreMasterWidget'
@@ -48,23 +49,17 @@ function Divider() { return <div className="h-px bg-border my-1" /> }
 /** How often the dashboard counts its numbers again. */
 const AUTO_REFRESH_MS = 60_000
 
-/** A single-day DateRange (local calendar day), daysAgo=0 is today, 1 is yesterday. */
+/** A single-day DateRange (the INDIA calendar day, like the numbers it opens), daysAgo=0 is today, 1 is yesterday. */
 function dayRange(daysAgo: number): { from: string; to: string } {
-  const d = new Date()
-  d.setDate(d.getDate() - daysAgo)
-  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const iso = istAddDays(istToday(), -daysAgo)
   return { from: iso, to: iso }
 }
 
-/** DateRange spanning from `daysAgo` days back through today — for the Req.
- *  Inflow/Outflow cards' "Last N days" windows (unlike dayRange, a span, not
- *  one calendar day). */
-function rangeBack(daysAgo: number): { from: string; to: string } {
-  const from = new Date()
-  from.setDate(from.getDate() - daysAgo)
-  const fromIso = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`
-  return { from: fromIso, to: dayRange(0).to }
+/** The real rolling window the Req. Inflow / Outflow cards count: from `ms` before the moment the numbers were counted (`asOf`) up to that moment - the list behind a card covers exactly the same moments. */
+function rollingRange(asOf: number, ms: number): { from: string; to: string; fromMs: number; toMs: number } {
+  return { from: istDay(asOf - ms), to: istDay(asOf), fromMs: asOf - ms, toMs: asOf }
 }
+const HOUR_MS = 3_600_000
 
 function StatRow({ label, value, sub, onClick }: {
   label: string; value: string; sub?: string; onClick?: () => void
@@ -244,10 +239,10 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds,
           <Section title="Req. Inflow" icon={ArrowDownToLine}>
             <div className="grid grid-cols-3 gap-3">
               {([
-                { label: 'Last 24 Hours', value: data.requestFlow.inflow.last24h, daysAgo: 1 },
-                { label: 'Last 7 Days', value: data.requestFlow.inflow.last7d, daysAgo: 7 },
-                { label: 'Last 30 Days', value: data.requestFlow.inflow.last30d, daysAgo: 30 },
-              ]).map(({ label, value, daysAgo }) => (
+                { label: 'Last 24 Hours', value: data.requestFlow.inflow.last24h, hours: 24 },
+                { label: 'Last 7 Days', value: data.requestFlow.inflow.last7d, hours: 24 * 7 },
+                { label: 'Last 30 Days', value: data.requestFlow.inflow.last30d, hours: 24 * 30 },
+              ]).map(({ label, value, hours }) => (
                 <ClickableRow
                   key={label}
                   className="text-center py-2 rounded-lg border border-border"
@@ -255,7 +250,7 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds,
                     title: `Req. Inflow — ${label}`,
                     description: `Requests created in the ${label.toLowerCase()}`,
                     createdInPeriod: true,
-                    period: rangeBack(daysAgo),
+                    period: rollingRange(data.asOf, hours * HOUR_MS),
                   })}
                 >
                   <p className="text-xl font-bold text-foreground">{value}</p>
@@ -273,18 +268,18 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds,
           <Section title="Req. Outflow" icon={ArrowUpFromLine}>
             <div className="grid grid-cols-3 gap-3">
               {([
-                { label: 'Last 24 Hours', value: data.requestFlow.outflow.last24h, daysAgo: 1 },
-                { label: 'Last 7 Days', value: data.requestFlow.outflow.last7d, daysAgo: 7 },
-                { label: 'Last 30 Days', value: data.requestFlow.outflow.last30d, daysAgo: 30 },
-              ]).map(({ label, value, daysAgo }) => (
+                { label: 'Last 24 Hours', value: data.requestFlow.outflow.last24h, hours: 24 },
+                { label: 'Last 7 Days', value: data.requestFlow.outflow.last7d, hours: 24 * 7 },
+                { label: 'Last 30 Days', value: data.requestFlow.outflow.last30d, hours: 24 * 30 },
+              ]).map(({ label, value, hours }) => (
                 <ClickableRow
                   key={label}
                   className="text-center py-2 rounded-lg border border-border"
                   onClick={() => setDrawer({
                     title: `Req. Outflow — ${label}`,
-                    description: `Requests closed in the ${label.toLowerCase()}`,
-                    closedInPeriod: true,
-                    period: rangeBack(daysAgo),
+                    description: `Requests resolved in the ${label.toLowerCase()}`,
+                    resolvedInPeriod: true,
+                    period: rollingRange(data.asOf, hours * HOUR_MS),
                   })}
                 >
                   <p className="text-xl font-bold text-foreground">{value}</p>
@@ -385,9 +380,9 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds,
               slaBreached: true,
             })}>
               <SlaGauge
-                label="Resolution SLA Compliance"
+                label="Resolution SLA Compliance (of resolved tickets)"
                 value={data.slaComplianceRate}
-                sub={`${data.slaBreachedNow} tickets currently breached`}
+                sub={`${data.slaBreachedNow} open tickets already breached`}
               />
             </ClickableRow>
             <ClickableRow onClick={() => setDrawer({
@@ -396,9 +391,9 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds,
               frtBreached: true,
             })}>
               <SlaGauge
-                label="First Response Time (FRT)"
+                label="First Response Time (FRT) (of answered tickets)"
                 value={data.frtComplianceRate}
-                sub={`${data.frtBreachedNow} tickets pending first reply`}
+                sub={`${data.frtBreachedNow} open tickets past their first-reply time`}
               />
             </ClickableRow>
             <Divider />
@@ -766,7 +761,6 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds,
     )
 
     return list
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, technicianWorkload, periodLabel, setDrawer])
 
   const widgetById = useMemo(() => new Map(widgets.map((w) => [w.id, w])), [widgets])
@@ -804,7 +798,7 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds,
 
   return (
     <>
-      <DetailDrawer filter={drawer} onClose={close} groupIds={groupIds} storeFilter={data.stores.filter} />
+      <DetailDrawer filter={drawer} onClose={close} groupIds={groupIds} storeFilter={data.stores.filter} people={people} />
       {drill.modal}
 
       <div className="space-y-4">

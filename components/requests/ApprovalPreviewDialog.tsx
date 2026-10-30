@@ -31,11 +31,15 @@ export function ApprovalPreviewDialog({ approval, viewerId, viewerRole, onClose 
     // opened while this one was still showing) — not just the mount case.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
+    // .catch / .finally: a failed call used to leave the spinner on for ever (and the approver unable to see why); now it says so and the Approval panel below still works
     getApprovalPreview(approval.id).then((res) => {
       if (cancelled) return
       if (res.error) setError(res.error)
       else setData(res.data ?? null)
-      setLoading(false)
+    }).catch(() => {
+      if (!cancelled) setError('Could not load the request details. You can still decide below, or open the full request.')
+    }).finally(() => {
+      if (!cancelled) setLoading(false)
     })
     return () => { cancelled = true }
   }, [approval.id])
@@ -69,6 +73,7 @@ export function ApprovalPreviewDialog({ approval, viewerId, viewerRole, onClose 
           </div>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <X className="h-4 w-4" />

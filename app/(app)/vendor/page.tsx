@@ -1,9 +1,12 @@
+import { vendorCompanyIsActive } from '@/lib/vendor/ctx'
+import { VendorAccessOff } from '@/components/vendor/VendorAccessOff'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { countByBox, getVendorTickets, isVendorTab, searchVendorTickets, ticketsOfTab, waitingForVendor, type VendorTab } from '@/lib/queries/vendor'
 import { isVendor, isVendorBox, vendorRoleOf, VENDOR_BOX_LABELS, VENDOR_BOX_ORDER, VENDOR_BOX_TURN, type VendorBox } from '@/lib/vendor/access'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { SortSelect } from '@/components/requests/SortSelect'
 import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
 import { formatDateTime } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -22,11 +25,24 @@ const BOX_TONE: Record<VendorBox, string> = {
 
 const TAB_LABEL: Record<VendorTab, string> = { tickets: 'My tickets', pms: 'AC PMS tickets' }
 
-export default async function VendorDashboardPage({ searchParams }: { searchParams: Promise<{ box?: string; q?: string; tab?: string }> }) {
+// "Sort" next to the search: the vendor's list is small and fully loaded, so it is sorted here.
+const VENDOR_SORT_OPTIONS = [
+  { value: 'created_at', label: 'Raised' },
+  { value: 'request_no', label: 'Ticket #' },
+  { value: 'store', label: 'Store' },
+  { value: 'priority', label: 'Priority' },
+  { value: 'status', label: 'Status' },
+]
+const PRIORITY_RANK: Record<string, number> = { urgent: 4, high: 3, medium: 2, low: 1 }
+
+export default async function VendorDashboardPage({ searchParams }: { searchParams: Promise<{ box?: string; q?: string; tab?: string; sort?: string; dir?: string }> }) {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
   if (!isVendor(profile)) redirect('/home')
-  const { box, q, tab: tabParam } = await searchParams
+  if (!(await vendorCompanyIsActive(profile.vendor_company_id))) return <VendorAccessOff />
+  const { box, q, tab: tabParam, sort: sortParam, dir: dirParam } = await searchParams
+  const sortCol = VENDOR_SORT_OPTIONS.some((o) => o.value === sortParam) ? sortParam! : 'created_at'
+  const sortDir: 'asc' | 'desc' = dirParam === 'asc' ? 'asc' : 'desc'
   const tab: VendorTab = isVendorTab(tabParam) ? tabParam : 'tickets'
   const isManager = vendorRoleOf(profile) === 'manager'
 
@@ -35,7 +51,18 @@ export default async function VendorDashboardPage({ searchParams }: { searchPara
   const counts = countByBox(all)
   // he lands on what needs him: a revised price first, otherwise the tickets to start
   const activeBox: VendorBox = isVendorBox(box) ? box : counts.revise_price > 0 ? 'revise_price' : 'open'
-  const rows = searchVendorTickets(all.filter((r) => r.box === activeBox), q ?? '')
+  const sortKey = (r: (typeof all)[number]): string | number =>
+    sortCol === 'request_no' ? r.request_no
+    : sortCol === 'store' ? (r.store_name ?? '').toLowerCase()
+    : sortCol === 'priority' ? (PRIORITY_RANK[r.priority] ?? 0)
+    : sortCol === 'status' ? r.status
+    : new Date(r.created_at).getTime()
+  const rows = [...searchVendorTickets(all.filter((r) => r.box === activeBox), q ?? '')].sort((a, b) => {
+    const x = sortKey(a); const y = sortKey(b)
+    const c = x < y ? -1 : x > y ? 1 : 0
+    return sortDir === 'asc' ? c : -c
+  })
+  const currentSearch = new URLSearchParams({ tab, box: activeBox, ...(q ? { q } : {}), ...(sortParam ? { sort: sortCol, dir: sortDir } : {}) }).toString()
 
   return (
     <div className="space-y-4 max-w-6xl">
@@ -87,6 +114,10 @@ export default async function VendorDashboardPage({ searchParams }: { searchPara
         />
         <button type="submit" className="rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted">Search</button>
         {q && <Link href={`/vendor?tab=${tab}&box=${activeBox}`} className="text-sm text-muted-foreground hover:text-foreground">Clear</Link>}
+        {/* keeps the sort chosen when the person searches */}
+        {sortParam && <input type="hidden" name="sort" value={sortCol} />}
+        {sortParam && <input type="hidden" name="dir" value={sortDir} />}
+        <SortSelect value={sortCol} dir={sortDir} options={VENDOR_SORT_OPTIONS} pathname="/vendor" currentSearch={currentSearch} />
       </form>
 
       <div className="overflow-x-auto rounded-xl border border-border" tabIndex={0} role="region" aria-label="Your tickets (scroll sideways on a small screen)">

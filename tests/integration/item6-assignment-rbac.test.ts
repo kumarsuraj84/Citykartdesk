@@ -97,39 +97,53 @@ describe('Item 6: assignRequest() RBAC', () => {
     expect(result.error).toBe('Not authorized to assign requests.')
   })
 
-  it('manager can cross-team assign, unchanged SLA fields, activity logged, persists on re-read', async () => {
+  // B-11: a technician outside the ticket's group cannot open the ticket (row security follows the group), so even a manager cannot hand it to them
+  it('manager cannot assign a ticket to a technician who is not in its group', async () => {
+    const admin = getAdmin()
+    const req = await seedRequestLike(fx, { requesterId: fx.requesterA.id, teamId: fx.teamA.id, serviceId: fx.teamA.serviceId, status: 'open' })
+
+    actAs(fx.manager)
+    const result = await assignRequest(req.id, fx.agentB.id)
+    expect(result.error).toMatch(/not in the technician group/)
+
+    const { data: after } = await admin.from('requests').select('assigned_to, status').eq('id', req.id).single()
+    expect(after?.assigned_to).toBeNull()
+    expect(after?.status).toBe('open')
+  })
+
+  it('manager can assign to a member of the ticket group, unchanged SLA fields, activity logged, persists on re-read', async () => {
     const admin = getAdmin()
     const req = await seedRequestLike(fx, { requesterId: fx.requesterA.id, teamId: fx.teamA.id, serviceId: fx.teamA.serviceId, status: 'open' })
     const { data: before } = await admin.from('requests').select('resolution_due_at, response_due_at').eq('id', req.id).single()
 
     actAs(fx.manager)
-    const result = await assignRequest(req.id, fx.agentB.id)
+    const result = await assignRequest(req.id, agentA2.id)
     expect(result.error).toBeUndefined()
 
     const { data: after } = await admin.from('requests').select('assigned_to, status, resolution_due_at, response_due_at').eq('id', req.id).single()
-    expect(after?.assigned_to).toBe(fx.agentB.id)
+    expect(after?.assigned_to).toBe(agentA2.id)
     expect(after?.status).toBe('assigned')
     expect(after?.resolution_due_at).toBe(before?.resolution_due_at)
     expect(after?.response_due_at).toBe(before?.response_due_at)
 
     const { data: activity } = await admin.from('request_activity').select('action, metadata').eq('request_id', req.id).eq('action', 'assigned')
     expect(activity).toHaveLength(1)
-    expect((activity?.[0]?.metadata as { assigned_to?: string } | null)?.assigned_to).toBe(fx.agentB.id)
+    expect((activity?.[0]?.metadata as { assigned_to?: string } | null)?.assigned_to).toBe(agentA2.id)
 
     // Fresh re-read (simulates a browser refresh) — value is durably persisted, not just returned in-memory.
     const { data: reread } = await admin.from('requests').select('assigned_to').eq('id', req.id).single()
-    expect(reread?.assigned_to).toBe(fx.agentB.id)
+    expect(reread?.assigned_to).toBe(agentA2.id)
   })
 
-  it('admin can cross-team assign', async () => {
+  it('admin can assign a ticket of another group to a manager (managers see every ticket)', async () => {
     const admin = getAdmin()
     const req = await seedRequestLike(fx, { requesterId: fx.requesterB.id, teamId: fx.teamB.id, serviceId: fx.teamB.serviceId, status: 'open' })
 
     actAs(fx.admin)
-    const result = await assignRequest(req.id, fx.agentA.id)
+    const result = await assignRequest(req.id, fx.manager.id)
     expect(result.error).toBeUndefined()
 
     const { data: after } = await admin.from('requests').select('assigned_to').eq('id', req.id).single()
-    expect(after?.assigned_to).toBe(fx.agentA.id)
+    expect(after?.assigned_to).toBe(fx.manager.id)
   })
 })

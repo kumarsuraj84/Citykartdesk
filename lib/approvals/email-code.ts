@@ -24,7 +24,10 @@ export async function hasUsableApprovalCode(admin: AnyClient, approvalId: string
 /** Makes a new code for this approver and approval (the caller has already checked that no usable code exists; a locked or expired one is cancelled). Returns the code to e-mail, or null if it could not be stored. */
 export async function issueApprovalCode(admin: AnyClient, approvalId: string, approverId: string): Promise<string | null> {
   const now = new Date().toISOString()
-  await admin.from('approval_email_codes').update({ used_at: now }).eq('approval_id', approvalId).eq('approver_id', approverId).is('used_at', null)
+  const { error: cancelError } = await admin.from('approval_email_codes').update({ used_at: now }).eq('approval_id', approvalId).eq('approver_id', approverId).is('used_at', null)
+  // If the earlier code could not be cancelled it would stay usable next to the new one (after the new one is used, the older one becomes the newest unused
+  // code). No new code is issued then; the caller says the code could not be created and the approver tries again.
+  if (cancelError) return null
   const code = newApprovalCode()
   const { error } = await admin.from('approval_email_codes').insert({
     approval_id: approvalId, approver_id: approverId, code_hash: hashApprovalCode(approvalId, approverId, code),

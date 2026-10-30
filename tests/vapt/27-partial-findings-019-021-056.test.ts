@@ -184,7 +184,9 @@ describe('VAPT-056: re-classifying needs a reason', () => {
     const { data } = await admin().from('requests').select('sub_category_id, priority, status, assigned_to').eq('id', ticket).single()
     expect(data?.sub_category_id).toBe(subB)
     expect(data?.priority).toBe('urgent')                                  // from the sub-category's SLA tier, never typed by hand
-    expect(data?.status).toBe('open')                                      // an "assigned" ticket that loses its owner goes back to open
+    // B-10: re-classifying keeps the owner (a Business Rule may give the ticket to somebody else); it used to clear the owner and send the ticket back to "open"
+    expect(data?.status).toBe('assigned')
+    expect(data?.assigned_to).toBe(fx.agentA.id)
     const act = (await admin().from('request_activity').select('metadata').eq('request_id', ticket).eq('action', 'reclassified').order('created_at', { ascending: false }).limit(1)).data?.[0]?.metadata as Record<string, unknown>
     expect(act.reason).toMatch(/server outage/)
     expect(act.sub_category_from).toBe(subA)

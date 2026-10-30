@@ -1,3 +1,5 @@
+import { vendorCompanyIsActive } from '@/lib/vendor/ctx'
+import { VendorAccessOff } from '@/components/vendor/VendorAccessOff'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ChevronLeft } from 'lucide-react'
@@ -47,6 +49,7 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
   if (!isVendor(profile)) redirect(`/requests/${id}`)
+  if (!(await vendorCompanyIsActive(profile.vendor_company_id))) return <VendorAccessOff />
 
   // read through the vendor's own login: row security lets him read only his own ticket (or his company's, for a manager)
   const request = await getRequestById(id)

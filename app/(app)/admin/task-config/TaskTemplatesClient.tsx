@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { toast } from 'sonner'
 import { Plus, Trash2, ChevronDown, ChevronRight, Edit2, Save, X, GripVertical, Clock } from 'lucide-react'
 import { createTaskTemplate, updateTaskTemplate, deleteTaskTemplate, upsertTemplateItem, deleteTemplateItem } from '@/lib/actions/admin/config'
 import type { TaskTemplate, TaskTemplateItem } from '@/lib/queries/admin'
@@ -41,16 +42,18 @@ function TemplateItemRow({
         dueOffsetDays: offset ? parseInt(offset, 10) : null,
         position: item.position,
       })
-      if (!result.error) {
-        onUpdated({ ...item, title, default_priority: priority, due_offset_days: offset ? parseInt(offset, 10) : null })
-        setEditing(false)
-      }
+      if (result.error) { toast.error(result.error); return }
+      onUpdated({ ...item, title, default_priority: priority, due_offset_days: offset ? parseInt(offset, 10) : null })
+      setEditing(false)
     })
   }
 
   function handleDelete() {
     start(async () => {
-      await deleteTemplateItem(item.id)
+      try {
+        const result = await deleteTemplateItem(item.id)
+        if (result?.error) { toast.error(result.error); return }
+      } catch { toast.error('Could not reach the server. Check your internet and try again.'); return }
       onDeleted(item.id)
     })
   }
@@ -110,11 +113,11 @@ function TemplateItemRow({
           +{item.due_offset_days}d
         </span>
       )}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={() => setEditing(true)} className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted">
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
+        <button onClick={() => setEditing(true)} aria-label="Edit item" className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted">
           <Edit2 className="h-3 w-3" />
         </button>
-        <button onClick={handleDelete} disabled={isPending} className="rounded p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50">
+        <button onClick={handleDelete} disabled={isPending} aria-label="Delete item" className="rounded p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50">
           <Trash2 className="h-3 w-3" />
         </button>
       </div>
@@ -142,7 +145,10 @@ function TemplateCard({
   function handleRename() {
     if (!name.trim() || name === template.name) { setEditingName(false); return }
     start(async () => {
-      await updateTaskTemplate(template.id, { name })
+      try {
+        const result = await updateTaskTemplate(template.id, { name })
+        if (result?.error) { toast.error(result.error); return }
+      } catch { toast.error('Could not reach the server. Check your internet and try again.'); return }
       setEditingName(false)
     })
   }
@@ -155,7 +161,8 @@ function TemplateCard({
         title: newTitle.trim(),
         position: items.length,
       })
-      if (!result.error && result.data) {
+      if (result.error) { toast.error(result.error); return }
+      if (result.data) {
         setItems((prev) => [...prev, {
           id: result.data!.id,
           template_id: template.id,
@@ -173,7 +180,10 @@ function TemplateCard({
 
   function handleDelete() {
     start(async () => {
-      await deleteTaskTemplate(template.id)
+      try {
+        const result = await deleteTaskTemplate(template.id)
+        if (result?.error) { toast.error(result.error); return }
+      } catch { toast.error('Could not reach the server. Check your internet and try again.'); return }
       onDeleted(template.id)
     })
   }

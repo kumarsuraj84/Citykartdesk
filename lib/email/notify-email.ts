@@ -239,6 +239,8 @@ export async function sendNotificationEmail(opts: {
       // conversation — see lib/email/thread-tag.ts / lib/email/inbound.ts.
       threadRequestNo: data.requestNo || undefined,
     })
+    // "no mail provider set up" is a state of the installation, not a failed delivery: it is reported as skipped so it is not counted as a failure each time
+    if (res.skipped) return { skipped: true }
     return res.error ? { error: res.error } : {}
   } catch (e) {
     // never throw — but tell the caller, so failures are counted and logged

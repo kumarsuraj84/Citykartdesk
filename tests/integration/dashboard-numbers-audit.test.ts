@@ -20,10 +20,18 @@ const sql = (q: string): unknown => {
 }
 
 // the moment a ticket counts as resolved: resolved_at, else closed_at, else (status says resolved/closed) its last update
-const RES = "coalesce(resolved_at, closed_at, case when status in ('resolved','closed') then updated_at end)"
+// A ticket the approval flow cancelled (cancellation_reason set) and the auto-close then closed was never resolved (audit F-12): it has no resolved moment.
+const RES = "case when cancellation_reason is not null and resolved_at is null then null else coalesce(resolved_at, closed_at, case when status in ('resolved','closed') then updated_at end) end"
+// ...and counts as a cancelled ticket in the "created by status" figure
+const STATUS = "case when cancellation_reason is not null and resolved_at is null then 'cancelled' else status::text end"
+// A ticket whose clock is stopped (waiting on the user, on purchase from HO, on an approval) is not breached while it waits
+const PAUSED = "('waiting_user','hold_purchase_ho','pending_approval')"
+
+// A ticket's age is whole days that have fully passed (5 days 14 hours is 5), the same in every report (audit F-16, lib/reporting/aging.ts)
+const AGE_DAYS = (now: string) => `floor(extract(epoch from ('${now}'::timestamptz - created_at))/86400)`
 
 interface Truth {
-  created: number; createdByStatus: Record<string, number>; createdByPriority: Record<string, number>; createdByGroup: Record<string, number>
+  created: number; createdByStatus: Record<string, number>; createdByRawStatus: Record<string, number>; createdByPriority: Record<string, number>; createdByGroup: Record<string, number>
   resolved: number; resolvedByGroup: Record<string, number>
   openNow: number; openByGroup: Record<string, number>; breachedNow: number
   slaBase: number; slaMet: number; tatAvgH: number | null; frtAvgH: number | null
@@ -35,27 +43,28 @@ function truth(org: string, s: string, e: string, now: string): Truth {
   const kv = (rows: string) => `(select coalesce(json_object_agg(k, c), '{}'::json) from (${rows}) x)`
   const q = `select json_build_object(
     'created', (select count(*) from requests where org_id='${org}' and ${w('created_at')}),
-    'createdByStatus', ${kv(`select status::text k, count(*) c from requests where org_id='${org}' and ${w('created_at')} group by 1`)},
+    'createdByStatus', ${kv(`select ${STATUS} k, count(*) c from requests where org_id='${org}' and ${w('created_at')} group by 1`)},
+    'createdByRawStatus', ${kv(`select status::text k, count(*) c from requests where org_id='${org}' and ${w('created_at')} group by 1`)},
     'createdByPriority', ${kv(`select priority::text k, count(*) c from requests where org_id='${org}' and ${w('created_at')} group by 1`)},
     'createdByGroup', ${kv(`select t.name k, count(*) c from requests r join teams t on t.id=r.team_id where r.org_id='${org}' and ${w('r.created_at')} group by 1`)},
     'resolved', (select count(*) from requests where org_id='${org}' and ${w(RES)}),
-    'resolvedByGroup', ${kv(`select t.name k, count(*) c from requests r join teams t on t.id=r.team_id where r.org_id='${org}' and ${w(RES.replace(/\b(resolved_at|closed_at|status|updated_at)\b/g, 'r.$1'))} group by 1`)},
+    'resolvedByGroup', ${kv(`select t.name k, count(*) c from requests r join teams t on t.id=r.team_id where r.org_id='${org}' and ${w(RES.replace(/\b(resolved_at|closed_at|status|updated_at|cancellation_reason)\b/g, 'r.$1'))} group by 1`)},
     'openNow', (select count(*) from requests where org_id='${org}' and status not in ('resolved','closed','cancelled')),
     'openByGroup', ${kv(`select t.name k, count(*) c from requests r join teams t on t.id=r.team_id where r.org_id='${org}' and r.status not in ('resolved','closed','cancelled') group by 1`)},
-    'breachedNow', (select count(*) from requests where org_id='${org}' and status not in ('resolved','closed','cancelled') and resolution_due_at < '${now}'),
+    'breachedNow', (select count(*) from requests where org_id='${org}' and status not in ('resolved','closed','cancelled') and status not in ${PAUSED} and resolution_due_at < '${now}'),
     'slaBase', (select count(*) from requests where org_id='${org}' and ${w(RES)} and resolution_due_at is not null),
     'slaMet', (select count(*) from requests where org_id='${org}' and ${w(RES)} and resolution_due_at is not null and ${RES} <= resolution_due_at),
     'tatAvgH', (select avg(extract(epoch from (${RES} - created_at))/3600) from requests where org_id='${org}' and ${w(RES)} and ${RES} >= created_at),
     'frtAvgH', (select avg(extract(epoch from (responded_at - created_at))/3600) from requests where org_id='${org}' and ${w('created_at')} and responded_at is not null and responded_at >= created_at),
     'aging', ${kv(`select case
-         when extract(epoch from ('${now}'::timestamptz - created_at))/86400 <= 5 then '0–5 days'
-         when extract(epoch from ('${now}'::timestamptz - created_at))/86400 <= 10 then '6–10 days'
-         when extract(epoch from ('${now}'::timestamptz - created_at))/86400 <= 20 then '11–20 days'
-         when extract(epoch from ('${now}'::timestamptz - created_at))/86400 <= 30 then '21–30 days'
-         when extract(epoch from ('${now}'::timestamptz - created_at))/86400 <= 45 then '31–45 days'
-         when extract(epoch from ('${now}'::timestamptz - created_at))/86400 <= 60 then '46–60 days'
-         when extract(epoch from ('${now}'::timestamptz - created_at))/86400 <= 75 then '61–75 days'
-         when extract(epoch from ('${now}'::timestamptz - created_at))/86400 <= 90 then '76–90 days'
+         when ${AGE_DAYS(now)} <= 5 then '0–5 days'
+         when ${AGE_DAYS(now)} <= 10 then '6–10 days'
+         when ${AGE_DAYS(now)} <= 20 then '11–20 days'
+         when ${AGE_DAYS(now)} <= 30 then '21–30 days'
+         when ${AGE_DAYS(now)} <= 45 then '31–45 days'
+         when ${AGE_DAYS(now)} <= 60 then '46–60 days'
+         when ${AGE_DAYS(now)} <= 75 then '61–75 days'
+         when ${AGE_DAYS(now)} <= 90 then '76–90 days'
          else '90+ days' end k, count(*) c from requests where org_id='${org}' and status not in ('resolved','closed','cancelled') group by 1`)}
   )`
   return sql(q) as Truth
@@ -159,7 +168,8 @@ describe('dashboard numbers vs the raw data (local database)', () => {
       check(`[${period}] Normal SLA %`, T.slaBase ? Math.round((100 * T.slaMet) / T.slaBase) : null, A.slaComplianceRate)
       check(`[${period}] Normal avg resolution h`, num(T.tatAvgH), num(A.avgResolutionHours))
       check(`[${period}] Normal avg first response h`, num(T.frtAvgH), num(A.avgFirstResponseHours))
-      check(`[${period}] Normal status counts`, T.createdByStatus, Object.fromEntries(A.byStatus.map((x) => [x.status, x.count])))
+      // the normal Dashboards page counts tickets by the status they really have; the Smart Dashboard shows a never-resolved closed ticket as cancelled (F-12)
+      check(`[${period}] Normal status counts`, T.createdByRawStatus,Object.fromEntries(A.byStatus.map((x) => [x.status, x.count])))
       check(`[${period}] Normal backlog aging`, T.aging, Object.fromEntries(A.backlogAging.filter((b) => b.count).map((b) => [b.label, b.count])))
       check(`[${period}] Normal group volume`, T.createdByGroup, Object.fromEntries(A.byTeam.filter((x) => x.volume).map((x) => [x.teamName, x.volume])))
       check(`[${period}] Normal group resolved`, T.resolvedByGroup, Object.fromEntries(A.byTeam.filter((x) => x.resolved).map((x) => [x.teamName, x.resolved])))

@@ -1,5 +1,6 @@
 'use client'
 
+import { formatDateOnly } from '@/lib/ui/formatDate'
 import { useState, useTransition, useRef, useEffect, Fragment, useCallback, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -35,8 +36,7 @@ const PRIORITY_META: Record<string, { label: string; color: string; dot: string 
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return formatDateOnly(iso, { year: false })
 }
 
 function toInputDate(iso: string | null): string {

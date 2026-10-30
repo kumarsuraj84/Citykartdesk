@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { isSafeIntakeStoragePath } from '@/lib/attachments/intake-key'
 import { contentTypeForFileName } from '@/lib/attachments/serve'
+import { fileResponse, openStoredFile } from '@/lib/attachments/stream'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic'
 // the session-client SELECT below is the real access check, evaluated fresh
 // on every fetch instead of baked into a signed URL at generation time.
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
@@ -35,26 +35,20 @@ export async function GET(
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
 
-  const admin = createAdminClient()
-  const { data, error: downloadError } = await admin.storage
-    .from('intake-attachments')
-    .download(attachment.storage_path)
-  if (downloadError || !data) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
-  }
+  // streamed, not copied into memory first (G-24). Any storage problem stays "not found" here, as before.
+  const stored = await openStoredFile('intake-attachments', attachment.storage_path, req.headers.get('range'))
+  if (stored.kind !== 'ok') return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  return new NextResponse(data, {
-    headers: {
-      // from the file extension, not the stored columns (D-053)
-      'Content-Type': contentTypeForFileName(attachment.file_name),
-      'X-Content-Type-Options': 'nosniff',
-      // Forced download, not inline — defense in depth beyond the upload-time
-      // allowlist/magic-byte check, so an inbound attachment can never render
-      // inline (and execute, for an HTML/SVG part) in the reviewer's browser
-      // even if it slipped through. Matches the { download: ... } option the
-      // old createSignedUrl() call used (lib/actions/intake/detail.ts).
-      'Content-Disposition': `attachment; filename="${encodeURIComponent(attachment.file_name)}"`,
-      'Cache-Control': 'private, no-store',
-    },
-  })
+  return fileResponse(stored.res, {
+    // from the file extension, not the stored columns (D-053)
+    'Content-Type': contentTypeForFileName(attachment.file_name),
+    'X-Content-Type-Options': 'nosniff',
+    // Forced download, not inline — defense in depth beyond the upload-time
+    // allowlist/magic-byte check, so an inbound attachment can never render
+    // inline (and execute, for an HTML/SVG part) in the reviewer's browser
+    // even if it slipped through. Matches the { download: ... } option the
+    // old createSignedUrl() call used (lib/actions/intake/detail.ts).
+    'Content-Disposition': `attachment; filename="${encodeURIComponent(attachment.file_name)}"`,
+    'Cache-Control': 'private, no-store',
+  }, req.headers.get('range'))
 }

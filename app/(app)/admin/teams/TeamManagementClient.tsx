@@ -29,9 +29,12 @@ function MemberRow({
 
   function handleRemove() {
     start(async () => {
-      const result = await removeTeamMember(teamId, member.id)
-      if (!result.error) {
+      try {
+        const result = await removeTeamMember(teamId, member.id)
+        if (result.error) { toast.error(result.error); return }
         onRemoved(member.id)
+      } catch {
+        toast.error('Could not remove this person. Check your internet and try again.')
       }
     })
   }
@@ -50,8 +53,9 @@ function MemberRow({
       <button
         onClick={handleRemove}
         disabled={isPending}
-        className="rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-50 transition-all disabled:opacity-40"
+        className="rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 hover:text-red-500 hover:bg-red-50 transition-all disabled:opacity-40"
         title="Remove from technician group"
+        aria-label={`Remove ${member.full_name} from technician group`}
       >
         <UserMinus className="h-3.5 w-3.5" />
       </button>
@@ -99,11 +103,14 @@ function AddMemberDropdown({
 
   function handleAdd(user: UserOption) {
     start(async () => {
-      const result = await addTeamMember(teamId, user.id)
-      if (!result.error) {
+      try {
+        const result = await addTeamMember(teamId, user.id)
+        if (result.error) { toast.error(result.error); return }
         onAdded(user)
         setOpen(false)
         setSearch('')
+      } catch {
+        toast.error('Could not add this person. Check your internet and try again.')
       }
     })
   }

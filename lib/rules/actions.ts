@@ -6,15 +6,20 @@ import { escapeHtml } from '@/lib/email/escape'
 import { logActivity } from '@/lib/activity'
 import { logger } from '@/lib/observability/logger'
 import { alertOperator } from '@/lib/observability/alert'
-import { STATUS_LABELS } from '@/lib/constants/requests'
+import { STATUS_LABELS, CLOSED_LIKE_REQUEST_STATUSES, isClosedLikeStatus } from '@/lib/constants/requests'
 import { getResolvedReopenWindowHours } from '@/lib/settings/reopenWindow'
-import { resolveSlaDeadlines } from '@/lib/sla/resolve'
+import { resolveSlaDeadlines, slaClockStart } from '@/lib/sla/resolve'
+import { pauseCreditMs, shiftDeadlineByCredit } from '@/lib/sla/business-hours'
+import { inBatches } from '@/lib/queries/in-batches'
 import { resolveServiceFormSections } from '@/lib/forms/sections'
 import type { SLAConfig, FormSection, FormField } from '@/types'
 import { isServerTransitionAllowed } from '@/lib/constants/request-transitions'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: { admin: { getUserById: (id: string) => any } } }
+
+/** PostgREST `in` list of the finished statuses ("resolved","closed","cancelled"). */
+const CLOSED_SQL_LIST = `(${CLOSED_LIKE_REQUEST_STATUSES.map((st) => `"${st}"`).join(',')})`
 
 export type RuleAction =
   // vendorCompanyId: instead of a fixed list of people, ALL the active technicians of that vendor company (so a technician added later takes part without editing the rule)
@@ -41,6 +46,10 @@ export type RuleAction =
 export type RuleActionContext = {
   ruleId: string
   ruleName: string
+  /** What fired the rule. An assign action behaves differently on an edit ('updated'): it only fills an empty slot (B-02). */
+  trigger?: 'created' | 'updated' | 'schedule'
+  /** Set for a deliberate re-routing (the category was changed): then an assign action of an 'updated' rule may replace the current assignee. */
+  allowReassign?: boolean
 }
 
 export type ActionRequest = {
@@ -83,34 +92,78 @@ async function getUserEmail(admin: AnyClient, userId: string): Promise<string | 
   }
 }
 
+/** What an action changed on the ticket. executeActions folds it into the request the NEXT action of the same rule sees (B-20), so "assign, then notify the assignee" notifies the new person. */
+type RequestPatch = Partial<Pick<ActionRequest, 'assigned_to' | 'status' | 'priority' | 'team_id' | 'response_due_at' | 'resolution_due_at' | 'waiting_since' | 'paused_ms_total' | 'reopen_count' | 'responded_at'>>
+
+/**
+ * Which of these people may take THIS ticket (B-19): active, in the ticket's organisation, and on its team. A vendor technician (an OEM engineer) is on no team and sees only
+ * the tickets assigned to him (row security), so he is the one exception to the team rule. A rule authored (or left stale) with a list that no longer matches the ticket's
+ * team could otherwise place a ticket with someone who has no access to it, effectively orphaning it; assignRequest() (the interactive equivalent) guards the same.
+ */
+async function validAssignees(admin: AnyClient, request: ActionRequest, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set()
+  const [profiles, members] = await Promise.all([
+    inBatches<{ id: string; is_active: boolean | null; org_id: string | null; vendor_company_id: string | null; vendor_role: string | null }>(ids, (batch) =>
+      admin.from('profiles').select('id, is_active, org_id, vendor_company_id, vendor_role').in('id', batch)),
+    inBatches<{ user_id: string }>(ids, (batch) => admin.from('team_members').select('user_id').eq('team_id', request.team_id).in('user_id', batch)),
+  ])
+  if (profiles.error || members.error) throw new Error(`Could not check who may take ticket ${request.id}: ${(profiles.error ?? members.error)?.message ?? 'unknown error'}`)
+  const onTeam = new Set(members.data.map((m) => m.user_id))
+  const valid = new Set<string>()
+  for (const p of profiles.data) {
+    if (p.is_active === false) continue
+    if (request.org_id && p.org_id !== request.org_id) continue
+    const isVendorTech = p.vendor_role === 'technician' && !!p.vendor_company_id
+    if (onTeam.has(p.id) || isVendorTech) valid.add(p.id)
+  }
+  return valid
+}
+
 async function runAssign(
   admin: AnyClient,
   request: ActionRequest,
   params: Extract<RuleAction, { type: 'assign' }>['params'],
   ctx: RuleActionContext
-): Promise<void> {
+): Promise<RequestPatch | void> {
   const { strategy } = params
   let assigneeIds = params.assigneeIds
   if (params.vendorCompanyId) {
-    const { data: techs } = await admin.from('profiles').select('id').eq('org_id', request.org_id).eq('vendor_company_id', params.vendorCompanyId).eq('vendor_role', 'technician').eq('is_active', true).order('full_name', { ascending: true }).order('id', { ascending: true })
+    // C-13: a vendor company an administrator has switched OFF gets no new tickets (its technicians are also refused by the vendor pages and actions).
+    const { data: company, error: companyError } = await admin.from('vendor_companies').select('is_active').eq('id', params.vendorCompanyId).eq('org_id', request.org_id).maybeSingle()
+    if (companyError) throw new Error(`Could not read the vendor company: ${companyError.message ?? 'unknown error'}`)
+    if (!company || company.is_active === false) return
+    const { data: techs, error: techsError } = await admin.from('profiles').select('id').eq('org_id', request.org_id).eq('vendor_company_id', params.vendorCompanyId).eq('vendor_role', 'technician').eq('is_active', true).order('full_name', { ascending: true }).order('id', { ascending: true })
+    if (techsError) throw new Error(`Could not read the technicians of the vendor company: ${techsError.message ?? 'unknown error'}`)
     assigneeIds = ((techs ?? []) as { id: string }[]).map((t) => t.id)
   }
   if (!assigneeIds || assigneeIds.length === 0) return
 
-  // A ticket that is with a vendor technician (an OEM engineer) is never taken away by a rule - not by an "edited" rule that re-runs after he starts work, and not by
-  // a round-robin that would pass it to the next person. Only an administrator moves it (so a rule that always sends AC tickets to a Citykart technician cannot undo the vendor routing).
   if (request.assigned_to) {
-    const { data: current } = await admin.from('profiles').select('vendor_company_id, vendor_role').eq('id', request.assigned_to).maybeSingle()
+    const { data: current, error: currentError } = await admin.from('profiles').select('vendor_company_id, vendor_role, is_active').eq('id', request.assigned_to).maybeSingle()
+    if (currentError) throw new Error(`Could not read the current assignee of ticket ${request.id}: ${currentError.message ?? 'unknown error'}`)
+    // A ticket that is with a vendor technician (an OEM engineer) is never taken away by a rule - not by an "edited" rule that re-runs after he starts work, and not by
+    // a round-robin that would pass it to the next person. Only an administrator moves it (so a rule that always sends AC tickets to a Citykart technician cannot undo the vendor routing).
     if (current?.vendor_company_id && current.vendor_role === 'technician') return
+    // B-02: when the ticket is EDITED, an assign rule only fills an empty slot (or replaces a person who is no longer active). Almost every rule is "created + edited" with a fixed
+    // person, so after any edit it used to take the ticket back from whoever a manager had just given it to.
+    if (ctx.trigger === 'updated' && !ctx.allowReassign && current && current.is_active !== false) return
+  }
+
+  // B-19: only people who can really take this ticket are candidates; an invalid one is skipped, and the next valid one is used (a round-robin used to advance and give up).
+  const valid = await validAssignees(admin, request, assigneeIds)
+  if (valid.size === 0) {
+    logger.warn({ event: 'rules.assign_no_valid_candidate', message: `Assign action of rule ${ctx.ruleId} has nobody who is active and on the team of the ticket`, route: 'lib/rules/actions.ts#runAssign', requestId: request.id, context: { ruleId: ctx.ruleId, candidates: assigneeIds.length } })
+    return
   }
 
   let chosenId: string | null = null
 
   if (strategy === 'direct') {
-    chosenId = assigneeIds[0] ?? null
+    chosenId = assigneeIds.find((id) => valid.has(id)) ?? null
   } else if (strategy === 'round_robin') {
     // The position is taken with a compare-and-set (QA-D018): two tickets created at the very same moment used to read the same position and both went to one person.
     // Whoever changes the stored position first keeps it; the other reads the new position and tries again.
+    const n = assigneeIds.length
     for (let attempt = 0; attempt < 12; attempt++) {
       const { data: rule } = await admin
         .from('business_rules')
@@ -118,25 +171,32 @@ async function runAssign(
         .eq('id', ctx.ruleId)
         .single()
       const stored = (rule?.last_assigned_index ?? null) as number | null
-      const index = (stored ?? 0) % assigneeIds.length
-      let claim = admin.from('business_rules').update({ last_assigned_index: (index + 1) % assigneeIds.length }).eq('id', ctx.ruleId)
+      const start = (stored ?? 0) % n
+      let index = -1
+      for (let k = 0; k < n; k++) {
+        const i = (start + k) % n
+        if (valid.has(assigneeIds[i])) { index = i; break }
+      }
+      if (index < 0) break
+      let claim = admin.from('business_rules').update({ last_assigned_index: (index + 1) % n }).eq('id', ctx.ruleId)
       claim = stored === null ? claim.is('last_assigned_index', null) : claim.eq('last_assigned_index', stored)
       const { data: won } = await claim.select('id')
       if (won && won.length > 0) { chosenId = assigneeIds[index] ?? null; break }
       await new Promise((r) => setTimeout(r, 15 + Math.floor(Math.random() * 40)))
     }
     if (!chosenId) {
-      // twelve lost races in a row: do not leave the ticket without a person; fall back to the first listed technician
-      chosenId = assigneeIds[0] ?? null
+      // twelve lost races in a row: do not leave the ticket without a person; fall back to the first listed technician who can take it
+      chosenId = assigneeIds.find((id) => valid.has(id)) ?? null
     }
   } else if (strategy === 'load_balanced') {
     const counts = await Promise.all(
-      assigneeIds.map(async (id) => {
-        const { count } = await admin
+      assigneeIds.filter((id) => valid.has(id)).map(async (id) => {
+        const { count, error } = await admin
           .from('requests')
           .select('id', { count: 'exact', head: true })
           .eq('assigned_to', id)
-          .not('status', 'in', '("resolved","cancelled","closed")')
+          .not('status', 'in', CLOSED_SQL_LIST)
+        if (error) throw new Error(`Could not count the open tickets of ${id}: ${error.message ?? 'unknown error'}`)
         return { id, count: count ?? 0 }
       })
     )
@@ -153,98 +213,97 @@ async function runAssign(
   // second time for the same assignment.
   if (chosenId === request.assigned_to) return
 
-  // A rule authored (or left stale) with an assigneeIds list that no longer
-  // matches the request's current team — teams/services get reorganized —
-  // could otherwise silently place a ticket with someone who has no RLS
-  // visibility into it, effectively orphaning it. assignRequest() (the
-  // interactive equivalent) already guards this; this direct admin-client
-  // write bypassed it entirely until now.
-  const { count: onTeam } = await admin
-    .from('team_members')
-    .select('user_id', { count: 'exact', head: true })
-    .eq('team_id', request.team_id)
-    .eq('user_id', chosenId)
-  // A vendor technician (an OEM engineer) is never on a team: he sees only the tickets assigned to him (row security), so he is the one exception to the team rule.
-  let isVendorTech = false
-  if (!onTeam) {
-    const { data: vp } = await admin.from('profiles').select('vendor_company_id, vendor_role, is_active, org_id').eq('id', chosenId).maybeSingle()
-    isVendorTech = !!vp && vp.vendor_role === 'technician' && !!vp.vendor_company_id && vp.is_active !== false && vp.org_id === request.org_id
-  }
-  if (!onTeam && !isVendorTech) {
-    console.error(`[business-rules] assign action for rule ${ctx.ruleId} chose user ${chosenId}, who is not on request ${request.id}'s team — skipped.`)
+  // A rule gives the ticket a person and leaves its status as it is (an "open" ticket stays "open" with its technician, as it always has on the live system).
+  // Whether a rule-assigned ticket should become "assigned" like a manual assignment is the owner's decision (audit B-31), so it is not changed here.
+  // Only if the ticket is still in the status this rule read (D-044): when someone changed it in between, the rule does not overwrite that.
+  const nextStatus = request.status
+  const { data: moved, error: assignError } = await admin
+    .from('requests')
+    .update({ assigned_to: chosenId, ...(nextStatus !== request.status ? { status: nextStatus } : {}) })
+    .eq('id', request.id)
+    .eq('status', request.status)
+    .select('id')
+    .maybeSingle()
+  if (assignError) throw new Error(`Could not assign ticket ${request.id}: ${assignError.message ?? 'unknown error'}`)
+  if (!moved) {
+    logger.warn({ event: 'rules.assign_ticket_changed', message: 'The ticket changed while the assign action was running; nothing was assigned', route: 'lib/rules/actions.ts#runAssign', requestId: request.id, context: { ruleId: ctx.ruleId } })
     return
   }
-
-  await admin.from('requests').update({ assigned_to: chosenId }).eq('id', request.id)
   await logActivity({
     requestId: request.id,
     actorId: null,
     action: 'assigned',
     metadata: { assigned_to: chosenId, via: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName },
   })
+  // B-20: nobody "assigned" this - a rule did - so no person is named as the actor (it used to read "assigned by <the assignee>")
   notify([
     {
       recipientId: chosenId,
-      actorId: chosenId,
+      actorId: null,
       type: 'request_assigned',
       title: 'Request assigned to you',
       body: request.title,
       requestId: request.id,
       link: `/requests/${request.id}`,
+      metadata: { assignerName: `Business rule: ${ctx.ruleName}` },
     },
   ]).catch(() => {})
-  notifyRequesterOfAssignment({ requestId: request.id, assigneeId: chosenId, actorId: chosenId }).catch(() => {})
+  // (this helper wants a person for the actor: the ticket's requester stands in, the same way the automatic close does)
+  notifyRequesterOfAssignment({ requestId: request.id, assigneeId: chosenId, actorId: request.requester_id }).catch(() => {})
+  return { assigned_to: chosenId, status: nextStatus }
 }
 
-async function runSetPriority(admin: AnyClient, request: ActionRequest, priority: string, ctx: RuleActionContext): Promise<void> {
+async function runSetPriority(admin: AnyClient, request: ActionRequest, priority: string, ctx: RuleActionContext): Promise<RequestPatch | void> {
+  // B-30: the priority is already this one (the rule matches again after every edit): nothing to change, so no deadline rewrite and no "priority changed" entry.
+  if (priority === request.priority) return
   // Recompute deadlines the same way a sub-category change does (updateRequestCategory())
-  // does — from created_at, field override > the service's mapped SLA Policy,
+  // does — from the start of the SLA clock, field override > the service's mapped SLA Policy,
   // business-hours aware — instead of leaving the old priority's due dates in
   // place under a new priority.
   // A finished ticket keeps the deadlines it finished with (D-044): only its priority is recorded.
-  if (request.status === 'resolved' || request.status === 'closed' || request.status === 'cancelled') {
-    await admin.from('requests').update({ priority }).eq('id', request.id)
+  if (isClosedLikeStatus(request.status)) {
+    const { error } = await admin.from('requests').update({ priority }).eq('id', request.id)
+    if (error) throw new Error(`Could not set the priority of ticket ${request.id}: ${error.message ?? 'unknown error'}`)
     await logActivity({ requestId: request.id, actorId: null, action: 'priority_changed', metadata: { priority_to: priority, via: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName } })
-    return
+    return { priority }
   }
   const allFields = resolveServiceFormSections(request.service).flatMap((s) => s.fields)
-  let { responseDueAt, resolutionDueAt } = await resolveSlaDeadlines(admin, {
+  // a reopened ticket's clock started when it was reopened (F-13), and the pauses that already ended are part of the length; a pause still in progress is NOT
+  // added here - it is credited once, when the pause ends (adding it here as well counted it twice)
+  const from = await slaClockStart(admin, request)
+  const { responseDueAt, resolutionDueAt } = await resolveSlaDeadlines(admin, {
     serviceId: request.service_id,
     priority: priority as 'low' | 'medium' | 'high' | 'urgent',
     servicePolicyConfig: request.service.sla_policy?.config ?? null,
     allFields,
     formData: request.form_data,
-    from: new Date(request.created_at),
+    from,
+    pauseCreditMs: request.paused_ms_total,
   })
 
-  // Preserve every pause this request has ever accumulated (the ledger,
-  // plus one currently in progress) — same as updateRequestCategory().
-  const creditMs =
-    request.paused_ms_total + (request.waiting_since ? Date.now() - new Date(request.waiting_since).getTime() : 0)
-  if (creditMs > 0) {
-    if (responseDueAt) responseDueAt = new Date(new Date(responseDueAt).getTime() + creditMs).toISOString()
-    if (resolutionDueAt) resolutionDueAt = new Date(new Date(resolutionDueAt).getTime() + creditMs).toISOString()
-  }
-
-  await admin
-    .from('requests')
-    .update({ priority, response_due_at: responseDueAt, resolution_due_at: resolutionDueAt })
-    .eq('id', request.id)
+  // B-01: a deadline that could not be worked out (no SLA for this priority, or the calendar could not be read; the latter is already logged and alerted at its source)
+  // is NOT written: the ticket keeps the deadline it has instead of losing it.
+  const update: Record<string, unknown> = { priority }
+  if (responseDueAt) update.response_due_at = responseDueAt
+  if (resolutionDueAt) update.resolution_due_at = resolutionDueAt
+  const { error } = await admin.from('requests').update(update).eq('id', request.id)
+  if (error) throw new Error(`Could not set the priority of ticket ${request.id}: ${error.message ?? 'unknown error'}`)
   await logActivity({
     requestId: request.id,
     actorId: null,
     action: 'priority_changed',
     metadata: { priority_to: priority, via: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName },
   })
+  return { priority, ...(responseDueAt ? { response_due_at: responseDueAt } : {}), ...(resolutionDueAt ? { resolution_due_at: resolutionDueAt } : {}) }
 }
 
-/** Returns true when the ticket was actually moved (false: invalid status, or someone else changed it first). */
-async function runSetStatus(admin: AnyClient, request: ActionRequest, status: string, ctx: RuleActionContext): Promise<boolean> {
-  if (!(status in STATUS_LABELS)) return false // guard against a stale/invalid status baked into an old rule
+/** Returns what changed when the ticket was actually moved (null: invalid status, or someone else changed it first). */
+async function runSetStatus(admin: AnyClient, request: ActionRequest, status: string, ctx: RuleActionContext): Promise<RequestPatch | null> {
+  if (!(status in STATUS_LABELS)) return null // guard against a stale/invalid status baked into an old rule
   // A rule may only make the moves a person could make, plus auto-close (VAPT-008): no jumping to any status, no reviving a cancelled ticket
   if (!isServerTransitionAllowed(request.status, status)) {
     logger.warn({ event: 'rules.status_move_refused', message: 'A Business Rule tried a status move that is not allowed', route: 'rules/actions.ts#runSetStatus', requestId: request.id, context: { from: request.status, to: status, ruleId: ctx.ruleId } })
-    return false
+    return null
   }
 
   const now = new Date()
@@ -286,15 +345,16 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
   const pausedNow = request.status === 'waiting_user' || request.status === 'hold_purchase_ho'
   const pausedNext = status === 'waiting_user' || status === 'hold_purchase_ho'
   if (pausedNow && !pausedNext && request.waiting_since) {
-    const pausedMs = now.getTime() - new Date(request.waiting_since).getTime()
+    // credited in business time when the calendar has gaps (B-08/B-09), plain wall-clock time otherwise - the same number goes into the deadline and the ledger
+    const creditMs = await pauseCreditMs(new Date(request.waiting_since), now)
     if (request.response_due_at) {
-      update.response_due_at = new Date(new Date(request.response_due_at).getTime() + pausedMs).toISOString()
+      update.response_due_at = (await shiftDeadlineByCredit(new Date(request.response_due_at), creditMs)).toISOString()
     }
     if (request.resolution_due_at) {
-      update.resolution_due_at = new Date(new Date(request.resolution_due_at).getTime() + pausedMs).toISOString()
+      update.resolution_due_at = (await shiftDeadlineByCredit(new Date(request.resolution_due_at), creditMs)).toISOString()
     }
     update.waiting_since = null
-    update.paused_ms_total = request.paused_ms_total + pausedMs
+    update.paused_ms_total = request.paused_ms_total + creditMs
   }
   if (pausedNext && !pausedNow) update.waiting_since = nowIso   // entering a pause; moving between pauses keeps the original start
 
@@ -327,8 +387,9 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
   }
 
   // Only if the ticket is still in the status this rule read (D-044): when someone changed it in between, the rule does not overwrite that.
-  const { data: changed } = await admin.from('requests').update(update).eq('id', request.id).eq('status', request.status).select('id').maybeSingle()
-  if (!changed) return false
+  const { data: changed, error: changeError } = await admin.from('requests').update(update).eq('id', request.id).eq('status', request.status).select('id').maybeSingle()
+  if (changeError) throw new Error(`Could not set the status of ticket ${request.id}: ${changeError.message ?? 'unknown error'}`)
+  if (!changed) return null
 
   // CSAT: same as updateRequestStatus() — a rule-resolved ticket gets a survey and the same
   // "resolved + how did we do?" e-mail, or the requester never hears about it or gets asked to rate it.
@@ -351,12 +412,14 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
   // close any open timer the same way the interactive updateRequestStatus()
   // does — otherwise an agent's clock keeps running forever on a ticket a rule
   // just resolved/reassigned out from under them.
-  if (request.status === 'in_progress' && status !== 'in_progress') {
-    await admin
+  // (B-07: also when the ticket is finished, whatever it was before - a timer left over from an earlier move must not run on a closed ticket)
+  if ((request.status === 'in_progress' && status !== 'in_progress') || isClosedLikeStatus(status)) {
+    const { error: timerError } = await admin
       .from('request_time_entries')
       .update({ stopped_at: nowIso })
       .eq('request_id', request.id)
       .is('stopped_at', null)
+    if (timerError) logger.error({ event: 'rules.timer_stop_failed', message: 'The open timer could not be stopped after a rule moved the ticket', route: 'rules/actions.ts#runSetStatus', requestId: request.id, error: timerError })
   }
 
   await logActivity({
@@ -365,23 +428,37 @@ async function runSetStatus(admin: AnyClient, request: ActionRequest, status: st
     action: 'status_changed',
     metadata: { to: status, via: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName },
   })
-  return true
+  // a reopen is also recorded as one: it starts the ticket's SLA clock again, and the clock's start is read back from this entry (lib/sla/resolve.ts#slaClockStart)
+  if (status === 'open' && (request.status === 'resolved' || request.status === 'closed')) {
+    await logActivity({ requestId: request.id, actorId: null, action: 'reopened', metadata: { reason: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName } })
+  }
+  return {
+    status: status as ActionRequest['status'],
+    ...(update.waiting_since !== undefined ? { waiting_since: update.waiting_since as string | null } : {}),
+    ...(update.paused_ms_total !== undefined ? { paused_ms_total: update.paused_ms_total as number } : {}),
+    ...(update.reopen_count !== undefined ? { reopen_count: update.reopen_count as number } : {}),
+    ...(update.response_due_at !== undefined ? { response_due_at: update.response_due_at as string } : {}),
+    ...(update.resolution_due_at !== undefined ? { resolution_due_at: update.resolution_due_at as string } : {}),
+    ...(update.responded_at !== undefined ? { responded_at: update.responded_at as string } : {}),
+  }
 }
 
-async function runSetTeam(admin: AnyClient, request: ActionRequest, teamId: string, ctx: RuleActionContext): Promise<void> {
+async function runSetTeam(admin: AnyClient, request: ActionRequest, teamId: string, ctx: RuleActionContext): Promise<RequestPatch | void> {
   if (!teamId) return // rule saved with no team selected yet — nothing to do
   // the team must belong to the ticket's own organisation, whatever the saved rule says (D-031)
   if (!request.org_id) return
+  if (teamId === request.team_id) return
   const { data: team } = await admin.from('teams').select('id').eq('id', teamId).eq('org_id', request.org_id).maybeSingle()
   if (!team) return
   const { error } = await admin.from('requests').update({ team_id: teamId }).eq('id', request.id)
-  if (error) return
+  if (error) throw new Error(`Could not move ticket ${request.id} to another team: ${error.message ?? 'unknown error'}`)
   await logActivity({
     requestId: request.id,
     actorId: null,
     action: 'reclassified',
     metadata: { team_id: teamId, via: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName },
   })
+  return { team_id: teamId }
 }
 
 async function runNotify(
@@ -418,7 +495,7 @@ async function runNotify(
     notify(
       [...recipients].map((recipientId) => ({
         recipientId,
-        actorId: recipientId,
+        actorId: null,   // a rule sent it: no person is named as the sender (it used to name the recipient themself)
         type: 'business_rule_notification' as const,
         title,
         body,
@@ -489,23 +566,28 @@ async function runNotify(
   }
 }
 
-/** Executes every action in order. A failure in one action is logged and does not stop the rest. */
-export async function executeActions(
+/**
+ * Executes every action in order. A failure in one action is logged and does not stop the rest.
+ * What an action changed is carried into the next one (B-20): "assign, then notify the assignee" notifies the NEW assignee, and a priority set before a status change is seen by it.
+ * (executeActionsWithResult) returns how many actions were tried and how many did not fail, so a caller can tell "nothing worked" (safe to try again) from "some of it worked" (must not be repeated).
+ */
+export async function executeActionsWithResult(
   admin: AnyClient,
   request: ActionRequest,
   actions: RuleAction[],
   ctx: RuleActionContext
-): Promise<void> {
+): Promise<{ attempted: number; succeeded: number }> {
+  let succeeded = 0
   for (const action of actions) {
     try {
-      if (action.type === 'assign') await runAssign(admin, request, action.params, ctx)
-      else if (action.type === 'set_priority') await runSetPriority(admin, request, action.params.priority, ctx)
-      else if (action.type === 'set_status') {
-        // later actions of the same rule see the status this one just set
-        if (await runSetStatus(admin, request, action.params.status, ctx)) request = { ...request, status: action.params.status }
-      }
-      else if (action.type === 'set_team') await runSetTeam(admin, request, action.params.teamId, ctx)
+      let patch: RequestPatch | void | null = undefined
+      if (action.type === 'assign') patch = await runAssign(admin, request, action.params, ctx)
+      else if (action.type === 'set_priority') patch = await runSetPriority(admin, request, action.params.priority, ctx)
+      else if (action.type === 'set_status') patch = await runSetStatus(admin, request, action.params.status, ctx)
+      else if (action.type === 'set_team') patch = await runSetTeam(admin, request, action.params.teamId, ctx)
       else if (action.type === 'notify') await runNotify(admin, request, action.params, ctx)
+      if (patch) request = { ...request, ...patch }
+      succeeded++
     } catch (e) {
       logger.error({
         event: 'business_rules.action_failed',
@@ -519,4 +601,10 @@ export async function executeActions(
       })
     }
   }
+  return { attempted: actions.length, succeeded }
+}
+
+/** The same, for a caller that does not need the counts. */
+export async function executeActions(admin: AnyClient, request: ActionRequest, actions: RuleAction[], ctx: RuleActionContext): Promise<void> {
+  await executeActionsWithResult(admin, request, actions, ctx)
 }

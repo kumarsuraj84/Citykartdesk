@@ -96,9 +96,13 @@ export async function resolveSlaDeadlines(
     allFields?: FormField[]
     formData?: Record<string, unknown>
     from: Date
+    // F-13: pauses already completed (the request's paused_ms_total, in pauseCreditMs() units). They are added to the SLA length BEFORE it is counted in business
+    // minutes, so a recompute from the start never forgets a pause. A pause still in progress is NOT passed: it is credited once, when the pause ends.
+    pauseCreditMs?: number
   }
 ): Promise<{ responseDueAt: string | null; resolutionDueAt: string | null }> {
-  const { serviceId, priority, servicePolicyConfig, allFields = [], formData = {}, from } = params
+  const { serviceId, priority, servicePolicyConfig, allFields = [], formData = {}, from, pauseCreditMs = 0 } = params
+  const creditMinutes = pauseCreditMs > 0 ? pauseCreditMs / 60_000 : 0
 
   const fieldTier = await resolveFieldSlaTier(supabase, serviceId, priority, allFields, formData)
   const policyTier = servicePolicyConfig?.[priority]
@@ -119,14 +123,36 @@ export async function resolveSlaDeadlines(
   // than needing a separate error path here.
   const responseDeadline =
     safeHours(responseHours) != null
-      ? await computeSLADeadline(from, Math.round(safeHours(responseHours)! * 60))
+      ? await computeSLADeadline(from, Math.round(safeHours(responseHours)! * 60 + creditMinutes))
       : null
   const resolutionDeadline =
     safeHours(resolutionHours) != null
-      ? await computeSLADeadline(from, Math.round(safeHours(resolutionHours)! * 60))
+      ? await computeSLADeadline(from, Math.round(safeHours(resolutionHours)! * 60 + creditMinutes))
       : null
   const responseDueAt = responseDeadline?.toISOString() ?? null
   const resolutionDueAt = resolutionDeadline?.toISOString() ?? null
 
   return { responseDueAt, resolutionDueAt }
+}
+
+/**
+ * When a ticket's SLA clock started: its creation, or the last time it was reopened (a reopen starts a brand-new clock, and its pause credit is cleared with it).
+ * Recomputing deadlines from created_at for a reopened ticket put them months in the past, so it was "breached" the moment it was re-classified.
+ */
+export async function slaClockStart(
+  client: AnyClient,
+  request: { id: string; created_at: string; reopen_count?: number | null }
+): Promise<Date> {
+  const created = new Date(request.created_at)
+  if (!(Number(request.reopen_count ?? 0) > 0)) return created
+  const { data } = await client
+    .from('request_activity')
+    .select('created_at')
+    .eq('request_id', request.id)
+    .eq('action', 'reopened')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const reopened = data?.created_at ? new Date(data.created_at as string) : null
+  return reopened && reopened > created ? reopened : created
 }

@@ -2,6 +2,8 @@ import ExcelJS from 'exceljs'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { totalOf } from './lines'
+import { fetchAllPages } from '@/lib/queries/paging'
+import { inBatches } from '@/lib/queries/in-batches'
 
 // The PO register: every purchase order a vendor asked for, with its number, date, ticket, store, items and amount (without GST).
 // A vendor sees his own (a vendor manager: his company's); Citykart's technicians, managers and administrators see all of them. Server only.
@@ -35,44 +37,59 @@ export const PO_STATUS_LABELS: Record<PoRegisterRow['status'], string> = {
 
 type Viewer = { kind: 'vendor' } | { kind: 'staff'; orgId: string }
 
+/**
+ * The most POs one register shows (newest first). Every list of ids sent to the database is read in batches of 100 (IN_BATCH): the production proxy refuses a request line of
+ * about 16 KB, which is roughly 400 ids, so one `.in()` with thousands of ids failed and the register came back empty.
+ */
 const MAX_ROWS = 5000
+
+type VrRow = { id: string; status: PoRegisterRow['status']; version: number; request_id: string; po_number: string | null; po_date: string | null; created_by: string | null; created_at: string; decided_at: string | null; decision_reason: string | null; org_id: string }
+const VR_COLUMNS = 'id, status, version, request_id, po_number, po_date, created_by, created_at, decided_at, decision_reason, org_id'
+
+/** A batched read that throws on a failed batch (the register must say "could not load", not show fewer POs). */
+async function readIn<T>(ids: string[], what: string, run: (batch: string[]) => PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<T[]> {
+  if (ids.length === 0) return []
+  const res = await inBatches<T>(ids, run)
+  if (res.error) throw new Error(`PO register: could not read ${what}: ${res.error.message}`)
+  return res.data
+}
 
 export async function loadPoRegister(viewer: Viewer): Promise<PoRegisterRow[]> {
   const admin = createAdminClient() as unknown as Db
-  let query = admin.from('vendor_requests').select('id, status, version, request_id, po_number, po_date, created_by, created_at, decided_at, decision_reason, org_id').eq('kind', 'po').order('created_at', { ascending: false }).limit(MAX_ROWS)
+  let rows: VrRow[]
   if (viewer.kind === 'staff') {
-    query = query.eq('org_id', viewer.orgId)
+    const { rows: all } = await fetchAllPages<VrRow>((from, to) => admin.from('vendor_requests').select(VR_COLUMNS).eq('kind', 'po').eq('org_id', viewer.orgId).order('created_at', { ascending: false }).order('id', { ascending: true }).range(from, to), { maxRows: MAX_ROWS })
+    rows = all
   } else {
     // a vendor reads the POs of the tickets row security lets him read (his own, or his company's for a manager)
     const supabase = await createClient()
-    const { data: visible } = await supabase.from('requests').select('id').limit(MAX_ROWS)
-    const ids = ((visible ?? []) as { id: string }[]).map((r) => r.id)
+    const { rows: visible } = await fetchAllPages<{ id: string }>((from, to) => supabase.from('requests').select('id').order('id', { ascending: true }).range(from, to), { maxRows: MAX_ROWS })
+    const ids = visible.map((r) => r.id)
     if (ids.length === 0) return []
-    query = query.in('request_id', ids)
+    rows = (await readIn<VrRow>(ids, 'the purchase orders', (b) => admin.from('vendor_requests').select(VR_COLUMNS).eq('kind', 'po').in('request_id', b)))
+      .sort((x, y) => (x.created_at < y.created_at ? 1 : x.created_at > y.created_at ? -1 : 0)).slice(0, MAX_ROWS)
   }
-  const { data: vrs } = await query
-  const rows = (vrs ?? []) as { id: string; status: PoRegisterRow['status']; version: number; request_id: string; po_number: string | null; po_date: string | null; created_by: string | null; created_at: string; decided_at: string | null; decision_reason: string | null }[]
   if (rows.length === 0) return []
 
   const requestIds = [...new Set(rows.map((r) => r.request_id))]
-  const [{ data: reqs }, { data: items }] = await Promise.all([
-    admin.from('requests').select('id, request_no, requester_id, assigned_to').in('id', requestIds),
-    admin.from('vendor_request_items').select('vendor_request_id, line_no, item_name, qty, price_excl_gst').in('vendor_request_id', rows.map((r) => r.id)).order('line_no', { ascending: true }),
+  const [reqs, items] = await Promise.all([
+    readIn<{ id: string; request_no: string; requester_id: string; assigned_to: string | null }>(requestIds, 'the tickets', (b) => admin.from('requests').select('id, request_no, requester_id, assigned_to').in('id', b)),
+    readIn<{ vendor_request_id: string; line_no: number; item_name: string; qty: number; price_excl_gst: number | null }>(rows.map((r) => r.id), 'the items', (b) => admin.from('vendor_request_items').select('vendor_request_id, line_no, item_name, qty, price_excl_gst').in('vendor_request_id', b).order('line_no', { ascending: true })),
   ])
-  const reqById = new Map(((reqs ?? []) as { id: string; request_no: string; requester_id: string; assigned_to: string | null }[]).map((r) => [r.id, r]))
+  const reqById = new Map(reqs.map((r) => [r.id, r]))
   const people = [...new Set([...reqById.values()].flatMap((r) => [r.requester_id, r.assigned_to]).filter((v): v is string => !!v))]
-  const { data: profs } = await admin.from('profiles').select('id, full_name, store_id, vendor_company_id').in('id', people)
-  const profById = new Map(((profs ?? []) as { id: string; full_name: string; store_id: string | null; vendor_company_id: string | null }[]).map((p) => [p.id, p]))
+  const profs = await readIn<{ id: string; full_name: string; store_id: string | null; vendor_company_id: string | null }>(people, 'the people', (b) => admin.from('profiles').select('id, full_name, store_id, vendor_company_id').in('id', b))
+  const profById = new Map(profs.map((p) => [p.id, p]))
   const storeIds = [...new Set([...profById.values()].map((p) => p.store_id).filter((v): v is string => !!v))]
   const companyIds = [...new Set([...profById.values()].map((p) => p.vendor_company_id).filter((v): v is string => !!v))]
-  const [{ data: stores }, { data: companies }] = await Promise.all([
-    storeIds.length ? admin.from('stores').select('id, code, name').in('id', storeIds) : Promise.resolve({ data: [] }),
-    companyIds.length ? admin.from('vendor_companies').select('id, name').in('id', companyIds) : Promise.resolve({ data: [] }),
+  const [stores, companies] = await Promise.all([
+    readIn<{ id: string; code: string; name: string }>(storeIds, 'the stores', (b) => admin.from('stores').select('id, code, name').in('id', b)),
+    readIn<{ id: string; name: string }>(companyIds, 'the vendor companies', (b) => admin.from('vendor_companies').select('id, name').in('id', b)),
   ])
-  const storeById = new Map(((stores ?? []) as { id: string; code: string; name: string }[]).map((s) => [s.id, s]))
-  const companyById = new Map(((companies ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]))
+  const storeById = new Map(stores.map((s) => [s.id, s]))
+  const companyById = new Map(companies.map((c) => [c.id, c.name]))
   const itemsBy = new Map<string, { item_name: string; qty: number; price_excl_gst: number | null }[]>()
-  for (const it of (items ?? []) as { vendor_request_id: string; item_name: string; qty: number; price_excl_gst: number | null }[]) {
+  for (const it of items) {
     const list = itemsBy.get(it.vendor_request_id) ?? []
     list.push({ item_name: it.item_name, qty: Number(it.qty), price_excl_gst: it.price_excl_gst === null ? null : Number(it.price_excl_gst) })
     itemsBy.set(it.vendor_request_id, list)

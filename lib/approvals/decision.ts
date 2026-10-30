@@ -8,6 +8,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { logActivity } from '@/lib/activity'
 import { notify } from '@/lib/notifications'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { logger } from '@/lib/observability/logger'
+import { pauseCreditMs, shiftDeadlineByCredit } from '@/lib/sla/business-hours'
+import { stopOpenTimeEntries } from '@/lib/requests/status-change'
 import type { RequestStatus } from '@/types'
 
 type ActionResult = { error?: string }
@@ -30,8 +33,43 @@ export async function archiveApprovalNotifications(requestId: string, opts: { on
     .eq('type', 'approval_requested')
     .is('archived_at', null)
   if (opts.onlyUserId) q = q.eq('user_id', opts.onlyUserId)
-  await q
+  const { error } = await q
+  // Only a stale bell entry is left behind when this fails, so it is logged and the decision carries on.
+  if (error) logger.warn({ event: 'approvals.archive_notifications_failed', message: 'Could not archive the approval notifications.', requestId, errorCode: error.code, error })
 }
+
+/** Takes back a decision row written a moment ago because the step after it failed, so the approver can simply try again (the table allows one decision per step). */
+export async function undoDecision(admin: ApprovalDb, decisionId: string | null, approvalId: string) {
+  if (!decisionId) return
+  const { error } = await admin.from('approval_decisions').delete().eq('id', decisionId)
+  if (error) logger.error({ event: 'approvals.undo_decision_failed', message: 'Could not take back a decision after a failed step; the approval may need a manual look.', errorCode: error.code, context: { approvalId, decisionId }, error })
+}
+
+/** Puts an approval back to waiting after the ticket step that follows it failed, so the approver is not left with a settled approval and a ticket still on hold. */
+export async function reopenApproval(admin: ApprovalDb, approvalId: string, from: 'approved' | 'rejected' | 'cancelled') {
+  const { error } = await admin.from('approvals').update({ status: 'pending' }).eq('id', approvalId).eq('status', from)
+  if (error) logger.error({ event: 'approvals.reopen_failed', message: 'Could not put an approval back to pending after a failed ticket update; it needs a manual look.', errorCode: error.code, context: { approvalId }, error })
+}
+
+/**
+ * The SLA numbers to write when a hold (waiting on the user / pending approval) ends: the due dates move later by the time spent on hold, and the same credit is added to
+ * paused_ms_total. The credit is counted in BUSINESS time when the calendar has gaps (the due dates are counted in business minutes) and equals the plain wall-clock gap for an
+ * always-on calendar, exactly like updateRequestStatus() does. Nothing to change when the ticket was not paused.
+ */
+export async function creditHoldTime(
+  req: { waiting_since: string | null; response_due_at: string | null; resolution_due_at: string | null; paused_ms_total: number | string | null },
+  now: Date,
+): Promise<{ response_due_at?: string; resolution_due_at?: string; paused_ms_total?: number }> {
+  if (!req.waiting_since) return {}
+  const creditMs = await pauseCreditMs(new Date(req.waiting_since), now)
+  const out: { response_due_at?: string; resolution_due_at?: string; paused_ms_total?: number } = {}
+  if (req.response_due_at) out.response_due_at = (await shiftDeadlineByCredit(new Date(req.response_due_at), creditMs)).toISOString()
+  if (req.resolution_due_at) out.resolution_due_at = (await shiftDeadlineByCredit(new Date(req.resolution_due_at), creditMs)).toISOString()
+  out.paused_ms_total = Number(req.paused_ms_total ?? 0) + creditMs
+  return out
+}
+
+const ALREADY_DECIDED ='This approval has already been decided.'
 
 // ── Shared: verify the caller is the correct approver for the current step ────
 
@@ -105,17 +143,20 @@ async function approveCore(ctx: ApprovalCtx, approvalId: string, comment?: strin
   // The approval must still be pending when the decision is written (VAPT-058 / VA-TKT-15): a decision that arrives after another approver, a
   // rejection or a cancellation has settled it is not recorded.
   const { data: stillPending } = await admin.from('approvals').select('status').eq('id', approvalId).maybeSingle()
-  if (!stillPending || stillPending.status !== 'pending') return { error: 'This approval has already been decided.' }
+  if (!stillPending || stillPending.status !== 'pending') return { error: ALREADY_DECIDED }
 
   // Record the decision
-  const { error: decisionError } = await admin.from('approval_decisions').insert({
+  const { data: decisionRow, error: decisionError } = await admin.from('approval_decisions').insert({
     approval_id: approvalId,
     step_order: currentStep.step_order,
     decided_by: profile.id,
     decision: 'approved',
     comment: comment?.trim() || null,
-  })
-  if (decisionError) return { error: sanitizeError(decisionError, { route: 'approvals.ts#approveApproval', fallback: 'Failed to record decision.' }) }
+  }).select('id').single()
+  // 23505 = this step already has a decision: someone else got there in the same moment
+  if (decisionError?.code === '23505') return { error: ALREADY_DECIDED }
+  if (decisionError || !decisionRow) return { error: sanitizeError(decisionError, { route: 'approvals.ts#approveApproval', fallback: 'Failed to record decision.' }) }
+  const decisionId: string = decisionRow.id
 
   // This is now decided for the acting approver — their notification is done.
   await archiveApprovalNotifications(approval.request_id, { onlyUserId: profile.id })
@@ -144,12 +185,22 @@ async function approveCore(ctx: ApprovalCtx, approvalId: string, comment?: strin
       .eq('status', 'pending')
       .select('id')
       .maybeSingle()
-    if (approvalUpdateError) return { error: sanitizeError(approvalUpdateError, { route: 'approvals.ts#approveApproval', fallback: 'Failed to update approval.' }) }
+    if (approvalUpdateError) {
+      await undoDecision(admin, decisionId, approvalId)
+      return { error: sanitizeError(approvalUpdateError, { route: 'approvals.ts#approveApproval', fallback: 'Failed to update approval.' }) }
+    }
     if (!approvalUpdated) {
+      // Somebody settled it between our check and this update. If it was another APPROVAL, ours stays on record (two people agreeing). If it was a rejection or a
+      // recall, our "approved" must not stay on an approval that did not end as approved (the same stray-decision problem as in rejectCore): take it back and say so.
+      const { data: now } = await admin.from('approvals').select('status').eq('id', approvalId).maybeSingle()
       revalidatePath(`/requests/${approval.request_id}`)
       revalidatePath('/approvals')
       revalidatePath('/home')
       revalidatePath('/notifications')
+      if (now && now.status !== 'approved') {
+        await undoDecision(admin, decisionId, approvalId)
+        return { error: ALREADY_DECIDED }
+      }
       return {}
     }
 
@@ -159,11 +210,18 @@ async function approveCore(ctx: ApprovalCtx, approvalId: string, comment?: strin
     // Resume the SLA clock — mirrors updateRequestStatus()'s "Waiting on
     // User" resume: extend the due dates by however long the approval was
     // pending, so time spent on hold isn't counted against SLA.
-    const { data: req } = await admin
+    const { data: req, error: reqReadError } = await admin
       .from('requests')
       .select('requester_id, waiting_since, response_due_at, resolution_due_at, pre_approval_status, paused_ms_total')
       .eq('id', approval.request_id)
       .single()
+    if (reqReadError || !req) {
+      // The ticket could not even be read: put the approval back to waiting so the approver can try again (otherwise it would read "no longer pending"
+      // while the ticket stays on hold for good).
+      await reopenApproval(admin, approvalId, 'approved')
+      await undoDecision(admin, decisionId, approvalId)
+      return { error: sanitizeError(reqReadError, { route: 'approvals.ts#approveApproval', fallback: 'Failed to read the request.' }) }
+    }
 
     const resumeNow = new Date()
     // Resume into whatever it actually was before being sent for approval —
@@ -184,47 +242,53 @@ async function approveCore(ctx: ApprovalCtx, approvalId: string, comment?: strin
       pre_approval_status: null,
       waiting_since: resumedStatus === 'waiting_user' ? resumeNow.toISOString() : null,
     }
-    if (req?.waiting_since) {
-      const pausedMs = resumeNow.getTime() - new Date(req.waiting_since).getTime()
-      if (req.response_due_at) {
-        updatePayload.response_due_at = new Date(new Date(req.response_due_at).getTime() + pausedMs).toISOString()
-      }
-      if (req.resolution_due_at) {
-        updatePayload.resolution_due_at = new Date(new Date(req.resolution_due_at).getTime() + pausedMs).toISOString()
-      }
-      updatePayload.paused_ms_total = Number(req.paused_ms_total ?? 0) + pausedMs
-    }
+    Object.assign(updatePayload, await creditHoldTime(req, resumeNow))
 
-    const { error: requestUpdateError } = await admin
+    const { data: movedRows, error: requestUpdateError } = await admin
       .from('requests')
       .update(updatePayload)
       .eq('id', approval.request_id)
       // only a ticket that is still waiting for this approval is moved on; one that a rule or a person has closed or cancelled meanwhile stays as it is
       .eq('status', 'pending_approval')
-    if (requestUpdateError) return { error: sanitizeError(requestUpdateError, { route: 'approvals.ts#approveApproval', fallback: 'Failed to update request.' }) }
+      .select('id')
+    if (requestUpdateError) {
+      // The approval was settled a moment ago but the ticket did not move. Undo both, so the ticket is not stuck on hold behind an approval that now
+      // reads "no longer pending" (the approver can simply try again).
+      await reopenApproval(admin, approvalId, 'approved')
+      await undoDecision(admin, decisionId, approvalId)
+      return { error: sanitizeError(requestUpdateError, { route: 'approvals.ts#approveApproval', fallback: 'Failed to update request.' }) }
+    }
+    // Nothing matched: the ticket is no longer waiting for this approval (a rule or a person moved it on). The approval itself is genuinely approved, so
+    // that stays, but the history must not claim the ticket resumed, and the requester is not told work is resuming.
+    const ticketMoved = (movedRows?.length ?? 0) > 0
 
     await logActivity({
       requestId: approval.request_id,
       actorId: profile.id,
       action: 'approved',
-      metadata: { step: currentStep.step_order, comment: comment?.trim(), ...(via ? { via } : {}) },
+      metadata: { step: currentStep.step_order, comment: comment?.trim(), ...(via ? { via } : {}), ...(ticketMoved ? {} : { ticket_already_moved_on: true }) },
     })
 
-    await logActivity({
-      requestId: approval.request_id,
-      actorId: profile.id,
-      action: 'status_changed',
-      metadata: { from: 'pending_approval', to: 'in_progress' },
-    })
+    if (ticketMoved) {
+      await logActivity({
+        requestId: approval.request_id,
+        actorId: profile.id,
+        action: 'status_changed',
+        // the status the ticket really went back to (it can be waiting_user or open, not always in_progress)
+        metadata: { from: 'pending_approval', to: resumedStatus },
+      })
+    }
 
     // Notify requester: approval fully approved
-    if (req && req.requester_id !== profile.id) {
+    if (ticketMoved && req.requester_id !== profile.id) {
       notify({
         recipientId: req.requester_id,
         actorId: profile.id,
         type: 'approval_approved',
         title: 'Your request has been approved',
-        body: `${profile.full_name} approved it — work is resuming.`,
+        body: resumedStatus === 'waiting_user'
+          ? `${profile.full_name} approved it — it is back to waiting for your reply.`
+          : `${profile.full_name} approved it — work is resuming.`,
         requestId: approval.request_id,
         link: `/requests/${approval.request_id}`,
         metadata: { approverName: profile.full_name, reason: comment?.trim() || undefined },
@@ -253,7 +317,11 @@ async function approveCore(ctx: ApprovalCtx, approvalId: string, comment?: strin
         .from('approvals')
         .update({ current_step: nextStep!.step_order })
         .eq('id', approvalId)
-      if (advanceError) return { error: sanitizeError(advanceError, { route: 'approvals.ts#approveApproval', fallback: 'Failed to advance to next approval step.' }) }
+      if (advanceError) {
+        // the step did not advance: take the decision back so the same approver can try again instead of being stuck on "already decided"
+        await undoDecision(admin, decisionId, approvalId)
+        return { error: sanitizeError(advanceError, { route: 'approvals.ts#approveApproval', fallback: 'Failed to advance to next approval step.' }) }
+      }
 
       if (nextStep?.approver_type === 'specific_user' && nextStep.approver_user_id && nextStep.approver_user_id !== profile.id) {
         notify({
@@ -290,14 +358,21 @@ async function rejectCore(ctx: ApprovalCtx, approvalId: string, comment?: string
   const { approval, currentStep, profile } = ctx
   const admin = createAdminClient()
 
-  const { error: decisionError } = await admin.from('approval_decisions').insert({
+  // The approval must still be pending before anything is written, exactly as approveCore checks: a rejection that arrives after another approver has
+  // settled it must not leave a stray "rejected" decision on an approved approval.
+  const { data: stillPending } = await admin.from('approvals').select('status').eq('id', approvalId).maybeSingle()
+  if (!stillPending || stillPending.status !== 'pending') return { error: ALREADY_DECIDED }
+
+  const { data: decisionRow, error: decisionError } = await admin.from('approval_decisions').insert({
     approval_id: approvalId,
     step_order: currentStep.step_order,
     decided_by: profile.id,
     decision: 'rejected',
     comment: comment?.trim() || null,
-  })
-  if (decisionError) return { error: sanitizeError(decisionError, { route: 'approvals.ts#rejectApproval', fallback: 'Failed to record decision.' }) }
+  }).select('id').single()
+  if (decisionError?.code === '23505') return { error: ALREADY_DECIDED }
+  if (decisionError || !decisionRow) return { error: sanitizeError(decisionError, { route: 'approvals.ts#rejectApproval', fallback: 'Failed to record decision.' }) }
+  const decisionId: string = decisionRow.id
 
   // Guarded the same way approveApproval's final step is: two approvers
   // (or an approve/reject race) hitting this at the same instant should only
@@ -309,13 +384,18 @@ async function rejectCore(ctx: ApprovalCtx, approvalId: string, comment?: string
     .eq('status', 'pending')
     .select('id')
     .maybeSingle()
-  if (approvalUpdateError) return { error: sanitizeError(approvalUpdateError, { route: 'approvals.ts#rejectApproval', fallback: 'Failed to update approval.' }) }
+  if (approvalUpdateError) {
+    await undoDecision(admin, decisionId, approvalId)
+    return { error: sanitizeError(approvalUpdateError, { route: 'approvals.ts#rejectApproval', fallback: 'Failed to update approval.' }) }
+  }
   if (!approvalRejected) {
+    // We lost the race: take our own "rejected" decision back so the record shows only what really settled the approval, and say so plainly.
+    await undoDecision(admin, decisionId, approvalId)
     revalidatePath(`/requests/${approval.request_id}`)
     revalidatePath('/approvals')
     revalidatePath('/home')
     revalidatePath('/notifications')
-    return {}
+    return { error: ALREADY_DECIDED }
   }
 
   // A single reject ends it for every approver — clear it for all of them.
@@ -345,36 +425,41 @@ async function rejectCore(ctx: ApprovalCtx, approvalId: string, comment?: string
     cancellation_reason: 'approval_rejected',
     reopen_deadline_at: new Date(resumeNow.getTime() + REOPEN_WINDOW_HOURS * 3_600_000).toISOString(),
   }
-  if (reqForResume?.waiting_since) {
-    const pausedMs = resumeNow.getTime() - new Date(reqForResume.waiting_since).getTime()
-    if (reqForResume.response_due_at) {
-      cancelPayload.response_due_at = new Date(new Date(reqForResume.response_due_at).getTime() + pausedMs).toISOString()
-    }
-    if (reqForResume.resolution_due_at) {
-      cancelPayload.resolution_due_at = new Date(new Date(reqForResume.resolution_due_at).getTime() + pausedMs).toISOString()
-    }
-    cancelPayload.paused_ms_total = Number(reqForResume.paused_ms_total ?? 0) + pausedMs
-  }
+  if (reqForResume) Object.assign(cancelPayload, await creditHoldTime(reqForResume, resumeNow))
 
-  const { error: requestUpdateError } = await admin
+  const { data: cancelledRows, error: requestUpdateError } = await admin
     .from('requests')
     .update(cancelPayload)
     .eq('id', approval.request_id)
-  if (requestUpdateError) return { error: sanitizeError(requestUpdateError, { route: 'approvals.ts#rejectApproval', fallback: 'Failed to update request.' }) }
+    // only a ticket still waiting for this approval is cancelled; one that was moved on meanwhile (resolved, closed, resumed) is left as it is
+    .eq('status', 'pending_approval')
+    .select('id')
+  if (requestUpdateError) {
+    // the approval was settled but the ticket did not move: undo both so the approver can try again
+    await reopenApproval(admin, approvalId, 'rejected')
+    await undoDecision(admin, decisionId, approvalId)
+    return { error: sanitizeError(requestUpdateError, { route: 'approvals.ts#rejectApproval', fallback: 'Failed to update request.' }) }
+  }
+  const ticketCancelled = (cancelledRows?.length ?? 0) > 0
+  // A cancelled ticket must not keep a running timer (B-07). The timer was normally stopped already when the ticket went to approval; this also covers one that
+  // was started again meanwhile. Only when this rejection really cancelled the ticket.
+  if (ticketCancelled) await stopOpenTimeEntries(approval.request_id, resumeNow.toISOString())
 
   await logActivity({
     requestId: approval.request_id,
     actorId: profile.id,
     action: 'rejected',
-    metadata: { step: currentStep.step_order, comment: comment?.trim(), ...(via ? { via } : {}) },
+    metadata: { step: currentStep.step_order, comment: comment?.trim(), ...(via ? { via } : {}), ...(ticketCancelled ? {} : { ticket_already_moved_on: true }) },
   })
 
-  await logActivity({
-    requestId: approval.request_id,
-    actorId: profile.id,
-    action: 'status_changed',
-    metadata: { from: 'pending_approval', to: 'cancelled' },
-  })
+  if (ticketCancelled) {
+    await logActivity({
+      requestId: approval.request_id,
+      actorId: profile.id,
+      action: 'status_changed',
+      metadata: { from: 'pending_approval', to: 'cancelled' },
+    })
+  }
 
   // Notify requester: approval rejected
   const { data: req } = await admin

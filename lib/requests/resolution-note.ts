@@ -15,11 +15,18 @@ const EMPTY_WORDS = new Set([
   'we are resolving the ticket', 'we are resolving the ticket.', 'we are closing the ticket',
 ])
 
-/** A password written into text: "Pass: Abcd@1234", "password is Abcd@1234", "pwd=Abcd1234", or a word with a symbol and digits that looks like one ("Abcd@1234"). */
+/**
+ * A password written into text. It is refused only when it clearly looks like a credential (B-34): the old rule also refused ordinary notes such as "Replaced switch#10" or "Gate@12".
+ *  1. the word pass / password / passwd / pwd followed by a separator (":", "=", "-", "is", "will be", "set to", "changed to") and a VALUE that holds a digit or a symbol
+ *     ("Pass: Abcd@1234", "password is Welcome#2026", "pwd=Abcd1234"; but not "password is reset" or "password - done");
+ *  2. a bare word + symbol + at least four digits that starts like a name ("Abcd@1234", "Welcome#2026"), but not an e-mail address.
+ */
 export function looksLikePassword(text: string): boolean {
-  if (/\b(?:pass(?:word)?|passwd|pwd)\b\s*(?:[:=]|-+|\bis\b|\bwill be\b|\bset to\b|\bchanged to\b)\s*\S{3,}/i.test(text)) return true
-  // a word + symbol + digits ("Abcd@1234", "Welcome#2026"), but not an e-mail address
-  return /(?<![\w.+-])[A-Za-z]{3,}[@#$!%&*][0-9]{2,}\b(?!\.[a-z]{2,})/.test(text)
+  const keyword = /\b(?:pass(?:word)?|passwd|pwd)\b\s*(?:[:=]|-+|\bis\b|\bwill be\b|\bset to\b|\bchanged to\b)\s*(\S{3,})/gi
+  for (const m of text.matchAll(keyword)) {
+    if (/[0-9@#$!%&*]/.test(m[1])) return true
+  }
+  return /(?<![\w.+-])(?=[A-Za-z]*[A-Z])[A-Za-z]{4,}[@#$!%&*][0-9]{4,}\b(?!\.[a-z]{2,})/.test(text)
 }
 
 export const PASSWORD_IN_NOTE_MESSAGE = 'Please do not write a password in the note. Share it privately with the requester and write only that it was reset or created.'

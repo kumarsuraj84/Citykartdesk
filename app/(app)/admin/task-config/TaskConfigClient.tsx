@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { toast } from 'sonner'
 import { Plus, Trash2, ChevronUp, ChevronDown, Check } from 'lucide-react'
 import {
   createTaskStatus,
@@ -130,8 +131,17 @@ function TaskStatusBuilder({ initialStatuses }: { initialStatuses: TaskStatus[] 
 
   function handleToggle(id: string, field: 'is_terminal' | 'is_active', val: boolean) {
     setStatuses((prev) => prev.map((s) => s.id === id ? { ...s, [field]: val } : s))
+    // the box changes at once; if the server refuses (or cannot be reached) it is put back and the reason shown
     start(async () => {
-      await updateTaskStatus(id, { [field]: val })
+      let failure = ''
+      try {
+        const result = await updateTaskStatus(id, { [field]: val })
+        if (result?.error) failure = result.error
+      } catch { failure = 'Could not reach the server. Check your internet and try again.' }
+      if (failure) {
+        setStatuses((prev) => prev.map((s) => s.id === id ? { ...s, [field]: !val } : s))
+        toast.error(failure)
+      }
     })
   }
 

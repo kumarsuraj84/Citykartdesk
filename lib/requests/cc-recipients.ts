@@ -2,6 +2,7 @@
 // (technician, manager, admin, requester ...) or an OEM contact listed under Master Data. No outsider address is ever accepted.
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { listAuthEmails } from '@/lib/auth/emails'
 import { loadSheetOemContacts } from '@/lib/masters/contacts'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,15 +46,15 @@ export async function loadCcBook(orgId: string, admin: AnyClient = createAdminCl
   const { data: oems } = await admin.from('oems').select('name, emails').eq('org_id', orgId)
 
   const book: CcBook = new Map()
-  for (let page = 1; page <= 20; page++) {
-    const { data } = await admin.auth.admin.listUsers({ page, perPage: 1000 })
-    const users = (data?.users ?? []) as { id: string; email?: string }[]
-    if (users.length === 0) break
-    for (const u of users) {
-      const p = u.email ? byId.get(u.id) : undefined
-      if (u.email && p) book.set(u.email.toLowerCase(), { email: u.email.toLowerCase(), name: p.name, kind: 'user', detail: ROLE_LABEL[p.role] ?? p.role, profileId: u.id })
+  // every page of the sign-in accounts is read (lib/auth/emails.ts), not only the first ones
+  const scanned = await listAuthEmails(admin, byId.keys())
+  if (scanned.ok) {
+    for (const [id, email] of scanned.value) {
+      const p = byId.get(id)
+      if (p) book.set(email, { email, name: p.name, kind: 'user', detail: ROLE_LABEL[p.role] ?? p.role, profileId: id })
     }
-    if (users.length < 1000) break
+  } else {
+    console.error('[cc-recipients] the sign-in accounts could not be read, so only OEM contacts can be copied for now:', scanned.error)
   }
   const sheetOems = await loadSheetOemContacts(admin as never, orgId)
   for (const oem of [...((oems ?? []) as { name: string; emails: string[] | null }[]), ...sheetOems]) {
@@ -62,7 +63,7 @@ export async function loadCcBook(orgId: string, admin: AnyClient = createAdminCl
       if (key && !book.has(key)) book.set(key, { email: key, name: oem.name, kind: 'oem', detail: 'OEM contact' })
     }
   }
-  cache.set(orgId, { at: Date.now(), book })
+  if (scanned.ok) cache.set(orgId, { at: Date.now(), book })   // an incomplete book (the sign-in service did not answer) is not kept for a minute
   return book
 }
 

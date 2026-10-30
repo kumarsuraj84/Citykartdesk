@@ -1,5 +1,6 @@
 'use client'
 
+import { formatDateOnly } from '@/lib/ui/formatDate'
 import type { TaskWithDetails, TaskStatus } from '@/types'
 
 interface TaskTimelineViewProps {
@@ -20,8 +21,9 @@ function toDate(iso: string): Date {
   return new Date(iso + (iso.length === 10 ? 'T00:00:00' : ''))
 }
 
+// d is built from a 'YYYY-MM-DD' string at the computer's own midnight (see toDate), so name its day from its own year / month / day numbers
 function fmt(d: Date): string {
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return formatDateOnly(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, { year: false })
 }
 
 export function TaskTimelineView({ tasks, onTaskClick }: TaskTimelineViewProps) {

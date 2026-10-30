@@ -61,6 +61,8 @@ function displayValue(raw: unknown, field: ReportField): string {
   return String(raw)
 }
 
+const NATURAL = new Intl.Collator(undefined, { numeric: true })
+
 const UNKNOWN_FIELD = (key: string): ReportField => ({ key, label: key, type: 'string' })
 
 // ── Filtering ────────────────────────────────────────────────────────────────
@@ -160,7 +162,8 @@ function buildGroupTree(rows: ReportRow[], fields: string[], fieldsByKey: Map<st
     buckets.get(key)!.push(row)
   }
   return [...buckets.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
+    // natural order, not plain text order: "0–5 days, 6–10 days, 11–20 days ... 90+ days" (plain text put 11–20 before 6–10), and "Week-2" before "Week-10" (audit F-37)
+    .sort(([a], [b]) => NATURAL.compare(a, b))
     .map(([value, groupRows]) => {
       const nodePath = [...path, value]
       return { value, path: nodePath, rows: groupRows, children: buildGroupTree(groupRows, rest, fieldsByKey, nodePath) }
@@ -201,6 +204,11 @@ export interface PivotRow {
   isSubtotal: boolean
   recordCount: number
   cells: PivotCellSet[] // one per column leaf, in colLeaves order
+  /**
+   * The row's "Total" column: each value field aggregated over ALL the row's records, with the field's OWN aggregate (an average of the records, the smallest of them, the number of
+   * different ones ...). Adding the cells together is only right for sums and counts; for an average of 5 and an average of 7 it gave 12 (audit F-06).
+   */
+  rowTotal: PivotCellSet
   children: PivotRow[]
 }
 
@@ -208,6 +216,8 @@ export interface PivotResult {
   colLeaves: ColumnLeaf[]
   rows: PivotRow[]
   grandTotal: PivotCellSet[]
+  /** the Grand Total row's "Total" column (same rule as PivotRow.rowTotal) */
+  grandRowTotal: PivotCellSet
   totalRecords: number
 }
 
@@ -218,17 +228,18 @@ export function computePivot(allRows: ReportRow[], config: PivotConfig, fields: 
   const colTree = buildGroupTree(rows, config.colFields, fieldsByKey)
   const colLeaves = flattenLeaves(colTree)
 
-  function computeCells(nodeRows: ReportRow[]): PivotCellSet[] {
-    return colLeaves.map((leaf) => {
-      const matching = rowsMatchingColumnPath(nodeRows, config.colFields, leaf.path, fieldsByKey)
-      const cell: PivotCellSet = {}
-      config.valueFields.forEach((vf, i) => {
-        const acc = newAccumulator()
-        accumulate(acc, matching, vf.field, fieldsByKey.get(vf.field)?.type ?? 'string')
-        cell[i] = finalize(acc, vf.agg)
-      })
-      return cell
+  function aggregate(matching: ReportRow[]): PivotCellSet {
+    const cell: PivotCellSet = {}
+    config.valueFields.forEach((vf, i) => {
+      const acc = newAccumulator()
+      accumulate(acc, matching, vf.field, fieldsByKey.get(vf.field)?.type ?? 'string')
+      cell[i] = finalize(acc, vf.agg)
     })
+    return cell
+  }
+
+  function computeCells(nodeRows: ReportRow[]): PivotCellSet[] {
+    return colLeaves.map((leaf) => aggregate(rowsMatchingColumnPath(nodeRows, config.colFields, leaf.path, fieldsByKey)))
   }
 
   function buildRows(nodes: GroupNode[], depth: number): PivotRow[] {
@@ -239,6 +250,7 @@ export function computePivot(allRows: ReportRow[], config: PivotConfig, fields: 
       isSubtotal: node.children.length > 0,
       recordCount: node.rows.length,
       cells: computeCells(node.rows),
+      rowTotal: aggregate(node.rows),
       children: buildRows(node.children, depth + 1),
     }))
   }
@@ -247,7 +259,7 @@ export function computePivot(allRows: ReportRow[], config: PivotConfig, fields: 
   const pivotRows = buildRows(rowTree, 0)
   const grandTotal = computeCells(rows)
 
-  return { colLeaves, rows: pivotRows, grandTotal, totalRecords: rows.length }
+  return { colLeaves, rows: pivotRows, grandTotal, grandRowTotal: aggregate(rows), totalRecords: rows.length }
 }
 
 /** Flattens a PivotResult back to a simple row-per-record table — used by the
