@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
@@ -8,7 +8,8 @@ import { cn, formatDateTime } from '@/lib/utils'
 import {
   deleteProgram, resetProgramTemplate, saveProgramBasics, moveCategoriesToProgram, saveProgramApprovers, saveProgramCategories, saveProgramDetailsTemplate, saveProgramPortalOptions, saveProgramPmsSheet, saveProgramResolutions, saveProgramSheet, saveProgramTemplate, sendProgramTestMail, setProgramActive, setProgramLevel, updateProgramNow,
 } from '@/lib/actions/admin/programs'
-import { allowedFields, DEFAULT_PROGRAM_BODY, PROGRAM_SAMPLE_VALUES, rowFieldNames } from '@/lib/programs/mail'
+import { allowedFields, DEFAULT_PROGRAM_BODY, rowFieldNames } from '@/lib/programs/mail'
+import { programSampleValues } from '@/lib/programs/sample'
 import { DEFAULT_HEADINGS, FIELD_LABEL, PROGRAM_FIELDS, type ProgramColumns, type ProgramField } from '@/lib/programs/types'
 import type { ProgramEditorData } from '@/lib/programs/admin-data'
 
@@ -68,6 +69,11 @@ export function ProgramEditorClient({ data, subject: subject0, body: body0, cust
   const [optMsg, setOptMsg] = useState<Msg>(null)
   const [detailsText, setDetailsText] = useState(program.details_template ?? '')
   const [detailsMsg, setDetailsMsg] = useState<Msg>(null)
+  // the preview is filled with this program's OWN first sheet row (its store card and category), and follows the machine wording while it is typed
+  const sampleValues = useMemo(
+    () => programSampleValues({ name: program.name, row_type: program.row_type, details_template: detailsText }, data.sampleRow, { categoryName: data.sampleCategory, store: data.sampleStore }),
+    [program.name, program.row_type, detailsText, data.sampleRow, data.sampleCategory, data.sampleStore],
+  )
   const [moveIds, setMoveIds] = useState<string[]>([])
   const [moveMsg, setMoveMsg] = useState<Msg>(null)
   const [approvers, setApprovers] = useState<string[]>(program.default_approver_ids ?? [])
@@ -220,7 +226,8 @@ export function ProgramEditorClient({ data, subject: subject0, body: body0, cust
       <Card n={4} title="The mail to the vendor" hint="Sent once when a ticket is raised. Use the field buttons to put the ticket's details in. The sheet's extra columns are available too.">
         <label className="mb-1 block text-xs font-medium" htmlFor="program-subject">Subject</label>
         <input id="program-subject" value={subject} onChange={(e) => setSubject(e.target.value)} className="mb-3 w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm" />
-        <RichEmailEditor label="Message" value={body} onChange={setBody} placeholders={allowedFields(extraHeadings)} sampleValues={PROGRAM_SAMPLE_VALUES} starterHtml={DEFAULT_PROGRAM_BODY} />
+        <RichEmailEditor label="Message" value={body} onChange={setBody} placeholders={allowedFields(extraHeadings)} sampleValues={sampleValues} starterHtml={DEFAULT_PROGRAM_BODY} />
+        <p className="mt-1 text-[11px] text-muted-foreground">{data.sampleRow ? `The preview and "Send a test to me" use the first row of this program's sheet (store ${data.sampleRow.store_code}), not a real ticket.` : 'The preview uses example text: this program has no sheet row yet.'}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button type="button" disabled={pending} className={btnPrimary} onClick={() => run(async () => { const r = await saveProgramTemplate(program.id, subject, body); setTplMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'Saved.' }) })}>Save the mail</button>
           <button type="button" disabled={pending} className={btn} onClick={() => run(async () => { const r = await sendProgramTestMail(program.id); setTplMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: `A test mail was sent to ${r.sentTo} only.` }) })}>Send a test to me</button>

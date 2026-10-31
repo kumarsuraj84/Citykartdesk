@@ -8,8 +8,9 @@ import { isHtmlTemplate, plainToHtml } from '@/lib/email/oem-template'
 import { sendEmail } from '@/lib/email/send'
 import { spreadsheetIdFrom } from '@/lib/masters/google'
 import { renderMasterMail } from '@/lib/masters/mail'
-import { allowedFields, programTemplate, PROGRAM_SAMPLE_VALUES, rowFieldNames, unknownFields } from '@/lib/programs/mail'
-import { loadProgramEditor } from '@/lib/programs/admin-data'
+import { allowedFields, programTemplate, rowFieldNames, unknownFields } from '@/lib/programs/mail'
+import { programSampleValues } from '@/lib/programs/sample'
+import { loadProgramEditor, loadProgramSample } from '@/lib/programs/admin-data'
 import { PROGRAM_FIELDS, slugify, type ProgramColumns, type ProgramField, type ProgramRowType } from '@/lib/programs/types'
 import { logAdminAudit } from './audit'
 
@@ -182,12 +183,15 @@ export async function sendProgramTestMail(id: string): Promise<ActionResult & { 
   if ('error' in guard) return { error: guard.error }
   const prog = await ownProgram(guard.orgId, id)
   if (!prog) return { error: 'Program not found.' }
-  const { data: full } = await db().from('vendor_programs').select('mail_subject, mail_body_html').eq('id', id).maybeSingle()
+  const { data: full } = await db().from('vendor_programs').select('mail_subject, mail_body_html, details_template, row_type').eq('id', id).maybeSingle()
   const tpl = programTemplate(full ?? {})
+  // the example is the program's own first sheet row (not another program's text), written with the machine wording as saved
+  const sample = await loadProgramSample(db(), guard.orgId, id)
+  const values = programSampleValues({ name: prog.name, row_type: full?.row_type ?? 'store', details_template: full?.details_template ?? null }, sample.row, { categoryName: sample.category, store: sample.store })
   const { data: u } = await createAdminClient().auth.admin.getUserById(guard.profile.id)
   const to = u?.user?.email
   if (!to) return { error: 'Your account has no e-mail address.' }
-  const rendered = renderMasterMail({ subject: tpl.subject, body: isHtmlTemplate(tpl.body) ? tpl.body : plainToHtml(tpl.body) }, { ...PROGRAM_SAMPLE_VALUES, program: prog.name })
+  const rendered = renderMasterMail({ subject: tpl.subject, body: isHtmlTemplate(tpl.body) ? tpl.body : plainToHtml(tpl.body) }, values)
   const sent = await sendEmail({ to, subject: `[TEST - not sent to the vendor] ${rendered.subject}`, html: rendered.html, text: rendered.text })
   if (sent.error) return { error: 'The test mail could not be sent.' }
   return { sentTo: to }

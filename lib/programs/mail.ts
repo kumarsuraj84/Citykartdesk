@@ -33,9 +33,9 @@ export const DEFAULT_PROGRAM_BODY = STARTER_TEMPLATE_HTML.replace(
 
 export const PROGRAM_SAMPLE_VALUES: Record<string, string> = {
   ...STORE_SAMPLE_VALUES,
-  ticket_no: 'CKSD-000123', subject: 'Water not cooling', description: 'The purifier at the entrance is not working since morning.\nPlease send a technician.',
+  ticket_no: 'CKSD-000123', subject: 'Issue raised by the store (example)', description: 'Example description written by the store.\nPlease send a technician.',
   requester_name: 'Store Manager', requester_email: 'store.manager@citykartstores.com', requester_phone: '98XXXXXX10', store_address: 'Main Road, Civil Lines, Allahabad - 211001',
-  store_code: 'ALC', category: 'Water purifier', program: 'RO Water Purifier', vendor: 'Aqua Care', machine_no: '1', serial: 'RO-12345', details: 'Machine 1, serial RO-12345, Aqua Care',
+  store_code: 'ALC', category: 'Category (example)', program: 'Program (example)', vendor: 'Example Vendor', machine_no: '1', serial: 'SN-12345', details: 'Machine 1, serial SN-12345, Example Vendor',
 }
 
 const unique = (list: (string | null | undefined)[]) => [...new Set(list.map((v) => (v ?? '').trim()).filter(Boolean))]

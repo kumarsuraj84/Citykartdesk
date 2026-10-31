@@ -3,6 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { fetchAllPages } from '@/lib/queries/paging'
 import { allowedFields, programTemplate, unknownFields } from './mail'
 import { programReadiness, type ReadinessItem } from './readiness'
+import { loadStoreFacts, type StoreFacts } from '@/lib/stores/details'
+import type { ProgramRowRecord } from './mail'
 import type { ProgramRecord } from './types'
 
 // What the Vendor Programs screens show, read in one place so the page and the "switch on" action use the same check.
@@ -40,6 +42,21 @@ export type ProgramEditorData = {
   extraHeadings: string[]
   activeRows: number
   readiness: { items: ReadinessItem[]; ready: boolean }
+  /** the first active sheet row of the program, its store card and the program's first category: the example the mail preview and the test mail are filled with */
+  sampleRow: ProgramRowRecord | null
+  sampleStore: StoreFacts | null
+  sampleCategory: string | null
+}
+
+/** The example row of a program (its first active row), read in one place for the editor and for "Send a test to me". */
+export async function loadProgramSample(db: Db, orgId: string, programId: string): Promise<{ row: ProgramRowRecord | null; store: StoreFacts | null; category: string | null }> {
+  const [rowRes, catRes] = await Promise.all([
+    db.from('program_rows').select('id, store_code, machine_no, serial, vendor, emails, po_emails, approver_emails, extra, is_active, sheet_row').eq('program_id', programId).eq('is_active', true).is('removed_at', null).order('sheet_row', { ascending: true }).limit(1),
+    db.from('service_categories').select('name').eq('org_id', orgId).eq('program_id', programId).order('name', { ascending: true }).limit(1),
+  ])
+  const row = ((rowRes.data ?? [])[0] ?? null) as ProgramRowRecord | null
+  const store = row ? await loadStoreFacts(db, orgId, { code: row.store_code }) : null
+  return { row, store, category: ((catRes.data ?? [])[0] as { name: string } | undefined)?.name ?? null }
 }
 
 export async function loadProgramEditor(orgId: string, id: string): Promise<ProgramEditorData | null> {
@@ -84,5 +101,6 @@ export async function loadProgramEditor(orgId: string, id: string): Promise<Prog
     unknownFields: unknownFields(`${tpl.subject} ${tpl.body}`, allowedFields(extraHeadings)),
     portal,
   })
-  return { staff: (staffRes.data ?? []) as StaffChoice[], program: p, categories, issues: issueList.slice(0, 300), issueTotal: issueList.length, extraHeadings, activeRows: activeCount.count ?? 0, readiness }
+  const sample = await loadProgramSample(db, orgId, id)
+  return { sampleRow: sample.row, sampleStore: sample.store, sampleCategory: sample.category, staff: (staffRes.data ?? []) as StaffChoice[], program: p, categories, issues: issueList.slice(0, 300), issueTotal: issueList.length, extraHeadings, activeRows: activeCount.count ?? 0, readiness }
 }
