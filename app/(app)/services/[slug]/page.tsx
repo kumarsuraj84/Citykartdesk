@@ -11,6 +11,7 @@ import { loadAcOptionsForStoreCode } from '@/lib/masters/resolve'
 import { loadMachineOptionsForStore } from '@/lib/programs/machines'
 import { ServiceRequestWorkspace } from '@/components/requests/ServiceRequestWorkspace'
 import { CategoryIcon } from '@/components/admin/CategoryIcon'
+import { addressWithPincode } from '@/lib/stores/details'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -35,8 +36,8 @@ export default async function ServiceDetailPage({ params }: PageProps) {
   let programMachineOptions: Record<string, { value: string; label: string }[]> | undefined
   if (profile?.store_id) {
     const supabase = await createClient()
-    const { data: store } = await supabase.from('stores').select('address, code').eq('id', profile.store_id).maybeSingle()
-    currentUserStoreAddress = store?.address ?? null
+    const { data: store } = await supabase.from('stores').select('address, pincode, code').eq('id', profile.store_id).maybeSingle()
+    currentUserStoreAddress = addressWithPincode(store?.address, store?.pincode) || null
     if (store?.code && profile.org_id) {
       const options = await loadAcOptionsForStoreCode(createAdminClient() as never, profile.org_id, store.code)
       acUnitOptions = options.map((o) => ({ value: o.value, label: o.label }))

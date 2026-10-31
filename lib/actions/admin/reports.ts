@@ -3,15 +3,10 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentProfile } from '@/lib/queries/profiles'
-import { exportRequestsCSV, exportTasksCSV, exportApprovalsCSV, type ExportFilters } from '@/lib/export/reports'
-import { sendEmail } from '@/lib/email/send'
 import { recordAudit } from '@/lib/syslog/audit'
-import { escapeHtml } from '@/lib/email/escape'
-import { loadCcBook } from '@/lib/requests/cc-recipients'
-import { checkReportRecipients } from '@/lib/reporting/report-recipients'
+import { checkRecipients, deliverScheduledReport } from '@/lib/reports/deliver'
 import type { Database, Json } from '@/types/database'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
-import { loadPolicies } from '@/lib/permissions/policies'
 
 type ScheduledReportRow = Database['public']['Tables']['scheduled_reports']['Row']
 
@@ -49,11 +44,6 @@ async function requireAdmin() {
 const REPORT_TYPES = ['requests', 'tasks', 'approvals'] as const
 const FREQUENCIES = ['daily', 'weekly', 'monthly'] as const
 
-async function checkRecipients(orgId: string, raw: unknown) {
-  const book = await loadCcBook(orgId)
-  const oemAllowed = (await loadPolicies()).report_recipients !== 'users_only'
-  return checkReportRecipients(raw, (email) => { const c = book.get(email); return !!c && (c.kind === 'user' || oemAllowed) })
-}
 
 export async function getScheduledReports(): Promise<{ data?: ScheduledReport[]; error?: string }> {
   const profile = await requireAdminOrManager()
@@ -177,44 +167,10 @@ export async function sendScheduledReport(id: string): Promise<{ error?: string 
   if (!report) return { error: 'Report not found.' }
   if (!report.org_id) return { error: 'Report has no organization context.' }
 
-  const orgId = report.org_id
-  // `filters` is stored as arbitrary Json; the export functions only read the
-  // known ExportFilters keys, so this narrow-cast is safe.
-  const filters = report.filters as unknown as ExportFilters | undefined
-
-  let csv: string
-  const filename = `${report.report_type}-report-${new Date().toISOString().slice(0, 10)}.csv`
-  try {
-    if (report.report_type === 'requests') {
-      csv = await exportRequestsCSV(orgId, filters)
-    } else if (report.report_type === 'tasks') {
-      csv = await exportTasksCSV(orgId, filters)
-    } else {
-      csv = await exportApprovalsCSV(orgId, filters)
-    }
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) }
-  }
-
-  const attachment = {
-    filename,
-    content: Buffer.from(csv).toString('base64'),
-  }
-
-  // the stored list is checked again at send time, so an address saved before this rule existed is not used
-  const checked = await checkRecipients(orgId, report.recipients ?? [])
-  if (!checked.ok) return { error: checked.error }
-  const recipients: string[] = checked.recipients
-  for (const to of recipients) {
-    const { error: emailErr } = await sendEmail({
-      to,
-      subject: `Citykart Desk Report: ${report.name}`,
-      html: `<p>Please find attached the scheduled report <strong>${escapeHtml(report.name)}</strong> (${report.frequency}).</p>`,
-      text: `Scheduled report: ${report.name} (${report.frequency}). See attached CSV.`,
-      attachments: [attachment],
-    })
-    if (emailErr) return { error: `Failed to send to ${to}: ${emailErr}` }
-  }
+  // the same builder and sender the automatic run uses (lib/reports/deliver.ts), so a report is the same whichever started it
+  const delivered = await deliverScheduledReport({ ...report, org_id: report.org_id })
+  if (delivered.error) return { error: delivered.error }
+  const recipients = delivered.sent
 
   await admin
     .from('scheduled_reports')

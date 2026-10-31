@@ -1,4 +1,5 @@
 import { STARTER_TEMPLATE_HTML } from '@/lib/email/oem-template'
+import { STORE_MAIL_FIELDS, STORE_SAMPLE_VALUES } from '@/lib/stores/details'
 import { programNoteLabel, type ProgramRecord } from './types'
 
 // The mail a program sends to its vendor / OEM when a ticket is raised. Pure (no database). The wording is edited on the program's screen with the same editor and the same
@@ -19,7 +20,7 @@ export type ProgramRowRecord = {
   sheet_row: number | null
 }
 
-export const PROGRAM_COMMON_FIELDS = ['ticket_no', 'subject', 'description', 'requester_name', 'requester_email', 'requester_phone', 'store_address', 'store_code', 'category', 'program', 'vendor', 'machine_no', 'serial', 'details'] as const
+export const PROGRAM_COMMON_FIELDS = ['ticket_no', 'subject', 'description', 'requester_name', 'requester_email', 'requester_phone', 'store_address', 'store_code', 'category', 'program', 'vendor', 'machine_no', 'serial', 'details', ...STORE_MAIL_FIELDS] as const
 
 /** The field name of an extra sheet column: "Brand Name" -> extra_brandname. */
 export const extraKey = (heading: string) => `extra_${heading.toLowerCase().replace(/[^a-z0-9]/g, '')}`
@@ -31,6 +32,7 @@ export const DEFAULT_PROGRAM_BODY = STARTER_TEMPLATE_HTML.replace(
 )
 
 export const PROGRAM_SAMPLE_VALUES: Record<string, string> = {
+  ...STORE_SAMPLE_VALUES,
   ticket_no: 'CKSD-000123', subject: 'Water not cooling', description: 'The purifier at the entrance is not working since morning.\nPlease send a technician.',
   requester_name: 'Store Manager', requester_email: 'store.manager@citykartstores.com', requester_phone: '98XXXXXX10', store_address: 'Main Road, Civil Lines, Allahabad - 211001',
   store_code: 'ALC', category: 'Water purifier', program: 'RO Water Purifier', vendor: 'Aqua Care', machine_no: '1', serial: 'RO-12345', details: 'Machine 1, serial RO-12345, Aqua Care',

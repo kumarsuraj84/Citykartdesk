@@ -88,6 +88,7 @@ export async function proxy(request: NextRequest) {
     '/api/masters/sync',          // copies the AC / Genset / CVM Google Sheets into the database (cron runner, shared secret)
     '/api/automation/retry',      // every 15 min: finishes the automatic steps of new tickets that did not happen (cron runner, shared secret)
     '/api/pms/daily',             // 09:00: re-reads the AC PMS sheet and makes the PMS tickets that are due today (cron runner, shared secret)
+    '/api/reports/run',           // every 30 min: sends the scheduled reports that are due (07:00 India time; cron runner, shared secret)
     '/api/weather/daily',         // saves the day's highest and lowest temperature of every city with an AC, for the AC Calendar (cron runner, shared secret)
     '/api/csp-report',            // browsers post policy-violation reports here with no session
   ])

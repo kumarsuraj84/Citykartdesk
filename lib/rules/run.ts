@@ -5,6 +5,7 @@ import { resolveServiceFormSections } from '@/lib/forms/sections'
 import { libraryFieldValues } from '@/lib/forms/library'
 import { sourceChannelOf } from '@/lib/sources'
 import { isSlaPausedStatus } from '@/lib/constants/requests'
+import { storeFactsFromRow, STORE_DETAIL_COLUMNS, type StoreFacts } from '@/lib/stores/details'
 import type { SLAConfig, FormSection, FormField } from '@/types'
 
 export { sourceChannelOf }
@@ -107,7 +108,31 @@ async function acFacts(admin: AnyClient, requestId: string) {
   if (error) throw new Error(`Could not read the AC of ticket ${requestId}: ${error.message ?? 'unknown error'}`)
   const unit = (Array.isArray(data?.snapshot) ? data.snapshot[0] : null) as Record<string, string | null> | null
   const s = (v: string | null | undefined) => (v ?? '').trim()
-  return { ac_amc_vendor: s(unit?.amc_vendor), ac_brand: s(unit?.brand), store_region: s(unit?.region), store_state: s(unit?.state), store_cluster: s(unit?.cluster) }
+  if (unit) return { ac_amc_vendor: s(unit.amc_vendor), ac_brand: s(unit.brand), store_region: s(unit.region), store_state: s(unit.state), store_cluster: s(unit.cluster) }
+  // No AC record: a ticket of a Vendor Program (for example AC after its categories were moved onto a program) keeps the sheet row of its program instead. The rules that route by
+  // the AC vendor, brand or place keep working from it: the vendor is the row's Vendor, and brand / region / state / cluster are the row's columns with those headings.
+  const { data: ps, error: pErr } = await admin.from('request_program_snapshots').select('snapshot').eq('request_id', requestId).limit(1).maybeSingle()
+  if (pErr) throw new Error(`Could not read the program row of ticket ${requestId}: ${pErr.message ?? 'unknown error'}`)
+  const row = (Array.isArray(ps?.snapshot) ? ps.snapshot[0] : null) as { vendor?: string | null; extra?: Record<string, string> | null } | null
+  const extra = (row?.extra ?? {}) as Record<string, string>
+  const byHeading = (...names: string[]) => {
+    const want = names.map((n) => n.toLowerCase().replace(/[^a-z0-9]/g, ''))
+    for (const [h, v] of Object.entries(extra)) if (want.includes(h.toLowerCase().replace(/[^a-z0-9]/g, ''))) return s(v)
+    return ''
+  }
+  return { ac_amc_vendor: s(row?.vendor), ac_brand: byHeading('ac brand', 'brand'), store_region: byHeading('region'), store_state: byHeading('state'), store_cluster: byHeading('cluster') }
+}
+
+/**
+ * The standard details of the requester's store (region, state, cluster, city, priority list, festival, months since opening), from the store card: the main store master,
+ * the same for a ticket of any service, with or without a Vendor Program. Null when the requester has no store or the store has no card.
+ */
+async function storeCardFacts(admin: AnyClient, orgId: string | null, storeId: string): Promise<StoreFacts | null> {
+  if (!storeId || !orgId) return null
+  const { data, error } = await admin.from('stores').select(STORE_DETAIL_COLUMNS).eq('org_id', orgId).eq('id', storeId).maybeSingle()
+  // an unreadable store card must not look like "this store has no region" (an "is not ..." condition would then match wrongly)
+  if (error) throw new Error(`Could not read the store of a ticket for the Business Rules: ${error.message ?? 'unknown error'}`)
+  return Array.isArray(data) ? null : storeFactsFromRow(data as Record<string, string | null> | null)
 }
 
 /** The Vendor Program / vendor facts of a ticket, from CK Desk's own settings: its category's program (or the built-in AC / Genset line) and the company of the vendor technician who has it. */
@@ -134,10 +159,23 @@ async function vendorFacts(admin: AnyClient, request: { category_id: string | nu
  * or always matched (is not / is not one of) (B-25 / H-01).
  */
 export async function buildRuleEvaluationRequest(admin: AnyClient, request: RawRequest): Promise<RuleEvaluationRequest> {
+  const storeId = (request.requester as { store_id?: string | null } | null)?.store_id ?? ''
+  const ac = await acFacts(admin, request.id)
+  const store = await storeCardFacts(admin, request.org_id, storeId)
+  // the store card first (it exists for every ticket of the store); the AC row / program row saved with the ticket only fills what the card leaves empty, so the rules that
+  // were made for the AC sheet's region, state and cluster keep matching
+  const card = (fromStore: string | undefined, fallback: string) => (fromStore && fromStore !== '' ? fromStore : fallback)
   return {
-    ...(await acFacts(admin, request.id)),
+    ...ac,
+    store_region: card(store?.region, ac.store_region),
+    store_state: card(store?.state, ac.store_state),
+    store_cluster: card(store?.cluster, ac.store_cluster),
+    store_city: store?.city ?? '',
+    store_priority: store?.priority ?? '',
+    store_festival: store?.festival ?? '',
+    store_open_months: store?.openMonths == null ? '' : String(store.openMonths),
     ...(await vendorFacts(admin, request)),
-    requester_store_id: (request.requester as { store_id?: string | null } | null)?.store_id ?? '',
+    requester_store_id: storeId,
     priority: request.priority,
     status: request.status,
     service_id: request.service_id,

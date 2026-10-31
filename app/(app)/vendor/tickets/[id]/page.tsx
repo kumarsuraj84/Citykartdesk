@@ -23,6 +23,7 @@ import { OemSentComment } from '@/components/requests/OemSentComment'
 import { LinesComment } from '@/components/requests/LinesComment'
 import { parseLinesComment } from '@/lib/vendor/lines-comment'
 import { isPmsRequest } from '@/lib/pms/is-pms'
+import { addressWithPincode } from '@/lib/stores/details'
 import type { FormSection } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -61,13 +62,13 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
     getRequestComments(id),
     getRequestAttachments(id),
     admin.from('request_master_snapshots').select('snapshot').eq('request_id', id).eq('kind', 'ac').maybeSingle(),
-    requesterStoreId ? admin.from('stores').select('code, name, address, city, state').eq('id', requesterStoreId).maybeSingle() : Promise.resolve({ data: null }),
+    requesterStoreId ? admin.from('stores').select('code, name, address, pincode, city, state').eq('id', requesterStoreId).maybeSingle() : Promise.resolve({ data: null }),
   ])
   const acs = (Array.isArray(snapRes.data?.snapshot) ? snapRes.data.snapshot : []) as Record<string, string | null>[]
   const ac = acs[0] ?? null
   // a ticket of a Vendor Program has no AC row: its saved sheet row and the program's own resolution list are used instead
   const programAsset = ac ? null : await loadProgramAsset(admin, id)
-  const store = storeRes.data as { code: string; name: string; address: string | null; city: string | null; state: string | null } | null
+  const store = storeRes.data as { code: string; name: string; address: string | null; pincode: string | null; city: string | null; state: string | null } | null
 
   const sections = (Array.isArray(request.form_sections_snapshot) ? request.form_sections_snapshot : []) as unknown as FormSection[]
   const formData = (request.form_data ?? {}) as Record<string, unknown>
@@ -195,7 +196,7 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
             <h2 className="border-b border-border px-4 py-2 text-sm font-semibold">Store</h2>
             <dl className="divide-y divide-border">
               <Row label="Store" value={store ? `${store.name} (${store.code})` : null} />
-              <Row label="Address" value={[store?.address, store?.city, store?.state].filter(Boolean).join(', ')} />
+              <Row label="Address" value={[addressWithPincode(store?.address, store?.pincode), store?.city, store?.state].filter(Boolean).join(', ')} />
               <Row label="Raised" value={formatDateTime(request.created_at)} />
               <Row label="Raised by" value={(request.requester as { full_name?: string } | null)?.full_name} />
             </dl>

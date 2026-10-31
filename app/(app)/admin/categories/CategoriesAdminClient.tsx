@@ -15,7 +15,7 @@ import {
   setCategoryApprovalHistory,
   setCategoryPms,
 } from '@/lib/actions/admin/categories'
-import { OEM_KINDS, OEM_KIND_LABEL, isOemKind, type OemKind } from '@/lib/oems/kinds'
+import { OEM_KIND_LABEL, isOemKind, type OemKind } from '@/lib/oems/kinds'
 import { IconPicker } from '@/components/admin/IconPicker'
 import { CategoryIcon } from '@/components/admin/CategoryIcon'
 import { BulkImportCategoriesDialog } from '@/components/admin/BulkImportCategoriesDialog'
@@ -176,17 +176,19 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
                   if (e.key === 'Escape') handleCancel()
                 }}
               />
-              <label className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                Auto-send tickets of this category by e-mail to the OEM addresses the AC / Genset sheet lists for the store:
-                <select
-                  value={oemKind}
-                  onChange={(e) => setOemKind(isOemKind(e.target.value) ? e.target.value : '')}
-                  className="rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-                >
-                  <option value="">No (normal ticket)</option>
-                  {OEM_KINDS.map((k) => <option key={k} value={k}>{OEM_KIND_LABEL[k]} OEM</option>)}
-                </select>
-              </label>
+              {savedOemKind && (
+                <label className="flex flex-wrap items-center gap-2 text-xs text-amber-700">
+                  This category still uses the OLD AC / Genset OEM switch (retired). Move it into a Vendor Program (Admin &gt; Vendor Programs), or clear the old switch here:
+                  <select
+                    value={oemKind}
+                    onChange={(e) => setOemKind(isOemKind(e.target.value) ? e.target.value : '')}
+                    className="rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  >
+                    <option value={savedOemKind}>{OEM_KIND_LABEL[savedOemKind]} OEM (old setting, keep for now)</option>
+                    <option value="">No (normal ticket)</option>
+                  </select>
+                </label>
+              )}
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <input type="checkbox" checked={cvmApproval} onChange={(e) => setCvmApproval(e.target.checked)} />
                 Put the ticket In Process and send it for approval to the CVM the CVM sheet lists for the store, automatically
@@ -249,7 +251,7 @@ function InlineEditRow({ cat }: { cat: ServiceCategoryWithSubCategories }) {
               )}
               {savedOemKind && (
                 <p className="mt-1 inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                  Auto-sent to the store&apos;s {OEM_KIND_LABEL[savedOemKind]} OEM
+                  Old setting: auto-sent to the store&apos;s {OEM_KIND_LABEL[savedOemKind]} OEM (move it to a Vendor Program)
                 </p>
               )}
             </div>

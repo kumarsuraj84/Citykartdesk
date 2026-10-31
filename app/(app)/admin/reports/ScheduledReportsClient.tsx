@@ -8,6 +8,7 @@ import {
   deleteScheduledReport,
   sendScheduledReport,
 } from '@/lib/actions/admin/reports'
+import { describeSchedule, nextSlot } from '@/lib/reports/schedule'
 
 type ReportType = 'requests' | 'tasks' | 'approvals'
 type Frequency = 'daily' | 'weekly' | 'monthly'
@@ -281,7 +282,7 @@ export function ScheduledReportsClient({ reports: initialReports }: Props) {
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <div>
           <h2 className="text-base font-semibold text-gray-900">Scheduled Reports</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Automatically email CSV reports to recipients.</p>
+          <p className="text-sm text-gray-500 mt-0.5">Each report is e-mailed by itself as a CSV at 07:00 India time: daily reports every day, weekly ones on Monday, monthly ones on the 1st. &ldquo;Send Now&rdquo; sends one at once.</p>
         </div>
         <button
           onClick={() => setShowCreate(true)}
@@ -318,7 +319,14 @@ export function ScheduledReportsClient({ reports: initialReports }: Props) {
                       {r.report_type}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-gray-600">{FREQ_LABELS[r.frequency]}</td>
+                  <td className="px-4 py-2 text-gray-600">
+                    {FREQ_LABELS[r.frequency]}
+                    <div className="text-[11px] text-gray-400" suppressHydrationWarning>
+                      {!r.is_active ? 'Switched off: not sent by itself'
+                        : r.recipients.length === 0 ? 'No recipients: nothing to send'
+                        : `Next: ${nextSlot(r.frequency, new Date()).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })} (${describeSchedule(r.frequency)})`}
+                    </div>
+                  </td>
                   <td className="px-4 py-2 text-gray-600">
                     {r.recipients.length} {r.recipients.length === 1 ? 'recipient' : 'recipients'}
                   </td>
@@ -335,7 +343,7 @@ export function ScheduledReportsClient({ reports: initialReports }: Props) {
                   </td>
                   <td className="px-4 py-2 text-gray-500">
                     {r.last_sent_at
-                      ? new Date(r.last_sent_at).toLocaleDateString()
+                      ? new Date(r.last_sent_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
                       : <span className="text-gray-300">Never</span>}
                   </td>
                   <td className="px-4 py-2">

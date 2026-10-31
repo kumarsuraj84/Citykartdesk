@@ -252,7 +252,9 @@ export async function saveBuiltInCategories(kind: string, categoryIds: string[])
   }
   const current = all.filter((c) => c.auto_oem_kind === kind).map((c) => c.id)
   const remove = current.filter((c) => !wanted.includes(c))
-  const add = wanted.filter((c) => !current.includes(c))   // a category that is in a Vendor Program moves BACK to the old setting (program_id cleared in the same step)
+  const add = wanted.filter((c) => !current.includes(c))
+  // The old setting is RETIRED: a category can be taken OFF it here, but never put on it (or moved back to it from a Vendor Program). The line is a Vendor Program now.
+  if (add.length) return { error: `The old ${label} OEM setting has been retired, so a category cannot be put on it any more. Use the ${label} Vendor Program (Admin > Vendor Programs) and move the category into it.` }
   if (remove.length) { const { error } = await db().from('service_categories').update({ auto_oem_kind: null }).in('id', remove).eq('org_id', guard.orgId); if (error) return { error: 'Could not save the categories.' } }
   if (add.length) { const { error } = await db().from('service_categories').update({ auto_oem_kind: kind, program_id: null }).in('id', add).eq('org_id', guard.orgId); if (error) return { error: 'Could not save the categories.' } }
   for (const [ids, to] of [[remove, 'none'], [add, kind]] as const) {

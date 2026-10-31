@@ -102,9 +102,13 @@ const REQUEST_FIELD_OPTIONS: { value: RuleConditionField; label: string }[] = [
   { value: 'age_days', label: 'Age (days)' },
   { value: 'ac_amc_vendor', label: 'AC - AMC vendor (from the AC sheet)' },
   { value: 'ac_brand', label: 'AC - brand (from the AC sheet)' },
-  { value: 'store_region', label: 'Store region (from the AC sheet)' },
-  { value: 'store_state', label: 'Store state (from the AC sheet)' },
-  { value: 'store_cluster', label: 'Store cluster (from the AC sheet)' },
+  { value: 'store_region', label: 'Store region (from the store list)' },
+  { value: 'store_state', label: 'Store state (from the store list)' },
+  { value: 'store_cluster', label: 'Store cluster (from the store list)' },
+  { value: 'store_city', label: 'Store city (from the store list)' },
+  { value: 'store_priority', label: 'Store priority list (from the store list)' },
+  { value: 'store_festival', label: 'Store festival (from the store list)' },
+  { value: 'store_open_months', label: 'Months since the store opened (from the store list)' },
 ]
 
 const VENDOR_FIELD_OPTIONS: { value: RuleConditionField; label: string }[] = [
@@ -213,7 +217,7 @@ function conditionValueOptions(field: RuleConditionField, refs: BusinessRulesCli
   if (field === 'vendor_company_id') return (refs.vendorCompanies ?? []).map((c) => ({ value: c.id, label: c.name }))
   if (field === 'requester_store_id') return (refs.stores ?? []).map((s) => ({ value: s.id, label: s.name }))
   if (field === 'is_sla_breached' || field === 'has_attachment' || field === 'is_with_vendor') return YES_NO_OPTIONS
-  return null // title/description/age_days — free text/number input
+  return null // title/description/age_days/store details — free text/number input
 }
 
 // 'toggle' is intentionally excluded — FieldRenderer.tsx has no case for it
@@ -401,10 +405,10 @@ function ConditionRow({
           />
         ) : (
           <input
-            type={condition.field === 'form_field' && formField ? formFieldInputType(formField) : condition.field === 'age_days' ? 'number' : 'text'}
+            type={condition.field === 'form_field' && formField ? formFieldInputType(formField) : condition.field === 'age_days' || condition.field === 'store_open_months' ? 'number' : 'text'}
             value={typeof condition.value === 'string' ? condition.value : ''}
             onChange={(e) => onChange({ ...condition, value: e.target.value })}
-            placeholder={condition.field === 'age_days' ? 'Days…' : 'Text…'}
+            placeholder={condition.field === 'age_days' ? 'Days…' : condition.field === 'store_open_months' ? 'Months…' : 'Text…'}
             className={cn(inputCls, 'min-w-[160px] flex-1 basis-[160px]')}
           />
         )

@@ -6,6 +6,7 @@ import {
 } from '@/lib/masters/resolve'
 import { isAssignedToVendor } from '@/lib/vendor/ticket-fields'
 import { loadProgram, runProgramRouting } from '@/lib/programs/routing'
+import { addressWithPincode, loadStoreFacts, storeMailFields } from '@/lib/stores/details'
 import { acVars, gensetVars, masterSentComment, renderMasterMail, resolveTemplate, type MailKind } from '@/lib/masters/mail'
 
 // Sends a ticket to the OEM using the AC / Genset sheet (replaces the old "OEM bucket" routing). Fires once, right after the ticket is created.
@@ -79,6 +80,7 @@ export async function runMasterOemRouting(p: {
 
   const { data: saved } = await db.from('master_mail_templates').select('subject, body_html').eq('org_id', orgId).eq('kind', p.kind).maybeSingle()
   const tpl = resolveTemplate(saved, p.kind)
+  const storeFields = storeMailFields(await loadStoreFacts(db, orgId, { code: p.storeCode }))
   const rendered = renderMasterMail(tpl, {
     ticket_no: request.request_no,
     subject: p.reopen ? `REOPENED: ${p.title}` : p.title,
@@ -92,6 +94,7 @@ Original issue: ${p.description || '(no description provided)'}`
     requester_phone: p.requesterPhone || '(not provided)',
     store_address: p.storeAddress || '(no address on file)',
     store_code: p.storeCode,
+    ...storeFields,
     category: p.categoryName || '(no category)',
     ...vars,
   })
@@ -149,9 +152,9 @@ export async function resendOemOnReopen(p: { requestId: string; actorId: string;
     let storeCode: string | null = null
     let storeAddress: string | null = null
     if (prof?.store_id) {
-      const { data: st } = await db.from('stores').select('code, address').eq('id', prof.store_id).maybeSingle()
+      const { data: st } = await db.from('stores').select('code, address, pincode').eq('id', prof.store_id).maybeSingle()
       storeCode = st?.code ? String(st.code).toUpperCase() : null
-      storeAddress = st?.address ?? null
+      storeAddress = addressWithPincode(st?.address, st?.pincode) || null
     }
     const { data: authUser } = await admin.auth.admin.getUserById(r.requester_id)
     // description and phone come from the form the store filled in (the same fields the first e-mail used)

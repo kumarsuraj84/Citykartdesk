@@ -7,7 +7,7 @@ import { logAdminAudit } from './audit'
 import type { RequestPriority } from '@/types'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { isOemKind, type OemKind } from '@/lib/oems/kinds'
+import type { OemKind } from '@/lib/oems/kinds'
 
 type ActionResult = { error?: string }
 
@@ -579,7 +579,9 @@ export async function deleteSubCategory(id: string, categoryId: string): Promise
 export async function setCategoryOemKind(id: string, kind: OemKind | null): Promise<ActionResult> {
   const guard = await requireAdmin()
   if ('error' in guard) return guard
-  if (kind !== null && !isOemKind(kind)) return { error: 'OEM type must be AC or Genset.' }
+  // The old per-category "send to the AC / Genset OEM" switch is RETIRED: AC and Genset are Vendor Programs now (Admin > Vendor Programs). A category that still has the old
+  // switch can be cleared here (null); nothing can be switched on again. (The old routing stays in the code for one more release as a safety net for a category that was missed.)
+  if (kind !== null) return { error: 'The old "send to the AC / Genset OEM" switch has been retired. Put the category in a Vendor Program (Admin > Vendor Programs) instead.' }
 
   const orgId = guard.profile!.org_id
   if (!orgId) return { error: 'Your account is not linked to an organisation.' }

@@ -168,15 +168,16 @@ describe('moving categories from the old setting to the program, and back', () =
     expect((await db().from('request_program_snapshots').select('program_id').eq('request_id', r.requestId!).single()).data.program_id).toBe(ids.program)
   })
 
-  it('can be moved back from the built-in Genset screen; new tickets use the old setting again', async () => {
+  it('cannot be moved back to the retired old Genset setting (neither from the built-in Genset screen nor from Admin > Categories); new tickets keep using the program', async () => {
     actAs(fx.admin)
     const back = await saveBuiltInCategories('genset', [ids.catOld, ids.catMove])
-    expect(back.error).toBeUndefined()
-    expect((await db().from('service_categories').select('auto_oem_kind, program_id').eq('id', ids.catMove).single()).data).toEqual({ auto_oem_kind: 'genset', program_id: null })
+    expect(back.error).toMatch(/retired/)
+    expect((await db().from('service_categories').select('auto_oem_kind, program_id').eq('id', ids.catMove).single()).data).toEqual({ auto_oem_kind: null, program_id: ids.program })
+    const { setCategoryOemKind } = await import('@/lib/actions/admin/categories')
+    expect((await setCategoryOemKind(ids.catMove, 'genset')).error).toMatch(/retired|Vendor Program/)
     await setStore(ids.storeA)
-    const r = await raise(ids.subMove, 'moved back')
+    const r = await raise(ids.subMove, 'still the program')
     expect((await ticket(r.requestId!)).status).toBe('in_progress')
-    expect((await db().from('request_master_snapshots').select('kind').eq('request_id', r.requestId!).single()).data.kind).toBe('genset')   // the OLD path saved its own copy
-    expect((await db().from('request_program_snapshots').select('request_id').eq('request_id', r.requestId!)).data).toHaveLength(0)
+    expect((await db().from('request_program_snapshots').select('program_id').eq('request_id', r.requestId!).single()).data.program_id).toBe(ids.program)
   })
 })

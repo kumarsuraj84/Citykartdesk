@@ -27,6 +27,11 @@ export type RuleConditionField =
   | 'store_region'
   | 'store_state'
   | 'store_cluster'
+  // more details of the requester's store, read from the store card (the main store master), for the tickets of every service
+  | 'store_city'
+  | 'store_priority'
+  | 'store_festival'
+  | 'store_open_months'   // whole months since the store opened (empty when its opening date is unknown)
   // Vendor Programs and vendor technicians - all set up in CK Desk
   | 'vendor_line'         // the Vendor Program (its id) of the ticket's category, or 'ac' / 'genset' for the built-in lines
   | 'vendor_company_id'   // the vendor company of the vendor technician who has the ticket
@@ -105,6 +110,10 @@ export type RuleEvaluationRequest = {
   store_region?: string
   store_state?: string
   store_cluster?: string
+  store_city?: string
+  store_priority?: string
+  store_festival?: string
+  store_open_months?: string
   vendor_line?: string
   vendor_company_id?: string
   is_with_vendor?: boolean

@@ -15,6 +15,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn(), 
 
 import { createClient } from '@/lib/supabase/server'
 import { runRulesForTrigger } from '@/lib/rules/run'
+import { pauseCreditMs, computeElapsedBusinessMinutes } from '@/lib/sla/business-hours'
 import { addComment } from '@/lib/actions/requests'
 
 vi.setConfig({ testTimeout: 120_000 })
@@ -70,8 +71,12 @@ describe('business rules and status (D-044)', () => {
       const r = await row(id)
       expect(r.status, id).toBe('in_progress')
       expect(r.waiting_since, id).toBeNull()
-      expect(Number(r.paused_ms_total), id).toBeGreaterThan(1.9 * HOUR)
-      expect(new Date(r.resolution_due_at!).getTime() - new Date(due).getTime(), id).toBeGreaterThan(1.9 * HOUR)
+      // The credit is the pause measured in BUSINESS time (it is the deadline that counts business hours), so what is expected depends on the time of day the test runs:
+      // after office hours the last two hours hold less working time than two hours. The same engine works out what is expected, so the test holds at any hour.
+      const credit = await pauseCreditMs(new Date(since), new Date())
+      expect(Math.abs(Number(r.paused_ms_total) - credit), id).toBeLessThan(5 * 60_000)
+      const moved = await computeElapsedBusinessMinutes(new Date(due), new Date(r.resolution_due_at!))
+      expect(Math.abs(moved * 60_000 - credit), id).toBeLessThan(5 * 60_000)
     }
     await removeRules()
   })

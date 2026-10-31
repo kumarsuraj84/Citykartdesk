@@ -26,7 +26,6 @@ export function BuiltInClient({ data, spec, rowType }: { data: BuiltInEditorData
   const [pending, start] = useTransition()
   const [picked, setPicked] = useState<string[]>(categories.filter((c) => c.selected).map((c) => c.id))
   const [catMsg, setCatMsg] = useState<Msg>(null)
-  const [catFilter, setCatFilter] = useState('')
   const [updMsg, setUpdMsg] = useState<Msg>(null)
   const on = categories.some((c) => c.selected)
   const errors = issues.filter((i) => i.severity === 'error').length
@@ -48,28 +47,35 @@ export function BuiltInClient({ data, spec, rowType }: { data: BuiltInEditorData
           ))}
         </ul>
         <p className="mt-2 text-xs text-muted-foreground">
-          This line is always on while a category is ticked below. {rowType === 'machine' ? 'One row of the sheet is one machine (the requester picks the AC in the ticket form).' : 'One row of the sheet is one genset; a store with several gensets gets one mail that lists them all.'}
+          {rowType === 'machine' ? 'One row of the sheet is one machine (the requester picks the AC in the ticket form).' : 'One row of the sheet is one genset; a store with several gensets gets one mail that lists them all.'}
         </p>
       </section>
 
-      <Card title="Categories" right={<Link href="/admin/categories" className="text-[11px] text-muted-foreground underline">Admin &gt; Categories</Link>}>
-        <p className="mb-3 text-xs text-muted-foreground">
-          Tickets of the ticked categories go to the store&apos;s {spec.kind === 'ac' ? 'AC' : 'Genset'} OEM. This is the same switch as &quot;send to the OEM&quot; in Admin &gt; Categories. A category that belongs to another line cannot be chosen.
-        </p>
-        <input value={catFilter} onChange={(e) => setCatFilter(e.target.value)} placeholder="Search a category" aria-label="Search a category" className="mb-2 w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm sm:w-80" />
-        <p className="mb-2 text-[11px] text-muted-foreground">{picked.length} ticked. Ticked categories always stay in the list.</p>
-        <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-          {categories.filter((c) => picked.includes(c.id) || c.name.toLowerCase().includes(catFilter.trim().toLowerCase())).map((c) => (
-            <label key={c.id} className={cn('flex items-start gap-2 rounded-lg border border-border px-2.5 py-1.5 text-sm', c.blocked && 'opacity-60')}>
-              <input type="checkbox" className="mt-0.5" disabled={!!c.blocked} checked={picked.includes(c.id)} onChange={(e) => setPicked((p) => (e.target.checked ? [...p, c.id] : p.filter((x) => x !== c.id)))} />
-              <span><span className="block">{c.name}</span>{c.blocked && <span className="block text-[11px] text-muted-foreground">{c.blocked}</span>}{!c.blocked && c.inProgram && <span className="block text-[11px] text-amber-700">Now in the Vendor Program &quot;{c.inProgram}&quot;. Ticking it moves it back to the old setting.</span>}</span>
-            </label>
-          ))}
-        </div>
-        <div className="mt-3 flex items-center gap-3">
-          <button type="button" disabled={pending} className={btn} onClick={() => start(async () => { const r = await saveBuiltInCategories(spec.kind, picked); setCatMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'Saved.' }); if (!r.error) router.refresh() })}>Save categories</button>
-          <Note m={catMsg} />
-        </div>
+      <Card title="Categories on the old setting" right={<Link href="/admin/programs" className="text-[11px] text-muted-foreground underline">Admin &gt; Vendor Programs</Link>}>
+        {categories.some((c) => c.selected) ? (
+          <>
+            <p className="mb-3 text-xs text-muted-foreground">
+              These categories still send their tickets with the OLD {spec.kind === 'ac' ? 'AC' : 'Genset'} OEM setting. That setting has been retired: move each category into the {spec.kind === 'ac' ? 'AC' : 'Genset'} Vendor Program
+              (card &quot;Move categories from the old AC / Genset setting&quot; on its screen), or untick it here to take it off the old setting. A category can no longer be put on the old setting.
+            </p>
+            <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+              {categories.filter((c) => c.selected).map((c) => (
+                <label key={c.id} className="flex items-start gap-2 rounded-lg border border-border px-2.5 py-1.5 text-sm">
+                  <input type="checkbox" className="mt-0.5" checked={picked.includes(c.id)} onChange={(e) => setPicked((p) => (e.target.checked ? [...p, c.id] : p.filter((x) => x !== c.id)))} />
+                  <span className="block">{c.name}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 flex items-center gap-3">
+              <button type="button" disabled={pending} className={btn} onClick={() => start(async () => { const r = await saveBuiltInCategories(spec.kind, picked); setCatMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'Saved.' }); if (!r.error) router.refresh() })}>Save categories</button>
+              <Note m={catMsg} />
+            </div>
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            No category uses the old setting any more. The tickets of {spec.kind === 'ac' ? 'AC' : 'Genset'} categories are mailed by the {spec.kind === 'ac' ? 'AC' : 'Genset'} Vendor Program (Admin &gt; Vendor Programs): its sheet, its mail wording and its categories are set there.
+          </p>
+        )}
         {spec.kind === 'ac' && <p className="mt-3 text-[11px] text-muted-foreground">Keep &quot;Route to OEM&quot; ticked on the AC service (Admin &gt; Services): the reports use it to recognise AC tickets.</p>}
       </Card>
 

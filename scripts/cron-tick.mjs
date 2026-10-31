@@ -45,6 +45,7 @@ const JOB_PATHS = {
   'masters-sync': '/api/masters/sync',
   'weather-daily': '/api/weather/daily',
   'pms-daily': '/api/pms/daily',
+  'scheduled-reports': '/api/reports/run',
   'automation-retry': '/api/automation/retry',
 }
 

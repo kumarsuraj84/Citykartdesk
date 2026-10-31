@@ -8,6 +8,7 @@ import { programTemplate, programVars, type ProgramRowRecord } from './mail'
 import { programNoteLabel, type ProgramRecord } from './types'
 import { isAssignedToVendor } from '@/lib/vendor/ticket-fields'
 import { findSelectedMachine } from './machines'
+import { loadStoreFacts, storeMailFields } from '@/lib/stores/details'
 
 // Sends a ticket to the vendor / OEM of a program, right after the ticket is created (and again, marked REOPENED, when the store reopens it). Same rules as the AC /
 // Genset routing (lib/requests/master-routing.ts):
@@ -38,6 +39,30 @@ export async function loadSnapshotRows(db: Db, requestId: string, programId: str
   const { data } = await db.from('request_program_snapshots').select('snapshot').eq('request_id', requestId).eq('program_id', programId).maybeSingle()
   const rows = (Array.isArray(data?.snapshot) ? data.snapshot : []) as ProgramRowRecord[]
   return rows.some((r) => (r.emails ?? []).length > 0) ? rows : []
+}
+
+/**
+ * Saves the sheet row(s) a ticket of an ACTIVE Vendor Program belongs to BEFORE the Business Rules run (the same copy runProgramRouting saves again, unchanged, a moment later).
+ * Without this the rules ran first and could not see the vendor, brand or place of the ticket's AC: a rule that routes by the AC vendor ("AC AMC vendor") then did not match
+ * a ticket of an AC program, which the old AC setting never had a problem with. Does nothing for a category that is in no program, a switched-off program, a requester
+ * without a store, or a store without rows.
+ */
+export async function saveProgramRowsForRules(admin: Admin, p: { orgId: string; requestId: string; categoryId: string | null; storeCode: string | null; machineValue?: string }): Promise<void> {
+  if (!p.categoryId || !p.storeCode) return
+  const db = admin as unknown as Db
+  const { data: cat } = await db.from('service_categories').select('program_id').eq('id', p.categoryId).eq('org_id', p.orgId).maybeSingle()
+  const programId = (cat as { program_id?: string | null } | null)?.program_id ?? null
+  if (!programId) return
+  const program = await loadProgram(db, p.orgId, programId)
+  if (!program?.is_active) return
+  const allRows = await loadActiveProgramRows(db, p.orgId, program.id, p.storeCode)
+  const chosen = p.machineValue ? findSelectedMachine(allRows, p.machineValue) : null
+  const rows = chosen ? [chosen] : allRows
+  if (rows.length === 0) return
+  await db.from('request_program_snapshots').upsert(
+    { request_id: p.requestId, program_id: program.id, row_ids: rows.map((r) => r.id), snapshot: rows as unknown, mailed_to: [], mailed_cc: [] },
+    { onConflict: 'request_id,program_id' },
+  )
 }
 
 export async function runProgramRouting(p: {
@@ -92,6 +117,8 @@ export async function runProgramRouting(p: {
   if (pool.length === 0) { await note(`The ${label} sheet has no e-mail address for store ${p.storeCode}, so the ticket was not sent to the vendor automatically. Please send it to them yourself.`); return }
 
   const tpl = programTemplate(program)
+  // the store's own details (region, cluster, city, state, priority list, festival, opening date) come from the store card, whatever the program's sheet has
+  const storeFields = storeMailFields(await loadStoreFacts(db, orgId, { code: p.storeCode ?? rows[0]?.store_code ?? null }))
   const rendered = renderMasterMail({ subject: tpl.subject, body: isHtmlTemplate(tpl.body) ? tpl.body : plainToHtml(tpl.body) }, {
     ticket_no: request.request_no,
     subject: p.reopen ? `REOPENED: ${p.title}` : p.title,
@@ -103,6 +130,7 @@ export async function runProgramRouting(p: {
     requester_phone: p.requesterPhone || '(not provided)',
     store_address: p.storeAddress || '(no address on file)',
     store_code: p.storeCode ?? rows[0]?.store_code ?? '',
+    ...storeFields,
     category: p.categoryName || '(no category)',
     ...programVars(program, rows),
   })

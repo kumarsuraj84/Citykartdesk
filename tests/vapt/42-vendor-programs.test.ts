@@ -214,31 +214,36 @@ describe('the built-in AC / Genset line is set up from the same screen', () => {
   const kindOf = async (id: string) => (await db().from('service_categories').select('auto_oem_kind').eq('id', id).single()).data.auto_oem_kind as string | null
   afterAll(async () => { if (cats.length) await db().from('service_categories').delete().in('id', cats) })
 
-  it('only an administrator can change it; the Genset categories are set and unset with the same switch as Admin > Categories', async () => {
+  it('the OLD setting is retired: only an administrator can take a category OFF it, and nobody can put a category ON it (here or in Admin > Categories)', async () => {
     const { saveBuiltInCategories } = await import('@/lib/actions/admin/programs')
-    const g1 = await mk('g1'), g2 = await mk('g2')
+    const { setCategoryOemKind } = await import('@/lib/actions/admin/categories')
+    const g1 = await mk('g1', { auto_oem_kind: 'genset' }), g2 = await mk('g2', { auto_oem_kind: 'genset' }), free = await mk('free')
     actAs(fx.requesterA)
     expect((await saveBuiltInCategories('genset', [g1])).error).toMatch(/Administrator/)
-    expect(await kindOf(g1)).toBeNull()
+    expect(await kindOf(g1)).toBe('genset')
     actAs(fx.admin)
-    expect((await saveBuiltInCategories('genset', [g1, g2])).error).toBeUndefined()
-    expect([await kindOf(g1), await kindOf(g2)]).toEqual(['genset', 'genset'])
-    expect((await saveBuiltInCategories('genset', [g1])).error).toBeUndefined()
+    expect((await saveBuiltInCategories('genset', [g1, g2, free])).error).toMatch(/retired/)            // a category cannot be put on the old setting
+    expect(await kindOf(free)).toBeNull()
+    expect((await setCategoryOemKind(free, 'genset')).error).toMatch(/retired/)                          // nor from Admin > Categories
+    expect((await setCategoryOemKind(free, 'ac')).error).toMatch(/retired/)
+    expect(await kindOf(free)).toBeNull()
+    expect((await saveBuiltInCategories('genset', [g1])).error).toBeUndefined()                           // taking one OFF is allowed
     expect([await kindOf(g1), await kindOf(g2)]).toEqual(['genset', null])
+    expect((await setCategoryOemKind(g1, null)).error).toBeUndefined()                                    // and so is clearing it from Admin > Categories
+    expect(await kindOf(g1)).toBeNull()
     const audit = ((await db().from('admin_audit_log').select('action, metadata').eq('entity_id', g2)).data ?? []) as { action: string }[]
-    expect(audit.filter((a) => a.action === 'category_oem_routing_changed').length).toBeGreaterThanOrEqual(2)
+    expect(audit.filter((a) => a.action === 'category_oem_routing_changed').length).toBeGreaterThanOrEqual(1)
   })
-  it('a category of a Vendor Program moves BACK to the old setting (program cleared in the same step); the other OEM type and the AC PMS category are refused', async () => {
+  it('a category of a Vendor Program cannot go back to the old setting; the other OEM type, the AC PMS category and an unknown line are refused; clearing a line clears only its categories', async () => {
     const { saveBuiltInCategories } = await import('@/lib/actions/admin/programs')
     const ac1 = await mk('ac1', { auto_oem_kind: 'ac' }), pms = await mk('pms', { is_pms: true }), inProgram = await mk('inprog', { program_id: ids.program })
     actAs(fx.admin)
-    expect((await saveBuiltInCategories('genset', [inProgram])).error).toBeUndefined()
-    expect((await db().from('service_categories').select('auto_oem_kind, program_id').eq('id', inProgram).single()).data).toEqual({ auto_oem_kind: 'genset', program_id: null })
+    expect((await saveBuiltInCategories('genset', [inProgram])).error).toMatch(/retired/)
+    expect((await db().from('service_categories').select('auto_oem_kind, program_id').eq('id', inProgram).single()).data).toEqual({ auto_oem_kind: null, program_id: ids.program })   // still in its program
     expect((await saveBuiltInCategories('genset', [ac1])).error).toMatch(/AC OEM/)
     expect((await saveBuiltInCategories('ac', [pms])).error).toMatch(/PMS/)
     expect((await saveBuiltInCategories('nope', [])).error).toBeTruthy()
     expect(await kindOf(ac1)).toBe('ac')
-    // clearing the AC list clears only AC categories of this org: the one made above goes back to none
     expect((await saveBuiltInCategories('ac', [])).error).toBeUndefined()
     expect(await kindOf(ac1)).toBeNull()
   })

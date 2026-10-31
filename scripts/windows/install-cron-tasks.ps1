@@ -2,13 +2,14 @@
 # Only creates/replaces tasks named CitykartDesk-Cron-* and CitykartDesk-LogShipper; touches nothing else. Re-running it re-registers ALL of them.
 # To add just one task on a server that already has the others, use the add-*-task.ps1 script of that task (for example add-automation-retry-task.ps1).
 #
-# The 10 cron tasks (each one runs run-cron-tick.ps1 -Job <name>, which calls the matching route of the app with CRON_SECRET) plus the log shipper:
+# The 11 cron tasks (each one runs run-cron-tick.ps1 -Job <name>, which calls the matching route of the app with CRON_SECRET) plus the log shipper:
 #   CitykartDesk-Cron-Alerts           every 30 min  (due-soon / overdue alerts + 08:00 daily digest)
 #   CitykartDesk-Cron-BusinessRules    every 15 min  (scheduled business rules / SLA escalation)
 #   CitykartDesk-Cron-EmailReplySync   every 1 min   (poll IMAP for replies to outbound emails)
 #   CitykartDesk-Cron-Csat             every 30 min  (auto-close resolved tickets past their reopen window + the one CSAT reminder)
 #   CitykartDesk-Cron-SystemLogArchive every 6 hours (moves old System Log records to the archive; never deletes)
 #   CitykartDesk-Cron-AutomationRetry  every 15 min  (finishes the automatic steps of new tickets that did not happen: mail to the OEM, rules, CVM approval; 3 tries at most)
+#   CitykartDesk-Cron-ScheduledReports every 30 min  (sends the scheduled reports that are due: 07:00 India time daily / Monday / the 1st)
 #   CitykartDesk-Cron-MastersSync      11:00, 15:00, 19:00 (copies the AC / Genset / CVM Google Sheets into the database)
 #   CitykartDesk-Cron-ApprovalReminders every day at 10:00 (one e-mail per approver listing everything still waiting for their decision)
 #   CitykartDesk-Cron-WeatherDaily     every day at 08:00 (outside temperature of every city with an AC)
@@ -33,6 +34,7 @@ Install-Job 'CitykartDesk-Cron-EmailReplySync' 'email-reply-sync' 1
 Install-Job 'CitykartDesk-Cron-Csat' 'csat' 30
 Install-Job 'CitykartDesk-Cron-SystemLogArchive' 'system-log-archive' 360
 Install-Job 'CitykartDesk-Cron-AutomationRetry' 'automation-retry' 15
+Install-Job 'CitykartDesk-Cron-ScheduledReports' 'scheduled-reports' 30
 
 # the log shipper has its own runner
 $shipRunner = Join-Path $PSScriptRoot 'run-log-shipper.ps1'

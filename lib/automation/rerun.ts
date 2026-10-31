@@ -6,6 +6,7 @@ import { loadCvmCandidates } from '@/lib/cvm/load'
 import { loadCvmEmail } from '@/lib/masters/resolve'
 import { inBatchesDo } from '@/lib/queries/in-batches'
 import { isOemKind } from '@/lib/oems/kinds'
+import { addressWithPincode } from '@/lib/stores/details'
 import { runCreatedAssignRules } from './assign-rules'
 import { AUTO_MAX_ATTEMPTS, chosenValues, diagnoseTicket, diagnoseTickets, isMailExpected, type AutomationDiagnosis, type Db, type ExpectedSteps, type StepKey, type StepState } from './diagnose'
 
@@ -108,9 +109,9 @@ async function loadRunContext(db: Db, admin: ReturnType<typeof createAdminClient
   let storeCode: string | null = null
   let storeAddress: string | null = null
   if (prof?.store_id) {
-    const { data: st } = await db.from('stores').select('code, address').eq('id', prof.store_id).maybeSingle()
+    const { data: st } = await db.from('stores').select('code, address, pincode').eq('id', prof.store_id).maybeSingle()
     storeCode = st?.code ? String(st.code).toUpperCase() : null
-    storeAddress = st?.address ?? null
+    storeAddress = addressWithPincode(st?.address, st?.pincode) || null
   }
   const { data: authUser } = await admin.auth.admin.getUserById(r.requester_id)
   // description, phone and e-mail come from the form the store filled in (the same fields the first e-mail used)

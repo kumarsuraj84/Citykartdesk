@@ -8,7 +8,7 @@ import { resolveSubCategoryForService } from '@/lib/requests/resolve-sub-categor
 import { pickTitleField, subjectToTitle } from '@/lib/requests/title-field'
 import { notifyRequesterTicketLogged } from '@/lib/requests/notify-requester'
 import { isOemKind, type OemKind } from '@/lib/oems/kinds'
-import { loadProgram, runProgramRouting } from '@/lib/programs/routing'
+import { loadProgram, runProgramRouting, saveProgramRowsForRules } from '@/lib/programs/routing'
 import { findSelectedMachine, machineValueOf } from '@/lib/programs/machines'
 import type { ProgramRowRecord } from '@/lib/programs/mail'
 import type { ProgramRecord } from '@/lib/programs/types'
@@ -21,6 +21,7 @@ import { logger } from '@/lib/observability/logger'
 import type { FormField, RequestPriority } from '@/types'
 import { isLocationRuleExempt, isServiceVisibleToLocation } from '@/lib/services/location-visibility'
 import { markAutomationFinished, markAutomationStarted, markRulesRan } from '@/lib/automation/rerun'
+import { addressWithPincode } from '@/lib/stores/details'
 import type { Json } from '@/types/database'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -270,11 +271,11 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   if (requesterProfile?.store_id) {
     const { data: store } = await admin
       .from('stores')
-      .select('address, code')
+      .select('address, pincode, code')
       .eq('id', requesterProfile.store_id)
       .eq('org_id', orgId)
       .maybeSingle()
-    requesterStoreAddress = store?.address ?? null
+    requesterStoreAddress = addressWithPincode(store?.address, store?.pincode) || null
     requesterStoreCode = store?.code ? String(store.code).toUpperCase() : null
   }
 
@@ -312,7 +313,27 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   // A box "machines of a Vendor Program" (one row per machine): for a category of such a program the machine chosen must be one of the store's active machines of that program (checked
   // here, not only in the browser), and it is compulsory when the store has machines. Other channels have no list to choose from, so their value is kept as given.
   let chosenMachineValue = ''
-  const machineField = allFields.find((f) => f.options_source === 'program_machines')
+  const programMachinesField = allFields.find((f) => f.options_source === 'program_machines')
+  // The AC form already has a dropdown of the store's ACs (the CKDESK number). When a category of that form is moved onto a Vendor Program with one row per machine (AC cut-over), the
+  // SAME dropdown chooses the machine, so the form does not have to be changed and the requester still sees one box. In that case the choice is optional exactly as it is for the old
+  // AC setting (no choice = the store's machines are all mailed), and a value the program does not know is ignored, never an error (the old AC list decided what could be chosen).
+  const machineField = programMachinesField ?? undefined
+  const aliasField = !programMachinesField && chosenAcValue ? acField : undefined
+  if (aliasField && subCategoryResolution.categoryId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pdb = admin as unknown as { from: (t: string) => any }
+    const { data: mc } = await admin.from('service_categories').select('program_id').eq('id', subCategoryResolution.categoryId).eq('org_id', orgId).maybeSingle()
+    const aliasProgramId = (mc as { program_id?: string | null } | null)?.program_id ?? null
+    if (aliasProgramId && requesterStoreCode) {
+      const { data: mp } = await pdb.from('vendor_programs').select('is_active, row_type').eq('id', aliasProgramId).eq('org_id', orgId).maybeSingle()
+      const prog = mp as { is_active: boolean; row_type: string } | null
+      if (prog?.is_active && prog.row_type === 'machine') {
+        const { data: mrows } = await pdb.from('program_rows').select('id, machine_no, serial').eq('program_id', aliasProgramId).eq('store_code', requesterStoreCode.toUpperCase()).eq('is_active', true).is('removed_at', null)
+        const found = findSelectedMachine((mrows ?? []) as ProgramRowRecord[], chosenAcValue)
+        if (found) chosenMachineValue = machineValueOf(found)
+      }
+    }
+  }
   if (machineField && subCategoryResolution.categoryId) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pdb = admin as unknown as { from: (t: string) => any }   // the program tables are read through the untyped client, as everywhere else
@@ -539,6 +560,13 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
 
   if (!(acField && chosenAcValue) && acUnitsForRouting && acUnitsForRouting.length > 0) {
     try { await saveMasterSnapshot(admin, { requestId: request.id, kind: 'ac', units: acUnitsForRouting }) } catch (e) { console.error('[createRequestCore] AC snapshot (routing) failed', e) }
+  }
+
+  // A ticket of a Vendor Program has its sheet row saved BEFORE the rules run, so a rule that routes by the AC vendor / brand / place sees it (as it did with the old AC setting).
+  try {
+    await saveProgramRowsForRules(admin, { orgId, requestId: request.id, categoryId, storeCode: requesterStoreCode, machineValue: chosenMachineValue || (chosenAcValue || undefined) })
+  } catch (e) {
+    console.error('[createRequestCore] saving the program row before the rules failed', e)
   }
 
   // Business Rules: "created" trigger — assign/set priority/set status/notify
