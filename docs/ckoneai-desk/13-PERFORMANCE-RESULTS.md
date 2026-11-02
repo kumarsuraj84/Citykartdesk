@@ -28,3 +28,13 @@ Status: LOCAL, measured 2 Nov 2026 on the development PC (10.0.0.47). **CKOneAI'
 From `evidence/eval-run-1.json` and the browser test. Warm, over 229 questions through signed calls from the dev PC to 10.0.0.82:8196: **P50 62 ms, P95 227 ms, maximum 1810 ms** (mock model, so no model time). Through CKDesk in the browser the answer appeared within about a second once warm.
 
 **Cold start (needs fixing before a pilot):** the first question after the test instance started took more than 60 seconds before CKOneAI sent anything. CKDesk's forwarder waits 60 seconds for the first byte, then answers 502, so the person saw "I couldn't finish that answer (http_502)" and had to press Retry. A direct call a minute later waited about 28 seconds (queued behind the abandoned first question; one shared model slot), and every call after that was fast (about 50 ms for a personal list, about 600 ms for an org-wide summary). Asked of CKOneAI: warm the platform connection when it starts, and send the first event (conversation / status) at once so the stream opens early. CKDesk can also wait longer for the first byte if the owner prefers; today it is 60 s.
+
+
+## After the fixes (run 2, 2 Nov 2026)
+
+Warm answers over 229 questions: P50 62 ms, P95 298 ms, three slow answers of 8 to 10 seconds (see doc 11). **Cold start fixed:** the first question after the test instance restarted answered in 68 ms to the first byte (222 ms in all), where it had taken more than 60 seconds before.
+
+
+## Run 3 and the slow-answer cause (2 Nov 2026)
+
+Warm over 229 questions: P50 62 ms, P95 202 ms. Two rare long answers (10.6 s, 3.6 s) are connection set-up delays (resent first packet), shown by a 300-question loop with two different clients (see doc 11). Not caused by CKOneAI's answering; to be re-measured from 10.0.1.98 on the switch-on day.

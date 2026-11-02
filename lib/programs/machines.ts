@@ -45,6 +45,23 @@ export function machineOptions(rows: ProgramRowRecord[]): MachineOption[] {
   return withMachineKeys(rows).map((r) => { const value = machineValueOf(r); return { value, label: value } })
 }
 
+type FieldLike = { id: string; type: string; label: string; options_source?: string | null; options?: { value: string; label: string }[] }
+
+/**
+ * A form whose AC box is still a plain typed list, not linked to the AC sheet (the live ADMIN - AC form has "AC Serial Number" as a fixed list of 38 choices): the ticket then saves only the
+ * id of the chosen option, so nothing said WHICH AC of the store the requester meant and the program mailed them all. The number the requester picked is the LABEL of that option ("1"):
+ * read it here, so the machine can still be found. Returns '' when the form has no such box or nothing was chosen. Never used for a box that is linked to the sheet (options_source).
+ */
+export function plainAcChoiceLabel(fields: FieldLike[], formData: Record<string, unknown>): string {
+  const f = fields.find((x) => x.type === 'select' && !x.options_source && /^\s*AC\s*(serial|number|no\b)/i.test(x.label))
+  if (!f) return ''
+  const saved = String(formData[f.id] ?? '').trim()
+  if (!saved) return ''
+  const opt = (f.options ?? []).find((o) => String(o.value) === saved)
+  // the live list calls the unit of the server room "Server Room AC"; the sheet calls it "Server Room"
+  return (opt?.label ?? saved).trim().replace(/\s+AC$/i, '')
+}
+
 /** The row a saved choice points to (case does not matter); null when it is not one of the given machines. */
 export function findSelectedMachine(rows: ProgramRowRecord[], value: string | null | undefined): ProgramRowRecord | null {
   const v = (value ?? '').trim().toLowerCase()

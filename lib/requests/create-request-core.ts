@@ -9,7 +9,7 @@ import { pickTitleField, subjectToTitle } from '@/lib/requests/title-field'
 import { notifyRequesterTicketLogged } from '@/lib/requests/notify-requester'
 import { isOemKind, type OemKind } from '@/lib/oems/kinds'
 import { loadProgram, runProgramRouting, saveProgramRowsForRules } from '@/lib/programs/routing'
-import { findSelectedMachine, machineValueOf } from '@/lib/programs/machines'
+import { findSelectedMachine, machineValueOf, plainAcChoiceLabel } from '@/lib/programs/machines'
 import type { ProgramRowRecord } from '@/lib/programs/mail'
 import type { ProgramRecord } from '@/lib/programs/types'
 import { runAutoCvmApproval } from '@/lib/cvm/auto-approval'
@@ -318,7 +318,10 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   // SAME dropdown chooses the machine, so the form does not have to be changed and the requester still sees one box. In that case the choice is optional exactly as it is for the old
   // AC setting (no choice = the store's machines are all mailed), and a value the program does not know is ignored, never an error (the old AC list decided what could be chosen).
   const machineField = programMachinesField ?? undefined
-  const aliasField = !programMachinesField && chosenAcValue ? acField : undefined
+  // A form whose AC box is still a plain typed list (not linked to the AC sheet) is read by the LABEL of the option chosen ("1"), so the right machine is mailed instead of all of them.
+  const plainAcLabel = !programMachinesField && !acField ? plainAcChoiceLabel(allFields, parsedFormData) : ''
+  const aliasValue = chosenAcValue || plainAcLabel
+  const aliasField = !programMachinesField && aliasValue ? true : undefined
   if (aliasField && subCategoryResolution.categoryId) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pdb = admin as unknown as { from: (t: string) => any }
@@ -329,7 +332,7 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
       const prog = mp as { is_active: boolean; row_type: string } | null
       if (prog?.is_active && prog.row_type === 'machine') {
         const { data: mrows } = await pdb.from('program_rows').select('id, machine_no, serial').eq('program_id', aliasProgramId).eq('store_code', requesterStoreCode.toUpperCase()).eq('is_active', true).is('removed_at', null)
-        const found = findSelectedMachine((mrows ?? []) as ProgramRowRecord[], chosenAcValue)
+        const found = findSelectedMachine((mrows ?? []) as ProgramRowRecord[], aliasValue)
         if (found) chosenMachineValue = machineValueOf(found)
       }
     }

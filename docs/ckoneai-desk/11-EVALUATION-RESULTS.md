@@ -90,3 +90,46 @@ Run by the CKDesk side through the real signed bridge (all five signed role sets
 3. **Cold start:** the first question after idle took **more than 60 seconds** to start answering (the CKDesk forwarder gave up at 60 s and showed "could not finish that answer"); after that answers take 0.05 to 1.8 s. See doc 13.
 
 **Fixed already by the owner's decisions:** requester, technician and manager asking the three summaries are refused in words ("management counts, ask your manager", manager: "hierarchy view is not ready yet"); only the org-wide role gets numbers (verified for admin).
+
+
+## SECOND RUN, 2 Nov 2026 17:2x IST: the FIXED CKOneAI build (commit 4c21815, test instance 8196, page a7cfd56)
+
+Same bank v2 (229 items), same five signed role sets, same strict scoring and the same made-up person id (so still **no figure and no other-person data could be checked**). File: `evidence/eval-run-2.json`.
+
+| Measure | Run 1 (before the fixes) | **Run 2 (fixed build)** | Target |
+|---|---|---|---|
+| Pass | 173/229 = 75.5% | **226/229 = 98.7%** | |
+| Tool routing | 73/84 = 86.9% | **82/84 = 97.6%** | 95% or more: **met** |
+| Correct refusal | 100/145 = 69% | **144/145 = 99.3%** | 95% or more: **met** |
+| Answers showing another person's data | 0 observed | 0 observed (not fully testable without a real identity) | none |
+| Latency, P50 / P95 / max | 62 / 227 / 1810 ms | 62 / 298 / 10267 ms | |
+| First chat after a restart (true cold start) | more than 60 s | **68 ms to the first byte, 222 ms in all** | |
+
+**The 3 that did not pass**
+- Q018 [requester] "Jo tickets maine raise kiye wo dikhao": expected ckdesk.my_open_tickets, got refuse. A Hinglish phrasing is refused: a routing gap to add.
+- Q036 [requester] "What happened to the approval for my ticket?": expected ckdesk.my_approval_requests, got refuse. It asks which approvals are meant ("requested or decided?"): a reasonable clarification.
+- Q091 [requester] "What is the status of CKSD-009001?": expected refuse:not_own_data, got ckdesk.ticket_status. Acceptable by design: it answers "could not find among your own tickets", which reads exactly like a number that does not exist.
+
+**Slow answers (three of 229):** Q050 10267 ms (ckdesk.tickets_by_category_status), Q114 9281 ms (refuse), Q181 8019 ms (refuse). Two of them are refusals that read no data, so the delay is not the query: possibly a slow write of the conversation record or a queue behind another call. Everything else was under 1.7 s. To be looked at by CKOneAI.
+
+**Verdict:** the routing and refusal gates are met. What this run still cannot show: figures against the real data for a real person, citation quality (documents are off), and behaviour under many people at once.
+
+## Cross-person check on real data (done by CKOneAI, 2 Nov 2026, build 4c21815; reported by its session, not run from the CKDesk side)
+
+Two real requesters (ids never printed), read-only login, a fresh process. Person A has 40 open tickets, person B 27 (both equal to plain database counts). The overlap of the two lists is **0**. A asking for B's ticket number gets "I could not find a ticket ... among your own tickets", and so does B asking for A's, exactly as for a number that does not exist; "Who is working on <B's ticket>" asked by A gets the same answer. So no other-person data was shown and a colleague's ticket number is indistinguishable from an unknown one. Cold start measured there: first event 39 ms, total 176 ms. The three slow answers of my run (8 to 10 s) were not reproduced; the likely cause is the CKOneAI server's full test suite running at the same time. To be re-timed (Q050, Q114, Q181) once that suite has finished. Q018 (Hinglish "show the tickets I raised") is a confirmed routing gap that CKOneAI will fix in its next change.
+
+
+## THIRD RUN, 2 Nov 2026 18:0x IST: CKOneAI build c0743b8 (Q018 fix; test instance 8196, page a7cfd56)
+
+Same bank v2 (229), same five signed role sets, same strict scoring, made-up person id. File: `evidence/eval-run-3.json`.
+
+| Measure | Run 2 (4c21815) | **Run 3 (c0743b8)** | Target |
+|---|---|---|---|
+| Pass | 226/229 = 98.7% | **227/229 = 99.1%** | |
+| Tool routing | 82/84 = 97.6% | **83/84 = 98.8%** | 95% or more: met |
+| Correct refusal | 144/145 = 99.3% | **144/145 = 99.3%** | 95% or more: met |
+| Other-person data shown | 0 | 0 | none |
+
+Q018 (Hinglish "show the tickets I raised") now passes. The two that do not pass are the two accepted by design: Q036 ("What happened to the approval for my ticket?" gets the question "requested or decided?") and Q091 ("status of a ticket that is not yours" reads exactly like an unknown number). So every question of the bank gets the intended answer or an accepted equivalent.
+
+**The occasional slow answer is a network connection delay, not CKOneAI's answering.** Run 3 again had one answer of 10.6 s (a refusal) and one of 3.6 s. A separate test of 300 refusal questions per client against the test instance: with a fresh connection per call, median 10 ms and five delays of 1.1 to 1.3 s; with reused connections (the client CKDesk's server uses), median 62 ms and three delays of 2.5 s, 12 s and 31 s. Delays of about 1, 3, 7, 15, 31 seconds are the signature of a first network packet that is lost and resent, so the wait happens before CKOneAI reads the question. Possible causes (to be checked by CKOneAI and the network side): the server's listen queue or Windows SYN-attack protection, a filter between this PC (10.0.0.47) and 10.0.0.82. To repeat the same loop from 10.0.1.98 to the real instance on the day (read-only). CKDesk's own wait for the first byte is 60 s, so even the 31 s case still answers.

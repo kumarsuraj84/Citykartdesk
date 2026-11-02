@@ -57,8 +57,5 @@
 @media (max-width:1023px) and (min-width:521px) { .ai-root { bottom:max(88px,env(safe-area-inset-bottom)); } .ai-panel { height:min(700px,82vh,calc(100vh - 220px)); } }
 @media (max-width:520px) { .ai-root[data-state="closed"] { bottom:calc(max(16px,env(safe-area-inset-bottom)) + 76px); } }
 
-@media (prefers-reduced-motion: reduce) {
-  .ai-launcher, .ai-launcher *, .ai-panel, .ai-panel * { transition-duration:0.01ms !important; animation-duration:0.01ms !important; animation-iteration-count:1 !important; }
-  .ai-launcher:hover, .ai-launcher:focus-visible { transform:none; }
-}
+/* Owner decision 2 Nov 2026: the bot button always animates, even when the computer asks for reduced motion (CKOneAI itself switches its motion off then). */
 @media print { .ai-root { display:none; } }
