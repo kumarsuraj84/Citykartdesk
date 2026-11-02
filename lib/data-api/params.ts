@@ -58,7 +58,7 @@ export function parseParams(sp: URLSearchParams): ParsedParams {
   return { ok: true, entity, limit, since, after }
 }
 
-/** A database timestamp as ISO UTC text with the database's own precision ("...+00:00" becomes "...Z"); anything else is returned as it is. */
+/** A database timestamp as ISO text with the database's own precision: "+00:00" becomes "Z", any other offset (the database's time zone, e.g. "-08:00") is KEPT as it is, so every value carries its offset. */
 export function isoUtc(v: unknown): string | null {
   if (v === null || v === undefined || v === '') return null
   const s = String(v)

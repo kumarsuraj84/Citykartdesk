@@ -37,6 +37,8 @@ export type EntityDef = {
   org: 'direct' | OrgHop[]
   /** extra filter of the table, e.g. only the status changes of the activity log */
   where?: { column: string; value: string }
+  /** a table with no row id of its own: its key is these two columns, and the API shows a synthetic text id "first:second" (the cursor and the ids list use it) */
+  compositeKey?: [string, string]
   /** the columns the API returns */
   columns: Col[]
   needsStoreOfProfile?: { profileColumns: string[] }
@@ -203,14 +205,29 @@ export const ENTITIES: EntityDef[] = [
   {
     name: 'users', table: 'profiles', mode: 'incremental', cursor: 'updated_at', org: 'direct',
     description: 'The people: opaque id and display name, role, active flag, store, department and location. No e-mail, mobile number or employee number. Every other entity refers to a person by id only; join to this one for the name.',
-    select: ['id', 'full_name', 'role', 'is_active', 'store_id', 'department_id', 'location_id', 'vendor_company_id', 'created_at', 'updated_at'],
+    select: ['id', 'full_name', 'role', 'is_active', 'store_id', 'department_id', 'location_id', 'vendor_company_id', 'manager_id', 'created_at', 'updated_at'],
     columns: [c('id', 'uuid', 'id'), c('full_name', 'text', 'name', 'display name only'), c('role', 'text'), c('is_active', 'bool'), c('store_code', 'text', 'derived', 'null for head-office users'), c('department_id', 'uuid'), c('location_id', 'uuid'),
-      c('is_vendor', 'bool', 'derived', 'a vendor / OEM technician login'), c('created_at', 'timestamptz'), c('updated_at', 'timestamptz')],
+      c('is_vendor', 'bool', 'derived', 'a vendor / OEM technician login'), c('created_at', 'timestamptz'), c('updated_at', 'timestamptz'),
+      c('manager_id', 'uuid', 'id', 'the direct manager (the Manager box on the account), an opaque id; null when none')],
     needsStoreCode: true,
     map: (r, ctx) => ({
       id: r.id, full_name: str(r.full_name, 120), role: r.role ?? null, is_active: !!r.is_active, store_code: r.store_id ? (ctx.storeCode.get(String(r.store_id)) ?? null) : null,
-      department_id: r.department_id ?? null, location_id: r.location_id ?? null, is_vendor: !!r.vendor_company_id, created_at: ts(r.created_at), updated_at: ts(r.updated_at),
+      department_id: r.department_id ?? null, location_id: r.location_id ?? null, is_vendor: !!r.vendor_company_id, created_at: ts(r.created_at), updated_at: ts(r.updated_at), manager_id: r.manager_id ?? null,
     }),
+  },
+  {
+    name: 'approval_workflow_steps', table: 'approval_workflow_steps', mode: 'snapshot', cursor: 'id', org: [{ column: 'workflow_id', table: 'approval_workflows', carry: 'org_id' }],
+    description: 'The steps of every approval workflow: who approves which step (an opaque id, or "any manager"). Together with approvals.current_step this says whom a pending approval waits for. The workflow tables have no change date, so read in full (small).',
+    select: ['id', 'workflow_id', 'step_order', 'approver_type', 'approver_user_id'],
+    columns: [c('id', 'uuid'), c('workflow_id', 'uuid'), c('step_order', 'int'), c('approver_type', 'text', 'no', 'specific_user or any_manager'), c('approver_user_id', 'uuid', 'id', 'null for an any_manager step')],
+    map: (r) => pick(r, ['id', 'workflow_id', 'step_order', 'approver_type', 'approver_user_id']),
+  },
+  {
+    name: 'team_members', table: 'team_members', mode: 'snapshot', cursor: 'id', org: 'direct', compositeKey: ['team_id', 'user_id'],
+    description: 'Who is in which support team (ids only). The table has no row id: "id" is made as team_id:user_id. No change date, so read in full (small).',
+    select: ['team_id', 'user_id', 'is_lead', 'joined_at'],
+    columns: [c('id', 'text', 'no', 'team_id:user_id, made by the API'), c('team_id', 'uuid'), c('user_id', 'uuid', 'id'), c('is_lead', 'bool'), c('joined_at', 'timestamptz')],
+    map: (r) => ({ id: `${r.team_id}:${r.user_id}`, team_id: r.team_id ?? null, user_id: r.user_id ?? null, is_lead: !!r.is_lead, joined_at: ts(r.joined_at) }),
   },
 ]
 

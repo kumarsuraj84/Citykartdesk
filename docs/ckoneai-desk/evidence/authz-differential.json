@@ -1,0 +1,154 @@
+{
+ "stack": "isolated audit stack (synthetic data)",
+ "generated": "2026-11-02T10:09:06.157Z",
+ "findings": {
+  "tickets": {
+   "requesterA": {
+    "ck_desk_shows": [
+     "A1",
+     "A2_unassigned_requesterA"
+    ],
+    "tool_raised_by_me": [
+     "A1",
+     "A2_unassigned_requesterA"
+    ],
+    "tool_assigned_to_me": [],
+    "ck_desk_shows_but_tool_does_not": []
+   },
+   "requesterB": {
+    "ck_desk_shows": [
+     "A3_requesterB_on_teamA_assignedAgentA",
+     "A4_requesterB_on_teamA_unassigned",
+     "B1"
+    ],
+    "tool_raised_by_me": [
+     "A3_requesterB_on_teamA_assignedAgentA",
+     "A4_requesterB_on_teamA_unassigned",
+     "B1"
+    ],
+    "tool_assigned_to_me": [],
+    "ck_desk_shows_but_tool_does_not": []
+   },
+   "agentA": {
+    "ck_desk_shows": [
+     "A1",
+     "A2_unassigned_requesterA",
+     "A3_requesterB_on_teamA_assignedAgentA",
+     "A4_requesterB_on_teamA_unassigned",
+     "A5_raised_by_agentA_on_teamB_assignedAgentB"
+    ],
+    "tool_raised_by_me": [
+     "A5_raised_by_agentA_on_teamB_assignedAgentB"
+    ],
+    "tool_assigned_to_me": [
+     "A1",
+     "A3_requesterB_on_teamA_assignedAgentA"
+    ],
+    "ck_desk_shows_but_tool_does_not": [
+     "A2_unassigned_requesterA",
+     "A4_requesterB_on_teamA_unassigned"
+    ]
+   },
+   "agentB": {
+    "ck_desk_shows": [
+     "A2_unassigned_requesterA",
+     "A5_raised_by_agentA_on_teamB_assignedAgentB",
+     "B1"
+    ],
+    "tool_raised_by_me": [],
+    "tool_assigned_to_me": [
+     "A5_raised_by_agentA_on_teamB_assignedAgentB",
+     "B1"
+    ],
+    "ck_desk_shows_but_tool_does_not": [
+     "A2_unassigned_requesterA"
+    ]
+   },
+   "manager": {
+    "ck_desk_shows": [
+     "A1",
+     "A2_unassigned_requesterA",
+     "A3_requesterB_on_teamA_assignedAgentA",
+     "A4_requesterB_on_teamA_unassigned",
+     "A5_raised_by_agentA_on_teamB_assignedAgentB",
+     "B1"
+    ],
+    "tool_raised_by_me": [],
+    "tool_assigned_to_me": [],
+    "ck_desk_shows_but_tool_does_not": [
+     "A1",
+     "A2_unassigned_requesterA",
+     "A3_requesterB_on_teamA_assignedAgentA",
+     "A4_requesterB_on_teamA_unassigned",
+     "A5_raised_by_agentA_on_teamB_assignedAgentB",
+     "B1"
+    ]
+   },
+   "admin": {
+    "ck_desk_shows": [
+     "A1",
+     "A2_unassigned_requesterA",
+     "A3_requesterB_on_teamA_assignedAgentA",
+     "A4_requesterB_on_teamA_unassigned",
+     "A5_raised_by_agentA_on_teamB_assignedAgentB",
+     "B1"
+    ],
+    "tool_raised_by_me": [],
+    "tool_assigned_to_me": [],
+    "ck_desk_shows_but_tool_does_not": [
+     "A1",
+     "A2_unassigned_requesterA",
+     "A3_requesterB_on_teamA_assignedAgentA",
+     "A4_requesterB_on_teamA_unassigned",
+     "A5_raised_by_agentA_on_teamB_assignedAgentB",
+     "B1"
+    ]
+   },
+   "platformOwner": {
+    "ck_desk_shows": [
+     "A1",
+     "A2_unassigned_requesterA",
+     "A3_requesterB_on_teamA_assignedAgentA",
+     "A4_requesterB_on_teamA_unassigned",
+     "A5_raised_by_agentA_on_teamB_assignedAgentB",
+     "B1"
+    ],
+    "tool_raised_by_me": [],
+    "tool_assigned_to_me": [],
+    "ck_desk_shows_but_tool_does_not": [
+     "A1",
+     "A2_unassigned_requesterA",
+     "A3_requesterB_on_teamA_assignedAgentA",
+     "A4_requesterB_on_teamA_unassigned",
+     "A5_raised_by_agentA_on_teamB_assignedAgentB",
+     "B1"
+    ]
+   }
+  },
+  "approval_of_A2_visible_to": {
+   "requesterA": true,
+   "requesterB": false,
+   "agentA": true,
+   "agentB": true,
+   "manager": true,
+   "admin": true,
+   "platformOwner": true
+  },
+  "csat_surveys_visible_count": {
+   "requesterA": 1,
+   "requesterB": 1,
+   "agentA": 0,
+   "agentB": 0,
+   "manager": 8,
+   "admin": 8,
+   "platformOwner": 8
+  },
+  "ticket_count_visible": {
+   "organisation_total": 3273,
+   "agentA": 5,
+   "agentB": 3,
+   "manager": 3273,
+   "admin": 3273
+  }
+ }
+}

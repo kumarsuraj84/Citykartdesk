@@ -7,6 +7,16 @@ import { encodeCursor, type Cursor, isoUtc } from './params'
 type Db = { from: (t: string) => any }
 
 const CHUNK = 150
+/** The columns that make up a row's key: normally just `id`. An entity whose table has no row id of its own (team_members) is keyed by two columns and shows a synthetic text id "first:second". */
+const keyCols = (def: EntityDef): string[] => def.compositeKey ?? ['id']
+export const rowId = (def: EntityDef, r: Row): string => (def.compositeKey ? `${r[def.compositeKey[0]]}:${r[def.compositeKey[1]]}` : String(r.id))
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/** A cursor for a composite-key entity is "uuid:uuid"; anything else is not one this API gave out. */
+export const cursorFitsEntity = (def: EntityDef, after: Cursor | null): boolean => {
+  if (!after || !def.compositeKey) return true
+  const [a, b, ...rest] = after.id.split(':')
+  return rest.length === 0 && UUID.test(a ?? '') && UUID.test(b ?? '')
+}
 const must = <T,>(res: { data: T | null; error: { message: string } | null }, what: string): T => {
   if (res.error) throw new Error(`${what}: ${res.error.message}`)
   return (res.data ?? []) as T
@@ -63,6 +73,11 @@ function baseQuery(db: Db, orgId: string, def: EntityDef, columns: string[], opt
 /** `after` for the keyset: rows strictly after (cursor, id). Values were checked by decodeCursor, and are quoted for the filter. */
 function applyAfter(q: any, def: EntityDef, after: Cursor | null) { // eslint-disable-line @typescript-eslint/no-explicit-any
   if (!after) return q
+  if (def.compositeKey) {
+    const [a, b] = after.id.split(':')
+    const [k0, k1] = def.compositeKey
+    return q.or(`${k0}.gt."${a}",and(${k0}.eq."${a}",${k1}.gt."${b}")`)
+  }
   if (def.cursor === 'id') return q.gt('id', after.id)
   if (after.t === null) return q.gt('id', after.id)
   return q.or(`${def.cursor}.gt."${after.t}",and(${def.cursor}.eq."${after.t}",id.gt."${after.id}")`)
@@ -84,15 +99,16 @@ export async function readPage(db: Db, orgId: string, def: EntityDef, p: { limit
     if (p.since && def.cursor !== 'id') f = f.gte(def.cursor, p.since)
     return applyAfter(f, def, p.after)
   }
-  let q = filtered([...new Set(['id', def.cursor, ...def.select])])
-  q = def.cursor === 'id' ? q.order('id', { ascending: true }) : q.order(def.cursor, { ascending: true }).order('id', { ascending: true })
+  let q = filtered(def.compositeKey ? [...def.compositeKey, ...def.select] : [...new Set(['id', def.cursor, ...def.select])])
+  q = def.compositeKey ? q.order(def.compositeKey[0], { ascending: true }).order(def.compositeKey[1], { ascending: true })
+    : def.cursor === 'id' ? q.order('id', { ascending: true }) : q.order(def.cursor, { ascending: true }).order('id', { ascending: true })
   const raw = must<Row[]>(await q.limit(p.limit + 1), `read ${def.name}`)
   let hasMore = raw.length > p.limit
   const page = hasMore ? raw.slice(0, p.limit) : raw
-  if (!hasMore && !(await reachedEnd(async () => (await filtered(['id'], { count: 'exact', head: true })).count ?? null, raw.length))) hasMore = true
+  if (!hasMore && !(await reachedEnd(async () => (await filtered([keyCols(def)[0]], { count: 'exact', head: true })).count ?? null, raw.length))) hasMore = true
   const last = page[page.length - 1]
   // the next page continues after the last row READ, even when some rows of it are left out below (other organisation)
-  const next = hasMore && last ? encodeCursor({ t: def.cursor === 'id' ? null : String(last[def.cursor]), id: String(last.id) }) : null
+  const next = hasMore && last ? encodeCursor({ t: def.cursor === 'id' ? null : String(last[def.cursor]), id: rowId(def, last) }) : null
   const kept = def.org === 'direct' ? page : await inOrg(db, orgId, def.org, page)
   const ctx = await buildCtx(db, orgId, def, kept)
   const maxCursor = last ? (def.cursor === 'id' ? null : isoUtc(last[def.cursor])) : null
@@ -101,17 +117,18 @@ export async function readPage(db: Db, orgId: string, def: EntityDef, p: { limit
 
 /** Every id (and its change date) of the entity, in pages, so the platform can find what was deleted since it last looked. */
 export async function readIds(db: Db, orgId: string, def: EntityDef, p: { limit: number; after: Cursor | null }): Promise<{ rows: { id: string; cursor_value: string | null }[]; next_after: string | null; count: number }> {
-  const cols = [...new Set(['id', def.cursor, ...(def.org === 'direct' ? [] : [def.org[0].column])])]
-  const filtered = (opts?: { count: 'exact'; head: true }) => { const f = baseQuery(db, orgId, def, opts ? ['id'] : cols, opts); return p.after ? f.gt('id', p.after.id) : f }
-  const raw = must<Row[]>(await filtered().order('id', { ascending: true }).limit(p.limit + 1), `read ${def.name} ids`)
+  const cols = [...new Set([...keyCols(def), ...(def.compositeKey ? [] : [def.cursor]), ...(def.org === 'direct' ? [] : [def.org[0].column])])]
+  const filtered = (opts?: { count: 'exact'; head: true }) => { const f = baseQuery(db, orgId, def, opts ? [keyCols(def)[0]] : cols, opts); return p.after ? (def.compositeKey ? applyAfter(f, def, p.after) : f.gt('id', p.after.id)) : f }
+  const ordered = (q: any) => (def.compositeKey ? q.order(def.compositeKey[0], { ascending: true }).order(def.compositeKey[1], { ascending: true }) : q.order('id', { ascending: true })) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const raw = must<Row[]>(await ordered(filtered()).limit(p.limit + 1), `read ${def.name} ids`)
   let hasMore = raw.length > p.limit
   const page = hasMore ? raw.slice(0, p.limit) : raw
   if (!hasMore && !(await reachedEnd(async () => (await filtered({ count: 'exact', head: true })).count ?? null, raw.length))) hasMore = true
   const last = page[page.length - 1]
   const kept = def.org === 'direct' ? page : await inOrg(db, orgId, def.org, page)
   return {
-    rows: kept.map((r) => ({ id: String(r.id), cursor_value: def.cursor === 'id' ? null : isoUtc(r[def.cursor]) })),
-    next_after: hasMore && last ? encodeCursor({ t: null, id: String(last.id) }) : null,
+    rows: kept.map((r) => ({ id: rowId(def, r), cursor_value: def.cursor === 'id' ? null : isoUtc(r[def.cursor]) })),
+    next_after: hasMore && last ? encodeCursor({ t: null, id: rowId(def, last) }) : null,
     count: kept.length,
   }
 }
@@ -120,7 +137,7 @@ export async function readIds(db: Db, orgId: string, def: EntityDef, p: { limit:
 export async function readMeta(db: Db, orgId: string) {
   const out = []
   for (const def of ENTITIES) {
-    let cq = db.from(def.table).select('id', { count: 'exact', head: true })
+    let cq = db.from(def.table).select(keyCols(def)[0], { count: 'exact', head: true })
     if (def.org === 'direct') cq = cq.eq('org_id', orgId)
     if (def.where) cq = cq.eq(def.where.column, def.where.value)
     const { count, error } = await cq

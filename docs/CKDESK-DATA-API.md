@@ -24,7 +24,7 @@ All are `GET`, all need `Authorization: Bearer <DATA_API_TOKEN>`, all answer JSO
 Rules the platform should follow:
 - **Follow `next_after`, never "fewer rows than asked means the end".** The database layer can cut a page short (its own 1,000-row limit); the API detects that and still returns a `next_after`.
 - First load: no `updated_since`, follow `next_after` to the end. Later loads: `updated_since` = last newest change date minus 1-3 days (re-reading a little is safe: rows are upserted by `id`).
-- Timestamps are ISO UTC (`...Z`) with the database's own precision.
+- Timestamps are ISO text with the database's own precision and **always an explicit offset**. The database runs in its own time zone, so on live they come as `-08:00` / `-07:00` (not `Z`); a value that is already UTC comes as `Z`. The offset is part of the value, so it is the same moment either way. Do not change this without telling the platform: it keeps the offset on every timestamp. (`updated_since` is accepted in any ISO form and read as an exact moment.)
 - Errors: `401` wrong/missing token (20 wrong tokens in a minute from one caller pauses that caller for the rest of the minute), `503` the API is switched off (no `DATA_API_TOKEN`) or the organisation cannot be decided, `400` a bad parameter, `404` unknown entity.
 - Deletes: CK Desk tables have no "deleted" flag (rows are really deleted), so the nightly `ids` comparison is the way.
 
@@ -57,7 +57,7 @@ Each ticket carries `store_code` (the CK Desk store code of the person who raise
 - The owner's decisions on comments (flags only, as built) and people (opaque ids only, as built) are the **conservative defaults**; they can be widened later one column at a time, only on the owner's word.
 - The bot (CKOneAI) reads the platform's `gold_*` views, not CK Desk. See `docs/CKDESK-BOT-VIA-CKONEAI.md`.
 
-## 7. Entities and columns (generated from `lib/data-api/entities.ts`; the tests keep the code and this sheet in line)
+## 7. Entities and columns (from `lib/data-api/entities.ts`; 19 entities from the local build: the last two and `users.manager_id` are NOT released yet)
 
 ### `requests`
 
@@ -383,4 +383,32 @@ The people: opaque id and display name, role, active flag, store, department and
 | `is_vendor` | bool | derived | a vendor / OEM technician login |
 | `created_at` | timestamptz | no |  |
 | `updated_at` | timestamptz | no |  |
+| `manager_id` | uuid | opaque id of a person | the direct manager (the Manager box on the account); null when none. **Added 2 Nov 2026 (LOCAL, not released): new last column** |
 
+### `approval_workflow_steps`  (NEW, local, not released)
+
+The steps of every approval workflow: which step is approved by whom (an opaque id, or "any manager"). With `approvals.current_step` it says whom a pending approval waits for. The workflow tables have no change date, so it is read in full (small).
+
+- Source table: `approval_workflow_steps`; key: `id`; load style: **snapshot**; the organisation is found through the workflow.
+
+| Column | Type | Personal data | Note |
+|---|---|---|---|
+| `id` | uuid | no |  |
+| `workflow_id` | uuid | no |  |
+| `step_order` | int | no |  |
+| `approver_type` | text | no | specific_user or any_manager |
+| `approver_user_id` | uuid | opaque id of a person | null for an any_manager step |
+
+### `team_members`  (NEW, local, not released)
+
+Who is in which support team (ids only). The table has no row id of its own, so `id` is made as `team_id:user_id` (also in `/ids` and in the cursor). No change date, so it is read in full (small).
+
+- Source table: `team_members`; key: (team_id, user_id) shown as the text `id`; load style: **snapshot**.
+
+| Column | Type | Personal data | Note |
+|---|---|---|---|
+| `id` | text | no | team_id:user_id, made by the API |
+| `team_id` | uuid | no |  |
+| `user_id` | uuid | opaque id of a person |  |
+| `is_lead` | bool | no |  |
+| `joined_at` | timestamptz | no |  |

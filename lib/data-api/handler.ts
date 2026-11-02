@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyDataApiToken } from './auth'
 import { entityByName, ENTITIES } from './entities'
 import { parseParams, API_VERSION } from './params'
-import { readPage, readIds, readMeta, resolveOrgId } from './query'
+import { readPage, readIds, readMeta, resolveOrgId, cursorFitsEntity } from './query'
 
 // The read-only data API for the data platform (DBA): GET only, token only, no write path, nothing but the columns listed in ./entities. See docs/CKDESK-DATA-API.md.
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store', 'X-Data-Api-Version': String(API_VERSION) } })
@@ -27,6 +27,8 @@ export async function handleDataApi(req: NextRequest, kind: 'meta' | 'rows' | 'i
     if (!p.ok) return json({ error: p.error }, 400)
     const def = entityByName(p.entity)
     if (!def) return json({ error: `Unknown entity. Known: ${ENTITIES.map((e) => e.name).join(', ')}.` }, 404)
+
+    if (!cursorFitsEntity(def, p.after)) return json({ error: 'after is not a cursor given by this API for this entity (use next_after of the previous page).' }, 400)
 
     if (kind === 'ids') {
       const page = await readIds(admin, orgId, def, { limit: p.limit, after: p.after })

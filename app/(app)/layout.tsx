@@ -8,6 +8,9 @@ import { getNotifications } from '@/lib/queries/notifications'
 import { getActionableApprovalsForUser } from '@/lib/queries/approvals'
 import { TrialBanner } from '@/components/layout/TrialBanner'
 import { EventTracker } from '@/components/EventTracker'
+import { decideAccess } from '@/lib/ckoneai/access'
+import { AssistantLauncher } from '@/components/ckoneai/AssistantLauncher'
+import { readCkoneaiConfig } from '@/lib/ckoneai/config'
 import type { NavVisibility } from '@/types'
 
 export default async function AppLayout({
@@ -70,6 +73,7 @@ export default async function AppLayout({
     isManager,
     isAdmin,
     hasPendingApprovals: isManager,
+    hasAssistant: decideAccess(readCkoneaiConfig(), profile).ok,
     enabledModules,
   }
 
@@ -88,6 +92,8 @@ export default async function AppLayout({
       >
         <ErrorBoundary>{children}</ErrorBoundary>
       </AppShell>
+      {/* the bot button at the bottom right (only for people the assistant is open to) */}
+      {navVisibility.hasAssistant && <AssistantLauncher />}
     </>
   )
 }

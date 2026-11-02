@@ -429,5 +429,7 @@ export type NavVisibility = {
   hasPendingApprovals: boolean
   /** the person has people reporting to them (the Manager box on their accounts): they get the Dashboard for their team's tickets */
   hasTeam?: boolean
+  /** the CKOneAI assistant is switched on and this person may use it (lib/ckoneai/access.ts): shows the Ask CK Desk entry */
+  hasAssistant?: boolean
   enabledModules: ModuleSlug[]
 }

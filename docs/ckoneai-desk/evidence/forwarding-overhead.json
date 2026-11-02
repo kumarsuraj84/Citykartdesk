@@ -1,0 +1,21 @@
+{
+ "note": "forwarding layer only (stand-in answers at once, same PC); the real service adds its own time",
+ "sequential_300": {
+  "direct_ms": {
+   "p50": 0.20689999999990505,
+   "p95": 0.2817999999999756
+  },
+  "via_ckdesk_ms": {
+   "p50": 0.3223000000000411,
+   "p95": 0.4557999999999538
+  },
+  "added_p50_ms": 0.11540000000013606,
+  "added_p95_ms": 0.17399999999997817
+ },
+ "concurrent_20x10": {
+  "via_ckdesk_ms": {
+   "p50": 2.5069999999998345,
+   "p95": 5.233400000000074
+  }
+ }
+}
