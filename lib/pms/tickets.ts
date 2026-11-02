@@ -66,6 +66,12 @@ export async function findPmsSetup(db: Db, orgId: string, programId: string | nu
   return { problem: 'The AC PMS sub-category is added only to switched-off services. Switch the AC PMS service on.' }
 }
 
+/** True when an active category ticked "AC PMS category" belongs to a Vendor Program (so the old built-in AC PMS is not used). */
+export async function pmsCategoryIsInAProgram(db: Db, orgId: string): Promise<boolean> {
+  const { data } = await db.from('service_categories').select('id').eq('org_id', orgId).eq('is_pms', true).eq('is_active', true).not('program_id', 'is', null).limit(1)
+  return ((data ?? []) as unknown[]).length > 0
+}
+
 /** The boxes of the service's form that the ticket fills itself: the subject and the description (found by their names; any other box is left for people). */
 export function textFields(sections: ReturnType<typeof resolveServiceFormSections>): { subject?: FormField; description?: FormField } {
   const all = sections.flatMap((s) => s.fields ?? [])
@@ -137,6 +143,8 @@ export async function createDuePmsTickets(db: Db, orgId: string, now: Date = new
     const range = pmsDueRange(now)
     const found = await findPmsSetup(db, orgId)
     if ('problem' in found) {
+      // the PMS category now lives in a Vendor Program, which makes its own PMS tickets: the built-in step has nothing to do, so no "no category" problem is shown
+      if (await pmsCategoryIsInAProgram(db, orgId)) { await refreshIssues(db, orgId, range.today, null, now); return out }
       out.setupProblem = found.problem
       await refreshIssues(db, orgId, range.today, found.problem, now)
       return out

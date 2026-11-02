@@ -3,6 +3,7 @@
 import { useState, useTransition, useMemo } from 'react'
 import { Search } from 'lucide-react'
 import { matchesStoreSearch } from '@/lib/org/search'
+import { missingDetails, missingSummary, missingLabel } from '@/lib/stores/missing'
 import {
   createDepartment, updateDepartment, deleteDepartment, importDepartments,
   createLocation, updateLocation, deleteLocation, importLocations,
@@ -871,7 +872,10 @@ function StoresTab({ stores }: { stores: StoreRow[] }) {
   const [showImport, setShowImport] = useState(false)
   const [search, setSearch] = useState('')
   // (a store being edited stays in the list even when the search no longer matches it)
-  const shown = stores.filter(s => s.id === editId || matchesStoreSearch(s, search))
+  const [onlyGaps, setOnlyGaps] = useState(false)
+  const gaps = useMemo(() => missingSummary(stores), [stores])
+  const gapsOnly = onlyGaps && gaps.stores > 0
+  const shown = stores.filter(s => s.id === editId || (matchesStoreSearch(s, search) && (!gapsOnly || missingDetails(s).length > 0)))
 
   const blank: StoreFormValues = {
     code: '', name: '', address: '', city: '', state: '', pincode: '', is_active: true,
@@ -960,6 +964,27 @@ function StoresTab({ stores }: { stores: StoreRow[] }) {
 
       {showImport && <StoreMasterUploadModal onClose={() => setShowImport(false)} />}
 
+      {gaps.stores > 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 space-y-2" role="status">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-semibold">
+              {gaps.stores} active store{gaps.stores === 1 ? '' : 's'} {gaps.stores === 1 ? 'has' : 'have'} details missing. Business Rules and the mail fields (city, region and so on) stay blank for them until they are filled.
+            </p>
+            <button
+              onClick={() => setOnlyGaps(v => !v)} aria-pressed={gapsOnly}
+              className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 font-semibold text-amber-900 hover:bg-amber-100 transition-colors"
+            >
+              {gapsOnly ? 'Show all stores' : 'Show only these stores'}
+            </button>
+          </div>
+          <p>
+            {gaps.perField.map(p => `${p.label}: ${p.count}`).join(' · ')}. Click Edit on a store to fill it, or use Upload Store Master for many. A store that is in the AC Google Sheet is filled from it by itself.
+          </p>
+        </div>
+      ) : stores.length > 0 && (
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-800" role="status">Every active store has all its details filled.</p>
+      )}
+
       {showAdd && (
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
           <p className="text-sm font-semibold text-foreground">New Store</p>
@@ -994,6 +1019,9 @@ function StoresTab({ stores }: { stores: StoreRow[] }) {
                 <div className="min-w-0">
                   <TableCell>{s.name}</TableCell>
                   {s.address && <p className="truncate text-[11px] text-muted-foreground" title={s.address}>{s.address}</p>}
+                  {missingDetails(s).length > 0 && (
+                    <p className="text-[11px] font-medium text-amber-700" title="These details of the store are blank">Missing: {missingDetails(s).map(missingLabel).join(', ')}</p>
+                  )}
                 </div>
                 <TableCell className="text-muted-foreground text-xs">{s.cluster ?? '—'}</TableCell>
                 <TableCell className="text-muted-foreground text-xs">{s.region ?? '—'}</TableCell>

@@ -18,7 +18,7 @@ import { createClient } from '@/lib/supabase/server'
 import { sendEmail } from '@/lib/email/send'
 import { syncPrograms } from '@/lib/programs/sync'
 import { createDueProgramPmsTickets } from '@/lib/programs/pms'
-import { findPmsSetup } from '@/lib/pms/tickets'
+import { findPmsSetup, createDuePmsTickets } from '@/lib/pms/tickets'
 import { istNow, addDays } from '@/lib/pms/window'
 import { saveProgramPmsSheet } from '@/lib/actions/admin/programs'
 import type { SheetsSource } from '@/lib/masters/google'
@@ -161,6 +161,17 @@ describe('programs without PMS, and the old AC PMS', () => {
     if ('setup' in old) expect(old.setup.categoryId).not.toBe(ids.cat)
     const mine = await findPmsSetup(db(), fx.orgId, ids.program)
     expect('setup' in mine && mine.setup.categoryId).toBe(ids.cat)
+  })
+
+  it('with the PMS category in a program and a built-in PMS sheet linked, the old step shows no "no category" problem', async () => {
+    await db().from('master_sources').upsert({ org_id: fx.orgId, kind: 'pms', spreadsheet_id: `${tag}-builtin-pms-0000` }, { onConflict: 'org_id,kind' })
+    await db().from('master_issues').insert({ org_id: fx.orgId, kind: 'pms', severity: 'error', code: 'pms_no_ticket', message: 'PMS tickets cannot be made: No category is marked as the AC PMS category.' })
+    const r = await createDuePmsTickets(db(), fx.orgId, at(10, 30))
+    const left = ((await db().from('master_issues').select('message').eq('org_id', fx.orgId).eq('kind', 'pms')).data ?? []) as { message: string }[]
+    await db().from('master_issues').delete().eq('org_id', fx.orgId).eq('kind', 'pms')
+    await db().from('master_sources').delete().eq('org_id', fx.orgId).eq('kind', 'pms')
+    expect(r.setupProblem).toBeUndefined()
+    expect(left.some((i) => /No category is marked/.test(i.message))).toBe(false)
   })
 
   it('removing the PMS sheet (administrator) removes its dates and problems and nothing else', async () => {

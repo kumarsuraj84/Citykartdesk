@@ -90,6 +90,9 @@ export async function proxy(request: NextRequest) {
     '/api/pms/daily',             // 09:00: re-reads the AC PMS sheet and makes the PMS tickets that are due today (cron runner, shared secret)
     '/api/reports/run',           // every 30 min: sends the scheduled reports that are due (07:00 India time; cron runner, shared secret)
     '/api/weather/daily',         // saves the day's highest and lowest temperature of every city with an AC, for the AC Calendar (cron runner, shared secret)
+    '/api/data/v1/meta',          // the read-only data API of the data platform (DBA): each one checks its own bearer token (DATA_API_TOKEN) and is GET only
+    '/api/data/v1/rows',
+    '/api/data/v1/ids',
     '/api/csp-report',            // browsers post policy-violation reports here with no session
   ])
   if (PUBLIC_API_ROUTES.has(pathname)) return passThrough(request)
