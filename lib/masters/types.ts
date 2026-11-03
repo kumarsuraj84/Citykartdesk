@@ -40,6 +40,22 @@ export type AcRow = {
   approverEmails: string[]
 }
 
+/** One store of the "Store Details" tab of the AC Google Sheet (the Store Master that fills the store card). One row per store. */
+export type StoreDetailRow = {
+  sheetRow: number
+  storeCode: string
+  priority: string
+  festival: string
+  region: string
+  cluster: string
+  /** yyyy-mm-dd, null when empty or not readable */
+  openingDate: string | null
+  city: string
+  state: string
+  address: string
+  pincode: string
+}
+
 export type GensetRow = {
   sheetRow: number
   storeCode: string

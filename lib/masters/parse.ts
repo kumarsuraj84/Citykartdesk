@@ -1,5 +1,5 @@
 import { parseEmails } from './emails'
-import type { AcRow, CvmRow, GensetRow, MasterIssue, MasterKind, ParseResult, PmsRow } from './types'
+import type { AcRow, CvmRow, GensetRow, MasterIssue, MasterKind, ParseResult, PmsRow, StoreDetailRow } from './types'
 
 // Pure: turns the cells of a master sheet (as the Sheets API returns them) into typed rows plus a list of problems. No database, no network.
 // Columns are found by their heading (case, spaces and punctuation do not matter), so the team can move columns around or add new ones.
@@ -297,6 +297,57 @@ export function parseAcSheet(values: unknown[][], display?: unknown[][]): ParseR
     })
   }
   return { rows, issues: groupEmailIssues(issues) }
+}
+
+// ── Store Details tab (the Store Master) ─────────────────────────────────────────────────────────────────────────────────────────
+const STORE_DETAIL_COLUMNS = ['storeprioritylist', 'storepriority', 'festival', 'region', 'cluster', 'openingdate', 'opendate', 'city', 'state', 'address', 'pincode']
+const STORE_DETAILS_MAPPED = ['storecode', ...STORE_DETAIL_COLUMNS]
+
+/**
+ * The "Store Details" tab of the AC sheet: one row per store, with the store's own details (priority, festival, region, cluster, opening date, city, state, address, pincode).
+ * Problems are reported under the AC sheet's list (kind 'ac'). Rows that are wrong in a way that would put a wrong value on a store card are still read (the sheet is the master),
+ * but the team is told: a "State" of ALL, a pincode that is not 6 digits, an opening date that cannot be read (that one is left empty), a store written twice (the first row is used).
+ */
+export function parseStoreDetailsSheet(values: unknown[][]): ParseResult<StoreDetailRow> {
+  const grid = toGrid(values)
+  if (!grid) return { rows: [], issues: [], fatal: 'The Store Details tab is empty.' }
+  const dupe = duplicateMappedHeading(grid, STORE_DETAILS_MAPPED, 'Store Details')
+  if (dupe) return { rows: [], issues: [], fatal: dupe }
+  const missing = missingColumns(grid, [{ label: 'Store Code', keys: ['storecode'] }])
+  if (missing.length) return { rows: [], issues: [], fatal: `The Store Details tab is missing the column(s): ${missing.join(', ')}.` }
+  if (!present(grid, STORE_DETAIL_COLUMNS)) return { rows: [], issues: [], fatal: 'The Store Details tab has no detail columns (Store Priority list, Festival, Region, Cluster, Opening date, City, State, Address, pincode).' }
+
+  const get = reader(grid)
+  const rows: StoreDetailRow[] = []
+  const issues: MasterIssue[] = []
+  const firstRow = new Map<string, number>()
+  const stateAll: string[] = []
+  const at = (severity: 'error' | 'warning', code: string, storeCode: string | null, sheetRow: number | null, message: string) => issues.push({ kind: 'ac', severity, code, storeCode, sheetRow, message })
+  for (const { sheetRow, cells } of grid.body) {
+    if (rowIsBlank(cells)) continue
+    const storeCode = get(cells, 'storecode').toUpperCase()
+    if (!storeCode) { at('error', 'blank_store', null, sheetRow, `Store Details row ${sheetRow}: the Store Code is empty, the row is skipped.`); continue }
+    const first = firstRow.get(storeCode)
+    if (first !== undefined) { at('warning', 'duplicate_store_details', storeCode, sheetRow, `Store Details rows ${first} and ${sheetRow}: ${storeCode} is written twice. The first row is used, row ${sheetRow} is ignored.`); continue }
+    firstRow.set(storeCode, sheetRow)
+
+    const openRaw = get(cells, 'openingdate', 'opendate')
+    const openProblem = dateProblem(openRaw)
+    if (openProblem) at('warning', 'bad_opening_date', storeCode, sheetRow, `Store Details row ${sheetRow} (${storeCode}): the opening date ${openProblem}, so the store's opening date is left as it is.`)
+    const pincode = get(cells, 'pincode')
+    if (pincode && !/^\d{6}$/.test(pincode)) at('warning', 'bad_pincode', storeCode, sheetRow, `Store Details row ${sheetRow} (${storeCode}): the pincode "${pincode}" is not 6 digits. It is still used, please check it.`)
+    const state = get(cells, 'state')
+    if (state.toUpperCase() === 'ALL') stateAll.push(storeCode)
+
+    rows.push({
+      sheetRow, storeCode, priority: get(cells, 'storeprioritylist', 'storepriority'), festival: get(cells, 'festival'), region: get(cells, 'region'), cluster: get(cells, 'cluster'),
+      openingDate: toIsoDate(openRaw), city: get(cells, 'city'), state, address: get(cells, 'address'), pincode,
+    })
+  }
+  if (stateAll.length) {
+    at('warning', 'suspect_state', stateAll[0], null, `${stateAll.length} store(s) have the State "ALL" in the Store Details tab (for example ${stateAll.slice(0, 6).join(', ')}${stateAll.length > 6 ? ' and more' : ''}). "ALL" is not a state, so mails and reports show it as written. Please write the real state code.`)
+  }
+  return { rows, issues }
 }
 
 const GENSET_MAPPED = ['storecode', ...GENSET_TICKET_MAIL.keys, 'gensetserialno', 'serialno', 'gensetbrand', 'brand', 'gensetkva', 'kva', 'cpcbgroup']

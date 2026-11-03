@@ -11,6 +11,11 @@ export interface SheetsSource {
   fetchValues(spreadsheetId: string, tabName: string | null): Promise<unknown[][]>
   /** The same sheet as it is SHOWN (dates as dates, '007' as '007', long numbers with every digit). Optional; used for the cells a person reads as text. */
   fetchDisplayValues?(spreadsheetId: string, tabName: string | null): Promise<unknown[][]>
+  /**
+   * One named tab of the sheet (the name is matched without caring about capitals or spaces), or null when the sheet has no such tab. A sheet that cannot be read at all throws,
+   * so "no such tab" is never mixed up with "Google is busy". Optional: a source without it has no extra tabs.
+   */
+  fetchTabValues?(spreadsheetId: string, tabName: string): Promise<unknown[][] | null>
 }
 
 export class SheetsAccessError extends Error {
@@ -74,6 +79,13 @@ export function googleSheetsSource(refreshToken: string): SheetsSource {
   return {
     fetchValues: (spreadsheetId, tabName) => read(spreadsheetId, tabName, 'UNFORMATTED_VALUE'),
     fetchDisplayValues: (spreadsheetId, tabName) => read(spreadsheetId, tabName, 'FORMATTED_VALUE'),
+    async fetchTabValues(spreadsheetId, tabName) {
+      const token = await accessTokenFor(refreshToken)
+      const meta = (await sheetsGet(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=sheets.properties.title`, token)) as { sheets?: { properties?: { title?: string } }[] }
+      const want = tabName.toLowerCase().replace(/\s+/g, '')
+      const title = (meta.sheets ?? []).map((s) => s.properties?.title ?? '').find((t) => t.toLowerCase().replace(/\s+/g, '') === want)
+      return title ? read(spreadsheetId, title, 'UNFORMATTED_VALUE') : null
+    },
   }
 }
 

@@ -21,5 +21,12 @@ export function csvDirSource(dir: string): SheetsSource {
       const text = await readFile(path.join(dir, `${spreadsheetId}.csv`), 'utf8').catch(() => { throw new Error(`The demo file ${spreadsheetId}.csv was not found.`) })
       return parseCsv(text)
     },
+    // an extra tab is a second file: "Store Details" of demo-ac is demo-ac-store-details.csv (absent = the sheet has no such tab)
+    async fetchTabValues(spreadsheetId, tabName) {
+      const slug = tabName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      if (!/^[a-z0-9-]{1,60}$/.test(spreadsheetId) || !slug) return null
+      const text = await readFile(path.join(dir, `${spreadsheetId}-${slug}.csv`), 'utf8').catch(() => null)
+      return text === null ? null : parseCsv(text)
+    },
   }
 }

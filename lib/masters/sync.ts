@@ -1,7 +1,7 @@
 import { createHash } from 'crypto'
-import { parseAcSheet, parseCvmSheet, parseGensetSheet, parsePmsSheet } from './parse'
+import { parseAcSheet, parseCvmSheet, parseGensetSheet, parsePmsSheet, parseStoreDetailsSheet } from './parse'
 import { matchAcUnits, matchGensets, planRemovals, REMOVAL_WAIT_MINUTES } from './diff'
-import type { AcRow, CvmRow, GensetRow, MasterIssue, MasterKind, PmsRow } from './types'
+import type { AcRow, CvmRow, GensetRow, MasterIssue, MasterKind, PmsRow, StoreDetailRow } from './types'
 import type { SheetsSource } from './google'
 import { fetchAllPages } from '@/lib/queries/paging'
 import { fetchDisplaySafe } from './display'
@@ -69,7 +69,14 @@ const gensetColumns = (r: GensetRow) => ({
   store_code: r.storeCode, brand: blank(r.brand), kva: blank(r.kva), serial: blank(r.serial), cpcb_group: blank(r.cpcbGroup), emails: r.emails, sheet_row: r.sheetRow,
 })
 
-// ── store master (AC sheet feeds the store details one way) ──────────────────────────────────────────────────────────────────────
+// ── store master ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// The store card is filled one way from the AC Google Sheet:
+//  - the machines' facts (AC total, AC brand, AMC brand, AMC vendor, Zenatix) always come from the AC rows of the first tab;
+//  - the store's own details (address, pincode, city, state, region, cluster, priority list, festival, opening date) come from the "Store Details" tab (the Store Master,
+//    one row per store). While the sheet has no such tab (and never had one), the first AC row of the store with a value is used instead, as before.
+// An empty cell never erases a value on the card.
+export const STORE_DETAILS_TAB = 'Store Details'
+
 function mostCommon(values: string[]): string | null {
   const count = new Map<string, number>()
   for (const v of values) if (v) count.set(v, (count.get(v) ?? 0) + 1)
@@ -79,33 +86,53 @@ function mostCommon(values: string[]): string | null {
   return best
 }
 
-export function storePatchFromAcRows(rows: AcRow[]): Record<string, unknown> {
+/** The store card values the AC rows give. `machineOnly` = just the machines' facts (the store's own details come from the Store Details tab then). */
+export function storePatchFromAcRows(rows: AcRow[], machineOnly = false): Record<string, unknown> {
   const active = rows.filter((r) => r.isActive)
   const first = (pick: (r: AcRow) => string) => rows.map(pick).find((v) => v) ?? null
   const patch: Record<string, unknown> = { ac_total: active.length }
   const set = (col: string, v: string | null) => { if (v) patch[col] = v }
-  set('address', first((r) => r.address))
-  set('city', first((r) => r.city))
-  set('state', first((r) => r.state))
-  set('pincode', first((r) => r.pincode))
-  set('cluster', first((r) => r.cluster))
-  set('region', first((r) => r.region))
-  set('priority_list', first((r) => r.storePriority))
-  set('festival', first((r) => r.festival))
+  if (!machineOnly) {
+    set('address', first((r) => r.address))
+    set('city', first((r) => r.city))
+    set('state', first((r) => r.state))
+    set('pincode', first((r) => r.pincode))
+    set('cluster', first((r) => r.cluster))
+    set('region', first((r) => r.region))
+    set('priority_list', first((r) => r.storePriority))
+    set('festival', first((r) => r.festival))
+    const date = rows.map((r) => r.openingDate).find((v) => v)
+    if (date) patch.open_date = date
+  }
   set('ac_brand', mostCommon(active.map((r) => r.brand)))
   set('ac_amc_brand', mostCommon(active.map((r) => r.amcBrand)))
   set('ac_amc_vendor', mostCommon(active.map((r) => r.amcVendor)))
-  const date = rows.map((r) => r.openingDate).find((v) => v)
-  if (date) patch.open_date = date
   const z = active.map((r) => r.zenatix.toLowerCase()).filter(Boolean)
   if (z.length) patch.zenatix = z.some((v) => v === 'yes' || v === 'y' || v === 'true')
   return patch
 }
 
-async function updateStoreMaster(db: Db, orgId: string, rows: AcRow[]) {
+/** The store card values a row of the Store Details tab gives (only the cells that have a value). */
+export function storePatchFromDetails(r: StoreDetailRow): Record<string, unknown> {
+  const patch: Record<string, unknown> = {}
+  const set = (col: string, v: string) => { if (v) patch[col] = v }
+  set('address', r.address)
+  set('city', r.city)
+  set('state', r.state)
+  set('pincode', r.pincode)
+  set('cluster', r.cluster)
+  set('region', r.region)
+  set('priority_list', r.priority)
+  set('festival', r.festival)
+  if (r.openingDate) patch.open_date = r.openingDate
+  return patch
+}
+
+export async function updateStoreMaster(db: Db, orgId: string, rows: AcRow[], details: StoreDetailRow[] | null, machineOnly: boolean) {
   const byStore = new Map<string, AcRow[]>()
   for (const r of rows) byStore.set(r.storeCode, [...(byStore.get(r.storeCode) ?? []), r])
-  const codes = [...byStore.keys()]
+  const detailByStore = new Map<string, StoreDetailRow>((details ?? []).map((d) => [d.storeCode, d]))
+  const codes = [...new Set([...byStore.keys(), ...detailByStore.keys()])]
   const stores: Record<string, unknown>[] = []
   for (let i = 0; i < codes.length; i += CHUNK) {
     const chunk = codes.slice(i, i + CHUNK)
@@ -113,11 +140,44 @@ async function updateStoreMaster(db: Db, orgId: string, rows: AcRow[]) {
     stores.push(...(must<Record<string, unknown>[]>(await db.from('stores').select(cols).eq('org_id', orgId).in('code', chunk), 'read stores') ?? []))
   }
   for (const s of stores) {
-    const patch = storePatchFromAcRows(byStore.get(String(s.code)) ?? [])
+    const code = String(s.code).toUpperCase()
+    const acRows = byStore.get(code)
+    const detail = detailByStore.get(code)
+    const patch = { ...(acRows ? storePatchFromAcRows(acRows, machineOnly) : {}), ...(detail ? storePatchFromDetails(detail) : {}) }
     const changed: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(patch)) if (!sameList(s[k], v)) changed[k] = v
     if (Object.keys(changed).length) must(await db.from('stores').update(changed).eq('id', s.id).eq('org_id', orgId), 'update store')
   }
+}
+
+type TabRead = { kind: 'none' } | { kind: 'ok'; values: unknown[][] } | { kind: 'error'; message: string }
+
+/** The "Store Details" tab of the AC sheet. 'none' = the sheet has no such tab (or this kind of source has no tabs); 'error' = the sheet could not be read this time. */
+async function readStoreDetailsTab(source: SheetsSource, spreadsheetId: string): Promise<TabRead> {
+  if (!source.fetchTabValues) return { kind: 'none' }
+  try {
+    const values = await source.fetchTabValues(spreadsheetId, STORE_DETAILS_TAB)
+    return values ? { kind: 'ok', values } : { kind: 'none' }
+  } catch (e) {
+    return { kind: 'error', message: e instanceof Error ? e.message : 'The tab could not be read.' }
+  }
+}
+
+// Once the tab has been used it is the master for good: if it later disappears (renamed or deleted by mistake) the cards keep their values; they are NOT filled from the AC rows again.
+const storeDetailsUsedKey = (orgId: string) => `masters_store_details_used:${orgId}`
+
+/** What the team should know about the tab against the store master: stores in the tab that CK Desk does not have, and active stores the tab does not list. */
+async function storeDetailsCoverageIssues(db: Db, orgId: string, details: StoreDetailRow[]): Promise<MasterIssue[]> {
+  const stores = await readAll(db, 'stores', 'code, is_active', orgId, ['code'])
+  const known = new Set(stores.map((s) => String(s.code).toUpperCase()))
+  const listed = new Set(details.map((d) => d.storeCode))
+  const unknown = details.map((d) => d.storeCode).filter((c) => !known.has(c))
+  const without = stores.filter((s) => s.is_active && !listed.has(String(s.code).toUpperCase())).map((s) => String(s.code).toUpperCase())
+  const more = (n: number, shown: number) => (n > shown ? ` and ${n - shown} more` : '')
+  const out: MasterIssue[] = []
+  if (unknown.length) out.push({ kind: 'ac', severity: 'warning', code: 'unknown_store', storeCode: unknown[0], sheetRow: null, message: `${unknown.length} store(s) in the Store Details tab are not in the CK Desk store master, so their details are not used: ${unknown.slice(0, 10).join(', ')}${more(unknown.length, 10)}. Create the store first (Admin > Org Settings > Stores).` })
+  if (without.length) out.push({ kind: 'ac', severity: 'warning', code: 'store_without_details', storeCode: without[0], sheetRow: null, message: `${without.length} active store(s) have no row in the Store Details tab, so their store card is not filled from the sheet: ${without.slice(0, 15).join(', ')}${more(without.length, 15)}. Add a row for each.` })
+  return out
 }
 
 // ── one sheet ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -313,7 +373,10 @@ async function syncOneUnlocked(p: { db: Db; orgId: string; kind: MasterKind; sou
   // the machine number and serial are read as the sheet SHOWS them (AC and Genset only; '007' keeps its zeros, a long serial every digit); the raw read is the fallback
   const display = kind === 'ac' || kind === 'genset' ? await fetchDisplaySafe(p.source, src.spreadsheet_id, src.tab_name ?? null) : undefined
 
-  const hash = createHash('sha1').update(JSON.stringify(display ? [values, display] : values)).digest('hex')
+  // the AC sheet's "Store Details" tab is part of what is copied: a change there is applied at the next update just like a change in the first tab
+  const tab: TabRead = kind === 'ac' ? await readStoreDetailsTab(p.source, src.spreadsheet_id) : { kind: 'none' }
+  const base = display ? [values, display] : values
+  const hash = createHash('sha1').update(JSON.stringify(tab.kind === 'ok' ? [base, tab.values] : tab.kind === 'error' ? [base, 'store-details-unreadable'] : base)).digest('hex')
   const pending = await pendingCount(db, orgId, kind)
   const fresh = src.last_applied_at && now.getTime() - new Date(src.last_applied_at).getTime() < FULL_PASS_MINUTES * 60_000
   if (!p.force && src.content_hash === hash && src.last_status === 'ok' && pending === 0 && fresh) {
@@ -331,8 +394,27 @@ async function syncOneUnlocked(p: { db: Db; orgId: string; kind: MasterKind; sou
       const empty = await refuseEmptySheet(db, orgId, 'AC', 'master_ac_units', parsed.rows.length)
       if (empty) return fail(empty)
       result = await applyUnits<AcRow>({ db, orgId, table: 'master_ac_units', rows: parsed.rows, now, match: (r, s) => matchAcUnits(r, s as never), columns: acColumns, recipientColumns: [{ column: 'emails', label: 'Ticket Mail To' }, { column: 'po_emails', label: 'PO Mail To' }, { column: 'approver_emails', label: 'Quote Approver Mail To' }] })
-      await updateStoreMaster(db, orgId, parsed.rows)
-      issues = [...parsed.issues, ...(await unknownStoreIssues(db, orgId, 'ac', parsed.rows.map((r) => r.storeCode)))]
+      // the store card: machines' facts from the AC rows; the store's own details from the Store Details tab (the AC rows' own columns only while the sheet has never had that tab)
+      const usedBefore = (await db.from('app_settings').select('value').eq('key', storeDetailsUsedKey(orgId)).maybeSingle()).data?.value === '1'
+      const tabIssues: MasterIssue[] = []
+      let details: StoreDetailRow[] | null = null
+      const machineOnly = tab.kind !== 'none' || usedBefore
+      if (tab.kind === 'ok') {
+        const pd = parseStoreDetailsSheet(tab.values)
+        if (pd.fatal || pd.rows.length === 0) {
+          tabIssues.push({ kind: 'ac', severity: 'error', code: 'store_details_not_applied', storeCode: null, sheetRow: null, message: `${pd.fatal ?? 'The Store Details tab has headings but no stores.'} The store cards were not changed from it, they keep their last values.` })
+        } else {
+          details = pd.rows
+          tabIssues.push(...pd.issues)
+          if (!usedBefore) must(await db.from('app_settings').upsert({ key: storeDetailsUsedKey(orgId), value: '1' }, { onConflict: 'key' }), 'remember the Store Details tab')
+        }
+      } else if (tab.kind === 'error') {
+        tabIssues.push({ kind: 'ac', severity: 'warning', code: 'store_details_unreadable', storeCode: null, sheetRow: null, message: `The Store Details tab could not be read this time (${tab.message}). The store cards were not changed from it, the next update tries again.` })
+      } else if (usedBefore) {
+        tabIssues.push({ kind: 'ac', severity: 'error', code: 'store_details_tab_missing', storeCode: null, sheetRow: null, message: `The AC sheet has no tab called "${STORE_DETAILS_TAB}" any more (renamed or deleted?). The store cards keep their last values until the tab is back.` })
+      }
+      await updateStoreMaster(db, orgId, parsed.rows, details, machineOnly)
+      issues = [...parsed.issues, ...tabIssues, ...(details ? await storeDetailsCoverageIssues(db, orgId, details) : []), ...(await unknownStoreIssues(db, orgId, 'ac', parsed.rows.map((r) => r.storeCode)))]
       if (p.cvmEmailKnown) {   // an approver must be an active technician, manager or admin, or a vendor's quote for that AC would never reach anyone
         const active = parsed.rows.filter((r) => r.isActive)
         for (const email of [...new Set(active.flatMap((r) => r.approverEmails))]) {

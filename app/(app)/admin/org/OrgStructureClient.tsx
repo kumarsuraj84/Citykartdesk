@@ -978,7 +978,7 @@ function StoresTab({ stores }: { stores: StoreRow[] }) {
             </button>
           </div>
           <p>
-            {gaps.perField.map(p => `${p.label}: ${p.count}`).join(' · ')}. Click Edit on a store to fill it, or use Upload Store Master for many. A store that is in the AC Google Sheet is filled from it by itself.
+            {gaps.perField.map(p => `${p.label}: ${p.count}`).join(' · ')}. Click Edit on a store to fill it, or use Upload Store Master for many. A store that has a row in the Store Details tab of the AC Google Sheet is filled from it by itself.
           </p>
         </div>
       ) : stores.length > 0 && (
@@ -993,7 +993,7 @@ function StoresTab({ stores }: { stores: StoreRow[] }) {
       )}
 
       <p className="text-xs text-muted-foreground">
-        The AC details, address and opening date of a store follow the AC Google Sheet. The OEM e-mail addresses and the CVM come from the AC, Genset and CVM sheets (Admin &rarr; Sheet Masters).
+        The address, pincode, city, state, region, cluster, priority list, festival and opening date of a store follow the Store Details tab of the AC Google Sheet; the AC total, brand, AMC brand and vendor follow its AC rows. The OEM e-mail addresses and the CVM come from the AC, Genset and CVM sheets (Admin &rarr; Sheet Masters).
       </p>
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
         <div className="min-w-[860px]">

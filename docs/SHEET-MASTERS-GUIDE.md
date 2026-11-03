@@ -29,8 +29,14 @@ automatically because the whole sheet is read each time.
 - **CVM approval:** a category set to "send for approval to the CVM" puts the ticket In Process, sends it to the CVM listed for the store (by e-mail; must be an
   active technician, manager or admin in CK Desk), shows Pending Approval, and returns it to In Process on approval. Nothing listed means Open with an internal note.
   The same CVM is pre-filled on "Send for Approval".
-- **Store details:** address, city, state, pincode, cluster, region, priority list, festival, opening date, AC total / brand / AMC brand / AMC vendor / Zenatix
-  follow the AC sheet (the sheet wins, one way).
+- **Store details (the Store Master):** the AC sheet has a second tab called **Store Details** (the first tab stays the AC list and must stay the FIRST tab).
+  One row per store, headings `Store Code, Store Priority list, Festival, Region, Cluster, Opening date, City, State, Address, pincode` (any order; capitals and
+  spaces do not matter; the tab name is found whatever its capitals or spaces). Those cells fill the store card (the sheet wins, one way; an empty cell never erases
+  a value on the card). The AC total / brand / AMC brand / AMC vendor / Zenatix of the card still come from the AC rows of the first tab. The tab is copied at
+  11:00, 15:00, 19:00 and by "Update from sheets now", like the rest. While the sheet has never had the tab, the first AC row of a store fills the details as before.
+  Once the tab has been used it is the master for good: if it disappears, is unreadable or has no stores, the cards keep their values and "Master data health"
+  shows why. "Master data health" also lists the active stores that have no row in the tab, codes CK Desk does not know, a State written as "ALL", a pincode that
+  is not 6 digits, an unreadable opening date and a store written twice (the first row is used).
 - **Reports:** the "OEM" of a store in dashboards and reports is the AC-AMC vendor from the AC sheet. Active AC counts exclude Inactive ACs.
 - **Replies:** a reply from any address in the AC or Genset sheet is recognised as an OEM reply, and those addresses are offered as OEM contacts when copying people.
 
