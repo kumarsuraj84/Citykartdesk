@@ -104,7 +104,7 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
 
   return (
     <div className="max-w-5xl space-y-4">
-      <Link href={pms ? '/vendor?tab=pms' : '/vendor'} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ChevronLeft className="h-3.5 w-3.5" /> {pms ? 'AC PMS tickets' : 'My tickets'}</Link>
+      <Link href={pms ? '/vendor?tab=pms' : '/vendor'} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ChevronLeft className="h-3.5 w-3.5" /> {pms ? 'PMS tickets' : 'My tickets'}</Link>
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">

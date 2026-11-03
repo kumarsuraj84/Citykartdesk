@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Loader2, Plus } from 'lucide-react'
-import { createVendorCompany, inviteVendorPerson, setVendorCompanyActive, updateVendorPerson } from '@/lib/actions/admin/vendors'
+import { createVendorCompany, inviteVendorPerson, renameVendorCompany, setVendorCompanyActive, updateVendorPerson } from '@/lib/actions/admin/vendors'
 
 export type VendorCompanyRow = { id: string; name: string; is_active: boolean; technicians: number; managers: number }
 export type VendorPersonRow = { id: string; full_name: string; is_active: boolean; vendor_company_id: string; vendor_role: 'technician' | 'manager' }
@@ -16,6 +16,8 @@ export function VendorsClient({ companies, people }: { companies: VendorCompanyR
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [companyName, setCompanyName] = useState('')
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameText, setRenameText] = useState('')
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
   const [companyId, setCompanyId] = useState('')
@@ -38,11 +40,25 @@ export function VendorsClient({ companies, people }: { companies: VendorCompanyR
           {companies.length === 0 && <li className="py-3 text-sm text-muted-foreground">No vendor company yet. Add the first one below.</li>}
           {companies.map((c) => (
             <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-              <div>
-                <span className="font-medium">{c.name}</span>
-                {!c.is_active && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">switched off</span>}
-                <span className="ml-3 text-xs text-muted-foreground">{c.technicians} technician{c.technicians === 1 ? '' : 's'}, {c.managers} manager{c.managers === 1 ? '' : 's'}</span>
-              </div>
+              {renamingId === c.id ? (
+                <form className="flex min-w-[14rem] flex-1 flex-wrap items-center gap-2"
+                  onSubmit={(e) => { e.preventDefault(); run(() => renameVendorCompany(c.id, renameText), 'Company renamed.', () => setRenamingId(null)) }}>
+                  <input className={`${inputCls} min-w-[12rem] flex-1`} aria-label={`New name of ${c.name}`} value={renameText} onChange={(e) => setRenameText(e.target.value)} maxLength={120} autoFocus />
+                  <button type="submit" className={btn} disabled={pending || renameText.trim().length < 2}>
+                    {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save name
+                  </button>
+                  <button type="button" className="text-xs text-muted-foreground hover:underline" disabled={pending} onClick={() => setRenamingId(null)}>Cancel</button>
+                </form>
+              ) : (
+                <div>
+                  <span className="font-medium">{c.name}</span>
+                  {!c.is_active && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">switched off</span>}
+                  <span className="ml-3 text-xs text-muted-foreground">{c.technicians} technician{c.technicians === 1 ? '' : 's'}, {c.managers} manager{c.managers === 1 ? '' : 's'}</span>
+                  <button type="button" className="ml-3 text-xs text-primary hover:underline" disabled={pending}
+                    title="Change the name of this company. Its people, tickets and history stay with it."
+                    onClick={() => { setRenamingId(c.id); setRenameText(c.name) }}>Rename</button>
+                </div>
+              )}
               <button type="button" className="text-xs text-primary hover:underline" disabled={pending}
                 title={c.is_active
                   ? 'Switch off: this company\'s engineers can no longer open the vendor pages or act on tickets, and it is not offered for new logins. Tickets already given to them stay with them until you give those to somebody else.'

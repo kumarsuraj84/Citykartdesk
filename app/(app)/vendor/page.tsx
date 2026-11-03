@@ -23,7 +23,7 @@ const BOX_TONE: Record<VendorBox, string> = {
   cancelled: 'border-slate-200 bg-slate-50/60 text-slate-700 dark:border-slate-800 dark:bg-slate-900/30 dark:text-slate-200',
 }
 
-const TAB_LABEL: Record<VendorTab, string> = { tickets: 'My tickets', pms: 'AC PMS tickets' }
+const TAB_LABEL: Record<VendorTab, string> = { tickets: 'My tickets', pms: 'PMS tickets' }
 
 // "Sort" next to the search: the vendor's list is small and fully loaded, so it is sorted here.
 const VENDOR_SORT_OPTIONS = [
@@ -67,9 +67,9 @@ export default async function VendorDashboardPage({ searchParams }: { searchPara
   return (
     <div className="space-y-4 max-w-6xl">
       <PageHeader
-        title={tab === 'pms' ? (isManager ? 'AC PMS tickets of my company' : 'AC PMS tickets') : (isManager ? 'Tickets of my company' : 'My tickets')}
+        title={tab === 'pms' ? (isManager ? 'PMS tickets of my company' : 'PMS tickets') : (isManager ? 'Tickets of my company' : 'My tickets')}
         description={tab === 'pms'
-          ? (isManager ? 'The scheduled AC PMS (preventive maintenance) tickets of the technicians of your company (view only).' : 'Scheduled AC PMS (preventive maintenance) visits given to you by Citykart. Open a ticket to start the visit.')
+          ? (isManager ? 'The scheduled PMS (preventive maintenance) tickets of the technicians of your company (view only).' : 'Scheduled PMS (preventive maintenance) visits given to you by Citykart. Open a ticket to start the visit.')
           : (isManager ? 'All tickets of the technicians of your company (view only).' : 'Tickets given to you by Citykart. Open a ticket to start working.')}
       />
 

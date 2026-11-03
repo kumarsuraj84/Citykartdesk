@@ -48,8 +48,12 @@ export async function renameVendorCompany(id: string, name: string): Promise<Res
   const n = cleanName(name)
   if (n.length < 2 || n.length > 120) return { error: 'The company name must be 2 to 120 characters.' }
   const admin = createAdminClient() as unknown as AnyClient
+  const { data: before } = await admin.from('vendor_companies').select('id, name').eq('id', id).eq('org_id', profile.org_id).maybeSingle()
+  if (!before) return { error: 'Vendor company not found.' }
+  if (before.name === n) return {}
   const { error } = await admin.from('vendor_companies').update({ name: n }).eq('id', id).eq('org_id', profile.org_id)
   if (error) return { error: error.code === '23505' ? 'A vendor company with this name already exists.' : sanitizeError(error, { route: 'admin/vendors.ts#rename' }) }
+  await recordAudit({ action: 'vendor.company_renamed', entityType: 'vendor_company', entityId: id, entityLabel: n, before: { name: before.name }, after: { name: n }, actorId: profile.id, orgId: profile.org_id })
   revalidatePath('/admin/vendors')
   return {}
 }

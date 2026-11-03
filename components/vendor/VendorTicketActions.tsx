@@ -284,7 +284,7 @@ export function VendorTicketActions({ requestId, status, canAct, resolutionChoic
       )}
 
       {modal === 'start' && (
-        <Modal title={pms ? 'Start the AC PMS visit' : 'Start working'} onClose={close}>
+        <Modal title={pms ? 'Start the PMS visit' : 'Start working'} onClose={close}>
           {pms ? (
             <p className="mb-3 text-sm text-muted-foreground">The ticket moves to In process. When the visit is done, press Resolve and attach the PMS report.</p>
           ) : (
@@ -368,7 +368,7 @@ export function VendorTicketActions({ requestId, status, canAct, resolutionChoic
       )}
 
       {modal === 'resolve' && (
-        <Modal title={pms ? 'AC PMS done' : 'Resolve this ticket'} onClose={close}>
+        <Modal title={pms ? 'PMS done' : 'Resolve this ticket'} onClose={close}>
           {!pms && (
             <>
               <label className="mb-1 block text-xs font-medium" htmlFor="res-choice">Resolution *</label>
