@@ -26,6 +26,14 @@ describe('which notifications pop up', () => {
     expect(popupDecision(n({ type: 'comment_added' }), DEFAULT_PREFS, ctx)).toEqual({ show: true, important: false })
   })
 
+  it('a vendor quote waiting for a PO decision pops up and stays (even on its own ticket), a quiet status message of the same type does not', () => {
+    const quote = n({ type: 'status_changed', link: '/vendor-po/abc', metadata: { popup: 'important' } })
+    expect(popupDecision(quote, DEFAULT_PREFS, ctx)).toEqual({ show: true, important: true })
+    expect(popupDecision(quote, { mode: 'important', sound: false }, ctx).show).toBe(true)
+    expect(popupDecision(quote, DEFAULT_PREFS, { ...ctx, openRequestId: REQ })).toEqual({ show: true, important: true })
+    expect(popupDecision(n({ type: 'status_changed', link: '/vendor-po/abc' }), DEFAULT_PREFS, ctx).show).toBe(false)
+    expect(popupDecision(quote, { mode: 'off', sound: false }, ctx).show).toBe(false)
+  })
   it('"important only" and "off" are respected', () => {
     expect(popupDecision(n({ type: 'comment_added' }), { mode: 'important', sound: false }, ctx).show).toBe(false)
     expect(popupDecision(n({ type: 'sla_breached' }), { mode: 'important', sound: false }, ctx).show).toBe(true)

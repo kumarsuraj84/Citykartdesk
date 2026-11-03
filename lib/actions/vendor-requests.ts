@@ -111,6 +111,8 @@ async function askApprovers(vendorRequestId: string, requestNo: string, actorId:
         recipientId: approver.id, actorId, type: 'status_changed',
         title: `${po.vendorRequest.version > 1 ? `Revised quote (version ${po.vendorRequest.version})` : 'PO approval needed'}: ${requestNo}`,
         body: `${actorName} sent a quote (total without GST ${formatMoney(total)}).`, requestId: po.request.id, link: `/vendor-po/${vendorRequestId}`, skipEmail: true,
+        // a pop-up on the approver's open page that stays until it is closed (clicking it opens the decision page), like an approval request
+        metadata: { popup: 'important' },
       })
     }
   } catch (e) {

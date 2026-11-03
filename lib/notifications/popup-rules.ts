@@ -62,8 +62,9 @@ export function requestIdFromPath(pathname: string | null | undefined): string |
   return m ? m[1].toLowerCase() : null
 }
 
-export function isImportant(n: Pick<PopupNotification, 'type'>): boolean {
-  return IMPORTANT_TYPES.has(n.type)
+export function isImportant(n: Pick<PopupNotification, 'type'> & { metadata?: PopupNotification['metadata'] }): boolean {
+  // a notification of an ordinary type can still ask for attention (a vendor's quote waiting for a PO decision is a "status_changed" message)
+  return IMPORTANT_TYPES.has(n.type) || (n.metadata as { popup?: string } | null | undefined)?.popup === 'important'
 }
 
 export function popupDecision(
