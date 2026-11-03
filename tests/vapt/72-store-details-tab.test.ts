@@ -73,8 +73,8 @@ describe('the Store Details tab fills the store card', () => {
     const r = await sync()
     expect(r.ac.status).toBe('ok')
     expect(await cardOf(A)).toMatchObject({ city: 'TAB CITY A', state: 'UP', address: 'tab address', pincode: '226005', cluster: 'UP2', region: 'R4', priority_list: 'Top 50', festival: 'DIWALI', open_date: '2011-07-01', ac_total: 2, ac_brand: 'DAIKIN', ac_amc_vendor: 'UMS' })
-    expect(await cardOf(C)).toMatchObject({ city: 'TAB CITY C', pincode: '4778', ac_total: 7 })   // no AC row: the old total stays, and the problem list names it
-    expect((await issuesOf()).find((i) => i.code === 'ac_total_without_rows')?.message).toContain(`${C} (7)`)
+    expect(await cardOf(C)).toMatchObject({ city: 'TAB CITY C', pincode: '4778', ac_total: 0 })   // no AC row in the sheet: counts as no AC (old total 7 -> 0), and the problem list names it
+    expect((await issuesOf()).find((i) => i.code === 'store_without_ac_rows')?.message).toContain(C)
     expect(await cardOf(B)).toMatchObject({ city: 'AC CITY B', address: 'ac address' })   // B is not in the tab: its card keeps what it has
     const issues = await issuesOf()
     expect(issues.find((i) => i.code === 'unknown_store' && i.message.includes('Store Details tab'))?.message).toContain(Z)

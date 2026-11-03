@@ -166,20 +166,33 @@ async function readStoreDetailsTab(source: SheetsSource, spreadsheetId: string):
 // Once the tab has been used it is the master for good: if it later disappears (renamed or deleted by mistake) the cards keep their values; they are NOT filled from the AC rows again.
 const storeDetailsUsedKey = (orgId: string) => `masters_store_details_used:${orgId}`
 
-/**
- * Active stores whose card shows an AC total although the AC sheet has no AC row for them at all. The sheet cannot change such a card (a store with no row is never touched), so the
- * old number (from an earlier upload) stays and would count in the reports. One line for the team, nothing is changed. Null when there is none.
- */
-export function acTotalWithoutRowsIssue(stores: Record<string, unknown>[], acStoreCodes: Set<string>): MasterIssue | null {
-  const list = stores
-    .filter((s) => s.is_active && Number(s.ac_total) > 0 && !acStoreCodes.has(String(s.code).toUpperCase()))
-    .map((s) => ({ code: String(s.code).toUpperCase(), total: Number(s.ac_total) }))
+/** The stores of the store master that have no AC row at all in the AC sheet (the code is compared in capitals). */
+export function storesWithoutAcRows(stores: Record<string, unknown>[], acStoreCodes: Set<string>) {
+  return stores
+    .filter((s) => !acStoreCodes.has(String(s.code).toUpperCase()))
+    .map((s) => ({ id: s.id, code: String(s.code).toUpperCase(), active: !!s.is_active, total: s.ac_total == null ? null : Number(s.ac_total) }))
+}
+
+/** One line for the team: the active stores that have no AC row in the AC sheet and so count as having no AC. Null when there is none. */
+export function noAcStoresIssue(stores: { code: string; active: boolean }[]): MasterIssue | null {
+  const list = stores.filter((s) => s.active).map((s) => s.code)
   if (!list.length) return null
-  const more = list.length > 15 ? ` and ${list.length - 15} more` : ''
+  const more = list.length > 20 ? ` and ${list.length - 20} more` : ''
   return {
-    kind: 'ac', severity: 'warning', code: 'ac_total_without_rows', storeCode: list[0].code, sheetRow: null,
-    message: `${list.length} store(s) show an AC total on the store card but have no AC row in the AC sheet, so the sheet cannot update it: ${list.slice(0, 15).map((s) => `${s.code} (${s.total})`).join(', ')}${more}. Add their AC rows to the sheet (the total then follows by itself), or set the total to 0 on the store card if the store has no AC.`,
+    kind: 'ac', severity: 'warning', code: 'store_without_ac_rows', storeCode: list[0], sheetRow: null,
+    message: `${list.length} active store(s) have no AC row in the AC sheet, so they count as having no AC (AC total 0): ${list.slice(0, 20).join(', ')}${more}. Add their AC rows to the sheet and the total follows by itself at the next update.`,
   }
+}
+
+/**
+ * A store with no AC row in the AC sheet counts as having no AC: its AC total is 0 (owner decision, 3 Nov 2026). When AC rows are added for it the total follows at the next update.
+ * Only the total is set; the brand / vendor of an earlier upload are left as they are. Not done when the sheet gave no AC rows at all (a sheet read badly must never zero every store).
+ */
+async function zeroTotalsWithoutAcRows(db: Db, orgId: string, acStoreCodes: Set<string>): Promise<MasterIssue | null> {
+  if (acStoreCodes.size === 0) return null
+  const stores = storesWithoutAcRows(await readAll(db, 'stores', 'id, code, is_active, ac_total', orgId, ['code']), acStoreCodes)
+  await inChunks(stores.filter((s) => s.total !== 0).map((s) => s.id), async (ids) => must(await db.from('stores').update({ ac_total: 0 }).in('id', ids).eq('org_id', orgId), 'zero the AC total'))
+  return noAcStoresIssue(stores)
 }
 
 /** What the team should know about the tab against the store master: stores in the tab that CK Desk does not have, and active stores the tab does not list. */
@@ -430,8 +443,8 @@ async function syncOneUnlocked(p: { db: Db; orgId: string; kind: MasterKind; sou
         tabIssues.push({ kind: 'ac', severity: 'error', code: 'store_details_tab_missing', storeCode: null, sheetRow: null, message: `The AC sheet has no tab called "${STORE_DETAILS_TAB}" any more (renamed or deleted?). The store cards keep their last values until the tab is back.` })
       }
       await updateStoreMaster(db, orgId, parsed.rows, details, machineOnly)
-      const totalGap = acTotalWithoutRowsIssue(await readAll(db, 'stores', 'code, is_active, ac_total', orgId, ['code']), new Set(parsed.rows.map((r) => r.storeCode)))
-      issues = [...parsed.issues, ...tabIssues, ...(details ? await storeDetailsCoverageIssues(db, orgId, details) : []), ...(totalGap ? [totalGap] : []), ...(await unknownStoreIssues(db, orgId, 'ac', parsed.rows.map((r) => r.storeCode)))]
+      const noAcLine = await zeroTotalsWithoutAcRows(db, orgId, new Set(parsed.rows.map((r) => r.storeCode)))
+      issues = [...parsed.issues, ...tabIssues, ...(details ? await storeDetailsCoverageIssues(db, orgId, details) : []), ...(noAcLine ? [noAcLine] : []), ...(await unknownStoreIssues(db, orgId, 'ac', parsed.rows.map((r) => r.storeCode)))]
       if (p.cvmEmailKnown) {   // an approver must be an active technician, manager or admin, or a vendor's quote for that AC would never reach anyone
         const active = parsed.rows.filter((r) => r.isActive)
         for (const email of [...new Set(active.flatMap((r) => r.approverEmails))]) {

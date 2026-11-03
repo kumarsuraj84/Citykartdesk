@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { parseAcSheet, parseStoreDetailsSheet } from '@/lib/masters/parse'
-import { acTotalWithoutRowsIssue, storePatchFromAcRows, storePatchFromDetails, updateStoreMaster } from '@/lib/masters/sync'
+import { noAcStoresIssue, storesWithoutAcRows, storePatchFromAcRows, storePatchFromDetails, updateStoreMaster } from '@/lib/masters/sync'
 import { googleSheetsSource } from '@/lib/masters/google'
 import { csvDirSource } from '@/lib/masters/demo'
 import type { StoreDetailRow } from '@/lib/masters/types'
@@ -161,25 +161,30 @@ describe('updating the store cards', () => {
   })
 })
 
-describe('an AC total the sheet cannot update', () => {
+describe('a store with no AC row in the sheet counts as having no AC', () => {
   const stores = [
-    { code: 'LAM', is_active: true, ac_total: 10 },   // has AC rows: the sheet keeps it right
-    { code: 'bkn', is_active: true, ac_total: 11 },   // no AC row, old total
-    { code: 'CTP', is_active: true, ac_total: 8 },
-    { code: 'DKH', is_active: true, ac_total: null }, // no AC row, no total: nothing to say
-    { code: 'ZZZ', is_active: true, ac_total: 0 },
-    { code: 'OLD', is_active: false, ac_total: 5 },   // closed store: not reported
+    { id: 1, code: 'LAM', is_active: true, ac_total: 10 },   // has AC rows: the sheet keeps it right
+    { id: 2, code: 'bkn', is_active: true, ac_total: 11 },   // no AC row, old total
+    { id: 3, code: 'CTP', is_active: true, ac_total: 8 },
+    { id: 4, code: 'DKH', is_active: true, ac_total: null }, // no AC row, no total
+    { id: 5, code: 'ZZZ', is_active: true, ac_total: 0 },    // no AC row, already 0
+    { id: 6, code: 'OLD', is_active: false, ac_total: 5 },   // closed store, no AC row
   ]
-  it('names the active stores that show a total but have no AC row in the sheet, and changes nothing', () => {
-    const i = acTotalWithoutRowsIssue(stores, new Set(['LAM']))
-    expect(i).toMatchObject({ kind: 'ac', severity: 'warning', code: 'ac_total_without_rows', storeCode: 'BKN' })
-    expect(i?.message).toMatch(/^2 store\(s\) show an AC total/)
-    expect(i?.message).toContain('BKN (11), CTP (8)')
-    expect(i?.message).not.toContain('OLD')
-    expect(i?.message).not.toContain('DKH')
+  it('finds the stores with no AC row (capitals do not matter) and what their total is now', () => {
+    const list = storesWithoutAcRows(stores, new Set(['LAM']))
+    expect(list.map((s) => s.code)).toEqual(['BKN', 'CTP', 'DKH', 'ZZZ', 'OLD'])
+    expect(list.map((s) => s.total)).toEqual([11, 8, null, 0, 5])
+    expect(list.filter((s) => s.total !== 0).map((s) => s.id)).toEqual([2, 3, 4, 6])   // the ones whose total is set to 0
   })
-  it('says nothing when every store with a total has AC rows', () => {
-    expect(acTotalWithoutRowsIssue(stores, new Set(['LAM', 'BKN', 'CTP']))).toBeNull()
+  it('tells the team which ACTIVE stores are counted as having no AC', () => {
+    const i = noAcStoresIssue(storesWithoutAcRows(stores, new Set(['LAM'])))
+    expect(i).toMatchObject({ kind: 'ac', severity: 'warning', code: 'store_without_ac_rows', storeCode: 'BKN' })
+    expect(i?.message).toMatch(/^4 active store\(s\) have no AC row/)
+    expect(i?.message).toContain('BKN, CTP, DKH, ZZZ')
+    expect(i?.message).not.toContain('OLD')
+  })
+  it('says nothing when every active store has AC rows', () => {
+    expect(noAcStoresIssue(storesWithoutAcRows(stores, new Set(['LAM', 'BKN', 'CTP', 'DKH', 'ZZZ'])))).toBeNull()
   })
 })
 

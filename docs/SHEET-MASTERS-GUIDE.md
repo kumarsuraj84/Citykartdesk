@@ -37,6 +37,10 @@ automatically because the whole sheet is read each time.
   Once the tab has been used it is the master for good: if it disappears, is unreadable or has no stores, the cards keep their values and "Master data health"
   shows why. "Master data health" also lists the active stores that have no row in the tab, codes CK Desk does not know, a State written as "ALL", a pincode that
   is not 6 digits, an unreadable opening date and a store written twice (the first row is used).
+  **AC details of the card** (AC total, AC brand, AC-AMC brand, AC-AMC vendor, Zenatix) follow the AC rows of the first tab: the total is the number of Active
+  AC rows of the store. A store with no AC row at all counts as having no AC: its AC total is set to 0 (decision 3 Nov 2026; its brand / vendor from an earlier
+  upload are left alone) and "Master data health" names it. When its AC rows are added the total follows at the next update. This is not done when the sheet gave
+  no AC rows at all.
 - **Reports:** the "OEM" of a store in dashboards and reports is the AC-AMC vendor from the AC sheet. Active AC counts exclude Inactive ACs.
 - **Replies:** a reply from any address in the AC or Genset sheet is recognised as an OEM reply, and those addresses are offered as OEM contacts when copying people.
 
