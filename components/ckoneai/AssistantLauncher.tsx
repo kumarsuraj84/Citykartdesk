@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import RobotAvatar from './RobotAvatar'
+import { ASSISTANT_NOTICE } from '@/lib/ckoneai/notice'
 import './assistant.css'
 
 // The "Ask CK Desk" bot button at the bottom right of every page, the same button and window as the CKOneAI assistant in CityKart Pulse (look: ./assistant.css).
@@ -14,6 +15,7 @@ import './assistant.css'
 //   ckoneai:ready, ckoneai:status {state: online | offline}, ckoneai:assistant-message {id} (a reply finished in THIS session), ckoneai:escape.
 export const ASSISTANT_FRAME_SRC = '/ckoneai-ui?embed=1&bridge=ckdesk'
 export const ASSISTANT_TITLE = 'Ask CK Desk'
+export { ASSISTANT_NOTICE }
 export type AssistantStatus = 'connecting' | 'online' | 'offline'
 const STATUS_TEXT: Record<AssistantStatus, string> = { connecting: 'Connecting...', online: 'Online', offline: 'Offline' }
 
@@ -135,6 +137,7 @@ export function AssistantLauncher() {
             <button type="button" className="ai-head__btn" onClick={minimise} title="Minimise" aria-label="Minimise"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M6 12h12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /></svg></button>
             <button type="button" className="ai-head__btn" onClick={closeAndForget} title="Close" aria-label="Close and end this chat window"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /></svg></button>
           </header>
+          <p className="ai-notice">{ASSISTANT_NOTICE}</p>
           {status === 'offline' && <p className="ai-offline-note">The assistant is not reachable right now. The rest of CK Desk is not affected. Please try again in a little while.</p>}
           <iframe ref={frame} title={ASSISTANT_TITLE} src={ASSISTANT_FRAME_SRC} className="ai-frame" allow="clipboard-write" onLoad={() => setFrameLoaded(true)} />
         </section>

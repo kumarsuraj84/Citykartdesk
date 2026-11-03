@@ -6,7 +6,7 @@ let path = '/home'
 vi.mock('next/navigation', () => ({ usePathname: () => path }))
 vi.mock('@/components/ckoneai/assistant.css', () => ({}))
 
-import { AssistantLauncher, ASSISTANT_FRAME_SRC } from '@/components/ckoneai/AssistantLauncher'
+import { AssistantLauncher, ASSISTANT_FRAME_SRC, ASSISTANT_NOTICE } from '@/components/ckoneai/AssistantLauncher'
 
 let headStatus = 200
 beforeEach(() => { headStatus = 200; vi.stubGlobal('fetch', vi.fn(async () => ({ status: headStatus }))) })
@@ -48,6 +48,14 @@ describe('the Ask CK Desk bot button (the CKOneAI assistant button)', () => {
     expect(frame()).toBe(first)
     fireEvent.click(screen.getByRole('button', { name: /^Close and end/ }))
     expect(frame()).toBeNull()                                                    // removed
+  })
+
+  it('tells people their questions are recorded, inside the open window (owner decision 3 Nov 2026)', async () => {
+    render(<AssistantLauncher />)
+    expect(document.querySelector('.ai-notice')).toBeNull()                       // no window yet, so no notice yet
+    await openIt()
+    expect(win()!.querySelector('.ai-notice')?.textContent).toBe(ASSISTANT_NOTICE)
+    expect(ASSISTANT_NOTICE).toBe('Your questions are recorded to help improve this assistant.')
   })
 
   it('Esc minimises it and returns focus to the button, and so does the Esc message of the chat page', async () => {

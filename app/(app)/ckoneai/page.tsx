@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { assistantAccess } from '@/lib/ckoneai/access'
+import { ASSISTANT_NOTICE } from '@/lib/ckoneai/notice'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Ask CK Desk' }
@@ -11,11 +12,12 @@ export default async function AskCkDeskPage() {
   const access = await assistantAccess()
   if (!access.ok) notFound()
   return (
-    <div className="h-[calc(100dvh-12rem)] min-h-[24rem] lg:h-[calc(100dvh-7.5rem)]">
+    <div className="flex h-[calc(100dvh-12rem)] min-h-[24rem] flex-col gap-1.5 lg:h-[calc(100dvh-7.5rem)]">
+      <p className="px-1 text-xs text-muted-foreground">{ASSISTANT_NOTICE}</p>
       <iframe
         title="Ask CK Desk"
         src="/ckoneai-ui?embed=1&bridge=ckdesk"
-        className="h-full w-full rounded-xl border border-black/10 bg-white"
+        className="min-h-0 w-full flex-1 rounded-xl border border-black/10 bg-white"
         allow="clipboard-write"
       />
     </div>
