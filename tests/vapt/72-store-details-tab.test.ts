@@ -45,7 +45,7 @@ const clear = async () => {
 beforeAll(async () => {
   fx = await setupD03Fixtures()
   await clear()
-  for (const c of [A, B, C]) await db().from('stores').insert({ org_id: fx.orgId, code: c, name: `${tag} ${c}`, address: 'old address', city: 'OLD CITY', state: 'OLD', pincode: '000000' })
+  for (const c of [A, B, C]) await db().from('stores').insert({ org_id: fx.orgId, code: c, name: `${tag} ${c}`, address: 'old address', city: 'OLD CITY', state: 'OLD', pincode: '000000', ...(c === C ? { ac_total: 7 } : {}) })   // C: an old total, no AC row in the sheet
   await db().from('master_sources').insert({ org_id: fx.orgId, kind: 'ac', spreadsheet_id: SHEET })
 }, 300_000)
 
@@ -73,7 +73,8 @@ describe('the Store Details tab fills the store card', () => {
     const r = await sync()
     expect(r.ac.status).toBe('ok')
     expect(await cardOf(A)).toMatchObject({ city: 'TAB CITY A', state: 'UP', address: 'tab address', pincode: '226005', cluster: 'UP2', region: 'R4', priority_list: 'Top 50', festival: 'DIWALI', open_date: '2011-07-01', ac_total: 2, ac_brand: 'DAIKIN', ac_amc_vendor: 'UMS' })
-    expect(await cardOf(C)).toMatchObject({ city: 'TAB CITY C', pincode: '4778', ac_total: null })
+    expect(await cardOf(C)).toMatchObject({ city: 'TAB CITY C', pincode: '4778', ac_total: 7 })   // no AC row: the old total stays, and the problem list names it
+    expect((await issuesOf()).find((i) => i.code === 'ac_total_without_rows')?.message).toContain(`${C} (7)`)
     expect(await cardOf(B)).toMatchObject({ city: 'AC CITY B', address: 'ac address' })   // B is not in the tab: its card keeps what it has
     const issues = await issuesOf()
     expect(issues.find((i) => i.code === 'unknown_store' && i.message.includes('Store Details tab'))?.message).toContain(Z)

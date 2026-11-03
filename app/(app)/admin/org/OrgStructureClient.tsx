@@ -844,6 +844,7 @@ function StoreForm({ f, setF, onSubmit, onCancel, submitLabel, pending, choices 
         <FormInput label="Festival" value={f.festival} onChange={v => setF({ ...f, festival: v })} placeholder="e.g. DIWALI|HOLI|EID" />
       </div>
       <p className="pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">AC details <span className="font-normal normal-case tracking-normal">(used for the AC service only)</span></p>
+      <p className="text-[11px] text-muted-foreground">Filled from the AC sheet (Sheet1) for a store that has AC rows there. A value typed here is replaced at the next update.</p>
       <div className="grid grid-cols-3 gap-3">
         <FormInput label="AC total" value={f.ac_total} onChange={v => setF({ ...f, ac_total: v.replace(/[^0-9]/g, '') })} placeholder="Number of ACs" />
         <ChoiceOrNew label="AC brand" value={f.ac_brand} onChange={v => setF({ ...f, ac_brand: v })} options={choices.ac_brand} placeholder="e.g. HITACHI" />
