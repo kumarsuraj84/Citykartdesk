@@ -39,7 +39,12 @@ const ROUTES = [
 // error signatures, it retries exactly once against a fresh connection
 // before giving up - the same principle lib/supabase/resilient-fetch.ts
 // already applies client-side, now applied here too.
-const pooledAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 1000, maxSockets: 256, maxFreeSockets: 64 })
+// IDLE_SOCKET_MS (4 Nov 2026 load review): the pooled sockets the other side closes while they sit unused are what produced the "socket hang up" lines in the proxy log
+// (1,657 retried and 430 unrecovered since 7 Oct, seen by the app as "Could not load the signed-in profile"). A socket that has been idle for IDLE_SOCKET_MS is now
+// destroyed here first (the agent destroys a FREE socket on its timeout), so a request never reuses a connection the upstream is about to close. Under steady traffic
+// the sockets stay busy and are reused as before.
+const IDLE_SOCKET_MS = 5000
+const pooledAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 1000, maxSockets: 256, maxFreeSockets: 64, timeout: IDLE_SOCKET_MS })
 
 function isStaleSocketError(err) {
   return err && (err.code === 'ECONNRESET' || err.code === 'EPIPE' || /socket hang up/i.test(err.message || ''))
@@ -80,7 +85,8 @@ function forwardPooled(req, res, route, forwardPath) {
             path: forwardPath,
             method: req.method,
             headers: req.headers,
-            agent: pooledAgent,
+            // the first try uses the pool; the retry opens a fresh connection (a second pooled socket could be just as dead as the first)
+            agent: isRetry ? false : pooledAgent,
           },
           (proxyRes) => {
             res.writeHead(proxyRes.statusCode, proxyRes.headers)
@@ -154,28 +160,36 @@ function forwardOneShot(req, res, route, forwardPath) {
   req.pipe(proxyReq)
 }
 
-const server = http.createServer((req, res) => {
-  const route = ROUTES.find((r) => req.url === r.prefix || req.url.startsWith(r.prefix + '/') || req.url.startsWith(r.prefix + '?'))
+function createProxyServer(routes = ROUTES) {
+  const server = http.createServer((req, res) => {
+    const route = routes.find((r) => req.url === r.prefix || req.url.startsWith(r.prefix + '/') || req.url.startsWith(r.prefix + '?'))
 
-  if (!route) {
-    res.writeHead(404, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ error: 'no matching route', path: req.url }))
-    return
-  }
+    if (!route) {
+      res.writeHead(404, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'no matching route', path: req.url }))
+      return
+    }
 
-  const forwardPath = req.url.slice(route.prefix.length) || '/'
-  if (route.pooled) {
-    forwardPooled(req, res, route, forwardPath)
-  } else {
-    forwardOneShot(req, res, route, forwardPath)
-  }
-})
+    const forwardPath = req.url.slice(route.prefix.length) || '/'
+    if (route.pooled) {
+      forwardPooled(req, res, route, forwardPath)
+    } else {
+      forwardOneShot(req, res, route, forwardPath)
+    }
+  })
 
-server.on('clientError', (err, socket) => {
-  console.error('[proxy] client connection error:', err.message)
-  if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n')
-})
+  server.on('clientError', (err, socket) => {
+    console.error('[proxy] client connection error:', err.message)
+    if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n')
+  })
+  return server
+}
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Citykart Desk proxy listening on 0.0.0.0:${PORT}`)
-})
+module.exports = { createProxyServer, pooledAgent, IDLE_SOCKET_MS }
+
+// run as the Windows service (node server.js); a test only loads the file
+if (require.main === module) {
+  createProxyServer().listen(PORT, '0.0.0.0', () => {
+    console.log(`Citykart Desk proxy listening on 0.0.0.0:${PORT}`)
+  })
+}

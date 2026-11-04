@@ -10,7 +10,9 @@ import {
 } from '@/lib/notifications/popup-rules'
 import { PopupCard } from './PopupCard'
 
-const POLL_VISIBLE_MS = 8_000
+// 20 s (was 8 s): the load review of 4 Nov 2026 found every open tab polling this route (auth + profile + query through the data-service proxy); a new notification now shows within ~20 s, and the
+// pop-up still accepts anything up to POPUP_MAX_AGE_MS (10 min) old, so nothing is missed.
+const POLL_VISIBLE_MS = 20_000
 const POLL_HIDDEN_MS = 30_000
 const SHOWN_KEEP = 200
 

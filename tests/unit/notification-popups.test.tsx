@@ -45,14 +45,14 @@ describe('notification pop-ups', () => {
     await runFirstCheck()
     expect(shownIds()).toEqual(['popup-a'])
     expect(String(fetchMock.mock.calls[0][0])).toContain('/api/notifications/new?since=')
-    await act(async () => { await vi.advanceTimersByTimeAsync(8100) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(20100) })
     expect(String(fetchMock.mock.calls[1][0])).toContain('since=') // moved forward to the server time of the last check
   })
 
   it('shows each notification once, even if the same one comes back', async () => {
     reply = { items: [mk('a', 'comment_added')], unread: 1 }
     await runFirstCheck()
-    await act(async () => { await vi.advanceTimersByTimeAsync(8100) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(20100) })
     expect(shownIds()).toEqual(['popup-a'])
   })
 
@@ -80,7 +80,7 @@ describe('notification pop-ups', () => {
     toastCustom.mockClear()
     localStorage.setItem(PREFS_KEY, JSON.stringify({ mode: 'off', sound: false }))
     reply = { items: [mk('c', 'sla_breached')], unread: 3 }
-    await act(async () => { await vi.advanceTimersByTimeAsync(8100) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(20100) })
     expect(toastCustom).not.toHaveBeenCalled()
   })
 
@@ -126,7 +126,7 @@ describe('notification pop-ups', () => {
     reply = { items: [mk('a', 'comment_added')], unread: 1 }
     await runFirstCheck()
     expect(toastCustom).not.toHaveBeenCalled()
-    await act(async () => { await vi.advanceTimersByTimeAsync(8100) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(20100) })
     expect(shownIds()).toEqual(['popup-a'])
   })
 })
