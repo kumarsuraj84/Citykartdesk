@@ -56,7 +56,7 @@ afterAll(async () => {
 }, 180_000)
 
 describe('the Store Details tab fills the store card', () => {
-  it('1. no tab yet: the AC rows give only the machines; the store's own details are not taken from them', async () => {
+  it('1. no tab yet: the AC rows give only the machines; the details of the store itself are not taken from them', async () => {
     ac = [AC_HEAD, acRow(A, 1, 'AC CITY A'), acRow(B, 1, 'AC CITY B')]
     tab = null
     const r = await sync()
