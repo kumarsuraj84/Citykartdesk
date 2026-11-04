@@ -10,7 +10,8 @@ vi.mock('next/headers', () => ({ headers: vi.fn().mockResolvedValue({ get: () =>
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn(), refresh: vi.fn() }))
 
 import { createClient } from '@/lib/supabase/server'
-import { refreshWeather, weatherFor, cityList } from '@/lib/weather/refresh'
+import { refreshWeather, weatherFor, stateList } from '@/lib/weather/refresh'
+import { STATE_ROW } from '@/lib/weather/states'
 import { loadAcCalendarData } from '@/lib/queries/ac-calendar'
 import type { FetchLike } from '@/lib/weather/open-meteo'
 
@@ -26,7 +27,7 @@ const cats: string[] = []
 const today = (ms = Date.now()) => new Date(ms + 19_800_000).toISOString().slice(0, 10)
 const addDays = (key: string, n: number) => today(Date.parse(`${key}T00:00:00+05:30`) + n * 86_400_000)
 
-/** A pretend service: knows two of the three cities; the third answers geocoding but then fails on the forecast. */
+/** A pretend service: answers every forecast with the same temperatures (a place at latitude 10 would be down; no state is there). */
 function pretend(calls: string[]): FetchLike {
   return async (url) => {
     calls.push(url)
@@ -57,52 +58,43 @@ afterAll(async () => {
   const a = db()
   await a.from('master_ac_units').delete().like('store_code', `${tag.toUpperCase()}%`)
   await a.from('weather_city_daily').delete().like('city', `${tag}%`)
+  await a.from('weather_city_daily').delete().eq('state', STATE_ROW)
   await a.from('weather_city_geo').delete().like('city', `${tag}%`)
   if (made.length) { await a.from('request_master_snapshots').delete().in('request_id', made); await a.from('request_activity').delete().in('request_id', made); await a.from('requests').delete().in('id', made) }
   if (cats.length) await a.from('service_categories').delete().in('id', cats)
   await fx?.cleanup()
 }, 180_000)
 
-describe('the daily weather job', () => {
-  it('saves the highest and lowest temperature of every city that has an AC; a city that is not found or a service that is down does not stop the others', async () => {
+describe('the daily weather job (by state)', () => {
+  it('saves the highest and lowest temperature of every state that has an AC at the state\'s fixed point, never looks a place up, and a state whose forecast fails does not stop the others', async () => {
     const calls: string[] = []
     const r = await refreshWeather(db(), pretend(calls), { orgId: fx.orgId })
-    // (the organisation's real store cities are in the list too, so only our three are checked)
-    expect(r.notFound.some((c) => c.startsWith(CITY_NONE))).toBe(true)        // the city the service does not know
-    expect(r.failedCities.some((c) => c.startsWith(CITY_DOWN))).toBe(true)    // the city whose forecast failed
-    expect(r.notFound.some((c) => c.startsWith(CITY_OK)) || r.failedCities.some((c) => c.startsWith(CITY_OK))).toBe(false)
     expect(r.refreshed).toBeGreaterThanOrEqual(1)
-    const w = await weatherFor(db(), [{ city: CITY_OK, state: 'JH' }], addDays(today(), -3), today())
+    const w = await weatherFor(db(), [{ city: 'Jharkhand', state: STATE_ROW }], addDays(today(), -3), today())
     expect(w.days[today()]).toMatchObject({ tmax: 33.4, tmin: 22.1, cities: 1 })
-    expect(w.missing).toBe(0)
-    // only city names went out
-    expect(calls.every((u) => u.startsWith('https://') && !/@|ticket|CKSD/i.test(u))).toBe(true)
-    expect(calls.some((u) => u.includes('archive-api'))).toBe(true)   // a new city gets its history once
+    expect(w.cities).toEqual(['Jharkhand']); expect(w.missing).toBe(0)
+    expect(calls.some((u) => u.includes('geocoding-api'))).toBe(false)               // no city is asked for any more
+    expect(calls.every((u) => u.startsWith('https://') && !/@|ticket|CKSD/i.test(u))).toBe(true)   // only fixed coordinates went out
+    expect(calls.some((u) => u.includes('archive-api') && u.includes('latitude=23.34'))).toBe(true)   // a new state gets its history once (Ranchi, Jharkhand's point)
   })
 
-  it('a city with no saved temperature shows as missing; the average of a place uses the cities that have one', async () => {
-    const w = await weatherFor(db(), [{ city: CITY_OK, state: 'JH' }, { city: CITY_NONE, state: 'JH' }, { city: CITY_DOWN, state: 'JH' }], today(), today())
-    expect(w.cities).toEqual([CITY_OK]); expect(w.missing).toBe(2); expect(w.days[today()].tmax).toBe(33.4)
+  it('a state with no saved temperature shows as missing; the average uses the states that have one', async () => {
+    const w = await weatherFor(db(), [{ city: 'Jharkhand', state: STATE_ROW }, { city: 'Goa', state: STATE_ROW }], today(), today())
+    expect(w.cities).toEqual(['Jharkhand']); expect(w.missing).toBe(1); expect(w.days[today()].tmax).toBe(33.4)
   })
 
-  it('the next run only re-reads the last days (no history again), does not ask again for a place it already knows, and retries a city the service did not find only after a week', async () => {
+  it('the next run only re-reads the last days (no history again)', async () => {
     const calls: string[] = []
     await refreshWeather(db(), pretend(calls), { orgId: fx.orgId })
-    expect(calls.some((u) => u.includes('archive-api') && u.includes('latitude=24.6'))).toBe(false)   // a city that already has history is not backfilled again
-    expect(calls.filter((u) => u.includes('geocoding-api') && u.includes(CITY_OK))).toHaveLength(0)
-    expect(calls.filter((u) => u.includes('geocoding-api') && u.includes(CITY_NONE))).toHaveLength(0)
-    const later: string[] = []
-    await refreshWeather(db(), pretend(later), { orgId: fx.orgId, now: Date.now() + 8 * 86_400_000 })
-    expect(later.filter((u) => u.includes('geocoding-api') && u.includes(CITY_NONE))).toHaveLength(1)
+    expect(calls.some((u) => u.includes('archive-api') && u.includes('latitude=23.34'))).toBe(false)
   })
 
-  it('lists each city once, and (for now) also the cities of the Store Master, so a store the AC sheet does not have yet still gets its temperature', async () => {
+  it('lists each state once, and (for now) also the states of the Store Master, so a store the AC sheet does not have yet still gets its temperature', async () => {
     const a = db()
-    const store = (await a.from('stores').insert({ org_id: fx.orgId, code: `${tag}ST`.toUpperCase(), name: 'x', city: `${tag}Storetown`, state: 'JH' }).select('id').single()).data.id as string
-    const list = (await cityList(db(), fx.orgId)).filter((c) => c.city.startsWith(tag))
-    expect(list.map((c) => c.city).sort()).toEqual([CITY_DOWN, CITY_NONE, CITY_OK, `${tag}Storetown`].sort())
-    const one = await cityList(db(), fx.orgId, { kind: 'store', key: `${tag}ST` })
-    expect(one).toEqual([{ city: `${tag}Storetown`, state: 'JH' }])
+    const store = (await a.from('stores').insert({ org_id: fx.orgId, code: `${tag}ST`.toUpperCase(), name: 'x', city: `${tag}Storetown`, state: 'GJ' }).select('id').single()).data.id as string
+    const names = (await stateList(db(), fx.orgId)).map((c) => c.city)
+    expect(names).toContain('Jharkhand'); expect(names).toContain('Gujarat')
+    expect(await stateList(db(), fx.orgId, { kind: 'store', key: `${tag}ST` })).toEqual([{ city: 'Gujarat', state: STATE_ROW }])
     await a.from('stores').delete().eq('id', store)
   })
 })

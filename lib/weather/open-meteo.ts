@@ -44,8 +44,8 @@ export function nameParts(city: string): string[] {
 
 export const geocodeUrl = (city: string) => `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=10&countryCode=IN&language=en&format=json`
 const DAILY = 'daily=temperature_2m_max,temperature_2m_min&timezone=Asia%2FKolkata'
-/** The last `pastDays` days and today (the day's forecast). */
-export const recentUrl = (lat: number, lon: number, pastDays: number) => `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&${DAILY}&past_days=${pastDays}&forecast_days=1`
+/** The last `pastDays` days, today, and the next `futureDays` days (forecast). */
+export const recentUrl = (lat: number, lon: number, pastDays: number, futureDays = 0) => `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&${DAILY}&past_days=${pastDays}&forecast_days=${futureDays + 1}`
 /** Confirmed history (it lags a few days behind). */
 export const archiveUrl = (lat: number, lon: number, from: string, to: string) => `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${from}&end_date=${to}&${DAILY}`
 
@@ -110,8 +110,8 @@ export async function geocodeCity(f: FetchLike, city: string, state: string): Pr
   }
   return null
 }
-export async function fetchRecent(f: FetchLike, lat: number, lon: number, pastDays: number): Promise<DayTemp[] | null> {
-  const json = await getJson(f, recentUrl(lat, lon, pastDays))
+export async function fetchRecent(f: FetchLike, lat: number, lon: number, pastDays: number, futureDays = 0): Promise<DayTemp[] | null> {
+  const json = await getJson(f, recentUrl(lat, lon, pastDays, futureDays))
   return json ? parseDaily(json) : null
 }
 export async function fetchArchive(f: FetchLike, lat: number, lon: number, from: string, to: string): Promise<DayTemp[] | null> {

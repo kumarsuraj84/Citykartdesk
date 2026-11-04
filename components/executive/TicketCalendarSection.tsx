@@ -134,13 +134,15 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
   const again = useMemo(() => (machines ? [] : sameIssueAgain(placeTickets, now)), [machines, placeTickets, now])
 
   // the saved temperatures (collected once a day at 08:00; this only reads them). Only for machine work: IT or HR tickets do not depend on the weather.
-  const weatherId = `${machineSlice}|${kind}|${key}|${month}`
+  // (with nothing picked, the states of the machines in view are named, so the range covers exactly those)
+  const fleetStates = useMemo(() => (machines && kind === 'all' ? [...new Set(aFleet.map((a) => a.state).filter(Boolean))].sort() : []), [machines, kind, aFleet])
+  const weatherId = `${machineSlice}|${kind}|${key}|${month}|${fleetStates.join(',')}`
   useEffect(() => {
     if (!machineSlice || (kind !== 'all' && !key)) return
     let live = true
-    getAcWeather({ kind, key, from: `${month}-01`, to: `${month}-${String(daysInMonth(month)).padStart(2, '0')}` }).then((r) => { if (live && !('error' in r)) setSaved({ id: weatherId, w: r }) }).catch(() => {})
+    getAcWeather({ kind, key, states: fleetStates, from: `${month}-01`, to: `${month}-${String(daysInMonth(month)).padStart(2, '0')}` }).then((r) => { if (live && !('error' in r)) setSaved({ id: weatherId, w: r }) }).catch(() => {})
     return () => { live = false }
-  }, [machineSlice, kind, key, month, weatherId])
+  }, [machineSlice, kind, key, month, weatherId, fleetStates])
   const weather = machineSlice && saved?.id === weatherId ? saved.w : null
 
   const thisMonth = dayKey(now).slice(0, 7)
@@ -151,6 +153,7 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
   const noun = machines ? ASSET_LABEL[assetKind] : null
   const dim = machines ? 'down' : 'open'
   const wcities = weather?.cities ?? []
+  const pickedWeather = picked ? weather?.days[picked] ?? null : null
   const loadingAssets = !assets && !assetError
 
   const cell = (d: Cell) => {
@@ -159,9 +162,11 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
     const body = (
       <>
         {/* the facts lead (how many are down, raised, fixed, the temperature); the day number is small and quiet */}
-        <span className="flex items-start justify-between gap-1">
+        <span className="flex flex-wrap items-start justify-between gap-x-1 gap-y-0.5">
           <span className="text-[11px] font-normal leading-none opacity-70">{d.today ? `${d.day} today` : d.day}</span>
-          {!d.future && w && (w.tmax !== null || w.tmin !== null) && <span className="text-[11px] font-medium leading-none opacity-80" title={`Highest ${deg(w.tmax)}, lowest ${deg(w.tmin)}`}>{deg(w.tmax)}/{deg(w.tmin)}</span>}
+          {w && (w.tmax !== null || w.tmin !== null) && (w.cities > 1
+            ? <span className={`whitespace-nowrap text-[11px] font-medium leading-none opacity-80 ${d.future ? 'italic' : ''}`} title={`${d.future ? 'Forecast, ' : ''}${w.cities} states: lowest ${deg(w.tmin)}, highest ${deg(w.tmax)}. ${d.future ? w.parts.map((p) => `${p.name} ${deg(p.tmax)}/${deg(p.tmin)}`).join(', ') : 'Click the day to see each state.'}`}>{w.tmin === null ? '' : Math.round(w.tmin)}–{deg(w.tmax)}</span>
+            : <span className={`whitespace-nowrap text-[11px] font-medium leading-none opacity-80 ${d.future ? 'italic' : ''}`} title={`${d.future ? 'Forecast: h' : 'H'}ighest ${deg(w.tmax)}, lowest ${deg(w.tmin)}`}>{deg(w.tmax)}/{deg(w.tmin)}</span>)}
         </span>
         {!d.future && (
           <>
@@ -277,11 +282,9 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
             {machineSlice && (
               <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
                 <Thermometer className="h-3 w-3" aria-hidden />
-                {kind === 'all'
-                  ? 'Pick a state, region, cluster or store to see the outside temperature (highest/lowest).'
-                  : !weather ? 'Temperature: loading…'
+                {!weather ? 'Temperature: loading…'
                   : wcities.length === 0 ? 'Outside temperature has not been collected for this place yet. It is saved every morning at 8:00.'
-                  : `Top right of each day: highest/lowest outside temperature, ${wcities.length === 1 ? `for ${wcities[0]}` : `average of ${wcities.length} cities`}${weather.missing > 0 ? ` (${weather.missing} more not collected yet)` : ''}. Saved every morning at 8:00.`}
+                  : `Each day shows the highest/lowest outside temperature (by state; the coming 7 days are the forecast, in italics), ${wcities.length === 1 ? `for ${wcities[0]}` : `as a range over ${wcities.length} states (lowest–highest; click a day to see each state)`}${weather.missing > 0 ? ` (${weather.missing} more not collected yet)` : ''}. Saved every morning at 8:00.`}
               </p>
             )}
 
@@ -291,6 +294,14 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
                   <h4 className="text-sm font-bold">{pickedCell.day} {monthTitle(month)} · {pickedCell.count} {machines ? `${pickedCell.count === 1 ? noun!.one : noun!.many} faulty` : 'tickets open'} at the end of the day</h4>
                   <button type="button" onClick={() => setPicked(null)} className="text-xs font-medium text-primary hover:underline">Close</button>
                 </div>
+                {machines && (pickedWeather?.parts.length ?? 0) > 0 && (
+                  <div className="mb-3 text-xs">
+                    <div className="mb-1 font-semibold">Outside temperature that day (highest / lowest)</div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      {pickedWeather!.parts.map((p) => <span key={p.name}><span className="text-muted-foreground">{p.name}</span> <span className="font-medium">{deg(p.tmax)}/{deg(p.tmin)}</span></span>)}
+                    </div>
+                  </div>
+                )}
                 <div className="grid gap-3 sm:grid-cols-3">
                   {list('Raised that day', pickedCell.raisedIds)}
                   {list('Fixed that day', pickedCell.resolvedIds)}
