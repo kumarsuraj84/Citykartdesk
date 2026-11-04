@@ -68,9 +68,11 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
   }, [tickets, approvals, filters, now, selDims, sel, ctx.approvals, Wc])
 
   // (the same calculation the normal Dashboards page's numbers are tested against: engine.drillCohort)
+  // an exact list (a calendar day, or one AC) is the slice limited to those tickets, oldest first like the other lists
+  const idSet = useMemo(() => (ctx.ids ? new Set(ctx.ids) : null), [ctx.ids])
   const behind = useMemo(
-    () => (ctx.approvals ? slice : drillCohort(tickets, filters, now, Wc, { metric: ctx.metric, only: ctx.only, dims: sel }).behind),
-    [slice, tickets, filters, now, ctx.approvals, ctx.only, ctx.metric, Wc, sel],
+    () => (idSet ? slice.filter((t) => idSet.has(t.id)).sort((a, b) => a.created - b.created) : ctx.approvals ? slice : drillCohort(tickets, filters, now, Wc, { metric: ctx.metric, only: ctx.only, dims: sel }).behind),
+    [idSet, slice, tickets, filters, now, ctx.approvals, ctx.only, ctx.metric, Wc, sel],
   )
   const cohort = useMemo(() => behind.filter((t) => (lens === 'breached' ? t.breached : lens === 'ok' ? !t.breached : true)), [behind, lens])
 
@@ -84,7 +86,7 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
   const [placeDim, setPlaceDim] = useState<'region' | 'state' | 'cluster'>('region')
   const places = useMemo(() => groupCount(cohort, (t) => t[placeDim]).filter(([v]) => v !== NOT_SET && v !== '(No state)'), [cohort, placeDim])
   const techs = useMemo(() => groupCount(cohort, (t) => t.tech), [cohort])
-  const metricValue = ctx.approvals ? String(cohort.length) : formatMeasure(ctx.metric, measure(slice, Wc, ctx.metric))
+  const metricValue = ctx.approvals || idSet ? String(cohort.length) : formatMeasure(ctx.metric, measure(slice, Wc, ctx.metric))
   const breachedN = cohort.filter((t) => t.breached).length
   const active = ticketId ? tickets.find((t) => t.id === ticketId) ?? null : null
 
@@ -100,7 +102,7 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
   const pg = Math.min(page, pages - 1)
   const title = stage === 4 && active ? `${active.no}: ${active.subject}` : ctx.title
   const steps = [
-    { n: 1 as const, label: '1. Cohort breakdown', sub: sel.group || sel.brand || (ctx.approvals ? 'Approvals' : MEASURES[ctx.metric].label) },
+    { n: 1 as const, label: '1. Cohort breakdown', sub: sel.group || sel.brand || (ctx.approvals ? 'Approvals' : idSet ? 'This list' : MEASURES[ctx.metric].label) },
     { n: 2 as const, label: '2. Store & technician slice', sub: sel.tech || sel.store || `${stores.length} store${stores.length === 1 ? '' : 's'} active` },
     { n: 3 as const, label: '3. Ticket register', sub: `${cohort.length} matching ticket${cohort.length === 1 ? '' : 's'}` },
     { n: 4 as const, label: '4. Last leg (lifecycle)', sub: active ? `${active.no} (${active.store})` : 'Select any ticket' },
@@ -146,9 +148,9 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
             <div className="space-y-5">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                 <div className={`${box} p-4`}>
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{ctx.approvals ? 'Approval-gated tickets' : 'Selected number'}</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{ctx.approvals ? 'Approval-gated tickets' : idSet ? 'Tickets in this list' : 'Selected number'}</div>
                   <div className="mt-1 text-2xl font-bold tabular-nums text-foreground">{metricValue}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">{ctx.approvals ? 'in this slice' : MEASURES[ctx.metric].label} · {ctx.winLabel ?? periodText}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{ctx.approvals ? 'in this slice' : idSet ? 'tickets' : MEASURES[ctx.metric].label} · {ctx.winLabel ?? periodText}</div>
                 </div>
                 <div className={`${box} p-4`}>
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Matching records</div>
@@ -296,7 +298,7 @@ export function DrilldownModal({ ctx, tickets, approvals, filters, now, W, perio
                       {cohort.slice(pg * PAGE, pg * PAGE + PAGE).map((t) => (
                         <tr key={t.id} onClick={() => openTicket(t)} className="group cursor-pointer transition-colors hover:bg-primary/5">
                           <td className="whitespace-nowrap py-3 pl-4 pr-2 font-bold tabular-nums text-primary">{t.no}</td>
-                          <td className="max-w-[220px] px-2 py-3"><div className="truncate font-semibold text-foreground">{t.subject}</div><div className="truncate text-[11px] text-muted-foreground">Store: {t.store} · Created {dateTimeLabel(t.created)}</div></td>
+                          <td className="max-w-[220px] px-2 py-3"><div className="truncate font-semibold text-foreground">{t.subject}</div><div className="truncate text-[11px] text-muted-foreground">Store: {t.store}{ctx.labels?.[t.id] ? ` · ${ctx.labels[t.id]}` : ''} · Created {dateTimeLabel(t.created)}</div></td>
                           <td className="whitespace-nowrap px-2 py-3"><div className="font-medium text-foreground">{t.group}</div><div className="text-[11px] text-muted-foreground">{t.tech}</div></td>
                           {hasOem && <td className="whitespace-nowrap px-2 py-3 font-medium text-foreground">{t.brand === '(No OEM)' ? '-' : t.brand}</td>}
                           <td className="whitespace-nowrap px-2 py-3"><span className="font-medium text-foreground">{statusLabel(t.status)}</span><div className="text-[11px] text-muted-foreground">Priority: {capitalize(t.prio)}</div></td>

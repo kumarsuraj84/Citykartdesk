@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Loader2, Thermometer } from 'lucide-react'
 import {
   ASSET_LABEL, CAME_BACK_DAYS, PLACE_KINDS, PLACE_LABEL, RED_ABOVE_PCT, REPEAT_TICKETS, REPEAT_WINDOW_DAYS, WATCH_TICKETS, YELLOW_ABOVE_PCT,
@@ -16,6 +15,7 @@ import { applyFilters, type ExecTicket, type Filters } from '@/lib/reporting/exe
 import { loadAcCalendar, getAcWeather, type AcWeather } from '@/lib/actions/acCalendar'
 import type { AcCalendarData } from '@/lib/queries/ac-calendar'
 import { Panel, PanelTitle, SelectBox, Seg } from './ui'
+import type { OpenDrill } from './types'
 
 // The Ticket Calendar of the Smart Dashboard ("IT Ticket Calendar", "ADMIN Ticket Calendar" ... named after the group chosen at the top). It always shows the tickets that match
 // the dashboard's filters (group, service, category, sub category, technician, region, state, cluster ...), and those are only the tickets the viewer is allowed to see: the
@@ -57,13 +57,12 @@ function machineKindsOf(inView: ExecTicket[], assetById: Map<string, { kind: Ass
   return [...ks]
 }
 
-export function TicketCalendarSection({ tickets, filters, now }: { tickets: ExecTicket[]; filters: Filters; now: number }) {
+export function TicketCalendarSection({ tickets, filters, now, open }: { tickets: ExecTicket[]; filters: Filters; now: number; open: OpenDrill }) {
   const [assets, setAssets] = useState<AcCalendarData | null>(null)
   const [assetError, setAssetError] = useState<string | null>(null)
   const [kind, setKind] = useState<PlaceKind>('all')
   const [pickedKey, setKey] = useState('')
   const [month, setMonth] = useState(() => dayKey(now).slice(0, 7))
-  const [picked, setPicked] = useState<string | null>(null)
   const [markAc, setMarkAc] = useState<string | null>(null)
   const [mode, setMode] = useState<'machines' | 'tickets'>('machines')
   const [kindChoice, setKindChoice] = useState<AssetKind>('ac')
@@ -147,14 +146,28 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
 
   const thisMonth = dayKey(now).slice(0, 7)
   const marked = markAc ? new Set(repeats.find((r) => r.key === markAc)?.days ?? []) : null
-  const pickedCell = picked ? cells.find((c) => c.key === picked) ?? null : null
   const place = kind === 'all' ? (groups.length === 1 ? groups[0] : 'all Citykart') : options.find((o) => o.key === key)?.label ?? key
   const nothing = machines ? scope.length === 0 : placeTickets.length === 0
   const noun = machines ? ASSET_LABEL[assetKind] : null
   const dim = machines ? 'down' : 'open'
   const wcities = weather?.cities ?? []
-  const pickedWeather = picked ? weather?.days[picked] ?? null : null
   const loadingAssets = !assets && !assetError
+
+  // A click on a day opens the dashboard's own drill-down pop-up (the same one every other number opens): the tickets of that day, from the calendar's own lists, so the list always matches the number.
+  const openDay = (d: Cell, which: 'open' | 'raised' | 'fixed') => {
+    const ids = which === 'raised' ? d.raisedIds : which === 'fixed' ? d.resolvedIds : d.openIds
+    const what = which === 'raised' ? 'raised that day' : which === 'fixed' ? 'fixed that day' : machines ? 'still faulty at the end of the day' : 'still open at the end of the day'
+    const dateText = `${d.day} ${monthTitle(month)}`
+    const w = weather?.days[d.key]
+    const temp = w && (w.tmax !== null || w.tmin !== null) ? (w.cities > 1 ? `outside ${deg(w.tmin)}–${deg(w.tmax)} over ${w.cities} states` : `outside ${deg(w.tmax)} / ${deg(w.tmin)}`) : ''
+    const labels: Record<string, string> = {}
+    for (const id of ids) { const b = briefs.get(id); if (b?.what) labels[id] = b.what }
+    open({
+      title: `${place} · ${dateText}`,
+      subtitle: [what.charAt(0).toUpperCase() + what.slice(1), which === 'open' && machines ? `${d.count} ${d.count === 1 ? noun!.one : noun!.many} faulty` : '', `${ids.length} ticket${ids.length === 1 ? '' : 's'}`, temp].filter(Boolean).join(' · '),
+      stage: 3, metric: 'created', dims: {}, ids, labels, winLabel: 'that day',
+    })
+  }
 
   const cell = (d: Cell) => {
     const w = weather?.days[d.key]
@@ -165,7 +178,7 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
         <span className="flex flex-wrap items-start justify-between gap-x-1 gap-y-0.5">
           <span className="text-[11px] font-normal leading-none opacity-70">{d.today ? `${d.day} today` : d.day}</span>
           {w && (w.tmax !== null || w.tmin !== null) && (w.cities > 1
-            ? <span className={`whitespace-nowrap text-[11px] font-medium leading-none opacity-80 ${d.future ? 'italic' : ''}`} title={`${d.future ? 'Forecast, ' : ''}${w.cities} states: lowest ${deg(w.tmin)}, highest ${deg(w.tmax)}. ${d.future ? w.parts.map((p) => `${p.name} ${deg(p.tmax)}/${deg(p.tmin)}`).join(', ') : 'Click the day to see each state.'}`}>{w.tmin === null ? '' : Math.round(w.tmin)}–{deg(w.tmax)}</span>
+            ? <span className={`whitespace-nowrap text-[11px] font-medium leading-none opacity-80 ${d.future ? 'italic' : ''}`} title={`${d.future ? 'Forecast, ' : ''}${w.cities} states: lowest ${deg(w.tmin)}, highest ${deg(w.tmax)}. ${d.future ? w.parts.map((p) => `${p.name} ${deg(p.tmax)}/${deg(p.tmin)}`).join(', ') : 'Click the day to open its tickets.'}`}>{w.tmin === null ? '' : Math.round(w.tmin)}–{deg(w.tmax)}</span>
             : <span className={`whitespace-nowrap text-[11px] font-medium leading-none opacity-80 ${d.future ? 'italic' : ''}`} title={`${d.future ? 'Forecast: h' : 'H'}ighest ${deg(w.tmax)}, lowest ${deg(w.tmin)}`}>{deg(w.tmax)}/{deg(w.tmin)}</span>)}
         </span>
         {!d.future && (
@@ -175,8 +188,13 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
               : <span className="mt-1.5 block text-xs leading-none opacity-70">none {dim}</span>}
             {(d.raised > 0 || d.resolved > 0) && (
               <span className="mt-1.5 flex gap-1 text-[11px] leading-none">
-                <span className="rounded bg-white/55 px-1 py-0.5 dark:bg-black/25">R{d.raised}</span>
-                <span className="rounded bg-white/55 px-1 py-0.5 dark:bg-black/25">F{d.resolved}</span>
+                {/* R and F open their own list (raised / fixed that day); a zero is plain text, nothing to open */}
+                {d.raised > 0
+                  ? <button type="button" onClick={(e) => { e.stopPropagation(); openDay(d, 'raised') }} title="Open the tickets raised that day" className="rounded bg-white/55 px-1 py-0.5 hover:bg-white/80 hover:underline dark:bg-black/25 dark:hover:bg-black/45">R{d.raised}</button>
+                  : <span className="rounded bg-white/55 px-1 py-0.5 dark:bg-black/25">R0</span>}
+                {d.resolved > 0
+                  ? <button type="button" onClick={(e) => { e.stopPropagation(); openDay(d, 'fixed') }} title="Open the tickets fixed that day" className="rounded bg-white/55 px-1 py-0.5 hover:bg-white/80 hover:underline dark:bg-black/25 dark:hover:bg-black/45">F{d.resolved}</button>
+                  : <span className="rounded bg-white/55 px-1 py-0.5 dark:bg-black/25">F0</span>}
               </span>
             )}
           </>
@@ -184,29 +202,16 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
       </>
     )
     if (d.future) return <div key={d.key} className={`min-h-[84px] rounded-md p-1.5 ${classes}`} aria-label={`${d.day}: a future day`}>{body}</div>
+    // the box itself opens the tickets that are still faulty / open at the end of that day (or, when there are none, what was raised or fixed); R and F inside it open their own lists
     return (
-      <button key={d.key} type="button" onClick={() => setPicked(picked === d.key ? null : d.key)} aria-pressed={picked === d.key}
-        aria-label={`${monthTitle(month)} ${d.day}: ${d.count} ${dim}, ${d.raised} raised, ${d.resolved} fixed`}
-        className={`min-h-[84px] rounded-md p-1.5 text-left transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${classes} ${picked === d.key ? 'shadow-md ring-2 ring-foreground' : ''}`}>
+      <div key={d.key} role="button" tabIndex={0} onClick={() => openDay(d, d.count > 0 || (d.raised === 0 && d.resolved === 0) ? 'open' : d.raised > 0 ? 'raised' : 'fixed')}
+        onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openDay(d, d.count > 0 || (d.raised === 0 && d.resolved === 0) ? 'open' : d.raised > 0 ? 'raised' : 'fixed') } }}
+        aria-label={`${monthTitle(month)} ${d.day}: ${d.count} ${dim}, ${d.raised} raised, ${d.resolved} fixed. Open the tickets`}
+        className={`min-h-[84px] cursor-pointer rounded-md p-1.5 text-left transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${classes}`}>
         {body}
-      </button>
+      </div>
     )
   }
-
-  const list = (head: string, ids: string[]) => (
-    <div className="min-w-0">
-      <div className="text-xs font-semibold text-foreground">{head} <span className="font-normal text-muted-foreground">({ids.length})</span></div>
-      {ids.length === 0 ? <p className="mt-1 text-xs text-muted-foreground">None.</p> : (
-        <ul className="mt-1 space-y-0.5">
-          {ids.slice(0, 12).map((id) => {
-            const t = briefs.get(id)
-            return t ? <li key={id} className="truncate text-xs"><Link href={`/requests/${t.id}`} className="font-medium text-primary hover:underline">{t.no}</Link> <span className="text-muted-foreground">· {t.where}{t.what ? ` · ${t.what}` : ''}</span></li> : null
-          })}
-          {ids.length > 12 && <li className="text-xs text-muted-foreground">and {ids.length - 12} more</li>}
-        </ul>
-      )}
-    </div>
-  )
 
   const metrics = machines
     ? [{ label: `Total ${noun!.many}`, value: scope.length, tone: '' }, { label: 'Faulty today', value: todayCell?.count ?? '—', tone: (todayCell?.count ?? 0) > 0 ? 'text-destructive' : '' }, { label: 'Raised this month', value: raisedTotal, tone: '' }, { label: 'Fixed this month', value: fixedTotal, tone: 'text-success' }]
@@ -221,8 +226,8 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
           : `How many tickets were open each day, and what was raised and fixed - ${place}. Each day is compared with this ${groups.length === 1 ? 'group' : 'view'}'s own usual level.`}
         right={
           <>
-            <Seg<PlaceKind> value={kind} label="Look at" onChange={(k) => { setKind(k); setPicked(null); setMarkAc(null) }} options={PLACE_KINDS.map((k) => ({ value: k, label: PLACE_LABEL[k] }))} />
-            {kind !== 'all' && <SelectBox label={`Choose a ${PLACE_LABEL[kind].toLowerCase()}`} value={key} onChange={(v) => { setKey(v); setPicked(null); setMarkAc(null) }} options={options.map((o) => ({ value: o.key, label: `${o.label} · ${o.n} ${machines ? (o.n === 1 ? noun!.one : noun!.many) : o.n === 1 ? 'ticket' : 'tickets'}` }))} />}
+            <Seg<PlaceKind> value={kind} label="Look at" onChange={(k) => { setKind(k); setMarkAc(null) }} options={PLACE_KINDS.map((k) => ({ value: k, label: PLACE_LABEL[k] }))} />
+            {kind !== 'all' && <SelectBox label={`Choose a ${PLACE_LABEL[kind].toLowerCase()}`} value={key} onChange={(v) => { setKey(v); setMarkAc(null) }} options={options.map((o) => ({ value: o.key, label: `${o.label} · ${o.n} ${machines ? (o.n === 1 ? noun!.one : noun!.many) : o.n === 1 ? 'ticket' : 'tickets'}` }))} />}
           </>
         }
       />
@@ -230,7 +235,7 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
       {machineSlice && (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
           <span className="text-muted-foreground">Count:</span>
-          <Seg<'machines' | 'tickets'> value={mode} label="Count" onChange={(m) => { setMode(m); setPicked(null); setMarkAc(null); setKey('') }} options={[{ value: 'machines', label: kindsInView.length > 1 ? 'Faulty ACs / gensets' : assetKind === 'ac' ? 'Faulty ACs' : 'Faulty gensets' }, { value: 'tickets', label: 'Open tickets' }]} />
+          <Seg<'machines' | 'tickets'> value={mode} label="Count" onChange={(m) => { setMode(m); setMarkAc(null); setKey('') }} options={[{ value: 'machines', label: kindsInView.length > 1 ? 'Faulty ACs / gensets' : assetKind === 'ac' ? 'Faulty ACs' : 'Faulty gensets' }, { value: 'tickets', label: 'Open tickets' }]} />
           {kindsInView.length > 1 && mode === 'machines' && <Seg<AssetKind> value={assetKind} label="Machine" onChange={(k) => { setKindChoice(k); setKey('') }} options={kindsInView.map((k) => ({ value: k, label: ASSET_LABEL[k].many.toUpperCase() }))} />}
         </div>
       )}
@@ -258,9 +263,9 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-sm font-bold">{monthTitle(month)}</h3>
               <div className="flex items-center gap-1 text-xs">
-                <button type="button" aria-label="Previous month" onClick={() => { setMonth(shiftMonth(month, -1)); setPicked(null) }} className="rounded-md border border-border p-1 hover:bg-muted"><ChevronLeft className="h-4 w-4" /></button>
-                <button type="button" onClick={() => { setMonth(thisMonth); setPicked(null) }} disabled={month === thisMonth} className="rounded-md border border-border px-2 py-1 font-medium hover:bg-muted disabled:opacity-50">This month</button>
-                <button type="button" aria-label="Next month" onClick={() => { setMonth(shiftMonth(month, 1)); setPicked(null) }} disabled={month >= thisMonth} className="rounded-md border border-border p-1 hover:bg-muted disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
+                <button type="button" aria-label="Previous month" onClick={() => { setMonth(shiftMonth(month, -1)) }} className="rounded-md border border-border p-1 hover:bg-muted"><ChevronLeft className="h-4 w-4" /></button>
+                <button type="button" onClick={() => { setMonth(thisMonth) }} disabled={month === thisMonth} className="rounded-md border border-border px-2 py-1 font-medium hover:bg-muted disabled:opacity-50">This month</button>
+                <button type="button" aria-label="Next month" onClick={() => { setMonth(shiftMonth(month, 1)) }} disabled={month >= thisMonth} className="rounded-md border border-border p-1 hover:bg-muted disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
               </div>
             </div>
             <div className="grid grid-cols-7 gap-1" role="group" aria-label={`${monthTitle(month)} for ${place}`}>
@@ -276,8 +281,8 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">
               {machines
-                ? `Each box: “down” = ${noun!.many} still faulty at the end of the day, R = faults raised, F = faults fixed. Colour = faulty ${noun!.many} as a share of the ${scope.length} ${scope.length === 1 ? noun!.one : noun!.many} here.`
-                : 'Each box: “open” = tickets not yet resolved at the end of the day, R = raised, F = fixed. Colour = the day compared with the usual level of the last 90 days.'}
+                ? `Each box: “down” = ${noun!.many} still faulty at the end of the day, R = faults raised, F = faults fixed. Click a day (or its R or F) to open its tickets. Colour = faulty ${noun!.many} as a share of the ${scope.length} ${scope.length === 1 ? noun!.one : noun!.many} here.`
+                : 'Each box: “open” = tickets not yet resolved at the end of the day, R = raised, F = fixed. Click a day (or its R or F) to open its tickets. Colour = the day compared with the usual level of the last 90 days.'}
             </p>
             {machineSlice && (
               <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
@@ -287,28 +292,6 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
                   : `Each day shows the highest/lowest outside temperature (by state; the coming 7 days are the forecast, in italics), ${wcities.length === 1 ? `for ${wcities[0]}` : `as a range over ${wcities.length} states (lowest–highest; click a day to see each state)`}${weather.missing > 0 ? ` (${weather.missing} more not collected yet)` : ''}. Saved every morning at 8:00.`}
               </p>
             )}
-
-            {pickedCell && (
-              <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <h4 className="text-sm font-bold">{pickedCell.day} {monthTitle(month)} · {pickedCell.count} {machines ? `${pickedCell.count === 1 ? noun!.one : noun!.many} faulty` : 'tickets open'} at the end of the day</h4>
-                  <button type="button" onClick={() => setPicked(null)} className="text-xs font-medium text-primary hover:underline">Close</button>
-                </div>
-                {machines && (pickedWeather?.parts.length ?? 0) > 0 && (
-                  <div className="mb-3 text-xs">
-                    <div className="mb-1 font-semibold">Outside temperature that day (highest / lowest)</div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1">
-                      {pickedWeather!.parts.map((p) => <span key={p.name}><span className="text-muted-foreground">{p.name}</span> <span className="font-medium">{deg(p.tmax)}/{deg(p.tmin)}</span></span>)}
-                    </div>
-                  </div>
-                )}
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {list('Raised that day', pickedCell.raisedIds)}
-                  {list('Fixed that day', pickedCell.resolvedIds)}
-                  {list(machines ? 'Still faulty' : 'Still open', pickedCell.openIds)}
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="min-w-0 space-y-5">
@@ -316,12 +299,16 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
               <>
                 <div>
                   <h3 className="text-sm font-bold">{noun!.many.toUpperCase()} that fail again and again</h3>
-                  <p className="mb-2 text-[11px] text-muted-foreground">Last {REPEAT_WINDOW_DAYS} days: {REPEAT_TICKETS}+ tickets = repeat, {WATCH_TICKETS}–{REPEAT_TICKETS - 1} = watch. Click one to mark its days on the calendar.</p>
+                  <p className="mb-2 text-[11px] text-muted-foreground">Last {REPEAT_WINDOW_DAYS} days: {REPEAT_TICKETS}+ tickets = repeat, {WATCH_TICKETS}–{REPEAT_TICKETS - 1} = watch. Click one to mark its days and open its tickets.</p>
                   {flagged.length === 0 ? <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">No {noun!.one} has failed {WATCH_TICKETS} or more times in the last {REPEAT_WINDOW_DAYS} days here.</p> : (
                     <ul className="space-y-1.5">
                       {flagged.map((r: RepeatAc) => (
                         <li key={r.key}>
-                          <button type="button" onClick={() => { setMarkAc(markAc === r.key ? null : r.key); const first = r.days.find((x) => x.startsWith(month)); setPicked(first ?? null) }} aria-pressed={markAc === r.key}
+                          <button type="button" onClick={() => {
+                            const on = markAc !== r.key
+                            setMarkAc(on ? r.key : null)
+                            if (on) open({ title: `${assetKind === 'genset' ? `Genset - ${r.storeName}` : r.label} · ${r.storeName}`, subtitle: `${r.count} ticket${r.count === 1 ? '' : 's'} in the last ${REPEAT_WINDOW_DAYS} days${TAG_TEXT[r.tag] ? ` · ${TAG_TEXT[r.tag]}` : ''}`, stage: 3, metric: 'created', dims: {}, ids: r.ticketIds, labels: Object.fromEntries(r.ticketIds.map((id) => [id, assetKind === 'genset' ? 'Genset' : r.label])) })
+                          }} aria-pressed={markAc === r.key}
                             className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition-colors hover:border-foreground/40 ${markAc === r.key ? 'border-foreground' : 'border-border'}`}>
                             <span className="flex items-start justify-between gap-2">
                               <span className="min-w-0">
@@ -362,7 +349,7 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
                     <ul className="space-y-1">
                       {worst.map((p) => (
                         <li key={p.key}>
-                          <button type="button" onClick={() => { setKind(listKind); setKey(p.key); setPicked(null); setMarkAc(null) }} className="flex w-full items-center justify-between gap-2 rounded-md border border-border px-2.5 py-1.5 text-left text-xs hover:border-foreground/40">
+                          <button type="button" onClick={() => { setKind(listKind); setKey(p.key); setMarkAc(null) }} className="flex w-full items-center justify-between gap-2 rounded-md border border-border px-2.5 py-1.5 text-left text-xs hover:border-foreground/40">
                             <span className="min-w-0 truncate font-medium">{p.label}</span>
                             <span className="shrink-0 tabular-nums text-muted-foreground">{p.down} of {p.acs} · <b className={p.pct > RED_ABOVE_PCT ? 'text-destructive' : p.pct > YELLOW_ABOVE_PCT ? 'text-amber-600 dark:text-amber-400' : ''}>{Math.round(p.pct)}%</b></span>
                           </button>

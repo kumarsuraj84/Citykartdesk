@@ -158,7 +158,7 @@ export function ExecutiveDashboard({ level, me, now, tickets: ticketsProp, appro
       {show('people') && <PeopleApprovals d={d} onOpen={open} />}
       {show('matrices') && <MatricesSection d={d} onOpen={open} />}
       {show('stores') && level !== 'requester' && <StoresSection d={d} onOpen={open} />}
-      {show('calendar') && <TicketCalendarSection tickets={tickets} filters={filters} now={now} />}
+      {show('calendar') && <TicketCalendarSection tickets={tickets} filters={filters} now={now} open={open} />}
       {show('tickets') && <ExplorerSection d={d} metric={metric} onOpen={open} onReset={reset} />}
 
       {drill && (

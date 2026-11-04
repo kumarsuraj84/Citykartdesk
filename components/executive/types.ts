@@ -37,6 +37,10 @@ export interface DrillContext {
   sla?: 'all' | 'breached' | 'ok'
   /** a slice with no measure of its own (closed in the window, open with no first response); the normal Dashboards page opens these */
   only?: SliceOnly
+  /** an exact list of tickets (the calendar's own list for a day, or for one AC): the pop-up shows these (still narrowed by the dashboard filters and by what is picked inside it), whatever the measure */
+  ids?: string[]
+  /** a short extra label per ticket, shown next to the store in the ticket list (the calendar gives the AC number) */
+  labels?: Record<string, string>
 }
 
 /** Opens the drill-down pop-up. Only the title, subtitle and stage are required; everything else defaults. */
