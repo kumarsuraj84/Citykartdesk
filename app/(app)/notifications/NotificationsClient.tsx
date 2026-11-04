@@ -4,11 +4,13 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Bell, Check, CheckCheck, Archive } from 'lucide-react'
+import { Bell, Check, CheckCheck, Archive, ArchiveX } from 'lucide-react'
 import {
   markNotificationRead,
   markAllNotificationsRead,
   archiveNotification,
+  archiveAllNotifications,
+  restoreArchivedNotifications,
 } from '@/lib/actions/notifications'
 import { formatRelativeTime } from '@/lib/utils'
 import type { NotificationWithActor } from '@/types'
@@ -231,6 +233,26 @@ export function NotificationsClient({
     })
   }
 
+  // "Clear all": every notification goes to Archived (nothing is deleted), with an Undo for a few seconds
+  function handleClearAll() {
+    const prevNotifications = notifications
+    const prevUnreadCount = unreadCount
+    const archivedAt = new Date().toISOString()
+    setNotifications((prev) => prev.map((n) => (n.archived_at ? n : { ...n, archived_at: archivedAt, read_at: n.read_at ?? archivedAt })))
+    setUnreadCount(0)
+    startTransition(async () => {
+      const result = await archiveAllNotifications()
+      if (result.error || !result.ids || !result.archivedAt) { toast.error(result.error ?? 'Could not clear the notifications.'); setNotifications(prevNotifications); setUnreadCount(prevUnreadCount); return }
+      router.refresh()
+      if (result.ids.length === 0) return
+      const undo = { archivedAt: result.archivedAt, ids: result.ids, unreadIds: result.unreadIds ?? [] }
+      toast(`Cleared ${result.ids.length} notification${result.ids.length === 1 ? '' : 's'}`, {
+        duration: 8000,
+        action: { label: 'Undo', onClick: async () => { const r = await restoreArchivedNotifications(undo); if (r.error) toast.error(r.error); else router.refresh() } },
+      })
+    })
+  }
+
   const visible = notifications.filter((n) => {
     if (filter === 'unread') return !n.read_at && !n.archived_at
     if (filter === 'archived') return !!n.archived_at
@@ -247,17 +269,31 @@ export function NotificationsClient({
             Stay updated on your requests and activity
           </p>
         </div>
-        {unreadCount > 0 && (
-          <button
-            type="button"
-            onClick={handleMarkAll}
-            disabled={isPending}
-            className="btn-soft shadow-sm"
-          >
-            <CheckCheck className="h-3.5 w-3.5" />
-            Mark all read
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {unreadCount > 0 && (
+            <button
+              type="button"
+              onClick={handleMarkAll}
+              disabled={isPending}
+              className="btn-soft shadow-sm"
+            >
+              <CheckCheck className="h-3.5 w-3.5" />
+              Mark all read
+            </button>
+          )}
+          {notifications.some((n) => !n.archived_at) && (
+            <button
+              type="button"
+              onClick={handleClearAll}
+              disabled={isPending}
+              title="Move all notifications to Archived (you can undo)"
+              className="btn-soft shadow-sm"
+            >
+              <ArchiveX className="h-3.5 w-3.5" />
+              Clear all
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}

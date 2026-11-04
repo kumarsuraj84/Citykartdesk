@@ -3,8 +3,9 @@
 import { useState, useRef, useEffect, useTransition } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { Bell, Check, CheckCheck, Archive, X, Eye, Loader2 } from 'lucide-react'
-import { markNotificationRead, markAllNotificationsRead, archiveNotification } from '@/lib/actions/notifications'
+import { Bell, Check, CheckCheck, Archive, ArchiveX, X, Eye, Loader2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { markNotificationRead, markAllNotificationsRead, archiveNotification, archiveAllNotifications, restoreArchivedNotifications } from '@/lib/actions/notifications'
 import { getApprovalForRequestAction } from '@/lib/actions/approvals'
 import { ApprovalPreviewDialog } from '@/components/requests/ApprovalPreviewDialog'
 import { formatRelativeTime } from '@/lib/utils'
@@ -174,6 +175,7 @@ export function NotificationBell({
   viewerRole,
   dark = false,
 }: NotificationBellProps) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [notifications, setNotifications] = useState(initialNotifications)
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount)
@@ -265,6 +267,25 @@ export function NotificationBell({
     })
   }
 
+  // "Clear all": every notification of the person goes to Archived (nothing is deleted), with an Undo for a few seconds. The bell leaves approval requests alone (they have their own bell).
+  function handleClearAll() {
+    const prevNotifications = notifications
+    const prevUnreadCount = unreadCount
+    setNotifications([])
+    setUnreadCount(0)
+    startTransition(async () => {
+      const result = await archiveAllNotifications({ excludeApprovalRequests: true })
+      if (result.error || !result.ids || !result.archivedAt) { toast.error(result.error ?? 'Could not clear the notifications.'); setNotifications(prevNotifications); setUnreadCount(prevUnreadCount); return }
+      router.refresh()
+      if (result.ids.length === 0) return
+      const undo = { archivedAt: result.archivedAt, ids: result.ids, unreadIds: result.unreadIds ?? [] }
+      toast(`Cleared ${result.ids.length} notification${result.ids.length === 1 ? '' : 's'}`, {
+        duration: 8000,
+        action: { label: 'Undo', onClick: async () => { const r = await restoreArchivedNotifications(undo); if (r.error) toast.error(r.error); else router.refresh() } },
+      })
+    })
+  }
+
   return (
     <div ref={ref} className="relative">
       <button
@@ -300,6 +321,18 @@ export function NotificationBell({
                 >
                   <CheckCheck className="h-3 w-3" />
                   Mark all read
+                </button>
+              )}
+              {notifications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  disabled={isPending}
+                  title="Move all notifications to Archived (you can undo)"
+                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
+                >
+                  <ArchiveX className="h-3 w-3" />
+                  Clear all
                 </button>
               )}
               <button

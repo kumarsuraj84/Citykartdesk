@@ -158,23 +158,31 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
     const classes = `${LEVEL_CLASS[d.level]} ${d.today ? 'ring-2 ring-primary' : ''} ${marked?.has(d.key) ? 'outline outline-2 -outline-offset-2 outline-foreground' : ''}`
     const body = (
       <>
+        {/* the facts lead (how many are down, raised, fixed, the temperature); the day number is small and quiet */}
         <span className="flex items-start justify-between gap-1">
-          <span className="text-sm font-bold leading-none">{d.day}</span>
-          {!d.future && w && (w.tmax !== null || w.tmin !== null) && <span className="text-[10px] font-medium leading-none opacity-80" title={`Highest ${deg(w.tmax)}, lowest ${deg(w.tmin)}`}>{deg(w.tmax)}/{deg(w.tmin)}</span>}
+          <span className="text-[11px] font-normal leading-none opacity-70">{d.today ? `${d.day} today` : d.day}</span>
+          {!d.future && w && (w.tmax !== null || w.tmin !== null) && <span className="text-[11px] font-medium leading-none opacity-80" title={`Highest ${deg(w.tmax)}, lowest ${deg(w.tmin)}`}>{deg(w.tmax)}/{deg(w.tmin)}</span>}
         </span>
         {!d.future && (
-          <span className="mt-1 block text-[11px] leading-tight">
-            {d.count > 0 ? <strong>{d.count} {dim}</strong> : <span className="opacity-70">none {dim}</span>}
-            {(d.raised > 0 || d.resolved > 0) && <span className="block opacity-80">R{d.raised} · F{d.resolved}</span>}
-          </span>
+          <>
+            {d.count > 0
+              ? <span className="mt-1.5 block text-2xl font-semibold leading-none">{d.count}<span className="ml-1 text-[11px] font-normal opacity-85">{dim}</span></span>
+              : <span className="mt-1.5 block text-xs leading-none opacity-70">none {dim}</span>}
+            {(d.raised > 0 || d.resolved > 0) && (
+              <span className="mt-1.5 flex gap-1 text-[11px] leading-none">
+                <span className="rounded bg-white/55 px-1 py-0.5 dark:bg-black/25">R{d.raised}</span>
+                <span className="rounded bg-white/55 px-1 py-0.5 dark:bg-black/25">F{d.resolved}</span>
+              </span>
+            )}
+          </>
         )}
       </>
     )
-    if (d.future) return <div key={d.key} className={`min-h-[60px] rounded-md p-1.5 ${classes}`} aria-label={`${d.day}: a future day`}>{body}</div>
+    if (d.future) return <div key={d.key} className={`min-h-[84px] rounded-md p-1.5 ${classes}`} aria-label={`${d.day}: a future day`}>{body}</div>
     return (
       <button key={d.key} type="button" onClick={() => setPicked(picked === d.key ? null : d.key)} aria-pressed={picked === d.key}
         aria-label={`${monthTitle(month)} ${d.day}: ${d.count} ${dim}, ${d.raised} raised, ${d.resolved} fixed`}
-        className={`min-h-[60px] rounded-md p-1.5 text-left transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${classes} ${picked === d.key ? 'shadow-md ring-2 ring-foreground' : ''}`}>
+        className={`min-h-[84px] rounded-md p-1.5 text-left transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${classes} ${picked === d.key ? 'shadow-md ring-2 ring-foreground' : ''}`}>
         {body}
       </button>
     )

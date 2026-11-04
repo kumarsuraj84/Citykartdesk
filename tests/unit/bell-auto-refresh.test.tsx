@@ -17,8 +17,9 @@ import type { NotificationWithActor } from '@/types'
 vi.mock('next/link', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 vi.mock('@/lib/actions/notifications', () => ({
-  markNotificationRead: vi.fn(), markAllNotificationsRead: vi.fn(), archiveNotification: vi.fn(),
+  markNotificationRead: vi.fn(), markAllNotificationsRead: vi.fn(), archiveNotification: vi.fn(), archiveAllNotifications: vi.fn(), restoreArchivedNotifications: vi.fn(),
 }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/lib/actions/approvals', () => ({ getApprovalForRequestAction: vi.fn() }))
 
 afterEach(() => cleanup())
