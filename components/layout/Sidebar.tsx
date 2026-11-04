@@ -16,6 +16,7 @@ import { signOut } from '@/lib/actions/auth'
 import { ROLE_LABELS } from '@/lib/constants/roles'
 import type { ProfileWithTeams, NavVisibility } from '@/types'
 import type { NavCounts } from '@/lib/queries/profiles'
+import { showApprovalsMenu } from '@/lib/approvals/store-users'
 
 interface SidebarProps {
   profile: ProfileWithTeams
@@ -105,7 +106,8 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
         // Any active user can be sent an ad-hoc approval (not just agent-
         // tier roles), so this can't be role-gated — a plain requester
         // designated as an approver still needs a way in.
-        ...(has('approvals')
+        // ... but a store user is never an approver, so the entry is hidden for them (unless an approval is somehow waiting for them): lib/approvals/store-users.ts
+        ...(showApprovalsMenu({ moduleOn: has('approvals'), storeLinked: !!profile.store_id, waiting: navCounts.approvals ?? 0 })
           ? [{ label: 'Approvals', href: '/approvals', icon: ShieldCheck, countKey: 'approvals' as keyof NavCounts }] : []),
         ...(has('projects') && isAdmin
           ? [{ label: 'Projects',      href: '/projects',      icon: FolderKanban, countKey: 'projects'      as keyof NavCounts }] : []),

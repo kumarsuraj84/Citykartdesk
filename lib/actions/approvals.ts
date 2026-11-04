@@ -12,6 +12,7 @@ import { archiveApprovalNotifications, decideApproval, type ApprovalDb } from '@
 import { notify } from '@/lib/notifications'
 import { rateLimit } from '@/lib/rate-limit'
 import { firstBarredApprover } from '@/lib/approvals/separation'
+import { barStoreApprovers } from '@/lib/approvals/store-users'
 import { createAdHocApproval } from '@/lib/approvals/adhoc'
 import { recallApprovalCore } from '@/lib/approvals/recall'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
@@ -38,6 +39,7 @@ export async function searchUsersForDelegation(
     .select('id, full_name')
     .eq('org_id', me.org_id)
     .eq('is_active', true)
+    .is('store_id', null)   // a store user is never an approver (lib/approvals/store-users.ts)
     .ilike('full_name', `%${safe}%`)
     .order('full_name')
     .limit(10)
@@ -67,6 +69,7 @@ export async function searchManagersForApproval(
     .select('id, full_name, role')
     .eq('org_id', profile.org_id)
     .eq('is_active', true)
+    .is('store_id', null)   // a store user is never an approver (lib/approvals/store-users.ts)
     .ilike('full_name', `%${safe}%`)
     .order('full_name')
     .limit(8)
@@ -96,6 +99,7 @@ export async function searchManagersForApproval(
     .select('id, full_name, role')
     .eq('org_id', profile.org_id)
     .eq('is_active', true)
+    .is('store_id', null)   // a store user is never an approver (lib/approvals/store-users.ts)
     .in('id', [...matchingIds])
     .order('full_name')
     .limit(8)
@@ -169,6 +173,8 @@ export async function sendAdHocApproval(
   if (!approvers) return { error: 'One or more selected users were not found.' }
   const barred = firstBarredApprover(approverIds, { requesterId: req.requester_id, senderId: profile.id })
   if (barred) return { error: barred }
+  const storeBarred = await barStoreApprovers(admin, approverIds)
+  if (storeBarred) return { error: storeBarred }
 
   const sent = await createAdHocApproval(admin, {
     request: { id: req.id, request_no: req.request_no, title: req.title, status: req.status, requester_id: req.requester_id, org_id: req.org_id, waiting_since: req.waiting_since },
@@ -224,6 +230,8 @@ export async function addAdHocApprovers(
   // nobody adds themselves, the requester or the sender as an approver (VAPT-016)
   const barredAdd = firstBarredApprover(approverIds, { requesterId: req.requester_id, senderId: approval.requested_by ?? null, actorId: profile.id })
   if (barredAdd) return { error: barredAdd }
+  const storeBarredAdd = await barStoreApprovers(admin, approverIds)
+  if (storeBarredAdd) return { error: storeBarredAdd }
 
   const { data: existingSteps } = await admin
     .from('approval_workflow_steps')
@@ -369,6 +377,8 @@ export async function delegateApproval(
     .eq('org_id', req?.org_id ?? '')
     .maybeSingle()
   if (!newApprover) return { error: 'Selected user was not found in your organisation.' }
+  const storeBarredDelegate = await barStoreApprovers(admin, [newApproverId])
+  if (storeBarredDelegate) return { error: storeBarredDelegate }
 
   // D-016: only THIS approval changes. A workflow that a service or other approvals also use is copied for this approval first.
   const isolated = await isolateStepForDelegation(admin as never, { id: approvalId, workflow_id: approval.workflow_id }, currentStep.step_order)

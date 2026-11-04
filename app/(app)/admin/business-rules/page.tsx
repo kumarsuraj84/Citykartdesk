@@ -97,7 +97,7 @@ export default async function BusinessRulesPage() {
         templates={templatesResult.data ?? []}
         formFields={formFields}
         libraryFields={libraryFields}
-        programs={[...((programs ?? []) as { id: string; name: string }[]), { id: 'ac', name: 'AC (built in)' }, { id: 'genset', name: 'Genset (built in)' }]}
+        programs={(programs ?? []) as { id: string; name: string }[]}
         vendorCompanies={(vendorCompanies ?? []) as { id: string; name: string }[]}
         stores={((stores ?? []) as { id: string; code: string; name: string }[]).map((s) => ({ id: s.id, name: `${s.name} (${s.code})` }))}
         legacyRulesAvailable={(assignmentRulesCount.count ?? 0) + (escalationRulesCount.count ?? 0) > 0}

@@ -305,7 +305,7 @@ export async function saveProgramDetailsTemplate(id: string, text: string): Prom
 
 /**
  * Moves categories from the OLD AC / Genset setting ("send to the AC / Genset OEM") to this program and switches the program on, in one step, so no ticket is ever left without
- * its mail. Refused unless everything else on the program's check list is green. The categories can be moved back from the built-in AC / Genset screen.
+ * its mail. Refused unless everything else on the program's check list is green.
  */
 export async function moveCategoriesToProgram(id: string, categoryIds: string[]): Promise<ActionResult> {
   const guard = await requireAdmin()

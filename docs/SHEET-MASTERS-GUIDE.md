@@ -77,3 +77,13 @@ automatically because the whole sheet is read each time.
 Retired by this change (not deleted from the database, hidden from the screens): the OEM list screen and "assign stores to OEM", the AC OEM / Genset OEM / CVM tags on a
 store, the OEM / CVM columns of the Store Master Excel upload. The columns `stores.oem_id`, `stores.genset_oem_id`, `stores.cvm_id` and the `oems` table stay for
 history and can be dropped in a later clean-up.
+
+## Clean-up stage A (4 Nov 2026): the built-in AC and Genset lines are gone from the screens
+
+AC and Genset are Vendor Programs like the others (Admin > Vendor Programs); the two "built in" rows and their screens are removed. Nothing a ticket needs was removed:
+- the AC and Genset sheet links, their copies (11:00 / 15:00 / 19:00) and their health list are on **Admin > Sheet Masters** (four sheets: AC, Genset, CVM, AC PMS);
+- the organisation-wide **default PO approver** is set on **Admin > Vendors** (the program's own default approvers stay on the program's screen);
+- the **AC Calendar** now finds AC and Genset tickets through the programs (a program named "AC" / containing "genset" is the AC / Genset line, see `lib/programs/asset-kind.ts`;
+  the old per-category setting still counts) - before, it looked only at the retired category setting and had no ticket to show;
+- the Business Rules vendor-line list no longer offers "AC (built in)" / "Genset (built in)".
+Not changed yet (stage B, after the full test suites can run): the old routing code (`lib/requests/master-routing.ts`), the category switch "send to the AC / Genset OEM" and the old mail wording editor.

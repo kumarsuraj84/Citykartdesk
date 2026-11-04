@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { logActivity } from '@/lib/activity'
 import { notify } from '@/lib/notifications'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { barStoreApprovers } from '@/lib/approvals/store-users'
 import { stopOpenTimeEntries } from '@/lib/requests/status-change'
 import type { RequestStatus } from '@/types'
 
@@ -31,6 +32,10 @@ export async function createAdHocApproval(
 ): Promise<{ error?: string }> {
   const req = p.request
   const approverIds = p.approvers.map((a) => a.id)
+
+  // the last line of defence (every caller - the technician's "Send for approval", the automatic CVM approval - passes here): nothing is ever sent to a store user
+  const storeBarred = await barStoreApprovers(admin, approverIds)
+  if (storeBarred) return { error: storeBarred }
 
   // Block if an approval is already open
   const { data: existing } = await admin.from('approvals').select('id').eq('request_id', req.id).eq('status', 'pending').maybeSingle()

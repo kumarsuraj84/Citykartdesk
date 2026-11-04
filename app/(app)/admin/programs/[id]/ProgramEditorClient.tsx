@@ -147,7 +147,7 @@ export function ProgramEditorClient({ data, subject: subject0, body: body0, cust
       </Card>
 
       {categories.some((c) => c.old_kind) && (
-        <Card n={2} title="Move categories from the old AC / Genset setting" hint="These categories still send their tickets with the OLD AC / Genset setting. Moving them here makes this program do it instead, and switches the program on in the same step (so no ticket is left without its mail). The program must be ready first: sheet read, mail wording written. You can move a category back from the AC / Genset (built in) screen.">
+        <Card n={2} title="Move categories from the old AC / Genset setting" hint="These categories still send their tickets with the OLD AC / Genset setting. Moving them here makes this program do it instead, and switches the program on in the same step (so no ticket is left without its mail). The program must be ready first: sheet read, mail wording written.">
           <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
             {categories.filter((c) => c.old_kind).map((c) => (
               <label key={c.id} className="flex items-start gap-2 rounded-lg border border-border px-2.5 py-1.5 text-sm">

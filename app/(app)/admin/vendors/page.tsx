@@ -3,6 +3,8 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { VendorsClient, type VendorCompanyRow, type VendorPersonRow } from './VendorsClient'
+import { PoApproverCard } from './PoApproverCard'
+import { resolvePoApprover } from '@/lib/vendor/po'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Vendors' }
@@ -17,9 +19,12 @@ export default async function VendorsPage() {
   const orgId = profile.org_id ?? ''
   const admin = createAdminClient() as unknown as Db
 
-  const [{ data: companies }, { data: people }] = await Promise.all([
+  const [{ data: companies }, { data: people }, { data: staffRows }, currentApprover] = await Promise.all([
     admin.from('vendor_companies').select('id, name, is_active').eq('org_id', orgId).order('name', { ascending: true }),
     admin.from('profiles').select('id, full_name, is_active, vendor_company_id, vendor_role').eq('org_id', orgId).not('vendor_company_id', 'is', null).order('full_name', { ascending: true }),
+    // who may be the default PO approver: active Citykart technicians, managers and administrators (never a vendor login)
+    admin.from('profiles').select('id, full_name, role').eq('org_id', orgId).eq('is_active', true).is('vendor_company_id', null).in('role', ['agent', 'manager', 'admin', 'platform_owner']).order('full_name', { ascending: true }),
+    resolvePoApprover(orgId),
   ])
 
   const peopleRows = (people ?? []) as VendorPersonRow[]
@@ -33,8 +38,9 @@ export default async function VendorsPage() {
     <div className="max-w-5xl space-y-4">
       <PageHeader
         title="Vendors"
-        description="The vendor and OEM companies whose engineers log in to work AC tickets and the tickets of Vendor Programs. The default PO approvers are not here: each line has its own on its own screen (Admin > Vendor Programs). A technician works the tickets given to him; a manager only views all tickets of his company's technicians."
+        description="The vendor and OEM companies whose engineers log in to work AC tickets and the tickets of Vendor Programs. The default PO approver is set below; every Vendor Program also has its own default approvers on its own screen (Admin > Vendor Programs). A technician works the tickets given to him; a manager only views all tickets of his company's technicians."
       />
+      <PoApproverCard staff={(staffRows ?? []) as { id: string; full_name: string; role: string }[]} approverId={currentApprover?.id ?? ''} />
       <VendorsClient companies={companyRows} people={peopleRows} />
     </div>
   )

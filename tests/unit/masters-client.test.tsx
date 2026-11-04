@@ -21,16 +21,16 @@ const issues: IssueView[] = [
 ]
 
 describe('Admin > Sheet Masters page', () => {
-  it('shows the three-times-a-day schedule, the counts, the CVM / PMS sheets, the health list and a pointer to Vendor Programs for AC and Genset', () => {
+  it('shows the three-times-a-day schedule, the counts, the four sheets (AC, Genset, CVM, AC PMS), the health list and a pointer to Vendor Programs for the mail wording', () => {
     render(<MastersClient googleResult={null} connection={{ account_email: 'citykartdesk@citykartstores.com', status: 'connected', last_error: null, connected_at: '2026-10-19T05:00:00Z' }} sources={[source('ac'), source('genset'), source('cvm')]} issues={issues} counts={counts} />)
     expect(screen.getByText(/11:00, 15:00, 19:00/)).toBeTruthy()
     expect(screen.getByText('Update from sheets now')).toBeTruthy()
     expect(screen.getByText('citykartdesk@citykartstores.com')).toBeTruthy()
     expect(screen.getByText('CVM Detail MASTER SHEET-ADMIN (for Approval)')).toBeTruthy()
-    expect(screen.queryByText('AC DETAILS MASTER SHEET-ADMIN')).toBeNull()
-    expect(screen.queryByText('GENSET Detail MASTER SHEET-ADMIN')).toBeNull()
-    expect(screen.getByText('AC and Genset')).toBeTruthy()
-    expect(screen.getByText(/Vendor Programs/).closest('a')?.getAttribute('href')).toBe('/admin/programs')
+    // the AC and Genset sheet links live here too (the built-in AC / Genset screens of Vendor Programs are gone)
+    expect(screen.getByText('AC DETAILS MASTER SHEET-ADMIN')).toBeTruthy()
+    expect(screen.getByText('GENSET Detail MASTER SHEET-ADMIN')).toBeTruthy()
+    expect(screen.getByText(/Admin > Vendor Programs/).closest('a')?.getAttribute('href')).toBe('/admin/programs')
     expect(screen.getByText('Active ACs')).toBeTruthy()
     expect(screen.getByText('12')).toBeTruthy()
     expect(screen.getByText(/PAR has the AC number 3 twice/)).toBeTruthy()

@@ -6,6 +6,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { getApprovalWorkflowWithSteps, type ApprovalWorkflowStep } from '@/lib/queries/admin'
 import { requireCapability } from '@/lib/permissions/policies'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { barStoreApprovers } from '@/lib/approvals/store-users'
 
 type ActionResult<T = undefined> = T extends undefined
   ? { error?: string }
@@ -135,6 +136,8 @@ export async function upsertWorkflowStep(input: UpsertStepInput): Promise<Action
   if (input.approverType === 'specific_user' && input.approverUserId) {
     const { data: approver } = await admin.from('profiles').select('id').eq('id', input.approverUserId).eq('org_id', guard.profile!.org_id!).eq('is_active', true).maybeSingle()
     if (!approver) return { error: 'Selected approver not found in your organisation.' }
+    const storeBarred = await barStoreApprovers(admin, [input.approverUserId])
+    if (storeBarred) return { error: storeBarred }
   }
 
   const payload = {

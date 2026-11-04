@@ -9,6 +9,7 @@ import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from '@/co
 import { Sidebar } from './Sidebar'
 import type { NavVisibility, ProfileWithTeams } from '@/types'
 import type { NavCounts } from '@/lib/queries/profiles'
+import { showApprovalsMenu } from '@/lib/approvals/store-users'
 
 interface MobileNavProps {
   profile: ProfileWithTeams
@@ -42,7 +43,8 @@ export function MobileNav({ profile, navVisibility, navCounts }: MobileNavProps)
     { label: 'Tasks',         href: '/tasks',         icon: ListTodo,    show: has('tasks') && isAdmin },
     { label: 'Intake',        href: '/intake',        icon: Sparkles,    show: has('intake') && (isAgent || isManager || isAdmin) },
     // Any active user can be sent an ad-hoc approval, not just agent-tier roles.
-    { label: 'Approvals',     href: '/approvals',     icon: CheckCircle, show: has('approvals') },
+    // (hidden for a store user: no store is an approver - see lib/approvals/store-users.ts)
+    { label: 'Approvals',     href: '/approvals',     icon: CheckCircle, show: showApprovalsMenu({ moduleOn: has('approvals'), storeLinked: !!profile.store_id, waiting: navCounts.approvals ?? 0 }) },
     { label: 'Notifications', href: '/notifications', icon: Bell,        show: true },
   ]
 

@@ -7,6 +7,7 @@ import { getServiceFormFieldsForOrg } from '@/lib/forms/sections'
 import { acFormFields, answerText, isServerRoomAc, type AcFormFields } from '@/lib/reporting/analytics/facts'
 import { levelFor, type DashLevel } from '@/lib/reporting/executive/levels'
 import type { AssetKind, CalAc, CalTicket } from '@/lib/reporting/executive/ac-calendar'
+import { assetKindByCategory } from '@/lib/programs/asset-kind'
 import { createShortCache } from '@/lib/cache/short-ttl'
 import type { ProfileWithTeams } from '@/types'
 
@@ -73,9 +74,14 @@ async function loadRows(orgId: string, level: DashLevel, scope: Parameters<typeo
   const now = Date.now()
   const since = new Date(now - LOOKBACK_DAYS * 86_400_000).toISOString()
 
-  // Only the categories that go to an OEM as machine work are asset tickets: AC (kind 'ac') and genset. Other tickets of the same service (stationery, repairs ...) are not.
-  const { data: kinds } = await admin.from('service_categories').select('id, auto_oem_kind').eq('org_id', orgId).in('auto_oem_kind', ['ac', 'genset'])
-  const kindOfCategory = new Map(((kinds ?? []) as { id: string; auto_oem_kind: AssetKind }[]).map((c) => [c.id, c.auto_oem_kind]))
+  // Only the categories that go to an OEM as machine work are asset tickets: AC and genset. Other tickets of the same service (stationery, repairs ...) are not.
+  // The AC and Genset lines are Vendor Programs now (their categories have no old `auto_oem_kind` any more), so a category counts when its program is the AC or the Genset line (lib/programs/asset-kind.ts);
+  // the old setting still counts too.
+  const [{ data: kinds }, { data: progs }] = await Promise.all([
+    admin.from('service_categories').select('id, auto_oem_kind, program_id').eq('org_id', orgId).or('auto_oem_kind.in.(ac,genset),program_id.not.is.null'),
+    admin.from('vendor_programs').select('id, name').eq('org_id', orgId),
+  ])
+  const kindOfCategory = assetKindByCategory((kinds ?? []) as { id: string; auto_oem_kind: string | null; program_id: string | null }[], (progs ?? []) as { id: string; name: string }[])
   const fields = await getServiceFormFieldsForOrg(admin, orgId)
   const byService = new Map<string, typeof fields>()
   for (const f of fields) byService.set(f.serviceId, [...(byService.get(f.serviceId) ?? []), f])

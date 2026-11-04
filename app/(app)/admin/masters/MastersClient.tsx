@@ -32,8 +32,8 @@ export type PmsView = { upcoming: number; log: { store_code: string; pms_date: s
 type Connection = { account_email: string | null; status: 'connected' | 'broken'; last_error: string | null; connected_at: string } | null
 
 export const SHEETS: { kind: 'ac' | 'genset' | 'cvm' | 'pms'; title: string; hint: string }[] = [
-  { kind: 'ac', title: 'AC DETAILS MASTER SHEET-ADMIN', hint: 'One row per AC. Gives the AC choices in the ticket form, the OEM e-mail addresses, and the store address and opening date.' },
-  { kind: 'genset', title: 'GENSET Detail MASTER SHEET-ADMIN', hint: 'One row per genset. Gives the OEM e-mail addresses for genset tickets.' },
+  { kind: 'ac', title: 'AC DETAILS MASTER SHEET-ADMIN', hint: 'One row per AC (the FIRST tab of the sheet). Gives the AC choices in the ticket form, the OEM e-mail addresses and the AC details of the store card. A second tab called "Store Details" (one row per store) fills the rest of the store card. Keep the AC tab first.' },
+  { kind: 'genset', title: 'GENSET Detail MASTER SHEET-ADMIN', hint: 'One row per genset. Gives the OEM e-mail addresses for genset tickets and the gensets of the AC calendar.' },
   { kind: 'cvm', title: 'CVM Detail MASTER SHEET-ADMIN (for Approval)', hint: 'One row per store with its CVM e-mail. The approval goes to that person.' },
   { kind: 'pms', title: 'AC PMS MASTER SHEET', hint: 'One row per store and PMS date (columns Store Code and AC PMS Date). On that date, from 09:00, one AC PMS ticket is made for the store, in the AC PMS service and category.' },
 ]
@@ -232,14 +232,12 @@ export function MastersClient({ googleResult, connection, sources, issues, count
         ))}
       </div>
 
-      <Card title="AC and Genset">
-        <p className="text-sm text-muted-foreground">
-          The AC and Genset sheets, their categories and their OEM e-mail wording are set up in <Link href="/admin/programs" className="font-medium text-primary underline">Admin &gt; Vendor Programs</Link>, together with every other vendor line.
-          This page keeps the Google connection, the update button, the CVM and AC PMS sheets, and the health list of all sheets.
-        </p>
-      </Card>
+      <p className="text-xs text-muted-foreground">
+        The mail wording, the categories and the vendor of each line (AC, Genset, RO purifier ...) are set up in <Link href="/admin/programs" className="font-medium text-primary underline">Admin &gt; Vendor Programs</Link>.
+        The four sheets below (AC, Genset, CVM, AC PMS) are copied here into CK Desk for everything else that reads them: the AC choices in the ticket form, the store card, the AC calendar, the approvals and the reports.
+      </p>
 
-      {SHEETS.filter((s) => s.kind === 'cvm' || s.kind === 'pms').map((s) => <SourceCard key={s.kind} source={sources.find((x) => x.kind === s.kind)} spec={s} issueCount={issueCount(s.kind)} />)}
+      {SHEETS.map((s) => <SourceCard key={s.kind} source={sources.find((x) => x.kind === s.kind)} spec={s} issueCount={issueCount(s.kind)} />)}
 
       {sources.some((x) => x.kind === 'pms') && (
         <Card title={`AC PMS tickets (${pms.upcoming} PMS date${pms.upcoming === 1 ? '' : 's'} still to come in the sheet)`}>

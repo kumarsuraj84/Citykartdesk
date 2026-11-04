@@ -52,7 +52,7 @@ export default async function SheetMastersPage({ searchParams }: { searchParams:
     <div className="mx-auto max-w-5xl space-y-4">
       <PageHeader
         title="Sheet Masters"
-        description="The Google connection, the update button, the CVM and AC PMS sheets and the health list of all sheets. CK Desk copies the sheets into its own database at 11:00, 15:00 and 19:00 and never changes them. The AC PMS tickets are made at 09:00 on each PMS date. AC and Genset are set up in Vendor Programs."
+        description="The Google connection, the update button, the four sheets (AC, Genset, CVM and AC PMS) and the health list of all sheets. CK Desk copies the sheets into its own database at 11:00, 15:00 and 19:00 and never changes them. The AC PMS tickets are made at 09:00 on each PMS date. The mail wording and categories of AC and Genset are set up in Vendor Programs."
       />
       <MastersClient
         googleResult={google ?? null}
