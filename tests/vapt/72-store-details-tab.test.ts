@@ -1,5 +1,5 @@
 // The "Store Details" tab of the AC Google Sheet as the Store Master, on the isolated audit stack (the sheet is replaced by fixed rows; nothing goes to Google):
-//  - while the sheet has no such tab, the store card follows the AC rows (as before);
+//  - while the sheet has no such tab, the store's own details are left as they are (the AC rows give only the machines' facts, never the place);
 //  - with the tab, the store's own details come from the tab and only the machines' facts from the AC rows; a store only in the tab is filled too; an empty cell erases nothing;
 //  - a store card is never filled from the AC rows again once the tab has been used: a tab that disappears, is unreadable or has no stores leaves the cards as they are, with a problem line;
 //  - the problem list says which stores the tab does not list and which codes CK Desk does not know.
@@ -56,13 +56,13 @@ afterAll(async () => {
 }, 180_000)
 
 describe('the Store Details tab fills the store card', () => {
-  it('1. no tab yet: the store card follows the AC rows, as before', async () => {
+  it('1. no tab yet: the AC rows give only the machines; the store's own details are not taken from them', async () => {
     ac = [AC_HEAD, acRow(A, 1, 'AC CITY A'), acRow(B, 1, 'AC CITY B')]
     tab = null
     const r = await sync()
     expect(r.ac.status).toBe('ok')
-    expect(await cardOf(A)).toMatchObject({ city: 'AC CITY A', state: 'AC-ST', address: 'ac address', pincode: '111111', ac_total: 1, ac_brand: 'DAIKIN' })
-    expect(await cardOf(B)).toMatchObject({ city: 'AC CITY B' })
+    expect(await cardOf(A)).toMatchObject({ city: 'OLD CITY', state: 'OLD', address: 'old address', ac_total: 1, ac_brand: 'DAIKIN' })   // the place stays; only the machines' facts change
+    expect(await cardOf(B)).toMatchObject({ city: 'OLD CITY' })
     expect(await cardOf(C)).toMatchObject({ city: 'OLD CITY' })   // not in the AC sheet, nothing to read
     expect((await db().from('app_settings').select('value').eq('key', usedKey())).data ?? []).toHaveLength(0)
   })

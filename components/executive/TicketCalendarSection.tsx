@@ -230,7 +230,7 @@ export function TicketCalendarSection({ tickets, filters, now }: { tickets: Exec
       {machineSlice && (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
           <span className="text-muted-foreground">Count:</span>
-          <Seg<'machines' | 'tickets'> value={mode} label="Count" onChange={(m) => { setMode(m); setPicked(null); setMarkAc(null); setKey('') }} options={[{ value: 'machines', label: kindsInView.length > 1 || assetKind === 'ac' ? 'Faulty ACs / gensets' : 'Faulty gensets' }, { value: 'tickets', label: 'Open tickets' }]} />
+          <Seg<'machines' | 'tickets'> value={mode} label="Count" onChange={(m) => { setMode(m); setPicked(null); setMarkAc(null); setKey('') }} options={[{ value: 'machines', label: kindsInView.length > 1 ? 'Faulty ACs / gensets' : assetKind === 'ac' ? 'Faulty ACs' : 'Faulty gensets' }, { value: 'tickets', label: 'Open tickets' }]} />
           {kindsInView.length > 1 && mode === 'machines' && <Seg<AssetKind> value={assetKind} label="Machine" onChange={(k) => { setKindChoice(k); setKey('') }} options={kindsInView.map((k) => ({ value: k, label: ASSET_LABEL[k].many.toUpperCase() }))} />}
         </div>
       )}

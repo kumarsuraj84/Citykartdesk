@@ -6,7 +6,7 @@ import { fetchAllPages } from '@/lib/queries/paging'
 import { getServiceFormFieldsForOrg } from '@/lib/forms/sections'
 import { acFormFields, answerText, isServerRoomAc, type AcFormFields } from '@/lib/reporting/analytics/facts'
 import { levelFor, type DashLevel } from '@/lib/reporting/executive/levels'
-import type { AssetKind, CalAc, CalTicket } from '@/lib/reporting/executive/ac-calendar'
+import { placeValue, type AssetKind, type CalAc, type CalTicket } from '@/lib/reporting/executive/ac-calendar'
 import { assetKindByCategory } from '@/lib/programs/asset-kind'
 import { createShortCache } from '@/lib/cache/short-ttl'
 import type { ProfileWithTeams } from '@/types'
@@ -49,7 +49,6 @@ interface RawTicket {
 interface Snap { store_code?: string; ckdesk_no?: string; serial?: string | null; brand?: string | null; tonnage?: string | null }
 
 const NOT_SET = '(Not set)'
-const set = (v: string | null | undefined) => v?.trim() || NOT_SET
 
 const acLabel = (no: string, brand?: string | null, tonnage?: string | null) => `AC ${no}${brand ? ` - ${brand}` : ''}${tonnage ? ` ${tonnage}` : ''}`
 
@@ -149,7 +148,7 @@ async function loadRows(orgId: string, level: DashLevel, scope: Parameters<typeo
     const who = r.assigned_to ? people.get(r.assigned_to) : undefined
     tickets.push({
       kind, id: r.id, no: r.request_no, ac: store && acNo ? `${store}|${acNo.toLowerCase()}` : '', acNo, serial: kind === 'genset' ? '' : (snap?.serial?.trim() ?? ''),
-      store, storeName: st?.name ?? store, region: set(st?.region), cluster: set(st?.cluster), state: set(st?.state),
+      store, storeName: st?.name ?? store, region: placeValue(st?.region) ?? NOT_SET, cluster: placeValue(st?.cluster) ?? NOT_SET, state: placeValue(st?.state) ?? NOT_SET,
       created: new Date(r.created_at).getTime(), resolved: doneIso ? new Date(doneIso).getTime() : null,
       fixedBy: who ? (who.company ? companyName.get(who.company) ?? who.name : who.name) : '', status: r.status,
     })
@@ -184,15 +183,19 @@ async function loadRows(orgId: string, level: DashLevel, scope: Parameters<typeo
   const storeInfo = new Map<string, { name: string; region: string; cluster: string; state: string; city: string }>()
   const storeRows = await fetchAllPages<{ code: string; name: string; region: string | null; cluster: string | null; state: string | null; city: string | null }>(
     (from, to) => admin.from('stores').select('code, name, region, cluster, state, city').eq('org_id', orgId).order('code', { ascending: true }).range(from, to), { maxRows: MAX_ROWS })
-  for (const sr of storeRows.rows) storeInfo.set(sr.code.toUpperCase(), { name: sr.name, region: set(sr.region), cluster: set(sr.cluster), state: set(sr.state), city: sr.city?.trim() ?? '' })
+  for (const sr of storeRows.rows) storeInfo.set(sr.code.toUpperCase(), { name: sr.name, region: placeValue(sr.region) ?? NOT_SET, cluster: placeValue(sr.cluster) ?? NOT_SET, state: placeValue(sr.state) ?? NOT_SET, city: sr.city?.trim() ?? '' })
+  // where a store is comes ONLY from the Store Master (the stores table): the AC sheet's own State / Region / Cluster / City columns are not read for the place
+  const storeByCode = new Map(storeRows.rows.map((x) => [x.code.toUpperCase(), x]))
   const fleet: CalAc[] = []
   for (const u of units.rows) {
     const store = u.store_code.toUpperCase()
     if (allowed && !allowed.has(store)) continue
     if (isServerRoomAc(u.ckdesk_no)) continue
+    const sm = storeByCode.get(store)
     fleet.push({
       kind: 'ac', key: `${store}|${u.ckdesk_no.trim().toLowerCase()}`, store, storeName: storeInfo.get(store)?.name ?? store, no: u.ckdesk_no.trim(), serial: u.serial?.trim() ?? '',
-      label: acLabel(u.ckdesk_no.trim(), u.brand, u.tonnage), region: set(u.region), cluster: set(u.cluster), state: set(u.state), city: u.city?.trim() ?? '',
+      label: acLabel(u.ckdesk_no.trim(), u.brand, u.tonnage), region: placeValue(sm?.region) ?? NOT_SET, cluster: placeValue(sm?.cluster) ?? NOT_SET, state: placeValue(sm?.state) ?? NOT_SET,
+      city: sm?.city?.trim() ?? '',
     })
   }
   // gensets: the place comes from the Store Master (the Genset sheet has none); a genset ticket is matched to its store
@@ -205,5 +208,10 @@ async function loadRows(orgId: string, level: DashLevel, scope: Parameters<typeo
       label: `Genset${g.brand ? ` - ${g.brand}` : ''}${g.kva ? ` ${g.kva} KVA` : ''}`, region: si?.region ?? NOT_SET, cluster: si?.cluster ?? NOT_SET, state: si?.state ?? NOT_SET, city: si?.city ?? '',
     })
   })
+  // a ticket is in the place of the store the machine is in (the store code on the ticket's AC copy), read the same way as the machine list, so a place's faulty count and its machine count always agree
+  for (const t of tickets) {
+    const si = storeInfo.get(t.store)
+    if (si) { t.region = si.region; t.cluster = si.cluster; t.state = si.state }
+  }
   return { level, now, tickets, fleet, myStore, truncated: truncated || units.truncated || gensets.truncated || storeRows.truncated }
 }

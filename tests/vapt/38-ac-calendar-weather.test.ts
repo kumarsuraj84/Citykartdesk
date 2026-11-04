@@ -52,10 +52,13 @@ beforeAll(async () => {
   const a = db()
   const unit = (store: string, no: string, city: string) => ({ org_id: fx.orgId, store_code: store, ckdesk_no: no, serial: `${store}-${no}`, brand: 'VOLTAS', tonnage: '1.5', region: `${tag}R`, cluster: `${tag}C`, state: 'JH', city, emails: [], sheet_row: 99000 + Number(no) })
   await a.from('master_ac_units').insert([unit(STORE_A, '1', CITY_OK), unit(STORE_A, '2', CITY_OK), unit(STORE_B, '1', CITY_NONE), unit(STORE_B, '2', CITY_DOWN)])
+  // the states come from the Store Master (the stores table), not from the AC sheet: one store in Jharkhand for the daily job to find
+  await a.from('stores').insert({ org_id: fx.orgId, code: `${tag}WX`.toUpperCase(), name: 'weather store', state: 'JH' })
 }, 300_000)
 
 afterAll(async () => {
   const a = db()
+  await a.from('stores').delete().eq('code', `${tag}WX`.toUpperCase())
   await a.from('master_ac_units').delete().like('store_code', `${tag.toUpperCase()}%`)
   await a.from('weather_city_daily').delete().like('city', `${tag}%`)
   await a.from('weather_city_daily').delete().eq('state', STATE_ROW)
@@ -89,7 +92,7 @@ describe('the daily weather job (by state)', () => {
     expect(calls.some((u) => u.includes('archive-api') && u.includes('latitude=23.34'))).toBe(false)
   })
 
-  it('lists each state once, and (for now) also the states of the Store Master, so a store the AC sheet does not have yet still gets its temperature', async () => {
+  it('lists each state once, from the Store Master only (the AC sheet\'s own State column is not used)', async () => {
     const a = db()
     const store = (await a.from('stores').insert({ org_id: fx.orgId, code: `${tag}ST`.toUpperCase(), name: 'x', city: `${tag}Storetown`, state: 'GJ' }).select('id').single()).data.id as string
     const names = (await stateList(db(), fx.orgId)).map((c) => c.city)

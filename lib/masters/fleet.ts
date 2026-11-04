@@ -1,6 +1,7 @@
 // AC master and Genset master: the copy of the sheets as lists the screens, the Excel export and the dashboards can use. Read only, server side.
 // The same columns serve every dashboard: counts by brand, tonnage, region, AMC vendor, store.
 import { fetchAllPages } from '@/lib/queries/paging'
+import { placeValue } from '@/lib/reporting/executive/ac-calendar'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (t: string) => any }
@@ -44,7 +45,27 @@ export async function loadFleet(db: Db, orgId: string, kind: FleetKind): Promise
     (from, to) => db.from(table).select(kind === 'ac' ? AC_COLS : GS_COLS).eq('org_id', orgId).order('store_code').order('id').range(from, to),
     { maxRows: MAX_LIST_ROWS },
   )
+  if (kind === 'ac') await placeFromStoreMaster(db, orgId, rows as AcMasterRow[])
   return rows
+}
+
+/**
+ * Where an AC is (region, cluster, city, state) comes ONLY from the Store Master (the stores table, filled from the Store Details tab), the same as on every ticket and in the calendar.
+ * The AC sheet's own copies of those columns are not shown or used ("ALL" is not a place). So the list, the filters and the Excel export agree with the rest of the app.
+ */
+async function placeFromStoreMaster(db: Db, orgId: string, rows: AcMasterRow[]): Promise<void> {
+  const { rows: stores } = await fetchAllPages<{ code: string; region: string | null; cluster: string | null; city: string | null; state: string | null }>(
+    (from, to) => db.from('stores').select('code, region, cluster, city, state').eq('org_id', orgId).order('code').range(from, to),
+    { maxRows: MAX_LIST_ROWS },
+  )
+  const byCode = new Map(stores.map((s) => [s.code.toUpperCase(), s]))
+  for (const r of rows) {
+    const s = byCode.get(r.store_code.toUpperCase())
+    r.region = placeValue(s?.region)
+    r.cluster = placeValue(s?.cluster)
+    r.state = placeValue(s?.state)
+    r.city = s?.city?.trim() || null
+  }
 }
 
 /** The state of one row as the screens and the export say it. */

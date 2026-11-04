@@ -85,13 +85,8 @@ describe('what goes on the store card', () => {
     ['LAM', 3, 'oem@oem.test', 'VOLTAS', 'VOLTAS', 'XYZ', 'NO', 'OLD CITY', 'old address', 111111, 'Inactive'],
   ]).rows
 
-  it('the AC rows give everything while there is no Store Details tab (as before)', () => {
+  it('the AC rows give only the machines (never the store\'s own details: city, address, pincode ...)', () => {
     const p = storePatchFromAcRows(ac)
-    expect(p).toMatchObject({ ac_total: 2, city: 'OLD CITY', address: 'old address', pincode: '111111', ac_brand: 'DAIKIN', ac_amc_vendor: 'UMS', zenatix: true })
-  })
-
-  it('with the tab, the AC rows give only the machines', () => {
-    const p = storePatchFromAcRows(ac, true)
     expect(p).toEqual({ ac_total: 2, ac_brand: 'DAIKIN', ac_amc_brand: 'DAIKIN', ac_amc_vendor: 'UMS', zenatix: true })
   })
 
@@ -122,7 +117,7 @@ const detail = (code: string, over: Partial<StoreDetailRow> = {}): StoreDetailRo
 describe('updating the store cards', () => {
   it('with the tab: the store details come from the tab, the machines from the AC rows', async () => {
     const { db, updates } = fakeStores([card('LAM')])
-    await updateStoreMaster(db, 'org', acRowsFor('LAM'), [detail('LAM')], true)
+    await updateStoreMaster(db, 'org', acRowsFor('LAM'), [detail('LAM')])
     expect(updates).toHaveLength(1)
     expect(updates[0].patch).toMatchObject({ city: 'TAB CITY', state: 'UP', address: 'tab address', pincode: '226005', cluster: 'UP2', region: 'R4', priority_list: 'Top 50', festival: 'DIWALI', open_date: '2011-07-01', ac_total: 1, ac_brand: 'DAIKIN', ac_amc_vendor: 'UMS' })
     expect(JSON.stringify(updates[0].patch)).not.toContain('AC-SHEET')
@@ -130,7 +125,7 @@ describe('updating the store cards', () => {
 
   it('a store that is only in the tab still gets its details, and its AC total is left alone', async () => {
     const { db, updates } = fakeStores([card('GWL', { ac_total: 5 })])
-    await updateStoreMaster(db, 'org', acRowsFor('LAM'), [detail('GWL')], true)
+    await updateStoreMaster(db, 'org', acRowsFor('LAM'), [detail('GWL')])
     expect(updates).toHaveLength(1)
     expect(updates[0].patch).not.toHaveProperty('ac_total')
     expect(updates[0].patch).toMatchObject({ city: 'TAB CITY' })
@@ -138,7 +133,7 @@ describe('updating the store cards', () => {
 
   it('an empty cell in the tab never erases what the card has', async () => {
     const { db, updates } = fakeStores([card('LAM')])
-    await updateStoreMaster(db, 'org', [], [detail('LAM', { city: '', pincode: '', openingDate: null })], true)
+    await updateStoreMaster(db, 'org', [], [detail('LAM', { city: '', pincode: '', openingDate: null })])
     expect(updates[0].patch).not.toHaveProperty('city')
     expect(updates[0].patch).not.toHaveProperty('pincode')
     expect(updates[0].patch).not.toHaveProperty('open_date')
@@ -147,17 +142,15 @@ describe('updating the store cards', () => {
 
   it('nothing is written when the card already matches', async () => {
     const { db, updates } = fakeStores([card('LAM', { address: 'tab address', city: 'TAB CITY', state: 'UP', pincode: '226005', cluster: 'UP2', region: 'R4', priority_list: 'Top 50', festival: 'DIWALI', open_date: '2011-07-01' })])
-    await updateStoreMaster(db, 'org', [], [detail('LAM')], true)
+    await updateStoreMaster(db, 'org', [], [detail('LAM')])
     expect(updates).toEqual([])
   })
 
-  it('with no tab (never had one) the AC rows fill the details as before; with a tab that could not be used the details are left alone', async () => {
-    const before = fakeStores([card('LAM')])
-    await updateStoreMaster(before.db, 'org', acRowsFor('LAM'), null, false)
-    expect(before.updates[0].patch).toMatchObject({ city: 'AC-SHEET CITY', state: 'AC-SHEET ST', ac_total: 1 })
+  it('with no usable tab the details are left alone: the AC rows give only the machines, never the place', async () => {
     const held = fakeStores([card('LAM')])
-    await updateStoreMaster(held.db, 'org', acRowsFor('LAM'), null, true)
+    await updateStoreMaster(held.db, 'org', acRowsFor('LAM'), null)
     expect(held.updates[0].patch).toEqual({ ac_total: 1, ac_brand: 'DAIKIN', ac_amc_vendor: 'UMS' })
+    expect(JSON.stringify(held.updates[0].patch)).not.toContain('AC-SHEET')
   })
 })
 

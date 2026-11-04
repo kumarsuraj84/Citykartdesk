@@ -45,7 +45,9 @@ function fakeAdmin(rule: Record<string, unknown>) {
       switch (table) {
         case 'business_rules': return { data: [rule], error: null }
         case 'requests': return has('maybeSingle') || has('single') ? { data: TICKET, error: null } : { data: [TICKET], error: null }
-        case 'request_master_snapshots': return { data: { snapshot: [{ brand: 'Voltas', amc_vendor: 'Blue Star', region: 'West', state: 'Gujarat', cluster: 'C1' }] }, error: null }
+        // the AC copy gives the brand and the vendor; where the store is comes only from the store card (the Store Master)
+        case 'request_master_snapshots': return { data: { snapshot: [{ brand: 'Voltas', amc_vendor: 'Blue Star', region: 'SHEET-IGNORED', state: 'SHEET-IGNORED', cluster: 'SHEET-IGNORED' }] }, error: null }
+        case 'stores': return { data: { code: 'S9', region: 'West', state: 'Gujarat', cluster: 'C1', city: 'Surat', priority_list: null, festival: null, open_date: null }, error: null }
         case 'service_categories': return { data: { program_id: null, auto_oem_kind: 'ac' }, error: null }
         case 'request_attachments': return { data: [], error: null }
         case 'business_rule_events': return has('insert') ? { error: null } : { data: [], error: null }

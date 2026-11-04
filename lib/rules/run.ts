@@ -101,16 +101,16 @@ async function hasAttachment(admin: AnyClient, requestId: string): Promise<boole
   return (data?.length ?? 0) > 0
 }
 
-/** The AC the ticket was raised for (saved with the ticket), as far as a rule needs it. Empty strings when the ticket has none. */
+/** The AC the ticket was raised for (saved with the ticket), as far as a rule needs it: the vendor and the brand. Empty strings when the ticket has none. (Where the store is comes only from the store card, never from an AC or program sheet.) */
 async function acFacts(admin: AnyClient, requestId: string) {
   const { data, error } = await admin.from('request_master_snapshots').select('snapshot').eq('request_id', requestId).eq('kind', 'ac').maybeSingle()
   // an unreadable snapshot must not look like "this ticket has no AC" (a "is not ..." condition would then match wrongly)
   if (error) throw new Error(`Could not read the AC of ticket ${requestId}: ${error.message ?? 'unknown error'}`)
   const unit = (Array.isArray(data?.snapshot) ? data.snapshot[0] : null) as Record<string, string | null> | null
   const s = (v: string | null | undefined) => (v ?? '').trim()
-  if (unit) return { ac_amc_vendor: s(unit.amc_vendor), ac_brand: s(unit.brand), store_region: s(unit.region), store_state: s(unit.state), store_cluster: s(unit.cluster) }
+  if (unit) return { ac_amc_vendor: s(unit.amc_vendor), ac_brand: s(unit.brand) }
   // No AC record: a ticket of a Vendor Program (for example AC after its categories were moved onto a program) keeps the sheet row of its program instead. The rules that route by
-  // the AC vendor, brand or place keep working from it: the vendor is the row's Vendor, and brand / region / state / cluster are the row's columns with those headings.
+  // the AC vendor or brand keep working from it: the vendor is the row's Vendor, and the brand is the row's column with that heading.
   const { data: ps, error: pErr } = await admin.from('request_program_snapshots').select('snapshot').eq('request_id', requestId).limit(1).maybeSingle()
   if (pErr) throw new Error(`Could not read the program row of ticket ${requestId}: ${pErr.message ?? 'unknown error'}`)
   const row = (Array.isArray(ps?.snapshot) ? ps.snapshot[0] : null) as { vendor?: string | null; extra?: Record<string, string> | null } | null
@@ -120,7 +120,7 @@ async function acFacts(admin: AnyClient, requestId: string) {
     for (const [h, v] of Object.entries(extra)) if (want.includes(h.toLowerCase().replace(/[^a-z0-9]/g, ''))) return s(v)
     return ''
   }
-  return { ac_amc_vendor: s(row?.vendor), ac_brand: byHeading('ac brand', 'brand'), store_region: byHeading('region'), store_state: byHeading('state'), store_cluster: byHeading('cluster') }
+  return { ac_amc_vendor: s(row?.vendor), ac_brand: byHeading('ac brand', 'brand') }
 }
 
 /**
@@ -162,14 +162,12 @@ export async function buildRuleEvaluationRequest(admin: AnyClient, request: RawR
   const storeId = (request.requester as { store_id?: string | null } | null)?.store_id ?? ''
   const ac = await acFacts(admin, request.id)
   const store = await storeCardFacts(admin, request.org_id, storeId)
-  // the store card first (it exists for every ticket of the store); the AC row / program row saved with the ticket only fills what the card leaves empty, so the rules that
-  // were made for the AC sheet's region, state and cluster keep matching
-  const card = (fromStore: string | undefined, fallback: string) => (fromStore && fromStore !== '' ? fromStore : fallback)
+  // where the store is comes ONLY from the store card (the Store Master): no AC row or program row is used for the region, state or cluster
   return {
     ...ac,
-    store_region: card(store?.region, ac.store_region),
-    store_state: card(store?.state, ac.store_state),
-    store_cluster: card(store?.cluster, ac.store_cluster),
+    store_region: store?.region ?? '',
+    store_state: store?.state ?? '',
+    store_cluster: store?.cluster ?? '',
     store_city: store?.city ?? '',
     store_priority: store?.priority ?? '',
     store_festival: store?.festival ?? '',

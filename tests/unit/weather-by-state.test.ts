@@ -60,11 +60,12 @@ const forecast = (hi: number, lo: number) => async (url: string) => {
 }
 
 describe('the list of states', () => {
+  // the Store Master is the one source; the AC sheet's own State column (which said "ALL" and sometimes a different state) is not read at all
   const tables = () => ({
-    master_ac_units: [{ state: 'JH', is_active: true, removed_at: null, org_id: 'o' }, { state: 'Jharkhand', is_active: true, removed_at: null, org_id: 'o' }, { state: 'ALL', is_active: true, removed_at: null, org_id: 'o' }],
-    stores: [{ state: 'DL', org_id: 'o', code: 'S1' }, { state: '', org_id: 'o', code: 'S2' }, { state: 'JH', org_id: 'o', code: 'S3' }],
+    master_ac_units: [{ state: 'XX-SHEET-ONLY', is_active: true, removed_at: null, org_id: 'o' }],
+    stores: [{ state: 'DL', org_id: 'o', code: 'S1' }, { state: '', org_id: 'o', code: 'S2' }, { state: 'JH', org_id: 'o', code: 'S3' }, { state: 'Jharkhand', org_id: 'o', code: 'S4' }, { state: 'ALL', org_id: 'o', code: 'S5' }],
   })
-  it('lists each state once (AC sheet and Store Master), leaves out blanks and unknown values', async () => {
+  it('lists each state once (from the Store Master only), leaves out blanks and unknown values', async () => {
     const { db } = fakeDb(tables())
     const list = await stateList(db, 'o')
     expect(list.map((x) => x.city).sort()).toEqual(['Delhi', 'Jharkhand'])
@@ -82,7 +83,7 @@ describe('the list of states', () => {
 
 describe('the daily job', () => {
   it('saves one set of temperatures per state, never looks a place up, lists what it does not know, and the calendar reads them back by state', async () => {
-    const t = { master_ac_units: [{ state: 'JH', is_active: true, removed_at: null }, { state: 'ALL', is_active: true, removed_at: null }], stores: [{ state: 'DL' }], weather_city_daily: [] as Row[] }
+    const t = { stores: [{ state: 'JH' }, { state: 'ALL' }, { state: 'DL' }], weather_city_daily: [] as Row[] }
     const { db, saved } = fakeDb(t)
     const urls: string[] = []
     const f = forecast(33.4, 22.1)
@@ -99,7 +100,7 @@ describe('the daily job', () => {
   })
   it('a state that has history is not backfilled again, and a failing forecast for one state does not stop the others', async () => {
     const old = { city: 'Jharkhand', state: STATE_ROW, day: '2026-09-01', tmax: 30, tmin: 20 }
-    const t = { master_ac_units: [{ state: 'JH', is_active: true, removed_at: null }, { state: 'DL', is_active: true, removed_at: null }], stores: [], weather_city_daily: [old] as Row[] }
+    const t = { stores: [{ state: 'JH' }, { state: 'DL' }], weather_city_daily: [old] as Row[] }
     const { db } = fakeDb(t)
     const urls: string[] = []
     const r = await refreshWeather(db, async (u) => {
@@ -134,7 +135,7 @@ describe('several states in view', () => {
 
 describe('the coming days', () => {
   it('the daily job asks for the last 7 days, today and the next 7 days in one request per state', async () => {
-    const t = { master_ac_units: [{ state: 'JH', is_active: true, removed_at: null }], stores: [], weather_city_daily: [] as Row[] }
+    const t = { stores: [{ state: 'JH' }], weather_city_daily: [] as Row[] }
     const { db, saved } = fakeDb(t)
     const urls: string[] = []
     const f = async (u: string) => {

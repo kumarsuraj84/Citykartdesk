@@ -36,26 +36,21 @@ function must<T>(res: { data?: T; error?: { message: string } | null }, what: st
   return res.data as T
 }
 
-/**
- * TEMPORARY: while the AC Google Sheet is incomplete, the state of every store in the Store Master counts as well as the sheet's own. When the sheet is complete,
- * set this to false and only the AC sheet's states are used (one line; nothing else changes).
- */
-export const ALSO_USE_STORE_MASTER_CITIES = true
-
 /** A place whose weather is kept: for a state, city = the state's name and state = STATE_ROW. (The name CityRef is kept from when this was by city.) */
 export type CityRef = { city: string; state: string }
 
-/** The place filter on the two tables: the AC sheet's own columns, and the Store Master's. */
-const UNIT_COLUMN = { store: 'store_code', cluster: 'cluster', region: 'region', state: 'state' } as const
+/**
+ * The place filter. The Store Master (the stores table, filled from the Store Details tab) is the ONE source of where a store is: the AC sheet's own State column is not used
+ * (it said "ALL" on 811 ACs and a different state from the Store Master on 265 more), the same as the tickets, the AC list of the calendar and the rules.
+ */
 const STORE_COLUMN = { store: 'code', cluster: 'cluster', region: 'region', state: 'state' } as const
-export type CityPlace = { kind: keyof typeof UNIT_COLUMN; key: string }
+export type CityPlace = { kind: keyof typeof STORE_COLUMN; key: string }
 
-async function distinctStates(db: Db, table: 'master_ac_units' | 'stores', orgId: string | undefined, place: CityPlace | null, into: Map<string, CityRef>, includeUnknown: boolean) {
+async function distinctStates(db: Db, orgId: string | undefined, place: CityPlace | null, into: Map<string, CityRef>, includeUnknown: boolean) {
   for (let from = 0; ; from += 1000) {
-    let q = db.from(table).select('state')
-    if (table === 'master_ac_units') q = q.eq('is_active', true).is('removed_at', null)
+    let q = db.from('stores').select('state')
     if (orgId) q = q.eq('org_id', orgId)
-    if (place) q = q.eq((table === 'stores' ? STORE_COLUMN : UNIT_COLUMN)[place.kind], place.kind === 'store' ? place.key.toUpperCase() : place.key)
+    if (place) q = q.eq(STORE_COLUMN[place.kind], place.kind === 'store' ? place.key.toUpperCase() : place.key)
     const rows = must<{ state: string | null }[]>(await q.order('id', { ascending: true }).range(from, from + 999), 'read states') ?? []
     for (const r of rows) {
       const raw = norm(r.state)
@@ -68,11 +63,10 @@ async function distinctStates(db: Db, table: 'master_ac_units' | 'stores', orgId
   }
 }
 
-/** The distinct states of a place (or of everything): the AC sheet's, plus, for now, the Store Master's. Values that are not a state we know are left out (the daily job asks for them with includeUnknown, to list them). */
+/** The distinct states of a place (or of everything), from the Store Master. Values that are not a state we know are left out (the daily job asks for them with includeUnknown, to list them). */
 export async function stateList(db: Db, orgId?: string, place: CityPlace | null = null, opts: { includeUnknown?: boolean } = {}): Promise<CityRef[]> {
   const seen = new Map<string, CityRef>()
-  await distinctStates(db, 'master_ac_units', orgId, place, seen, !!opts.includeUnknown)
-  if (ALSO_USE_STORE_MASTER_CITIES) await distinctStates(db, 'stores', orgId, place, seen, !!opts.includeUnknown)
+  await distinctStates(db, orgId, place, seen, !!opts.includeUnknown)
   return [...seen.values()]
 }
 

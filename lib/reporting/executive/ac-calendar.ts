@@ -93,6 +93,16 @@ export const monthTitle = (month: string) => `${MONTH_NAMES[Number(month.slice(5
 
 // ── places ────────────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Where a store is (state, cluster, region): the Store Master's value (the stores table, filled from the Store Details tab) and nothing else. Every ticket, the AC list, the AC Calendar,
+ * the weather and the rules read the place this one way; no other sheet's copy of those columns is used (the AC rows had "ALL" on 811 ACs and another state on 265). Blank or "ALL"
+ * is "not set" (it is not a place): null.
+ */
+export function placeValue(storeMaster: string | null | undefined): string | null {
+  const t = storeMaster?.trim()
+  return t && t.toUpperCase() !== 'ALL' ? t : null
+}
+
 const attrOf = (kind: Exclude<PlaceKind, 'all'>, x: { store: string; cluster: string; region: string; state: string }) => (kind === 'store' ? x.store : x[kind])
 export const inPlace = (kind: PlaceKind, key: string, x: { store: string; cluster: string; region: string; state: string }) => kind === 'all' || attrOf(kind, x) === key
 

@@ -2,7 +2,7 @@
 // repeat-fault ACs (4+ tickets in 90 days; 2-3 watch), "came back within 30 days", and the worst places.
 import { describe, it, expect } from 'vitest'
 import {
-  acStrip, buildMonth, dayKey, dayStart, daysInMonth, firstWeekday, fleetIn, levelFor, monthTotals, placeOptions, repeatAcs, shiftMonth, tagFor, worstPlaces,
+  acStrip, buildMonth, dayKey, dayStart, daysInMonth, firstWeekday, fleetIn, levelFor, monthTotals, placeOptions, placeValue, repeatAcs, shiftMonth, tagFor, worstPlaces,
   type CalAc, type CalTicket,
 } from '@/lib/reporting/executive/ac-calendar'
 
@@ -13,6 +13,25 @@ const ac = (store: string, no: string, o: Partial<CalAc> = {}): CalAc => ({
 let n = 0
 const tk = (store: string, acNo: string, created: number, resolved: number | null, o: Partial<CalTicket> = {}): CalTicket => ({
   kind: 'ac', id: `t${++n}`, no: `CKSD-${n}`, ac: `${store}|${acNo}`, acNo, serial: '', store, storeName: `Store ${store}`, region: 'R1', cluster: 'C1', state: 'JH', created, resolved, fixedBy: 'Voltas', status: resolved ? 'resolved' : 'in_progress', ...o,
+})
+
+describe('where a store is: the Store Master only', () => {
+  it('the Store Master\'s value, trimmed', () => {
+    expect(placeValue('BR')).toBe('BR')
+    expect(placeValue(' Bihar ')).toBe('Bihar')
+  })
+  it('"ALL" and blank are not a place', () => {
+    expect(placeValue('all')).toBeNull()
+    expect(placeValue('')).toBeNull()
+    expect(placeValue(null)).toBeNull()
+    expect(placeValue(undefined)).toBeNull()
+  })
+  it('an AC placed by its store lands in the same state as that store\'s tickets (no "ALL" state with ACs but no tickets)', () => {
+    const fleet = [ac('S1', '1', { state: placeValue('BR')! }), ac('S2', '1', { state: placeValue('UP')! })]
+    expect(placeOptions('state', fleet).map((o) => o.key)).toEqual(['BR', 'UP'])
+    const days = buildMonth('2026-11', [tk('S1', '1', at('2026-11-03'), null, { state: 'BR' })], fleetIn(fleet, 'state', 'BR').length, 'state', 'BR', at('2026-11-04'))
+    expect(days[3].down).toBe(1)                          // 4 Nov: the AC is down
+  })
 })
 
 describe('days in India time', () => {

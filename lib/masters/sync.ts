@@ -71,9 +71,9 @@ const gensetColumns = (r: GensetRow) => ({
 
 // ── store master ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 // The store card is filled one way from the AC Google Sheet:
-//  - the machines' facts (AC total, AC brand, AMC brand, AMC vendor, Zenatix) always come from the AC rows of the first tab;
-//  - the store's own details (address, pincode, city, state, region, cluster, priority list, festival, opening date) come from the "Store Details" tab (the Store Master,
-//    one row per store). While the sheet has no such tab (and never had one), the first AC row of the store with a value is used instead, as before.
+//  - the machines' facts (AC total, AC brand, AMC brand, AMC vendor, Zenatix) come from the AC rows of the first tab;
+//  - the store's own details (address, pincode, city, state, region, cluster, priority list, festival, opening date) come ONLY from the "Store Details" tab (the Store Master,
+//    one row per store). No other sheet's copy of those columns is used (the AC rows repeat some of them, and had wrong values: ALL, or another state).
 // An empty cell never erases a value on the card.
 export const STORE_DETAILS_TAB = 'Store Details'
 
@@ -86,24 +86,11 @@ function mostCommon(values: string[]): string | null {
   return best
 }
 
-/** The store card values the AC rows give. `machineOnly` = just the machines' facts (the store's own details come from the Store Details tab then). */
-export function storePatchFromAcRows(rows: AcRow[], machineOnly = false): Record<string, unknown> {
+/** The store card values the AC rows give: just the machines' facts. The store's own details (place, address, priority ...) come only from the Store Details tab. */
+export function storePatchFromAcRows(rows: AcRow[]): Record<string, unknown> {
   const active = rows.filter((r) => r.isActive)
-  const first = (pick: (r: AcRow) => string) => rows.map(pick).find((v) => v) ?? null
   const patch: Record<string, unknown> = { ac_total: active.length }
   const set = (col: string, v: string | null) => { if (v) patch[col] = v }
-  if (!machineOnly) {
-    set('address', first((r) => r.address))
-    set('city', first((r) => r.city))
-    set('state', first((r) => r.state))
-    set('pincode', first((r) => r.pincode))
-    set('cluster', first((r) => r.cluster))
-    set('region', first((r) => r.region))
-    set('priority_list', first((r) => r.storePriority))
-    set('festival', first((r) => r.festival))
-    const date = rows.map((r) => r.openingDate).find((v) => v)
-    if (date) patch.open_date = date
-  }
   set('ac_brand', mostCommon(active.map((r) => r.brand)))
   set('ac_amc_brand', mostCommon(active.map((r) => r.amcBrand)))
   set('ac_amc_vendor', mostCommon(active.map((r) => r.amcVendor)))
@@ -128,7 +115,7 @@ export function storePatchFromDetails(r: StoreDetailRow): Record<string, unknown
   return patch
 }
 
-export async function updateStoreMaster(db: Db, orgId: string, rows: AcRow[], details: StoreDetailRow[] | null, machineOnly: boolean) {
+export async function updateStoreMaster(db: Db, orgId: string, rows: AcRow[], details: StoreDetailRow[] | null) {
   const byStore = new Map<string, AcRow[]>()
   for (const r of rows) byStore.set(r.storeCode, [...(byStore.get(r.storeCode) ?? []), r])
   const detailByStore = new Map<string, StoreDetailRow>((details ?? []).map((d) => [d.storeCode, d]))
@@ -143,7 +130,7 @@ export async function updateStoreMaster(db: Db, orgId: string, rows: AcRow[], de
     const code = String(s.code).toUpperCase()
     const acRows = byStore.get(code)
     const detail = detailByStore.get(code)
-    const patch = { ...(acRows ? storePatchFromAcRows(acRows, machineOnly) : {}), ...(detail ? storePatchFromDetails(detail) : {}) }
+    const patch = { ...(acRows ? storePatchFromAcRows(acRows) : {}), ...(detail ? storePatchFromDetails(detail) : {}) }
     const changed: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(patch)) if (!sameList(s[k], v)) changed[k] = v
     if (Object.keys(changed).length) must(await db.from('stores').update(changed).eq('id', s.id).eq('org_id', orgId), 'update store')
@@ -427,7 +414,6 @@ async function syncOneUnlocked(p: { db: Db; orgId: string; kind: MasterKind; sou
       const usedBefore = (await db.from('app_settings').select('value').eq('key', storeDetailsUsedKey(orgId)).maybeSingle()).data?.value === '1'
       const tabIssues: MasterIssue[] = []
       let details: StoreDetailRow[] | null = null
-      const machineOnly = tab.kind !== 'none' || usedBefore
       if (tab.kind === 'ok') {
         const pd = parseStoreDetailsSheet(tab.values)
         if (pd.fatal || pd.rows.length === 0) {
@@ -441,8 +427,10 @@ async function syncOneUnlocked(p: { db: Db; orgId: string; kind: MasterKind; sou
         tabIssues.push({ kind: 'ac', severity: 'warning', code: 'store_details_unreadable', storeCode: null, sheetRow: null, message: `The Store Details tab could not be read this time (${tab.message}). The store cards were not changed from it, the next update tries again.` })
       } else if (usedBefore) {
         tabIssues.push({ kind: 'ac', severity: 'error', code: 'store_details_tab_missing', storeCode: null, sheetRow: null, message: `The AC sheet has no tab called "${STORE_DETAILS_TAB}" any more (renamed or deleted?). The store cards keep their last values until the tab is back.` })
+      } else {
+        tabIssues.push({ kind: 'ac', severity: 'warning', code: 'store_details_tab_missing', storeCode: null, sheetRow: null, message: `The AC sheet has no tab called "${STORE_DETAILS_TAB}", so the store cards' own details (state, region, cluster, city, address ...) are not filled. They come only from that tab; the AC rows' own columns are not used for them.` })
       }
-      await updateStoreMaster(db, orgId, parsed.rows, details, machineOnly)
+      await updateStoreMaster(db, orgId, parsed.rows, details)
       const noAcLine = await zeroTotalsWithoutAcRows(db, orgId, new Set(parsed.rows.map((r) => r.storeCode)))
       issues = [...parsed.issues, ...tabIssues, ...(details ? await storeDetailsCoverageIssues(db, orgId, details) : []), ...(noAcLine ? [noAcLine] : []), ...(await unknownStoreIssues(db, orgId, 'ac', parsed.rows.map((r) => r.storeCode)))]
       if (p.cvmEmailKnown) {   // an approver must be an active technician, manager or admin, or a vendor's quote for that AC would never reach anyone

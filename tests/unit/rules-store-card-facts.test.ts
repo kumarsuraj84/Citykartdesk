@@ -1,7 +1,7 @@
 /**
  * The store card (stores table) is the main store master: a Business Rule sees the requester's store region, state, cluster, city, priority list, festival and months since
- * opening for a ticket of ANY service (an IT ticket, an RO ticket, a ticket with no Vendor Program at all). The AC row / program row saved with the ticket only fills what the
- * card leaves empty, so the rules made for the AC sheet's region keep matching. No database: a small fake answers the tables the fact builder reads.
+ * opening for a ticket of ANY service (an IT ticket, an RO ticket, a ticket with no Vendor Program at all). Where the store is comes ONLY from the card: the AC row / program row
+ * saved with the ticket give the vendor and the brand, never the region, state or cluster. No database: a small fake answers the tables the fact builder reads.
  */
 import { describe, it, expect, vi } from 'vitest'
 
@@ -86,22 +86,23 @@ describe('a ticket with no AC and no Vendor Program (an IT ticket) still sees it
   })
 })
 
-describe('the AC row and the program row only fill what the store card leaves empty', () => {
-  it('the card wins over the AC row', async () => {
+describe('the AC row and the program row never give the place: only the store card does', () => {
+  it('the card is used, the AC row gives only the vendor and the brand', async () => {
     const f = await facts({ store: CARD, acSnapshot: { amc_vendor: 'Voltas', brand: 'Voltas', region: 'West', state: 'Gujarat', cluster: 'GJ-9' } })
     expect(f).toMatchObject({ store_region: 'East', store_state: 'Odisha', store_cluster: 'OD-1', ac_amc_vendor: 'Voltas', ac_brand: 'Voltas' })
   })
-  it('an empty card detail is filled from the AC row (the rules made for the AC sheet keep matching)', async () => {
+  it('an empty card detail stays empty: the AC row\'s own region / cluster are not used', async () => {
     const f = await facts({ store: { ...CARD, region: null, cluster: '' }, acSnapshot: { region: 'West', state: 'Gujarat', cluster: 'GJ-9' } })
-    expect(f).toMatchObject({ store_region: 'West', store_cluster: 'GJ-9', store_state: 'Odisha' })
+    expect(f).toMatchObject({ store_region: '', store_cluster: '', store_state: 'Odisha' })
   })
-  it('a ticket of a program with no store card detail uses the program row headings', async () => {
+  it('a ticket of a program: the program row gives the vendor, its Region heading is not used', async () => {
     const f = await facts({ store: { ...CARD, region: null }, programRow: { vendor: 'Aqua Care', extra: { Region: 'South' } } })
-    expect(f.store_region).toBe('South')
+    expect(f.ac_amc_vendor).toBe('Aqua Care')
+    expect(f.store_region).toBe('')
   })
-  it('with no store card at all the old AC row still answers (and the new details are empty)', async () => {
+  it('with no store card at all the place is empty (the old AC row is not used for it)', async () => {
     const f = await facts({ store: null, acSnapshot: { region: 'West', state: 'Gujarat', cluster: 'GJ-9' } })
-    expect(f).toMatchObject({ store_region: 'West', store_state: 'Gujarat', store_cluster: 'GJ-9', store_city: '', store_priority: '', store_festival: '', store_open_months: '' })
+    expect(f).toMatchObject({ store_region: '', store_state: '', store_cluster: '', store_city: '', store_priority: '', store_festival: '', store_open_months: '' })
   })
 })
 
