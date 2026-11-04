@@ -59,6 +59,7 @@ export async function runAutoCvmApproval(p: {
       approvers: [{ id: cvm.id, full_name: cvm.full_name }],
       senderId: p.actorId,
       senderName: 'The system',
+      via: 'auto_cvm',
     })
     if (res.error) return await stop('The ticket could not be sent to the CVM for approval automatically. Please send it for approval yourself.')
 

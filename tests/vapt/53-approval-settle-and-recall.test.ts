@@ -69,13 +69,22 @@ describe('recalling an approval', () => {
     expect((await approveApproval(id, 'late')).error).toBeTruthy()
   })
 
-  it('a technician (not a manager) cannot recall, and an unrelated ticket is not affected', async () => {
+  it('a technician who did NOT send the approval (another technician) cannot recall it, and the ticket is not affected', async () => {
     const t = await newTicket()
-    await send(t.id)
-    actAs(fx.agentA)
+    await send(t.id)   // sent by agentA
+    actAs(fx.agentB)
     expect((await recallApproval(t.id)).error).toBeTruthy()
     expect((await approvalOf(t.id))!.status).toBe('pending')
     expect((await ticket(t.id))!.status).toBe('pending_approval')
+  })
+
+  it('the technician who SENT the approval can recall it', async () => {
+    const t = await newTicket()
+    await send(t.id)
+    actAs(fx.agentA)
+    expect((await recallApproval(t.id, 'wrong approver')).error).toBeUndefined()
+    expect((await approvalOf(t.id))!.status).toBe('cancelled')
+    expect((await ticket(t.id))!.status).toBe('in_progress')
   })
 
   it('a ticket that is not waiting for an approval cannot be recalled', async () => {

@@ -7,6 +7,7 @@ import { sendAdHocApproval, addAdHocApprovers, searchManagersForApproval } from 
 import { SLACountdownClocks } from './SLACountdownClocks'
 import type { RequestStatus } from '@/types'
 import { ROLE_LABELS } from '@/lib/constants/roles'
+import { sendButtonLabel } from '@/lib/approvals/via'
 
 interface Props {
   requestId:          string
@@ -272,7 +273,7 @@ export function RequestActionBar({
                         </div>
                       )}
                       {suggestedApprover && selectedApprovers.some((x) => x.id === suggestedApprover.id) && (
-                        <p className="text-[11px] text-muted-foreground">Pre-filled: the CVM of this store. You can remove or change it.</p>
+                        <p className="text-[11px] text-muted-foreground">Pre-filled: the CVM of this store (this category asks for the CVM&apos;s approval). You can remove or change it.</p>
                       )}
 
                       <div className="relative">
@@ -317,7 +318,7 @@ export function RequestActionBar({
                       >
                         {isActing
                           ? <Loader2 className="mx-auto h-3.5 w-3.5 animate-spin" />
-                          : `${isPendingApproval ? 'Add' : 'Send to'} ${selectedApprovers.length || ''} ${selectedApprovers.length === 1 ? 'person' : 'people'} →`}
+                          : sendButtonLabel(selectedApprovers.map((a) => a.full_name), isPendingApproval)}
                       </button>
                     </div>
                   )}

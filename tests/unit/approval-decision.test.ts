@@ -176,11 +176,19 @@ describe('recalling an approval', () => {
     expect(row('request_time_entries')[0].stopped_at).toBeNull()
   })
 
-  it('is for managers, admins and platform owners only', async () => {
-    seed()
+  it('is for managers, admins and platform owners, and for the technician who SENT the approval - not for another technician', async () => {
+    seed({ approval: { requested_by: 'someone-else' } })
     const r = await recallApprovalCore(db as never, { ...tech, org_id: 'org-1' }, 'r1')
     expect(r.error).toMatch(/manager or an admin/)
     expect(row('approvals')[0].status).toBe('pending')
+  })
+
+  it('the technician who sent it can withdraw it (a wrong approver is usually noticed by the sender)', async () => {
+    seed()   // the seeded approval was sent by u-tech
+    const r = await recallApprovalCore(db as never, { ...tech, org_id: 'org-1' }, 'r1', 'picked the wrong approver')
+    expect(r).toEqual({})
+    expect(row('approvals')[0].status).toBe('cancelled')
+    expect(row('requests')[0].status).not.toBe('pending_approval')
   })
 
   it('cannot reach another organisation\'s ticket', async () => {

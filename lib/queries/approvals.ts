@@ -24,6 +24,8 @@ export type ApprovalWithDetails = {
   status: ApprovalStatus
   created_at: string
   updated_at: string
+  /** who sent it for approval (the technician); lets that person recall it */
+  requested_by?: string | null
   request: {
     id: string
     request_no: string
@@ -109,7 +111,7 @@ export async function getApprovals(
   let q = supabase
     .from('approvals')
     .select(
-      `id, request_id, workflow_id, current_step, status, created_at, updated_at,
+      `id, request_id, workflow_id, current_step, status, created_at, updated_at, requested_by,
       request:requests (
         id, request_no, title, requester_id, priority, status, created_at,
         requester:profiles!requests_requester_id_fkey (id, full_name),
@@ -176,7 +178,7 @@ export async function getApprovalsForRequest(requestId: string): Promise<Approva
   const { data: approvals } = await supabase
     .from('approvals')
     .select(`
-      id, request_id, workflow_id, current_step, status, created_at, updated_at,
+      id, request_id, workflow_id, current_step, status, created_at, updated_at, requested_by,
       request:requests (
         id, request_no, title, requester_id, priority, status, created_at,
         requester:profiles!requests_requester_id_fkey (id, full_name),

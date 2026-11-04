@@ -53,6 +53,7 @@ import { parseLinesComment } from '@/lib/vendor/lines-comment'
 import { LinesComment } from '@/components/requests/LinesComment'
 import { OemSentComment } from '@/components/requests/OemSentComment'
 import { STATUS_LABELS, TERMINAL_STATUSES } from '@/lib/constants/requests'
+import { approvalViaText } from '@/lib/approvals/via'
 import type {
   RequestStatus,
   ActivityAction,
@@ -252,14 +253,16 @@ function ApprovalEventCard({ item }: { item: RequestActivityWithActor }) {
   const actor = item.actor?.full_name ?? 'System'
 
   if (item.action === 'approval_requested') {
-    const m = item.metadata as { approver_names?: string[] } | null
+    const m = item.metadata as { approver_names?: string[]; via?: string } | null
     const names = m?.approver_names?.length ? m.approver_names.join(', ') : 'the approver'
+    const via = approvalViaText(m?.via, actor)
     return (
       <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-2.5 text-xs text-amber-800">
         <Clock className="mt-px h-3.5 w-3.5 shrink-0" />
         <span className="flex-1">
           <span className="font-semibold">{actor}</span> sent this request for approval to{' '}
           <span className="font-semibold">{names}</span>
+          {via && <span className="text-amber-700/80"> ({via})</span>}
         </span>
         <span className="ml-auto flex shrink-0 flex-col items-end text-[10px] text-amber-700/70">
           <span>{formatRelativeTime(item.created_at)}</span>
@@ -319,8 +322,8 @@ function HistoryRow({ item }: { item: RequestActivityWithActor }) {
     : []
   if (copied.length > 0) detail = `Sent to ${copied.join(', ')}`
   if (item.action === 'approval_requested' && item.metadata) {
-    const m = item.metadata as { approver_names?: string[] }
-    if (m.approver_names?.length) detail = `Sent to ${m.approver_names.join(', ')}`
+    const m = item.metadata as { approver_names?: string[]; via?: string }
+    if (m.approver_names?.length) detail = `Sent to ${m.approver_names.join(', ')}${m.via ? ` (${approvalViaText(m.via, item.actor?.full_name ?? 'the sender')})` : ''}`
   }
   if ((item.action === 'approved' || item.action === 'rejected') && item.metadata) {
     const m = item.metadata as { comment?: string }
@@ -419,7 +422,8 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
   const isRequester = request.requester_id === profile.id
   // the CVM of the requester's store, offered as the approver when a technician sends this ticket for approval (technicians and managers only)
-  const suggestedApprover = isAgent ? await suggestedCvmForRequest({ requesterId: request.requester_id, orgId: profile.org_id, viewerId: profile.id }) : null
+  // (only for a category that asks for the CVM's approval - Hangers, Fixtures, Fixture Attachments; nothing is pre-filled for any other category)
+  const suggestedApprover = isAgent ? await suggestedCvmForRequest({ requesterId: request.requester_id, orgId: profile.org_id, viewerId: profile.id, categoryId: (request as { category_id?: string | null }).category_id ?? null }) : null
 
   // Opened without saying which list it came from (an email or notification link, search,
   // approvals)? A ticket the viewer works on belongs to Agent Requests, one they raised to

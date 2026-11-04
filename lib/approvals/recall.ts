@@ -1,5 +1,5 @@
 // Recall (withdraw) a pending approval. Before this, a ticket on "Pending approval" had no way out except the approver deciding: if the approver left, was on
-// leave or was the wrong person, the ticket stayed on hold for good. A manager, admin or platform owner can now cancel the pending approval, which puts the
+// leave or was the wrong person, the ticket stayed on hold for good. A manager, admin or platform owner can now cancel the pending approval - and so can the technician who SENT it (a wrong approver is usually noticed by the sender) - which puts the
 // ticket back to the status it had before it was sent (pre_approval_status), gives back the time it spent on hold to the SLA, and tells everyone concerned.
 // A plain module (the signed-in check lives in lib/actions/approvals.ts) so it can be tested without a server action.
 
@@ -11,8 +11,9 @@ import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { archiveApprovalNotifications, creditHoldTime, reopenApproval, type ApprovalActor } from '@/lib/approvals/decision'
 import { stopOpenTimeEntries } from '@/lib/requests/status-change'
 import type { RequestStatus } from '@/types'
+import { RECALL_ROLES, mayRecallApproval } from '@/lib/approvals/recall-rule'
 
-export const RECALL_ROLES = ['manager', 'admin', 'platform_owner']
+export { RECALL_ROLES, mayRecallApproval }
 
 export async function recallApprovalCore(
   admin: ReturnType<typeof createAdminClient>,
@@ -20,8 +21,7 @@ export async function recallApprovalCore(
   requestId: string,
   reason?: string,
 ): Promise<{ error?: string }> {
-  if (!RECALL_ROLES.includes(profile.role)) return { error: 'Only a manager or an admin can recall an approval.' }
-
+  // (who may recall is decided below, once the approval - and so who sent it - is known)
   const { data: req } = await admin
     .from('requests')
     .select('id, org_id, title, status, requester_id, waiting_since, response_due_at, resolution_due_at, pre_approval_status, paused_ms_total')
@@ -38,6 +38,7 @@ export async function recallApprovalCore(
     .eq('status', 'pending')
     .maybeSingle()
   if (!approval) return { error: 'There is no pending approval to recall.' }
+  if (!mayRecallApproval(profile.role, profile.id, approval.requested_by)) return { error: 'Only a manager or an admin, or the technician who sent the approval, can recall it.' }
 
   // Settle the approval first and only once: an approver deciding at the same moment either wins this or sees "already decided".
   const { data: claimed, error: claimError } = await admin

@@ -4,6 +4,7 @@ import { logActivity } from '@/lib/activity'
 import { notify } from '@/lib/notifications'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { barStoreApprovers } from '@/lib/approvals/store-users'
+import type { ApprovalVia } from '@/lib/approvals/via'
 import { stopOpenTimeEntries } from '@/lib/requests/status-change'
 import type { RequestStatus } from '@/types'
 
@@ -28,7 +29,7 @@ export type AdHocRequest = {
  */
 export async function createAdHocApproval(
   admin: Db,
-  p: { request: AdHocRequest; approvers: { id: string; full_name: string }[]; senderId: string; senderName: string },
+  p: { request: AdHocRequest; approvers: { id: string; full_name: string }[]; senderId: string; senderName: string; /** how the approvers were chosen: written into the history so a wrong approver can be traced */ via?: ApprovalVia },
 ): Promise<{ error?: string }> {
   const req = p.request
   const approverIds = p.approvers.map((a) => a.id)
@@ -92,7 +93,7 @@ export async function createAdHocApproval(
   await stopOpenTimeEntries(req.id, new Date().toISOString())
 
   await logActivity({ requestId: req.id, actorId: p.senderId, action: 'status_changed', metadata: { from: req.status, to: 'pending_approval' } })
-  await logActivity({ requestId: req.id, actorId: p.senderId, action: 'approval_requested', metadata: { approver_names: p.approvers.map((a) => a.full_name) } })
+  await logActivity({ requestId: req.id, actorId: p.senderId, action: 'approval_requested', metadata: { approver_names: p.approvers.map((a) => a.full_name), ...(p.via ? { via: p.via } : {}) } })
 
   // Notify all approvers at once
   for (const uid of approverIds) {

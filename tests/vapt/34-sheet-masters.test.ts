@@ -347,14 +347,17 @@ describe('the CVM comes from the CVM sheet', () => {
 })
 
 describe('the CVM is offered as the approver, and a failing OEM mail is reported', () => {
-  it('suggests the CVM listed for the requesting store to a technician or manager sending the ticket, and nobody when it is the sender, the store is not listed, or the requester has no store', async () => {
+  it('suggests the CVM listed for the requesting store to a technician or manager sending the ticket - ONLY for a category that asks for the CVM approval - and nobody when it is the sender, the store is not listed, or the requester has no store', async () => {
     await setStore(ids.storeA)
-    expect((await suggestedCvmForRequest({ requesterId: fx.requesterA.id, orgId: fx.orgId, viewerId: fx.manager.id }))?.id).toBe(fx.agentA.id)
-    expect(await suggestedCvmForRequest({ requesterId: fx.requesterA.id, orgId: fx.orgId, viewerId: fx.agentA.id })).toBeNull()
+    expect((await suggestedCvmForRequest({ requesterId: fx.requesterA.id, orgId: fx.orgId, viewerId: fx.manager.id, categoryId: ids.catFixture }))?.id).toBe(fx.agentA.id)
+    // a category that does NOT ask for the CVM (the AC category here; IT, Genisys ... on live) has nothing pre-filled
+    expect(await suggestedCvmForRequest({ requesterId: fx.requesterA.id, orgId: fx.orgId, viewerId: fx.manager.id, categoryId: ids.catAc })).toBeNull()
+    expect(await suggestedCvmForRequest({ requesterId: fx.requesterA.id, orgId: fx.orgId, viewerId: fx.manager.id, categoryId: null })).toBeNull()
+    expect(await suggestedCvmForRequest({ requesterId: fx.requesterA.id, orgId: fx.orgId, viewerId: fx.agentA.id, categoryId: ids.catFixture })).toBeNull()
     await setStore(ids.storeB)
-    expect(await suggestedCvmForRequest({ requesterId: fx.requesterA.id, orgId: fx.orgId, viewerId: fx.manager.id })).toBeNull()
+    expect(await suggestedCvmForRequest({ requesterId: fx.requesterA.id, orgId: fx.orgId, viewerId: fx.manager.id, categoryId: ids.catFixture })).toBeNull()
     await setStore(null)
-    expect(await suggestedCvmForRequest({ requesterId: fx.requesterA.id, orgId: fx.orgId, viewerId: fx.manager.id })).toBeNull()
+    expect(await suggestedCvmForRequest({ requesterId: fx.requesterA.id, orgId: fx.orgId, viewerId: fx.manager.id, categoryId: ids.catFixture })).toBeNull()
   })
   it('when the OEM mail cannot be sent the ticket is not told it was sent: it stays Open with an internal note', async () => {
     // only the OEM mail fails (the other mails of a new ticket, for example to the requester, go through)

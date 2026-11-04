@@ -4,13 +4,16 @@ import { loadCvmEmail } from '@/lib/masters/resolve'
 import { loadCvmCandidates } from './load'
 
 /**
- * The CVM of the requester's store (from the CVM Google Sheet), offered as the approver when a technician sends the ticket for approval (the technician can
- * still change it). Nothing is suggested when: the requester has no store, the sheet has no CVM for the store, the CVM's e-mail is not an active staff member
+ * The CVM of the requester's store (from the CVM Google Sheet), pre-filled as the approver when a technician sends the ticket for approval (the technician can
+ * still change it) - ONLY for a category that asks for the CVM's approval (Hangers, Fixtures, Fixture Attachments: `auto_cvm_approval`). Every other category (IT, Genisys ...)
+ * has nothing pre-filled: the technician searches and picks the approvers himself. Nothing is suggested either when: the requester has no store, the sheet has no CVM for the store, the CVM's e-mail is not an active staff member
  * of CK Desk, or the CVM is the requester or the person sending (the approval rules never allow either of them to approve). Read-only; server-only.
  */
-export async function suggestedCvmForRequest(p: { requesterId: string; orgId: string | null; viewerId: string }): Promise<{ id: string; full_name: string } | null> {
-  if (!p.orgId) return null
+export async function suggestedCvmForRequest(p: { requesterId: string; orgId: string | null; viewerId: string; categoryId: string | null }): Promise<{ id: string; full_name: string } | null> {
+  if (!p.orgId || !p.categoryId) return null
   const admin = createAdminClient()
+  const { data: category } = await admin.from('service_categories').select('auto_cvm_approval').eq('id', p.categoryId).eq('org_id', p.orgId).maybeSingle()
+  if (category?.auto_cvm_approval !== true) return null
   const { data: requester } = await admin.from('profiles').select('store_id').eq('id', p.requesterId).eq('org_id', p.orgId).maybeSingle()
   if (!requester?.store_id) return null
   const { data: store } = await admin.from('stores').select('code').eq('id', requester.store_id).eq('org_id', p.orgId).maybeSingle()

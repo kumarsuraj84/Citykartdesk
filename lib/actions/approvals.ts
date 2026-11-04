@@ -13,6 +13,8 @@ import { notify } from '@/lib/notifications'
 import { rateLimit } from '@/lib/rate-limit'
 import { firstBarredApprover } from '@/lib/approvals/separation'
 import { barStoreApprovers } from '@/lib/approvals/store-users'
+import { classifyManualApproval } from '@/lib/approvals/via'
+import { suggestedCvmForRequest } from '@/lib/cvm/suggest'
 import { createAdHocApproval } from '@/lib/approvals/adhoc'
 import { recallApprovalCore } from '@/lib/approvals/recall'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
@@ -176,11 +178,18 @@ export async function sendAdHocApproval(
   const storeBarred = await barStoreApprovers(admin, approverIds)
   if (storeBarred) return { error: storeBarred }
 
+  // how the approvers were chosen goes into the history: the server works out for itself whether the CVM the screen pre-fills is among them (never trusts the browser)
+  let suggestedCvmId: string | null = null
+  try {
+    const { data: cat } = await admin.from('requests').select('category_id').eq('id', req.id).maybeSingle()
+    suggestedCvmId = (await suggestedCvmForRequest({ requesterId: req.requester_id, orgId: req.org_id, viewerId: profile.id, categoryId: (cat?.category_id as string | null) ?? null }))?.id ?? null
+  } catch { /* the record is only a note: a failed look-up is simply 'chosen' */ }
   const sent = await createAdHocApproval(admin, {
     request: { id: req.id, request_no: req.request_no, title: req.title, status: req.status, requester_id: req.requester_id, org_id: req.org_id, waiting_since: req.waiting_since },
     approvers,
     senderId: profile.id,
     senderName: profile.full_name,
+    via: classifyManualApproval({ approverIds, suggestedCvmId }),
   })
   if (sent.error) return { error: sent.error }
 
@@ -260,7 +269,7 @@ export async function addAdHocApprovers(
     requestId,
     actorId: profile.id,
     action: 'approval_requested',
-    metadata: { approver_names: fresh.map((a) => a.full_name), added_to_pending: true },
+    metadata: { approver_names: fresh.map((a) => a.full_name), added_to_pending: true, via: 'chosen' },
   }).catch(() => {})
 
   for (const a of fresh) {

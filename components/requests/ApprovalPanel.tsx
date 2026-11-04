@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { CheckCircle2, XCircle, Clock, UserCheck, MessageSquare, CalendarDays } from 'lucide-react'
 import { approveApproval, rejectApproval, delegateApproval, recallApproval, searchUsersForDelegation } from '@/lib/actions/approvals'
 import { canActOnApproval } from '@/lib/approvals/canAct'
+import { mayRecallApproval } from '@/lib/approvals/recall-rule'
 import type { ApprovalWithDetails } from '@/lib/queries/approvals'
 import type { UserRole } from '@/types'
 
@@ -72,8 +73,8 @@ export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: App
     })
   }
 
-  // A manager / admin can withdraw a pending approval (the approver left, was the wrong person ...): the ticket goes back to where it was.
-  const canRecall = approval.status === 'pending' && (viewerRole === 'manager' || viewerRole === 'admin' || viewerRole === 'platform_owner')
+  // A manager / admin - or the technician who sent it - can withdraw a pending approval (the approver left, was the wrong person ...): the ticket goes back to where it was.
+  const canRecall = approval.status === 'pending' && mayRecallApproval(viewerRole, viewerId, approval.requested_by)
   function handleRecall() {
     setError(null)
     startTransition(async () => {
@@ -221,7 +222,7 @@ export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: App
         </div>
       )}
 
-      {/* ── Recall (managers) ── */}
+      {/* ── Recall (managers, admins, and the technician who sent the approval) ── */}
       {canRecall && (
         <div className="space-y-2 rounded-xl border border-border bg-card p-3">
           {error && !canAct && (
