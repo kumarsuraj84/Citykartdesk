@@ -51,6 +51,9 @@ export type EntityDef = {
   map: (r: Row, ctx: Ctx) => Row
 }
 
+/** The Server Room AC as the AC sheet writes it: the AC number "Server Room" (217 rows on live, one per store), also "Server Room AC" or "Server Room 2". The AC Calendar's own rule (isServerRoomAc) is narrower and is NOT changed here. */
+export const isServerRoomUnit = (acNo: string): boolean => isServerRoomAc(acNo) || /^\s*server\s*room(\s|$)/i.test(acNo)
+
 const c = (name: string, type: ColType, pii: Pii = 'no', note?: string): Col => ({ name, type, pii, ...(note ? { note } : {}) })
 const ts = isoUtc
 const pick = (r: Row, names: string[], times: string[] = []): Row => {
@@ -215,10 +218,10 @@ export const ENTITIES: EntityDef[] = [
     description: 'The air conditioners of the AC sheet (about 2,400 rows, read in full): store code, AC number, brand, tonnage, whether the AC is active or was removed, and whether it is the Server Room AC. `store_code` + `ckdesk_no` (lower case) is the `ac_key` of the tickets. No serial number, vendor, e-mail or address.',
     select: ['id', 'store_code', 'ckdesk_no', 'brand', 'tonnage', 'is_active', 'removed_at'],
     columns: [c('id', 'uuid'), c('store_code', 'text', 'no', 'CKDesk store code, capitals'), c('ckdesk_no', 'text', 'no', 'the AC number the store uses on its tickets'), c('brand', 'text'), c('tonnage', 'text'), c('is_active', 'bool'),
-      c('is_server_room', 'bool', 'derived', 'the Server Room AC (not one of the store\'s counted ACs in the AC Calendar)'), c('removed_at', 'timestamptz', 'no', 'set when the AC left the sheet; null while it is on it')],
+      c('is_server_room', 'bool', 'derived', 'the AC number is "Server Room" (how the AC sheet writes the server-room AC, one per store); the AC Calendar does not use this flag and still counts these ACs'), c('removed_at', 'timestamptz', 'no', 'set when the AC left the sheet; null while it is on it')],
     map: (r) => ({
       id: r.id, store_code: typeof r.store_code === 'string' ? r.store_code.trim().toUpperCase() : null, ckdesk_no: str(r.ckdesk_no, 60), brand: str(r.brand, 60), tonnage: str(r.tonnage, 30),
-      is_active: !!r.is_active, is_server_room: isServerRoomAc(String(r.ckdesk_no ?? '')), removed_at: ts(r.removed_at),
+      is_active: !!r.is_active, is_server_room: isServerRoomUnit(String(r.ckdesk_no ?? '')), removed_at: ts(r.removed_at),
     }),
   },
   {

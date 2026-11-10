@@ -77,6 +77,12 @@ describe('the data API entities for the AC heatmap', () => {
     expect(JSON.stringify(out)).not.toMatch(/SECRET-SERIAL|a@b\.test/)
     expect(u.map({ id: 'a2', store_code: 'RBL', ckdesk_no: 'AC 1', is_active: true }, ctx).is_server_room).toBe(false)
   })
+  it('the Server Room AC is recognised as the AC sheet writes it ("Server Room"), and no ordinary AC is', () => {
+    const u = entityByName('ac_units')!
+    const flag = (no: string) => u.map({ id: 'a', store_code: 'RBL', ckdesk_no: no, is_active: true }, ctx).is_server_room
+    for (const no of ['Server Room', 'server room', ' Server  Room ', 'Server Room AC', 'Server Room 2']) expect(flag(no), no).toBe(true)
+    for (const no of ['AC 1', 'AC 12', 'Serverless', 'Reserve Room', 'AC Server Room 1', '']) expect(flag(no), no).toBe(false)
+  })
   it('the names stay unique', () => {
     expect(new Set(ENTITIES.map((e) => e.name)).size).toBe(ENTITIES.length)
   })

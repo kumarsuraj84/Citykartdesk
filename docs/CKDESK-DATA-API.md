@@ -380,7 +380,7 @@ The air conditioners of the AC sheet (about 2,400 rows, read in full): store cod
 | `brand` | text | no |  |
 | `tonnage` | text | no |  |
 | `is_active` | bool | no |  |
-| `is_server_room` | bool | derived | the Server Room AC (not one of the store's counted ACs in the AC Calendar) |
+| `is_server_room` | bool | derived | the AC number is "Server Room" (how the AC sheet writes the server-room AC, one per store; 217 rows on 10 Nov 2026); the AC Calendar does not use this flag and still counts these ACs |
 | `removed_at` | timestamptz | no | set when the AC left the sheet; null while it is on it |
 
 ### `users`
