@@ -5,6 +5,7 @@
 //  - people appear as an opaque id (pii "id") and, only in the `users` entity, their display name (pii "name", agreed by the owner on 2 Nov 2026), plus role and store / department ids; comments appear as flags and a length, never as text;
 //  - every store carries its CKDesk store code (`store_code`), the key the data platform joins to its own site list.
 import { isoUtc } from './params'
+import { isServerRoomAc } from '@/lib/reporting/analytics/facts'
 
 export type ColType = 'uuid' | 'text' | 'int' | 'numeric' | 'bool' | 'timestamptz' | 'date' | 'json'
 /** no = no personal data; id = an opaque id of a person; name = the display name of a person (owner agreed 2 Nov 2026; never e-mail, mobile or employee number); derived = worked out by the API from other columns */
@@ -22,6 +23,8 @@ export type Ctx = {
   storeOfProfile: Map<string, string>
   /** store id -> store code */
   storeCode: Map<string, string>
+  /** ticket id -> the key of the AC it is about ("STORE|ac number"); only for AC tickets that say which AC */
+  acKeyOfRequest?: Map<string, string>
 }
 export type Row = Record<string, unknown>
 
@@ -43,6 +46,8 @@ export type EntityDef = {
   columns: Col[]
   needsStoreOfProfile?: { profileColumns: string[] }
   needsStoreCode?: boolean
+  /** the rows are tickets and the API works out which AC each one is about (see ./ac-key) */
+  needsAcKey?: boolean
   map: (r: Row, ctx: Ctx) => Row
 }
 
@@ -68,6 +73,7 @@ export const ENTITIES: EntityDef[] = [
       c('id', 'uuid'), c('request_no', 'text'), c('service_id', 'uuid'), c('category_id', 'uuid'), c('sub_category_id', 'uuid'), c('status', 'text'), c('priority', 'text'), c('team_id', 'uuid'),
       c('requester_id', 'uuid', 'id'), c('assigned_to', 'uuid', 'id', 'the technician'), c('parent_request_id', 'uuid'),
       c('store_code', 'text', 'derived', 'CKDesk store code of the requester; null for a head-office user'),
+      c('ac_key', 'text', 'derived', 'which AC an AC ticket is about: STORE code in capitals + "|" + the AC number in lower case, e.g. "ABC|ac 3" (the key the AC Calendar uses); null for any other ticket or when the ticket does not say which AC'),
       c('created_at', 'timestamptz'), c('updated_at', 'timestamptz'), c('responded_at', 'timestamptz'), c('resolved_at', 'timestamptz'), c('closed_at', 'timestamptz'),
       c('response_due_at', 'timestamptz'), c('resolution_due_at', 'timestamptz'), c('waiting_since', 'timestamptz', 'no', 'set while the ticket waits for the user'),
       c('paused_ms_total', 'int', 'no', 'milliseconds the SLA clock was paused'), c('reopen_count', 'int'),
@@ -75,11 +81,13 @@ export const ENTITIES: EntityDef[] = [
       c('resolution_breached', 'bool', 'derived', 'resolved_at later than resolution_due_at; null while not resolved or no target'),
     ],
     needsStoreOfProfile: { profileColumns: ['requester_id'] },
+    needsAcKey: true,
     map: (r, ctx) => {
       const late = (done: unknown, due: unknown) => (done && due ? new Date(String(done)).getTime() > new Date(String(due)).getTime() : null)
       return {
         ...pick(r, REQUEST_PLAIN, REQUEST_TIMES),
         store_code: ctx.storeOfProfile.get(String(r.requester_id)) ?? null,
+        ac_key: ctx.acKeyOfRequest?.get(String(r.id)) ?? null,
         response_breached: late(r.responded_at, r.response_due_at),
         resolution_breached: late(r.resolved_at, r.resolution_due_at),
       }
@@ -201,6 +209,17 @@ export const ENTITIES: EntityDef[] = [
     select: ['id', 'name', 'slug', 'level', 'row_type', 'is_active', 'created_at', 'updated_at'],
     columns: [c('id', 'uuid'), c('name', 'text'), c('slug', 'text'), c('level', 'text', 'no', 'mail or portal'), c('row_type', 'text', 'no', 'machine or store'), c('is_active', 'bool'), c('created_at', 'timestamptz'), c('updated_at', 'timestamptz')],
     map: (r) => pick(r, ['id', 'name', 'slug', 'level', 'row_type', 'is_active', 'created_at', 'updated_at'], ['created_at', 'updated_at']),
+  },
+  {
+    name: 'ac_units', table: 'master_ac_units', mode: 'snapshot', cursor: 'id', org: 'direct',
+    description: 'The air conditioners of the AC sheet (about 2,400 rows, read in full): store code, AC number, brand, tonnage, whether the AC is active or was removed, and whether it is the Server Room AC. `store_code` + `ckdesk_no` (lower case) is the `ac_key` of the tickets. No serial number, vendor, e-mail or address.',
+    select: ['id', 'store_code', 'ckdesk_no', 'brand', 'tonnage', 'is_active', 'removed_at'],
+    columns: [c('id', 'uuid'), c('store_code', 'text', 'no', 'CKDesk store code, capitals'), c('ckdesk_no', 'text', 'no', 'the AC number the store uses on its tickets'), c('brand', 'text'), c('tonnage', 'text'), c('is_active', 'bool'),
+      c('is_server_room', 'bool', 'derived', 'the Server Room AC (not one of the store\'s counted ACs in the AC Calendar)'), c('removed_at', 'timestamptz', 'no', 'set when the AC left the sheet; null while it is on it')],
+    map: (r) => ({
+      id: r.id, store_code: typeof r.store_code === 'string' ? r.store_code.trim().toUpperCase() : null, ckdesk_no: str(r.ckdesk_no, 60), brand: str(r.brand, 60), tonnage: str(r.tonnage, 30),
+      is_active: !!r.is_active, is_server_room: isServerRoomAc(String(r.ckdesk_no ?? '')), removed_at: ts(r.removed_at),
+    }),
   },
   {
     name: 'users', table: 'profiles', mode: 'incremental', cursor: 'updated_at', org: 'direct',

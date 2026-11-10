@@ -57,7 +57,7 @@ Each ticket carries `store_code` (the CK Desk store code of the person who raise
 - The owner's decisions on comments (flags only, as built) and people (opaque ids only, as built) are the **conservative defaults**; they can be widened later one column at a time, only on the owner's word.
 - The bot (CKOneAI) reads the platform's `gold_*` views, not CK Desk. See `docs/CKDESK-BOT-VIA-CKONEAI.md`.
 
-## 7. Entities and columns (from `lib/data-api/entities.ts`; 19 entities from the local build: the last two and `users.manager_id` are NOT released yet)
+## 7. Entities and columns (from `lib/data-api/entities.ts`; 20 entities from the local build: the last two, `users.manager_id`, `requests.ac_key` and `ac_units` are NOT released yet)
 
 ### `requests`
 
@@ -80,6 +80,7 @@ One row per ticket: service / category, status, priority, people (ids only), the
 | `assigned_to` | uuid | opaque id of a person | the technician |
 | `parent_request_id` | uuid | no |  |
 | `store_code` | text | derived | CKDesk store code of the requester; null for a head-office user |
+| `ac_key` | text | derived | NEW (local, not released): which AC an AC ticket is about: STORE code in capitals + "\|" + the AC number in lower case, e.g. "ABC\|ac 3" (the key the AC Calendar uses). From the AC copy saved on the ticket, else the AC number answered on the form. Null for any other ticket, a genset ticket, or when the ticket does not say which AC (about 39% of AC tickets had it on 10 Nov 2026). Join to `ac_units` on upper(store_code) + "\|" + lower(ckdesk_no). After the release do ONE full reload of `requests` (no `updated_since`): existing rows do not change their `updated_at` |
 | `created_at` | timestamptz | no |  |
 | `updated_at` | timestamptz | no |  |
 | `responded_at` | timestamptz | no |  |
@@ -363,6 +364,24 @@ The Vendor Programs (AC, Genset, RO ...; names behind program_id). Mail wording,
 | `is_active` | bool | no |  |
 | `created_at` | timestamptz | no |  |
 | `updated_at` | timestamptz | no |  |
+
+### `ac_units`  (NEW, local, not released)
+
+The air conditioners of the AC sheet (about 2,400 rows, read in full): store code, AC number, brand, tonnage, whether the AC is active or was removed, and whether it is the Server Room AC. No serial number, vendor, e-mail or address.
+
+- Source table: `master_ac_units`; key: `id`; load style: **snapshot** (no change date: read in full each time); ordering: `id`.
+- Rows on live (10 Nov 2026): 2,360 (2,359 active; 217 are Server Room ACs).
+
+| Column | Type | Personal data | Note |
+|---|---|---|---|
+| `id` | uuid | no |  |
+| `store_code` | text | no | CKDesk store code, capitals |
+| `ckdesk_no` | text | no | the AC number the store uses on its tickets |
+| `brand` | text | no |  |
+| `tonnage` | text | no |  |
+| `is_active` | bool | no |  |
+| `is_server_room` | bool | derived | the Server Room AC (not one of the store's counted ACs in the AC Calendar) |
+| `removed_at` | timestamptz | no | set when the AC left the sheet; null while it is on it |
 
 ### `users`
 

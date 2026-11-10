@@ -2,6 +2,7 @@
 // (cursor column, then id) so the next page starts exactly after the last row of this one.
 import { type EntityDef, type Ctx, type Row, type OrgHop, ENTITIES } from './entities'
 import { encodeCursor, type Cursor, isoUtc } from './params'
+import { acKeysForRequests } from './ac-key'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (t: string) => any }
@@ -47,7 +48,7 @@ async function inOrg(db: Db, orgId: string, hops: OrgHop[], rows: Row[]): Promis
 }
 
 async function buildCtx(db: Db, orgId: string, def: EntityDef, rows: Row[]): Promise<Ctx> {
-  const ctx: Ctx = { storeOfProfile: new Map(), storeCode: new Map() }
+  const ctx: Ctx = { storeOfProfile: new Map(), storeCode: new Map(), acKeyOfRequest: new Map() }
   if (!def.needsStoreOfProfile && !def.needsStoreCode) return ctx
   const stores = must<{ id: string; code: string }[]>(await db.from('stores').select('id, code').eq('org_id', orgId).limit(5000), 'read stores')
   for (const s of stores) ctx.storeCode.set(s.id, s.code)
@@ -58,6 +59,7 @@ async function buildCtx(db: Db, orgId: string, def: EntityDef, rows: Row[]): Pro
       for (const p of ps) if (p.store_id && ctx.storeCode.has(p.store_id)) ctx.storeOfProfile.set(p.id, ctx.storeCode.get(p.store_id)!)
     }
   }
+  if (def.needsAcKey) ctx.acKeyOfRequest = await acKeysForRequests(db, orgId, rows, ctx.storeOfProfile)
   return ctx
 }
 
