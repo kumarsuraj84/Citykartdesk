@@ -22,6 +22,7 @@ import type { UserWithTeams, Department, Location, Store, CostCenter, JobFunctio
 import type { UserRole } from '@/types'
 import { ROLE_LABELS, ROLE_BADGE_STYLES } from '@/lib/constants/roles'
 import { BulkImportUsersDialog } from '@/components/admin/BulkImportUsersDialog'
+import { UpdateUserContactsDialog } from '@/components/admin/UpdateUserContactsDialog'
 import { BulkPasswordResetDialog } from '@/components/admin/BulkPasswordResetDialog'
 import { ExportButton } from '@/components/requests/ExportButton'
 import { normalizeMobileNumber } from '@/lib/users/mobile'
@@ -1086,6 +1087,7 @@ export function UserManagementClient({ initialUsers, currentUserId, isAdmin, dep
           <div className="flex items-center gap-2">
             <ExportButton action={exportUsersCsv} filename={`users-${new Date().toISOString().slice(0, 10)}`} label="Export" />
             <BulkImportUsersDialog />
+            <UpdateUserContactsDialog />
             <BulkPasswordResetDialog />
             <button
               onClick={() => setShowInvite(true)}

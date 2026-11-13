@@ -15,6 +15,7 @@ import { logAdminAudit } from './audit'
 import { recordAudit } from '@/lib/syslog/audit'
 import { BULK_RESET_BATCH_SIZE, BULK_RESET_ROLES } from '@/lib/users/bulk-reset'
 import { normalizeMobileNumber } from '@/lib/users/mobile'
+import { planContactUpdate, type ContactAccount, type ContactPlan, type ContactSheetRow, type MobileOwners } from '@/lib/users/contact-update'
 import { isUsableEmail, describeEmailUpdates, type EmailChangeCounts } from '@/lib/users/email-change'
 import { toCSV } from '@/lib/export/csv'
 import { USER_EXPORT_COLUMNS, buildUsersExportRows, type ExportProfile } from '@/lib/export/users'
@@ -847,6 +848,125 @@ export async function bulkCreateUsers(
   await recordAudit({ action: 'user.bulk_imported', entityType: 'user', message: `${imported} users imported, ${errors.length} rows with errors`, after: { imported, rowErrors: errors.length }, actorId: profile.id, orgId })
   revalidatePath('/admin/users')
   return { data: { imported, errors, ...(credentials.length ? { credentials } : {}), ...(invited ? { invited } : {}) } }
+}
+
+// ── updateUserContactsFromSheet ──────────────────────────────────────────────
+// Sets the employee code and the mobile number of people who ALREADY have an account (matched by e-mail) so that they are exactly as in the sheet:
+// a value in the sheet is written, an empty cell clears it. Nothing else of the person is touched. Two steps: apply=false only shows what WOULD change
+// (nothing is written); apply=true writes it. The rules themselves are in lib/users/contact-update.ts.
+
+export type ContactUpdateChange = { email: string; field: 'employee_code' | 'mobile_number'; before: string; after: string }
+export type ContactUpdateResult = {
+  applied: boolean
+  counts: ContactPlan['counts']
+  problems: string[]
+  changes: ContactUpdateChange[]
+  /** apply=true only: how many were really written and the ones that failed */
+  written?: number
+  failed?: string[]
+}
+
+async function readAllRows<T>(query: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<{ ok: true; rows: T[] } | { ok: false; error: string }> {
+  const rows: T[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await query(from, from + 999)
+    if (error) return { ok: false, error: error.message }
+    rows.push(...(data ?? []))
+    if (!data || data.length < 1000) break
+  }
+  return { ok: true, rows }
+}
+
+export async function updateUserContactsFromSheet(
+  rows: ContactSheetRow[],
+  options: { apply: boolean; hasEmployeeColumn: boolean; hasMobileColumn: boolean }
+): Promise<{ error?: string; data?: ContactUpdateResult }> {
+  const profile = await getCurrentProfile()
+  if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
+  if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
+  if (!Array.isArray(rows) || rows.length === 0) return { error: 'No rows to update.' }
+  if (rows.length > 5000) return { error: 'The file has more than 5,000 rows; split it into smaller files.' }
+  if (!options.hasEmployeeColumn && !options.hasMobileColumn) return { error: 'The file has neither an employee_id nor a mobile_number column, so there is nothing to update.' }
+
+  const admin = createAdminClient() as unknown as AnyClient
+  const orgId = profile.org_id
+
+  const profilesRes = await readAllRows<{ id: string; role: string; employee_id: string | null }>((from, to) =>
+    admin.from('profiles').select('id, role, employee_id').eq('org_id', orgId).order('id').range(from, to))
+  if (!profilesRes.ok) return { error: `The list of people could not be read (${profilesRes.error}). Nothing was changed.` }
+  const mobilesRes = await readAllRows<{ profile_id: string; mobile_number: string }>((from, to) =>
+    admin.from('profile_mobile_numbers').select('profile_id, mobile_number').eq('org_id', orgId).order('mobile_number').range(from, to))
+  if (!mobilesRes.ok) return { error: `The mobile numbers could not be read (${mobilesRes.error}). Nothing was changed.` }
+
+  const existingAccounts = await listAuthIdsByEmail(admin, new Set(profilesRes.rows.map((p) => p.id)))
+  if (!existingAccounts.ok) return { error: `The list of existing accounts could not be read (${existingAccounts.error}). Nothing was changed; please try again.` }
+
+  const byProfile = new Map(profilesRes.rows.map((p) => [p.id, p]))
+  const numbersOf = new Map<string, string[]>()
+  const owners: MobileOwners = new Map()
+  for (const m of mobilesRes.rows) {
+    numbersOf.set(m.profile_id, [...(numbersOf.get(m.profile_id) ?? []), m.mobile_number])
+    owners.set(m.mobile_number, m.profile_id)
+  }
+  const accounts = new Map<string, ContactAccount>()
+  for (const [email, id] of existingAccounts.value) {
+    const p = byProfile.get(id)
+    if (p) accounts.set(email.toLowerCase(), { id, role: p.role, employeeId: p.employee_id, mobiles: numbersOf.get(id) ?? [] })
+  }
+
+  const plan = planContactUpdate(rows, accounts, owners, {
+    hasEmployeeColumn: options.hasEmployeeColumn,
+    hasMobileColumn: options.hasMobileColumn,
+    guard: (acct, field) => targetGuardError({ id: profile.id, role: profile.role }, { id: acct.id, role: acct.role }, field === 'mobile' ? 'phone' : 'profile'),
+  })
+
+  const changes: ContactUpdateChange[] = []
+  for (const r of plan.rows) {
+    if (r.employee.kind === 'change') changes.push({ email: r.email, field: 'employee_code', before: r.employee.before ?? '', after: r.employee.after ?? '' })
+    if (r.mobile.kind === 'change') changes.push({ email: r.email, field: 'mobile_number', before: r.mobile.before ?? '', after: r.mobile.after ?? '' })
+  }
+  if (!options.apply) return { data: { applied: false, counts: plan.counts, problems: plan.problems, changes } }
+
+  // ---- write ----
+  let written = 0
+  const failed: string[] = []
+  const audits: Promise<void>[] = []
+  for (const r of plan.rows) {
+    if (!r.profileId) continue
+    if (r.employee.kind === 'change') {
+      const { error } = await admin.from('profiles').update({ employee_id: r.employee.after, updated_at: new Date().toISOString() }).eq('id', r.profileId).eq('org_id', orgId)
+      if (error) failed.push(`${r.rowLabel} (${r.email}): employee code could not be saved (${error.message}).`)
+      else {
+        written++
+        audits.push(recordAudit({ action: 'user.employee_code_bulk_updated', entityType: 'user', entityId: r.profileId, before: { employee_id: r.employee.before }, after: { employee_id: r.employee.after }, actorId: profile.id, orgId }))
+      }
+    }
+    if (r.mobile.kind === 'change') {
+      const before = r.mobile.before
+      const after = r.mobile.after
+      let ok = true
+      if (after) {
+        // the new number is added first, so a failure leaves the old one in place; the old one is removed afterwards
+        const { error } = await admin.from('profile_mobile_numbers').insert({ profile_id: r.profileId, org_id: orgId, mobile_number: after })
+        if (error) {
+          ok = false
+          failed.push(`${r.rowLabel} (${r.email}): mobile number could not be saved (${error.code === '23505' ? 'this number is already assigned to another user' : error.message}).`)
+        }
+      }
+      if (ok && before) {
+        const { error } = await admin.from('profile_mobile_numbers').delete().eq('profile_id', r.profileId).eq('org_id', orgId).eq('mobile_number', before)
+        if (error) { ok = false; failed.push(`${r.rowLabel} (${r.email}): the new number was saved but the old one could not be removed (${error.message}).`) }
+      }
+      if (ok) {
+        written++
+        audits.push(recordAudit({ category: 'security', action: 'user.mobile_bulk_updated', entityType: 'user', entityId: r.profileId, before: { mobile_number: before }, after: { mobile_number: after }, actorId: profile.id, orgId }))
+      }
+    }
+  }
+  await Promise.all(audits)
+  await recordAudit({ action: 'user.contacts_bulk_updated', entityType: 'user', message: `${written} employee codes / mobile numbers updated from a sheet, ${failed.length} failed, ${plan.problems.length} skipped`, after: { ...plan.counts, written, failed: failed.length }, actorId: profile.id, orgId })
+  revalidatePath('/admin/users')
+  return { data: { applied: true, counts: plan.counts, problems: plan.problems, changes, written, failed } }
 }
 
 // ── adminSendPasswordReset ──────────────────────────────────────────────────
