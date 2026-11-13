@@ -16,6 +16,11 @@ import { recordAudit } from '@/lib/syslog/audit'
 import { BULK_RESET_BATCH_SIZE, BULK_RESET_ROLES } from '@/lib/users/bulk-reset'
 import { normalizeMobileNumber } from '@/lib/users/mobile'
 import { planContactUpdate, type ContactAccount, type ContactPlan, type ContactSheetRow, type MobileOwners } from '@/lib/users/contact-update'
+import { canHoldTickets, losesTicketRights } from '@/lib/requests/release-assignee'
+import { countTicketsHeldBy, releaseRequests, reassignRequests } from './assignee-cleanup'
+
+/** What to do with the unfinished tickets of somebody who is losing the right to hold them. */
+export type TicketHandover = 'release' | 'leave' | { reassignTo: string }
 import { isUsableEmail, describeEmailUpdates, type EmailChangeCounts } from '@/lib/users/email-change'
 import { toCSV } from '@/lib/export/csv'
 import { USER_EXPORT_COLUMNS, buildUsersExportRows, type ExportProfile } from '@/lib/export/users'
@@ -83,8 +88,9 @@ export async function updateUserRole(
   role: UserRole,
   // A vendor technician / manager is a normal 'user' account linked to a vendor company. Giving such a person any other role ends that link, so it needs a
   // deliberate yes (audit A-23). The screen sends this only after asking.
-  opts: { confirmRemoveVendorAccess?: boolean } = {}
-): Promise<{ error?: string; needsConfirm?: boolean }> {
+  // `tickets` answers the second question: this person is losing the right to hold tickets, so what happens to the unfinished tickets they still have?
+  opts: { confirmRemoveVendorAccess?: boolean; tickets?: TicketHandover } = {}
+): Promise<{ error?: string; needsConfirm?: boolean; needsTicketDecision?: { count: number; requestNos: string[] }; ticketsNote?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin','platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
@@ -93,7 +99,7 @@ export async function updateUserRole(
 
   const admin = createAdminClient()
   // D-009: the person being changed matters too, not only the role being given
-  const { data: target } = await admin.from('profiles').select('id, role, org_id, vendor_company_id, vendor_role').eq('id', userId).eq('org_id', profile.org_id).maybeSingle()
+  const { data: target } = await admin.from('profiles').select('id, role, org_id, is_active, vendor_company_id, vendor_role').eq('id', userId).eq('org_id', profile.org_id).maybeSingle()
   if (!target) return { error: 'User not found.' }
   const guard = targetGuardError({ id: profile.id, role: profile.role }, { id: target.id, role: target.role }, 'role')
   if (guard) return { error: guard }
@@ -103,6 +109,15 @@ export async function updateUserRole(
   if (leavesVendor && !opts.confirmRemoveVendorAccess) {
     return { error: `This person is a vendor ${target.vendor_role ?? 'user'}. Changing their role to "${role}" removes their vendor access (the link to their vendor company). Confirm to continue.`, needsConfirm: true }
   }
+  // A ticket keeps its technician in its own field, so taking the technician role away would leave their unfinished tickets with somebody who cannot work
+  // on them and whom the routing rules never look at again. Ask first, then do what the administrator chose (see handOverTickets below).
+  // a vendor technician who stays a plain "user" keeps their vendor link and keeps working on that vendor's tickets, so nothing is asked then
+  const held = canHoldTickets(target) && losesTicketRights({ newRole: role, keepsVendorLink: !!target.vendor_company_id && !leavesVendor })
+    ? await countTicketsHeldBy(userId)
+    : null
+  if (held?.count && !opts.tickets) {
+    return { needsTicketDecision: { count: held.count, requestNos: held.requestNos ?? [] } }
+  }
   const { error } = await admin
     .from('profiles')
     .update({ role, updated_at: new Date().toISOString(), ...(leavesVendor ? { vendor_company_id: null, vendor_role: null } : {}) })
@@ -111,24 +126,51 @@ export async function updateUserRole(
 
   if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/users.ts' }) }
   await recordAudit({ category: 'security', action: 'user.role_changed', entityType: 'user', entityId: userId, before: { role: target.role, ...(leavesVendor ? { vendor_company_id: target.vendor_company_id, vendor_role: target.vendor_role } : {}) }, after: { role, ...(leavesVendor ? { vendor_company_id: null, vendor_role: null } : {}) }, actorId: profile.id, orgId: profile.org_id })
+  // the role is changed FIRST and the tickets are handed over afterwards, so the routing rules cannot give a ticket back to the same person
+  const ticketsNote = held?.requestIds?.length ? await handOverTickets(held.requestIds, opts.tickets) : undefined
   revalidatePath('/admin/users')
-  return {}
+  return { ...(ticketsNote ? { ticketsNote } : {}) }
+}
+
+/** Carries out the administrator's choice for the tickets of somebody who may no longer hold them, and says in one sentence what happened. */
+async function handOverTickets(requestIds: string[], choice: TicketHandover | undefined): Promise<string | undefined> {
+  if (!choice || choice === 'leave') {
+    return `${requestIds.length} unfinished ticket(s) are still with this person. They are listed under Admin → Stuck tickets, where you can send them back for routing.`
+  }
+  if (choice === 'release') {
+    const res = await releaseRequests(requestIds)
+    if (res.error) return `The tickets could not be sent back for routing (${res.error}). They are listed under Admin → Stuck tickets.`
+    const d = res.data!
+    const parts = [`${d.released} ticket(s) taken off this person`, `${d.routed} given to a technician by the Business Rules`]
+    if (d.keptWaiting) parts.push(`${d.keptWaiting} kept their waiting status and need a technician chosen by hand`)
+    if (d.released - d.routed - d.keptWaiting > 0) parts.push(`${d.released - d.routed - d.keptWaiting} are waiting in the unassigned list (no rule matched)`)
+    return parts.join('; ') + '.'
+  }
+  const res = await reassignRequests(requestIds, choice.reassignTo)
+  if (res.error) return `The tickets could not be handed over (${res.error}). They are listed under Admin → Stuck tickets.`
+  return `${res.data!.moved} ticket(s) handed over${res.data!.skipped ? `, ${res.data!.skipped} not changed` : ''}.`
 }
 
 export async function toggleUserActive(
   userId: string,
-  isActive: boolean
-): Promise<{ error?: string }> {
+  isActive: boolean,
+  opts: { tickets?: TicketHandover } = {}
+): Promise<{ error?: string; needsTicketDecision?: { count: number; requestNos: string[] }; ticketsNote?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin','platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
 
   const admin = createAdminClient()
   // D-009: only a platform owner may deactivate an admin / platform owner, and nobody deactivates themselves
-  const { data: target } = await admin.from('profiles').select('id, role, org_id').eq('id', userId).eq('org_id', profile.org_id).maybeSingle()
+  const { data: target } = await admin.from('profiles').select('id, role, org_id, vendor_company_id').eq('id', userId).eq('org_id', profile.org_id).maybeSingle()
   if (!target) return { error: 'User not found.' }
   const guard = targetGuardError({ id: profile.id, role: profile.role }, { id: target.id, role: target.role }, 'active')
   if (guard) return { error: guard }
+  // switching an account off leaves its unfinished tickets with somebody who cannot work on them: same question as for a role change
+  const held = !isActive && canHoldTickets({ role: target.role, is_active: true, vendor_company_id: target.vendor_company_id }) ? await countTicketsHeldBy(userId) : null
+  if (held?.count && !opts.tickets) {
+    return { needsTicketDecision: { count: held.count, requestNos: held.requestNos ?? [] } }
+  }
   const { error } = await admin
     .from('profiles')
     .update({ is_active: isActive, updated_at: new Date().toISOString() })
@@ -141,8 +183,9 @@ export async function toggleUserActive(
   const { error: banError } = await admin.auth.admin.updateUserById(userId, { ban_duration: isActive ? 'none' : '876000h' })
   if (banError) return { error: `The account was marked ${isActive ? 'active' : 'inactive'}, but its sign-in could not be ${isActive ? 'restored' : 'blocked'}: ${banError.message}` }
   await recordAudit({ category: 'security', action: isActive ? 'user.reactivated' : 'user.deactivated', entityType: 'user', entityId: userId, before: { is_active: !isActive }, after: { is_active: isActive }, actorId: profile.id, orgId: profile.org_id })
+  const ticketsNote = held?.requestIds?.length ? await handOverTickets(held.requestIds, opts.tickets) : undefined
   revalidatePath('/admin/users')
-  return {}
+  return { ...(ticketsNote ? { ticketsNote } : {}) }
 }
 
 const MAX_NAME_LENGTH = 120

@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { diagnoseTickets, type AutomationDiagnosis, type Db } from '@/lib/automation/diagnose'
 import { StuckTicketsClient, type StuckRow } from './StuckTicketsClient'
+import { WrongTechnicianSection } from './WrongTechnicianSection'
+import { listTicketsWithoutRealTechnician } from '@/lib/actions/admin/assignee-cleanup'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Stuck tickets' }
@@ -60,12 +62,19 @@ export default async function StuckTicketsPage() {
   const broken = diagnoses.filter((d) => d.eligible && d.kind === 'broken').map(toRow)
   const unassigned = diagnoses.filter((d) => d.eligible && d.kind === 'unassigned').map(toRow)
 
+  // tickets stuck with somebody who may not hold tickets any more (this check has no date limit: such a ticket never fixes itself)
+  const wrongTech = await listTicketsWithoutRealTechnician()
+  const { data: techRows } = await db.from('profiles').select('id, full_name').eq('org_id', profile.org_id).eq('is_active', true)
+    .in('role', ['agent', 'manager']).order('full_name')
+  const technicians = ((techRows ?? []) as { id: string; full_name: string | null }[]).map((t) => ({ id: t.id, name: t.full_name ?? t.id.slice(0, 8) }))
+
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       <PageHeader
         title="Stuck tickets"
         description={`Tickets of the last ${DAYS} days (older tickets, made before this page existed, only for the last ${OLDER_TICKET_DAYS} days) where an automatic step did not happen (a mail to the OEM, a Business Rule, a CVM approval). Press Run on a row to do only the missing steps. Every 15 minutes the system also retries the safe ones by itself, 3 times at most.`}
       />
+      <WrongTechnicianSection rows={wrongTech.rows ?? []} technicians={technicians} loadError={wrongTech.error ?? null} />
       <StuckTicketsClient broken={broken} unassigned={unassigned} checked={ids.length} total={total} checkError={checkError} />
     </div>
   )

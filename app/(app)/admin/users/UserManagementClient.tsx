@@ -23,6 +23,7 @@ import type { UserRole } from '@/types'
 import { ROLE_LABELS, ROLE_BADGE_STYLES } from '@/lib/constants/roles'
 import { BulkImportUsersDialog } from '@/components/admin/BulkImportUsersDialog'
 import { UpdateUserContactsDialog } from '@/components/admin/UpdateUserContactsDialog'
+import { TicketHandoverDialog, type TicketHandoverChoice } from '@/components/admin/TicketHandoverDialog'
 import { BulkPasswordResetDialog } from '@/components/admin/BulkPasswordResetDialog'
 import { ExportButton } from '@/components/requests/ExportButton'
 import { normalizeMobileNumber } from '@/lib/users/mobile'
@@ -247,6 +248,7 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [savedNote, setSavedNote] = useState<string | null>(null)
+  const [ticketAsk, setTicketAsk] = useState<{ count: number; requestNos: string[] } | null>(null)
 
   const orgUser = user as UserWithTeams & {
     email: string | null
@@ -326,13 +328,26 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
   }
 
   // A vendor / OEM account loses its vendor access when its role changes, so the server asks for a deliberate yes first (audit A-23): ask here, then send it again with the yes.
-  async function saveRole(): Promise<{ error?: string }> {
+  async function saveRole(): Promise<{ error?: string; needsTicketDecision?: { count: number; requestNos: string[] } }> {
     let r = await safely(() => updateUserRole(user.id, form.role))
     if (r.needsConfirm) {
       if (!confirm('This person is an OEM / vendor account. Changing the role removes their vendor access. Continue?')) return { error: 'The role was not changed.' }
       r = await safely(() => updateUserRole(user.id, form.role, { confirmRemoveVendorAccess: true }))
     }
     return r
+  }
+
+  // the answer to "what happens to the N unfinished tickets of this person?" finishes the role change
+  function finishRoleChange(choice: TicketHandoverChoice) {
+    startTransition(async () => {
+      const r = await safely(() => updateUserRole(user.id, form.role, { confirmRemoveVendorAccess: true, tickets: choice }))
+      setTicketAsk(null)
+      if (r.error) { setError(r.error); return }
+      router.refresh()
+      if (r.ticketsNote) { setSavedNote(r.ticketsNote); setSuccess(true); return }
+      setSuccess(true)
+      onClose()
+    })
   }
 
   function handleSave() {
@@ -354,7 +369,7 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
         })),
         isAdmin && !isSelf && form.role !== user.role
           ? saveRole()
-          : Promise.resolve<{ error?: string }>({}),
+          : Promise.resolve<{ error?: string; needsTicketDecision?: { count: number; requestNos: string[] } }>({}),
         // A requester has no business being in a technician group — force-clear
         // rather than trust the hidden section's last state if they were just
         // demoted from a technician role in this same edit.
@@ -362,6 +377,8 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
       ])
       const err = r1.error ?? r2.error ?? r3.error
       if (err) { setError(err); return }
+      // the role change is held back until the administrator says what happens to this person's unfinished tickets
+      if (r2.needsTicketDecision) { setTicketAsk(r2.needsTicketDecision); return }
       router.refresh()
       // something to tell (a store was renamed with its login, or could not be): stay open so it is read
       if (r1.warning) { setError(r1.warning); return }
@@ -542,6 +559,16 @@ function EditDrawer({ user, departments, locations, stores, costCenters, jobFunc
 
           {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
           {success && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">Changes saved.{savedNote ? ` ${savedNote}` : ''}</p>}
+          {ticketAsk && (
+            <TicketHandoverDialog
+              userName={form.full_name || user.email || 'This person'}
+              count={ticketAsk.count}
+              requestNos={ticketAsk.requestNos}
+              busy={pending}
+              onChoose={finishRoleChange}
+              onCancel={() => { setTicketAsk(null); setError('The role was not changed.') }}
+            />
+          )}
         </div>
 
         {/* Footer */}
@@ -565,12 +592,26 @@ function ToggleActiveButton({ user }: { user: UserWithTeams }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+  const [ticketAsk, setTicketAsk] = useState<{ count: number; requestNos: string[] } | null>(null)
   function handleToggle() {
     if (user.is_active && !confirm(`Deactivate ${user.full_name}? They will no longer be able to log in.`)) return
     setError(null)
+    setNote(null)
     startTransition(async () => {
       const result = await safely(() => toggleUserActive(user.id, !user.is_active))
+      // switching the account off is held back until the administrator says what happens to this person's unfinished tickets
+      if (result.needsTicketDecision) { setTicketAsk(result.needsTicketDecision); return }
       if (result.error) { setError(result.error); return }
+      router.refresh()
+    })
+  }
+  function finishToggle(choice: TicketHandoverChoice) {
+    startTransition(async () => {
+      const result = await safely(() => toggleUserActive(user.id, !user.is_active, { tickets: choice }))
+      setTicketAsk(null)
+      if (result.error) { setError(result.error); return }
+      if (result.ticketsNote) setNote(result.ticketsNote)
       router.refresh()
     })
   }
@@ -588,6 +629,17 @@ function ToggleActiveButton({ user }: { user: UserWithTeams }) {
         {user.is_active ? 'Deactivate' : 'Reactivate'}
       </button>
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {note && <p className="mt-1 text-xs text-emerald-700">{note}</p>}
+      {ticketAsk && (
+        <TicketHandoverDialog
+          userName={user.full_name || user.email || 'This person'}
+          count={ticketAsk.count}
+          requestNos={ticketAsk.requestNos}
+          busy={pending}
+          onChoose={finishToggle}
+          onCancel={() => { setTicketAsk(null); setError('The account was not switched off.') }}
+        />
+      )}
     </div>
   )
 }
