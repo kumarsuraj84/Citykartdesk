@@ -31,7 +31,7 @@ describe('updateUserContactsFromSheet', () => {
   const created: string[] = []
   const nFill = mobile(), nChange = mobile(), nNew = mobile(), nClear = mobile(), nOther = mobile()
 
-  async function mk(label: string, name: string, role: string) {
+  async function mk(label: string, name: string, role: 'admin' | 'user') {
     const u = await createTestUser(label, name)
     created.push(u.id)
     await admin.from('profiles').update({ role, org_id: ORG_ID, full_name: name }).eq('id', u.id)
