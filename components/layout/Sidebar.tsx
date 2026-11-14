@@ -10,6 +10,7 @@ import {
   Users, Tag, GitBranch, Building2, Database, Workflow,
   LogOut, BookOpen, KeyRound, ChevronDown, Sparkles, Filter,
   PanelLeftClose, PanelLeftOpen, Table2, Zap, Headset, FileText, Clock, Library, FileBarChart, LayoutDashboard, Wrench,
+  Archive, FileSearch,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/actions/auth'
@@ -89,6 +90,18 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
         // Requesters have no technician group, so they never see it.
         ...(has('requests') && (isAgent || isManager || isAdmin) ? [{ label: 'Predefined Reports', href: '/reports/analytics', icon: FileBarChart }] : []),
         ...(isManager || isAdmin ? [{ label: 'Logs', href: '/admin/logs', icon: ScrollText }] : []),
+      ],
+    },
+    {
+      // The old Zoho (ManageEngine) data, in its own tab. It reads its own database and is not joined to CK Desk in any way,
+      // so it sits on its own rather than inside Analytics. Administrators and managers only (the owner's decision).
+      key: 'zoho',
+      label: 'Zoho data',
+      show: isManager || isAdmin,
+      items: [
+        { label: 'Overview', href: '/zoho', icon: Archive, exactMatch: true },
+        { label: 'Zoho reports', href: '/zoho/reports', icon: Table2 },
+        { label: 'Find a Zoho ticket', href: '/zoho/tickets', icon: FileSearch },
       ],
     },
     {
