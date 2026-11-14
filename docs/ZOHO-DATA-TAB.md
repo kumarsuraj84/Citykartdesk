@@ -22,7 +22,27 @@ So:
 |---|---|
 | `/zoho` — Overview | How many tickets, how many still open, how long the open ones have waited, raised vs finished each month, and the lists of services, statuses, technicians, who raises the most, and priorities. |
 | `/zoho/reports` — Reports | **Stores with AC tickets still open**: open AC tickets per store against how many ACs that store has, with the age buckets and the owner's red flag at 30%. |
-| `/zoho/tickets` — Find a ticket | Open any Zoho ticket **by its Zoho ticket number**. Shows every field the old system held, the fields of that service, the attachments, and the whole conversation (e-mails, replies, notes and recorded changes). There is also a word search for when the number is not to hand. |
+| `/zoho/tickets` — Find a ticket | Open any Zoho ticket **by its Zoho ticket number**. Shows **every field Zoho held**, the attachments, and the whole conversation (e-mails, replies, notes and recorded changes). There is also a word search for when the number is not to hand. |
+
+### Every field, and nothing lost
+
+The ticket screen does **not** work from a fixed list of fields. It reads each ticket's **whole original Zoho record**
+(the copy keeps it), so a Zoho field nobody ever named still appears, under *Everything else Zoho held*. The fields are
+laid out the way a person reads them:
+
+| Part of the screen | What it holds |
+|---|---|
+| **What was written when the ticket was raised** | the store's own message, formatting and all |
+| **What the technician recorded on closing** | the closure code and what the technician wrote — on our tickets this is where "what was done" lives, because Zoho's own *Resolution* box is empty throughout |
+| **What the store asked for** | subject, who raised it, when, department, site, how it was raised, the service, category, item, priority, urgency, impact |
+| **What the technician did** | technician, group, status, assigned / responded / resolved / completed dates, time taken, closure, approval, first-call-resolution, reopened |
+| **Fields of this service** | the service's own fields (AC number, employee code, bank details, …); empty ones are left out |
+| **Zoho's own record** | SLA, due dates, overdue / escalated flags, tags, last changed in Zoho, and the rest of its book-keeping |
+| **Everything else Zoho held** | any Zoho field not yet given a proper name — shown as Zoho named it |
+
+A blank field means **Zoho itself was blank** when the copy was taken, not that anything was lost in copying.
+`lib/zoho/ticket-fields.ts` holds the names and the owner of each field, and the rules for reading Zoho's value shapes
+(a date is `{value, display_value}`, a person is `{id, name}`, time taken is in milliseconds).
 
 Open to **administrators and managers** only. A vendor login can never reach it (the vendor allow-list does not include it).
 

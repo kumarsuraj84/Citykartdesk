@@ -1,8 +1,12 @@
 import { EmailBody } from '@/app/(app)/intake/_components/EmailBody'
-import { Mail, StickyNote, History, Paperclip } from 'lucide-react'
-import type { ZohoTicketDetail, ZohoTicketField, ZohoTimelineEntry } from '@/lib/zoho/report-shapes'
+import { Mail, StickyNote, History, Paperclip, MessageSquareQuote, CheckCircle2 } from 'lucide-react'
+import type { ZohoFieldGroup, ZohoTicketDetail, ZohoTimelineEntry } from '@/lib/zoho/report-shapes'
 
-/** One Zoho ticket, exactly as the old system held it: its own fields, its own words, and the whole conversation. Nothing is matched to CK Desk. */
+/**
+ * One Zoho ticket, exactly as the old system held it: every field Zoho had, its own words, and the whole conversation.
+ * Nothing is matched to CK Desk. The fields are read from the ticket's whole original Zoho record, so a Zoho field we
+ * never gave a proper name to is still shown rather than quietly dropped.
+ */
 
 const when = (at: string | null) => (at ? new Date(at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'date not recorded')
 
@@ -13,17 +17,19 @@ const size = (bytes: number | null) => {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-function Fields({ title, fields, note, mono }: { title: string; fields: ZohoTicketField[]; note?: string; mono?: boolean }) {
-  if (fields.length === 0) return null
+function Fields({ group }: { group: ZohoFieldGroup }) {
   return (
     <div className="rounded-lg border border-border bg-card p-3">
-      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-      {note && <p className="mt-0.5 text-[11px] text-muted-foreground">{note}</p>}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <h2 className="text-sm font-semibold text-foreground">{group.title}</h2>
+        <span className="text-[11px] text-muted-foreground">{group.fields.length} field{group.fields.length === 1 ? '' : 's'}</span>
+      </div>
+      {group.note && <p className="mt-0.5 text-[11px] text-muted-foreground">{group.note}</p>}
       <dl className="mt-2 grid gap-x-6 gap-y-2 sm:grid-cols-2">
-        {fields.map((f) => (
+        {group.fields.map((f) => (
           <div key={f.label} className="min-w-0">
             <dt className="text-[11px] font-medium text-muted-foreground">{f.label}</dt>
-            <dd className={`break-words text-sm text-foreground ${mono ? 'font-mono text-xs' : ''}`}>{f.value}</dd>
+            <dd className={`break-words text-sm text-foreground ${group.mono ? 'font-mono text-xs' : ''}`}>{f.value}</dd>
           </div>
         ))}
       </dl>
@@ -70,10 +76,55 @@ function Entry({ e }: { e: ZohoTimelineEntry }) {
 
 export function ZohoTicketView({ ticket }: { ticket: ZohoTicketDetail }) {
   const c = ticket.counts
+  const fieldCount = ticket.groups.reduce((t, g) => t + g.fields.length, 0)
+
   return (
     <div className="space-y-4">
-      <Fields title={`Zoho ticket ${ticket.ticketNo}`} fields={ticket.main} />
-      <Fields title="Fields of this service" fields={ticket.serviceFields} note="Only the fields this Zoho service actually used. Empty ones are left out." />
+      {/* the headline: the ticket number, what it was about, and where it got to */}
+      <div className="rounded-lg border border-border bg-card p-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <p className="font-mono text-sm font-semibold text-primary">Zoho ticket {ticket.ticketNo}</p>
+          <p className="text-[11px] text-muted-foreground">{fieldCount} fields held for this ticket</p>
+        </div>
+        <h1 className="mt-1 text-base font-semibold text-foreground">{ticket.subject || '(no subject)'}</h1>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {ticket.status}
+          {ticket.service && <>{' · '}{ticket.service}</>}
+        </p>
+      </div>
+
+      {/* what the store actually wrote when raising it */}
+      {ticket.message && (
+        <div className="rounded-lg border border-border bg-card p-3">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <MessageSquareQuote className="h-3.5 w-3.5 text-muted-foreground" />
+            What was written when the ticket was raised
+          </h2>
+          <div className="mt-2 border-t border-border/60 pt-2">
+            <EmailBody html={ticket.message} text={null} />
+          </div>
+        </div>
+      )}
+
+      {/* what the technician recorded on closing - where our technicians write what they did */}
+      {ticket.closure && (
+        <div className="rounded-lg border border-border bg-card p-3">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground" />
+            What the technician recorded on closing
+          </h2>
+          {ticket.closure.code && (
+            <p className="mt-1 text-xs text-muted-foreground">Closure code: <span className="font-medium text-foreground">{ticket.closure.code}</span>
+              {ticket.closure.by && <>{' · by '}<span className="text-foreground">{ticket.closure.by}</span></>}
+            </p>
+          )}
+          {ticket.closure.comments
+            ? <p className="mt-2 whitespace-pre-wrap break-words border-t border-border/60 pt-2 text-sm text-foreground">{ticket.closure.comments}</p>
+            : <p className="mt-1 text-xs italic text-muted-foreground">The technician wrote nothing here.</p>}
+        </div>
+      )}
+
+      {ticket.groups.map((g) => <Fields key={g.key} group={g} />)}
 
       {ticket.attachments.length > 0 && (
         <div className="rounded-lg border border-border bg-card p-3">
@@ -112,13 +163,6 @@ export function ZohoTicketView({ ticket }: { ticket: ZohoTicketDetail }) {
             </ul>
           )}
       </div>
-
-      <Fields
-        title="The original Zoho field names"
-        fields={ticket.originalFields}
-        note="Kept exactly as ManageEngine stored them, so nothing from Zoho is lost even where we have not given a field a proper name yet."
-        mono
-      />
     </div>
   )
 }

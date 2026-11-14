@@ -3,8 +3,9 @@ import { zohoQuery } from './db'
 import { prepareMailHtml } from '@/lib/intake/mail-html'
 import {
   AC_SERVICE, AGE_BUCKETS, RED_FLAG_SHARE, ZOHO_FINISHED_STATUSES, ZOHO_OPEN_STATUSES, tidyZohoStatus,
-  type AgeBucket, type Counted, type StoreAcReport, type StoreAcRow, type ZohoDashboard, type ZohoTicketDetail, type ZohoTicketField, type ZohoTimelineEntry,
+  type AgeBucket, type Counted, type StoreAcReport, type StoreAcRow, type ZohoDashboard, type ZohoFieldGroup, type ZohoTicketDetail, type ZohoTicketField, type ZohoTimelineEntry,
 } from './report-shapes'
+import { SHOWN_SEPARATELY, isKnownField, labelOf, orderOf, ownerOf, showClosure, showZohoValue, type ZohoFieldOwner } from './ticket-fields'
 
 /**
  * Every read the Zoho Data tab makes. All of it goes to the ZOHO holding database through the read-only login - no CK Desk table is touched here,
@@ -194,27 +195,6 @@ export async function getStoreAcReport(): Promise<StoreAcReport> {
 
 // ── one ticket, by its Zoho ticket number ────────────────────────────────────────────────────────────────────────────
 
-/** Only the fields every Zoho ticket has. */
-const MAIN_FIELDS: { col: string; label: string }[] = [
-  { col: 'template', label: 'Service' },
-  { col: 'status', label: 'Status' },
-  { col: 'priority', label: 'Priority' },
-  { col: 'request_type', label: 'Request type' },
-  { col: 'mode', label: 'Raised through' },
-  { col: 'requester_name', label: 'Raised by' },
-  { col: 'requester_email', label: 'Raised by (e-mail)' },
-  { col: 'technician_name', label: 'Technician' },
-  { col: 'technician_email', label: 'Technician (e-mail)' },
-  { col: 'group_name', label: 'Group' },
-  { col: 'category', label: 'Category' },
-  { col: 'subcategory', label: 'Sub category' },
-  { col: 'item', label: 'Item' },
-  { col: 'created_at', label: 'Raised on' },
-  { col: 'resolved_at', label: 'Finished on' },
-  { col: 'etr', label: 'Expected by (ETR)' },
-  { col: 'contact_detail', label: 'Contact detail' },
-]
-
 /** The fields only some services use. An empty one is simply not shown. */
 const SERVICE_FIELDS: { col: string; label: string }[] = [
   { col: 'ac_number', label: 'AC number' }, { col: 'ac_style', label: 'AC style' }, { col: 'ac_serial_no', label: 'AC serial no' },
@@ -239,7 +219,9 @@ const SERVICE_FIELDS: { col: string; label: string }[] = [
   { col: 'vendor_ticket_no', label: 'Vendor ticket no' }, { col: 'vendor_ticket_creation_date', label: 'Vendor ticket raised on' },
 ]
 
-const SELECT_COLS = ['zoho_id', 'display_id', 'subject', 'udf', ...MAIN_FIELDS.map((f) => f.col), ...SERVICE_FIELDS.map((f) => f.col)]
+// `raw` carries the whole original Zoho record, which is what the field groups are built from, so the screen can never
+// lose a Zoho field just because we did not pull it out into a column of its own.
+const SELECT_COLS = ['zoho_id', 'display_id', 'subject', 'status', 'template', 'udf', 'raw', ...SERVICE_FIELDS.map((f) => f.col)]
 
 const TIMELINE_LIMIT = 300
 
@@ -322,18 +304,57 @@ export async function getZohoTicket(ticketNo: number): Promise<ZohoTicketDetail 
   }
   const udf = (row.udf ?? {}) as Record<string, unknown>
 
+  // Everything Zoho itself held on this ticket. The copy keeps the whole original record, so this is read from there
+  // rather than from the handful of columns we pulled out - a Zoho field we have never named still reaches the screen.
+  const zoho = ((row.raw as Record<string, unknown> | null)?.request ?? {}) as Record<string, unknown>
+  /** a group read in the order of the field list, not the order Zoho happened to send them in */
+  const inOrder = (list: (ZohoTicketField & { at: number })[]): ZohoTicketField[] =>
+    [...list].sort((a, b) => a.at - b.at || a.label.localeCompare(b.label)).map(({ label, value }) => ({ label, value }))
+  const owned: Record<ZohoFieldOwner, (ZohoTicketField & { at: number })[]> = { store: [], technician: [], system: [] }
+  const unnamed: ZohoTicketField[] = []
+  for (const [key, value] of Object.entries(zoho)) {
+    if (SHOWN_SEPARATELY.has(key)) continue
+    const text = showZohoValue(key, value)
+    if (text === '' || text === 'null') continue
+    const entry = { label: labelOf(key), value: text, at: orderOf(key) }
+    if (isKnownField(key)) owned[ownerOf(key)].push(entry)
+    else unnamed.push({ label: key, value: text })
+  }
+  // the attachment list is shown in full further down, so here it is only a count
+  if (attachments.length > 0) owned.system.push({ label: 'Attachments', value: `${attachments.length}`, at: orderOf('attachments') })
+
+  const closure = showClosure(zoho.closure_info)
+  if (closure.code) owned.technician.push({ label: 'Closure code', value: closure.code, at: orderOf('closure_info') })
+  const resolution = showZohoValue('resolution', zoho.resolution)
+  if (resolution) owned.technician.push({ label: 'Resolution written by the technician', value: resolution, at: orderOf('resolution') })
+
+  const groups: ZohoFieldGroup[] = ([
+    { key: 'store', title: 'What the store asked for', fields: inOrder(owned.store) },
+    { key: 'technician', title: 'What the technician did', note: 'Blank means the technician had not filled it in when this copy was taken - it is not missing from the copy.', fields: inOrder(owned.technician) },
+    { key: 'service', title: 'Fields of this service', note: 'Only the fields this Zoho service actually used. Empty ones are left out.', fields: SERVICE_FIELDS.map(field).filter((x): x is ZohoTicketField => x !== null) },
+    { key: 'system', title: "Zoho's own record", fields: inOrder(owned.system) },
+    {
+      key: 'other',
+      title: 'Everything else Zoho held',
+      note: 'Zoho field names we have not given a proper name yet. They are shown so nothing from the old system is ever lost.',
+      mono: true,
+      fields: [
+        ...unnamed,
+        ...Object.entries(udf)
+          .map(([k, v]) => ({ label: k, value: show(v) }))
+          .filter((x) => x.value !== '' && x.value !== 'null'),
+      ].sort((a, b) => a.label.localeCompare(b.label)),
+    },
+  ] satisfies ZohoFieldGroup[]).filter((g) => g.fields.length > 0)
+
   return {
     ticketNo: Number(row.display_id),
-    main: [
-      { label: 'Zoho ticket no', value: String(row.display_id) },
-      { label: 'Subject', value: show(row.subject) || '(no subject)' },
-      ...MAIN_FIELDS.map(field).filter((x): x is ZohoTicketField => x !== null),
-    ],
-    serviceFields: SERVICE_FIELDS.map(field).filter((x): x is ZohoTicketField => x !== null),
-    originalFields: Object.entries(udf)
-      .map(([k, v]) => ({ label: k, value: show(v) }))
-      .filter((x) => x.value !== '' && x.value !== 'null')
-      .sort((a, b) => a.label.localeCompare(b.label)),
+    subject: show(row.subject) || null,
+    status: show(row.status) || '(none)',
+    service: show(row.template) || null,
+    message: prepareMailHtml(typeof zoho.description === 'string' ? zoho.description : null),
+    closure: closure.code || closure.comments ? closure : null,
+    groups,
     timeline: timeline.slice(0, TIMELINE_LIMIT),
     attachments: attachments.map((a) => ({ fileName: a.file_name ?? '(no name)', size: a.size === null ? null : n(a.size), saved: a.status === 'ok' })),
     counts: { emails: n(counts[0]?.emails), notes: n(counts[0]?.notes), history: n(counts[0]?.history), attachments: n(counts[0]?.attachments) },

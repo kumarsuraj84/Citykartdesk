@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseZohoTicketNo } from '@/lib/zoho/queries'
+import { isKnownField, labelOf, ownerOf, plainText, showClosure, showElapsed, showZohoValue, tidyFieldName } from '@/lib/zoho/ticket-fields'
 import { ZOHO_OPEN_STATUSES, ZOHO_FINISHED_STATUSES, isZohoOpenStatus, tidyZohoStatus, bucketOf, AGE_BUCKETS, RED_FLAG_SHARE, AC_SERVICE } from '@/lib/zoho/report-shapes'
 
 // The Zoho Data tab reads the old Zoho system's own database. These tests cover the rules that decide what a report says,
@@ -81,5 +82,70 @@ describe('which service the AC reports read', () => {
   it('is the AC issue log only, never the planned-service form', () => {
     expect(AC_SERVICE).toBe('AC Issues Log System Only - Admin Team')
     expect(AC_SERVICE).not.toContain('PMS')
+  })
+})
+
+// ── every Zoho field reaches the screen ───────────────────────────────────────────────────────────────────────────────
+// The copy keeps each ticket's whole original Zoho record. These tests cover the reading of it, because a field that is
+// shown as blank when Zoho actually held a value is the one mistake a person cannot spot.
+
+describe('reading a value out of the original Zoho record', () => {
+  it('shows a date the way Zoho wrote it', () => {
+    expect(showZohoValue('responded_time', { value: '1794593357713', display_value: 'Nov 4, 2026 11:54 AM' })).toBe('Nov 4, 2026 11:54 AM')
+  })
+
+  it('shows a person, a group or a status by name', () => {
+    expect(showZohoValue('technician', { id: '7467000000134001', name: 'Kapil Dev' })).toBe('Kapil Dev')
+    expect(showZohoValue('status', { id: '1', name: 'Closed' })).toBe('Closed')
+  })
+
+  it('says Yes and No instead of true and false', () => {
+    expect(showZohoValue('is_overdue', true)).toBe('Yes')
+    expect(showZohoValue('is_escalated', false)).toBe('No')
+  })
+
+  it('leaves an unused field blank, so it is simply not shown', () => {
+    expect(showZohoValue('responded_time', null)).toBe('')
+    expect(showZohoValue('tags', [])).toBe('')
+    expect(showZohoValue('subject', '   ')).toBe('')
+  })
+
+  it('turns the time taken from milliseconds into hours and minutes', () => {
+    expect(showElapsed(12_286_000)).toBe('3 h 25 m')
+    expect(showElapsed(60_000)).toBe('1 m')
+    expect(showElapsed(0)).toBe('')
+    expect(showElapsed(null)).toBe('')
+    expect(showZohoValue('time_elapsed', 12_286_000)).toBe('3 h 25 m')
+  })
+
+  it('takes the words out of an old e-mail body, formatting and all', () => {
+    expect(plainText('<div>Dear team,&nbsp;<br>ladies washroom flas not warking</div>')).toBe('Dear team, \nladies washroom flas not warking')
+  })
+
+  it('reads the closure the technician filled in', () => {
+    const c = showClosure({ closure_code: { id: '1', name: 'Moved' }, closure_comments: '<p>Replaced the flush valve</p>', requester: { name: 'Kapil Dev' } })
+    expect(c.code).toBe('Moved')
+    expect(c.comments).toBe('Replaced the flush valve')
+    expect(c.by).toBe('Kapil Dev')
+  })
+
+  it('never loses a Zoho field we have not named yet', () => {
+    expect(isKnownField('responded_time')).toBe(true)
+    expect(isKnownField('some_new_zoho_field')).toBe(false)   // still shown, under "Everything else Zoho held"
+    expect(tidyFieldName('first_response_due_by_time')).toBe('First response due by time')
+    expect(labelOf('closure_info')).toBe('Closure')
+  })
+
+  it('knows whose field each one is', () => {
+    expect(ownerOf('requester')).toBe('store')
+    expect(ownerOf('responded_time')).toBe('technician')
+    expect(ownerOf('technician')).toBe('technician')
+    expect(ownerOf('sla')).toBe('system')
+  })
+
+  it('shows the fields that were missing from the first version of the screen', () => {
+    for (const key of ['responded_time', 'assigned_time', 'completed_time', 'resolved_time', 'closure_info', 'department', 'site', 'sla', 'urgency', 'approval_status', 'time_elapsed']) {
+      expect(isKnownField(key), key).toBe(true)
+    }
   })
 })

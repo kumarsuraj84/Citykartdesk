@@ -106,14 +106,28 @@ export type ZohoTimelineEntry = {
 
 export type ZohoTicketField = { label: string; value: string }
 
+/** The ticket's fields in the order a person reads them: what the store asked for, what the technician did, Zoho's own record. */
+export type ZohoFieldGroup = {
+  key: 'store' | 'technician' | 'service' | 'system' | 'other'
+  title: string
+  note?: string
+  /** written out in a smaller fixed-width type, for the raw Zoho field names */
+  mono?: boolean
+  fields: ZohoTicketField[]
+}
+
 export type ZohoTicketDetail = {
   ticketNo: number
-  /** the fields that every Zoho ticket has */
-  main: ZohoTicketField[]
-  /** the fields only this service uses (AC number, employee code, bank details, ...) - empty ones are left out */
-  serviceFields: ZohoTicketField[]
-  /** the original ManageEngine custom fields, kept so nothing from Zoho is ever lost */
-  originalFields: ZohoTicketField[]
+  /** the ticket's headline facts, for the top of the screen */
+  subject: string | null
+  status: string
+  service: string | null
+  /** what the store actually wrote when raising it, with the old formatting kept */
+  message: string | null
+  /** what the technician recorded on closing: the code they chose and what they wrote */
+  closure: { code: string; comments: string; by: string } | null
+  /** every field Zoho holds, grouped - nothing is left out, even a field we have never seen before */
+  groups: ZohoFieldGroup[]
   timeline: ZohoTimelineEntry[]
   attachments: { fileName: string; size: number | null; saved: boolean }[]
   counts: { emails: number; notes: number; history: number; attachments: number }
