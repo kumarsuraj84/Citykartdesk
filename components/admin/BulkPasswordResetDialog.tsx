@@ -21,6 +21,7 @@ export function BulkPasswordResetDialog() {
   const [phase, setPhase] = useState<Phase>('form')
   const [ids, setIds] = useState<string[] | null>(null)
   const [adminCount, setAdminCount] = useState(0)
+  const [vendorCount, setVendorCount] = useState(0)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [typed, setTyped] = useState('')
   // 'random' is the default on purpose (audit A-05). 'shared' is the deliberate choice to announce one password to everybody.
@@ -48,6 +49,7 @@ export function BulkPasswordResetDialog() {
     setPhase('form')
     setIds(null)
     setAdminCount(0)
+    setVendorCount(0)
     setLoadError(null)
     setTyped('')
     setMode('random')
@@ -62,7 +64,7 @@ export function BulkPasswordResetDialog() {
     setFatal(null)
     const r = await safely(() => listPasswordResetTargets())
     if (r.error) setLoadError(r.error)
-    else { setIds(r.ids ?? []); setAdminCount(r.admins ?? 0) }
+    else { setIds(r.ids ?? []); setAdminCount(r.admins ?? 0); setVendorCount(r.vendors ?? 0) }
   }
 
   function close() {
@@ -151,7 +153,9 @@ export function BulkPasswordResetDialog() {
                     ) : (
                       <>
                         This resets <strong className="text-foreground">{total} active {total === 1 ? 'account' : 'accounts'}</strong>
-                        {adminCount > 0 && <> (including <strong className="text-foreground">{adminCount}</strong> {adminCount === 1 ? 'administrator' : 'administrators'})</>}.{' '}
+                        {' '}— store and office users, technicians and managers
+                        {adminCount > 0 && <>, <strong className="text-foreground">{adminCount}</strong> {adminCount === 1 ? 'administrator' : 'administrators'}</>}
+                        {vendorCount > 0 && <>, and <strong className="text-foreground">{vendorCount}</strong> OEM / vendor {vendorCount === 1 ? 'login' : 'logins'}</>}.{' '}
                         <strong className="text-foreground">Your own account and every platform owner are never changed.</strong>{' '}
                         Everybody must choose their own new password the next time they open the portal — people already signed in
                         are asked on their next page load, and their current session ends now.

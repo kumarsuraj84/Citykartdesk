@@ -1226,9 +1226,10 @@ const BULK_RESET_CONCURRENCY = 5
 /**
  * Who a bulk reset would touch: every active user, agent and manager in the org, plus the administrators when the caller is
  * the platform owner (only an owner may change an admin account — audit D-009). Never a platform owner, never the caller.
- * `admins` says how many of them are administrators, so the dialog can spell that out before anything is changed.
+ * An OEM engineer (a vendor login) is an ordinary 'user' account carrying a vendor company, so vendors are included too.
+ * `admins` and `vendors` say how many of each, so the dialog can spell that out before anything is changed.
  */
-export async function listPasswordResetTargets(): Promise<{ error?: string; ids?: string[]; admins?: number }> {
+export async function listPasswordResetTargets(): Promise<{ error?: string; ids?: string[]; admins?: number; vendors?: number }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
@@ -1236,14 +1237,18 @@ export async function listPasswordResetTargets(): Promise<{ error?: string; ids?
   const admin = createAdminClient() as unknown as AnyClient
   const { data, error } = await admin
     .from('profiles')
-    .select('id, role')
+    .select('id, role, vendor_company_id')
     .eq('org_id', profile.org_id)
     .eq('is_active', true)
     .in('role', bulkResetRolesFor(profile.role))
     .neq('id', profile.id)
   if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/users.ts' }) }
-  const rows = (data ?? []) as { id: string; role: string }[]
-  return { ids: rows.map((r) => r.id), admins: rows.filter((r) => r.role === 'admin').length }
+  const rows = (data ?? []) as { id: string; role: string; vendor_company_id: string | null }[]
+  return {
+    ids: rows.map((r) => r.id),
+    admins: rows.filter((r) => r.role === 'admin').length,
+    vendors: rows.filter((r) => !!r.vendor_company_id).length,
+  }
 }
 
 /**
