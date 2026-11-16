@@ -13,7 +13,7 @@ import { assertRefsInOrg } from './orgScopeGuard'
 import { emailPasswordResetLink, emailInvitation } from '@/lib/email/auth-mail'
 import { logAdminAudit } from './audit'
 import { recordAudit } from '@/lib/syslog/audit'
-import { BULK_RESET_BATCH_SIZE, BULK_RESET_ROLES } from '@/lib/users/bulk-reset'
+import { BULK_RESET_BATCH_SIZE, bulkResetRolesFor } from '@/lib/users/bulk-reset'
 import { normalizeMobileNumber } from '@/lib/users/mobile'
 import { planContactUpdate, type ContactAccount, type ContactPlan, type ContactSheetRow, type MobileOwners } from '@/lib/users/contact-update'
 import { canHoldTickets, losesTicketRights } from '@/lib/requests/release-assignee'
@@ -1223,8 +1223,12 @@ export async function exportUsersCsv(): Promise<string> {
 
 const BULK_RESET_CONCURRENCY = 5
 
-/** Who a bulk reset would touch: every active user, agent and manager in the org (not admins / platform owners, not the caller). */
-export async function listPasswordResetTargets(): Promise<{ error?: string; ids?: string[] }> {
+/**
+ * Who a bulk reset would touch: every active user, agent and manager in the org, plus the administrators when the caller is
+ * the platform owner (only an owner may change an admin account — audit D-009). Never a platform owner, never the caller.
+ * `admins` says how many of them are administrators, so the dialog can spell that out before anything is changed.
+ */
+export async function listPasswordResetTargets(): Promise<{ error?: string; ids?: string[]; admins?: number }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
@@ -1232,28 +1236,45 @@ export async function listPasswordResetTargets(): Promise<{ error?: string; ids?
   const admin = createAdminClient() as unknown as AnyClient
   const { data, error } = await admin
     .from('profiles')
-    .select('id')
+    .select('id, role')
     .eq('org_id', profile.org_id)
     .eq('is_active', true)
-    .in('role', BULK_RESET_ROLES)
+    .in('role', bulkResetRolesFor(profile.role))
     .neq('id', profile.id)
   if (error) return { error: sanitizeError(error, { route: 'lib/actions/admin/users.ts' }) }
-  return { ids: ((data ?? []) as { id: string }[]).map((r) => r.id) }
+  const rows = (data ?? []) as { id: string; role: string }[]
+  return { ids: rows.map((r) => r.id), admins: rows.filter((r) => r.role === 'admin').length }
 }
 
-// Every account gets its OWN random temporary password (audit A-05): one password shared by many accounts meant that anyone who learned it could sign in to
-// every account that had not yet changed it, and then choose a new password there. The passwords are returned ONCE, in `credentials` (same shape as the
-// bulk import: e-mail, name, password) for the administrator to hand over; they are not stored or logged. The old `newPassword` argument is kept so existing
-// callers still compile, but it is no longer used.
+/**
+ * Sets a new temporary password on a batch of accounts.
+ *
+ * By default every account gets its OWN random one (audit A-05): one password shared by many accounts means anyone who
+ * learns it can sign in to every account that has not yet changed it, and choose a new password there. Those passwords come
+ * back ONCE, in `credentials` (e-mail, name, password), for the administrator to hand over; they are not stored or logged.
+ *
+ * `sharedPassword` is the deliberate other way: one password, typed by the administrator, set on every account in the batch —
+ * for a company-wide roll-out where one password has to be announced to everybody. It must pass the same password policy as
+ * any other new password, nothing is returned to hand out (the administrator already knows it), and the audit entry records
+ * that this reset was a shared one. Either way each person must choose their own password at their next page load, and every
+ * session opened with the old password is ended.
+ */
 export async function resetPasswordsBatch(
   userIds: string[],
-  _newPassword?: string // eslint-disable-line @typescript-eslint/no-unused-vars -- deprecated, see above
+  sharedPassword?: string
 ): Promise<{ error?: string; succeeded?: number; failed?: { id: string; name?: string; error: string }[]; credentials?: BulkCredential[]; warning?: string }> {
   const profile = await getCurrentProfile()
   if (!profile || !['admin', 'platform_owner'].includes(profile.role)) return { error: 'Unauthorized.' }
   if (!profile.org_id) return { error: 'Your account is not linked to an organisation.' }
   if (!Array.isArray(userIds) || userIds.length === 0) return { error: 'No users selected.' }
   if (userIds.length > BULK_RESET_BATCH_SIZE) return { error: `At most ${BULK_RESET_BATCH_SIZE} users per batch.` }
+
+  // A shared password is still a new password: it must clear the same policy as one typed on a single account.
+  const shared = typeof sharedPassword === 'string' && sharedPassword.length > 0 ? sharedPassword : null
+  if (shared) {
+    const policyError = validateNewPassword(shared)
+    if (policyError) return { error: policyError }
+  }
 
   const admin = createAdminClient() as unknown as AnyClient
 
@@ -1263,15 +1284,18 @@ export async function resetPasswordsBatch(
     .select('id, full_name')
     .eq('org_id', profile.org_id)
     .eq('is_active', true)
-    .in('role', BULK_RESET_ROLES)
+    .in('role', bulkResetRolesFor(profile.role))
     .neq('id', profile.id)
     .in('id', batch))
   const nameById = new Map(((allowedRows ?? []) as { id: string; full_name: string }[]).map((r) => [r.id, r.full_name]))
   const allowed = [...nameById.keys()]
 
+  const notEligible = profile.role === 'platform_owner'
+    ? 'Not eligible (must be an active member of this organisation, and never a platform owner or your own account).'
+    : 'Not eligible (must be an active user, agent or manager of this organisation).'
   const failed: { id: string; name?: string; error: string }[] = userIds
     .filter((id) => !nameById.has(id))
-    .map((id) => ({ id, error: 'Not eligible (must be an active user, agent or manager of this organisation).' }))
+    .map((id) => ({ id, error: notEligible }))
   const succeededIds: string[] = []
   const issued = new Map<string, string>()   // id -> the password just set
   const emailByAccount = await listAuthEmails(admin, allowed)
@@ -1280,9 +1304,10 @@ export async function resetPasswordsBatch(
     const chunk = allowed.slice(i, i + BULK_RESET_CONCURRENCY)
     const results = await Promise.all(
       chunk.map(async (id) => {
-        const password = generateOneTimePassword()
+        const password = shared ?? generateOneTimePassword()
         const { error } = await admin.auth.admin.updateUserById(id, { password, email_confirm: true })
-        if (!error) issued.set(id, password)
+        // a shared password is not handed back: the administrator typed it and already has it
+        if (!error && !shared) issued.set(id, password)
         return { id, error: error?.message ?? null }
       })
     )
@@ -1303,10 +1328,23 @@ export async function resetPasswordsBatch(
   await logAdminAudit({
     orgId: profile.org_id, actorId: profile.id,
     entityType: 'user', entityId: null, action: 'bulk_password_reset',
-    metadata: { requested: userIds.length, succeeded: succeededIds.length, failed: failed.length },
+    // `mode` matters: a shared reset is a weaker state than a random one until everybody has changed their password, so it has to be visible in the audit trail
+    metadata: { requested: userIds.length, succeeded: succeededIds.length, failed: failed.length, mode: shared ? 'shared' : 'random' },
+  })
+  await recordAudit({
+    category: 'security',
+    action: shared ? 'user.password_bulk_reset_shared' : 'user.password_bulk_reset',
+    outcome: succeededIds.length > 0 ? 'success' : 'failure',
+    entityType: 'user',
+    message: shared
+      ? `An administrator set ONE shared temporary password on ${succeededIds.length} account(s); each person must choose their own at next sign-in`
+      : `An administrator reset ${succeededIds.length} account(s), each to its own one-time password`,
+    detail: { requested: userIds.length, succeeded: succeededIds.length, failed: failed.length, sessionsNotEnded },
+    actorId: profile.id,
+    orgId: profile.org_id,
   })
   revalidatePath('/admin/users')
-  const credentials: BulkCredential[] = succeededIds.map((id) => ({
+  const credentials: BulkCredential[] = shared ? [] : succeededIds.map((id) => ({
     email: emailByAccount.ok ? (emailByAccount.value.get(id) ?? '') : '',
     full_name: nameById.get(id) ?? '',
     password: issued.get(id) ?? '',

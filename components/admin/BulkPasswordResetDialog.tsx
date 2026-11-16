@@ -6,7 +6,8 @@ import { ModalFrame } from '@/components/ui/ModalFrame'
 import { useRouter } from 'next/navigation'
 import { KeyRound, X, Loader2, Download } from 'lucide-react'
 import { listPasswordResetTargets, resetPasswordsBatch, type BulkCredential } from '@/lib/actions/admin/users'
-import { BULK_RESET_BATCH_SIZE, chunk } from '@/lib/users/bulk-reset'
+import { BULK_RESET_BATCH_SIZE, chunk, type BulkResetMode } from '@/lib/users/bulk-reset'
+import { PASSWORD_RULE_TEXT, validateNewPassword } from '@/lib/security/password-policy'
 import { toCSV, downloadCSV } from '@/lib/export/csv'
 
 type Failure = { id: string; name?: string; error: string }
@@ -19,8 +20,14 @@ export function BulkPasswordResetDialog() {
   const [open, setOpen] = useState(false)
   const [phase, setPhase] = useState<Phase>('form')
   const [ids, setIds] = useState<string[] | null>(null)
+  const [adminCount, setAdminCount] = useState(0)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [typed, setTyped] = useState('')
+  // 'random' is the default on purpose (audit A-05). 'shared' is the deliberate choice to announce one password to everybody.
+  const [mode, setMode] = useState<BulkResetMode>('random')
+  const [sharedPassword, setSharedPassword] = useState('')
+  const [sharedAgain, setSharedAgain] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   // Each person gets their OWN random temporary password. They come back from the server once and are kept only in this window's memory until it is closed.
   const [credentials, setCredentials] = useState<BulkCredential[]>([])
   const [warning, setWarning] = useState<string | null>(null)
@@ -40,8 +47,13 @@ export function BulkPasswordResetDialog() {
     setOpen(true)
     setPhase('form')
     setIds(null)
+    setAdminCount(0)
     setLoadError(null)
     setTyped('')
+    setMode('random')
+    setSharedPassword('')
+    setSharedAgain('')
+    setShowPassword(false)
     setCredentials([])
     setWarning(null)
     setProgress(0)
@@ -50,18 +62,23 @@ export function BulkPasswordResetDialog() {
     setFatal(null)
     const r = await safely(() => listPasswordResetTargets())
     if (r.error) setLoadError(r.error)
-    else setIds(r.ids ?? [])
+    else { setIds(r.ids ?? []); setAdminCount(r.admins ?? 0) }
   }
 
   function close() {
     if (phase === 'running') return
     setCredentials([])   // gone for good once the window is closed
+    setSharedPassword('')
+    setSharedAgain('')
     setOpen(false)
     if (phase === 'done') router.refresh()
   }
 
   const total = ids?.length ?? 0
-  const canStart = phase === 'form' && total > 0 && typed.trim().toUpperCase() === CONFIRM_WORD
+  const policyError = mode === 'shared' && sharedPassword.length > 0 ? validateNewPassword(sharedPassword) : null
+  const mismatch = mode === 'shared' && sharedAgain.length > 0 && sharedAgain !== sharedPassword
+  const sharedReady = mode === 'random' || (sharedPassword.length > 0 && !policyError && sharedAgain === sharedPassword)
+  const canStart = phase === 'form' && total > 0 && sharedReady && typed.trim().toUpperCase() === CONFIRM_WORD
 
   function downloadCredentials() {
     // the shared CSV writer (lib/export/csv.ts) also stops a cell from being read as a formula by Excel / Sheets
@@ -84,8 +101,9 @@ export function BulkPasswordResetDialog() {
     const failed: Failure[] = []
     const issued: BulkCredential[] = []
     const warnings: string[] = []
+    const useShared = mode === 'shared' ? sharedPassword : undefined
     for (const batch of chunk(ids, BULK_RESET_BATCH_SIZE)) {
-      const r = await safely(() => resetPasswordsBatch(batch))
+      const r = await safely(() => resetPasswordsBatch(batch, useShared))
       if (r.error) {
         setFatal(r.error)
         break
@@ -132,18 +150,80 @@ export function BulkPasswordResetDialog() {
                       'Checking who is affected…'
                     ) : (
                       <>
-                        This gives each of <strong className="text-foreground">{total} active {total === 1 ? 'user' : 'users'}</strong>{' '}
-                        (users, agents and managers) their <strong className="text-foreground">own random temporary password</strong>. <strong className="text-foreground">Admins and platform owners, including you, are not changed.</strong>{' '}
-                        Each person must then choose their own new password the next time they open the portal — signed-in people
-                        are asked on their next page load.
+                        This resets <strong className="text-foreground">{total} active {total === 1 ? 'account' : 'accounts'}</strong>
+                        {adminCount > 0 && <> (including <strong className="text-foreground">{adminCount}</strong> {adminCount === 1 ? 'administrator' : 'administrators'})</>}.{' '}
+                        <strong className="text-foreground">Your own account and every platform owner are never changed.</strong>{' '}
+                        Everybody must choose their own new password the next time they open the portal — people already signed in
+                        are asked on their next page load, and their current session ends now.
                       </>
                     )}
                   </p>
 
-                  <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
-                    The passwords are shown to you <strong>only once</strong>, after the reset, as a file to download. Give each person only their own, privately.
-                    They are not stored anywhere readable, so if you close the window without downloading the file, the reset has to be done again.
-                  </p>
+                  {/* How the new passwords are made. Random is first and is the default: one shared password is weaker (audit A-05). */}
+                  <fieldset className="space-y-2 rounded-lg border border-border p-3">
+                    <legend className="px-1 text-xs font-medium text-muted-foreground">New password</legend>
+                    <label className="flex cursor-pointer gap-2">
+                      <input type="radio" name="bulk-reset-mode" className="mt-0.5" checked={mode === 'random'} onChange={() => setMode('random')} />
+                      <span className="text-xs">
+                        <span className="font-medium text-foreground">A different password for each person</span>
+                        <span className="block text-[11px] text-muted-foreground">Safer. You get a file of one-time passwords to hand over privately, shown only once.</span>
+                      </span>
+                    </label>
+                    <label className="flex cursor-pointer gap-2">
+                      <input type="radio" name="bulk-reset-mode" className="mt-0.5" checked={mode === 'shared'} onChange={() => setMode('shared')} />
+                      <span className="text-xs">
+                        <span className="font-medium text-foreground">The same password for everyone — you choose it</span>
+                        <span className="block text-[11px] text-muted-foreground">For a roll-out, where one password is announced to the whole company.</span>
+                      </span>
+                    </label>
+                  </fieldset>
+
+                  {mode === 'random' && (
+                    <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                      The passwords are shown to you <strong>only once</strong>, after the reset, as a file to download. Give each person only their own, privately.
+                      They are not stored anywhere readable, so if you close the window without downloading the file, the reset has to be done again.
+                    </p>
+                  )}
+
+                  {mode === 'shared' && (
+                    <>
+                      <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs font-medium text-muted-foreground">The password everybody will get</span>
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            value={sharedPassword}
+                            onChange={(e) => setSharedPassword(e.target.value)}
+                            autoComplete="new-password"
+                            aria-describedby="bulk-reset-rule"
+                            className="rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs font-medium text-muted-foreground">Type it again</span>
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            value={sharedAgain}
+                            onChange={(e) => setSharedAgain(e.target.value)}
+                            autoComplete="new-password"
+                            className="rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                          />
+                        </label>
+                        <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <input type="checkbox" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} />
+                          Show what I typed
+                        </label>
+                        <p id="bulk-reset-rule" className="text-[11px] text-muted-foreground">{PASSWORD_RULE_TEXT}</p>
+                        {policyError && <p className="text-[11px] text-destructive">{policyError}</p>}
+                        {mismatch && <p className="text-[11px] text-destructive">The two do not match.</p>}
+                      </div>
+                      <p className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-[11px] text-destructive">
+                        <strong>Please understand what one shared password means.</strong> Until a person changes it, anybody who knows this
+                        password can sign in as them — and then set a new password on that account. Announce it only to the people it belongs to,
+                        tell everybody to sign in and change it the same day, and never send it together with the list of e-mail addresses.
+                      </p>
+                    </>
+                  )}
                   {plainHttp && (
                     <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
                       This page isn’t using HTTPS, so what you type here travels unencrypted. Do this from inside the office network
@@ -193,6 +273,12 @@ export function BulkPasswordResetDialog() {
                     Done — <strong>{succeeded}</strong> {succeeded === 1 ? 'password was' : 'passwords were'} reset. Each person will be
                     asked to choose their own password at next login.
                   </p>
+                  {mode === 'shared' && succeeded > 0 && (
+                    <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                      Everybody now has the password you typed. Tell them to sign in and change it today — until they do, that one password
+                      opens all {succeeded} {succeeded === 1 ? 'account' : 'accounts'}. This reset is recorded in the audit log as a shared one.
+                    </p>
+                  )}
                   {warning && <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">{warning}</p>}
                   {credentials.length > 0 && (
                     <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">

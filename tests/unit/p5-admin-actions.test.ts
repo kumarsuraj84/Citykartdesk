@@ -1,5 +1,6 @@
 // The administrator actions changed by the P5 fixes, with the database and the sign-in service replaced by recorders (nothing is contacted):
 //   A-05  a reset / e-mail change ends the person's sessions; a bulk reset gives every account its OWN random password
+//         unless the administrator deliberately types one shared password, which must still pass the policy
 //   A-09  the same password rule on every action that sets a new password
 //   A-22  length caps          A-23  a vendor who gets another role loses the vendor link, only after a confirm
 //   A-24  an address taken beyond the first 1000 accounts is found, and an unreadable list never means "free"
@@ -114,12 +115,11 @@ describe('resetPasswordsBatch (A-05)', () => {
     listByTable.profiles = [{ id: 'a', full_name: 'Asha' }, { id: 'b', full_name: 'Bala' }, { id: 'c', full_name: 'Chitra' }]
     authUsers = [{ id: 'a', email: 'asha@citykart.org' }, { id: 'b', email: 'bala@citykart.org' }, { id: 'c', email: 'chitra@citykart.org' }]
     const { resetPasswordsBatch } = await import('@/lib/actions/admin/users')
-    const r = await resetPasswordsBatch(['a', 'b', 'c'], 'Ignored#Typed123')
+    const r = await resetPasswordsBatch(['a', 'b', 'c'])
     expect(r.error).toBeUndefined()
     expect(r.succeeded).toBe(3)
     const passwords = r.credentials!.map((c) => c.password)
-    expect(new Set(passwords).size).toBe(3)                              // never one shared password
-    expect(passwords).not.toContain('Ignored#Typed123')                  // the typed argument is no longer used
+    expect(new Set(passwords).size).toBe(3)                              // the default is never one shared password
     for (const p of passwords) expect(p.length).toBeGreaterThanOrEqual(12)
     expect(r.credentials!.find((c) => c.full_name === 'Asha')).toMatchObject({ email: 'asha@citykart.org' })
     expect(log.authUpdates.map(([id, a]) => [id, a.password])).toEqual(r.credentials!.map((c, i) => [['a', 'b', 'c'][i], c.password]))
@@ -130,6 +130,28 @@ describe('resetPasswordsBatch (A-05)', () => {
     const { resetPasswordsBatch } = await import('@/lib/actions/admin/users')
     expect((await resetPasswordsBatch([])).error).toMatch(/no users/i)
     expect((await resetPasswordsBatch(Array.from({ length: 41 }, (_, i) => `u${i}`))).error).toMatch(/at most/i)
+  })
+
+  it('a password typed by the administrator is used for everybody, and nothing is handed back', async () => {
+    listByTable.profiles = [{ id: 'a', full_name: 'Asha' }, { id: 'b', full_name: 'Bala' }]
+    authUsers = [{ id: 'a', email: 'asha@citykart.org' }, { id: 'b', email: 'bala@citykart.org' }]
+    const { resetPasswordsBatch } = await import('@/lib/actions/admin/users')
+    const r = await resetPasswordsBatch(['a', 'b'], 'Welcome-Desk#2026')
+    expect(r.error).toBeUndefined()
+    expect(r.succeeded).toBe(2)
+    expect(r.credentials).toEqual([])                                     // the administrator already knows it
+    expect(log.authUpdates.map(([, a]) => a.password)).toEqual(['Welcome-Desk#2026', 'Welcome-Desk#2026'])
+    expect(log.updates.find((u) => u.table === 'profiles')?.values).toEqual({ must_reset_password: true })
+    expect(log.rpcs.map(([fn, a]) => `${fn}:${a.p_user_id}`).sort()).toEqual(['revoke_user_sessions:a', 'revoke_user_sessions:b'])
+  })
+
+  it('refuses a shared password that breaks the password policy, before touching any account', async () => {
+    listByTable.profiles = [{ id: 'a', full_name: 'Asha' }]
+    authUsers = [{ id: 'a', email: 'asha@citykart.org' }]
+    const { resetPasswordsBatch } = await import('@/lib/actions/admin/users')
+    expect((await resetPasswordsBatch(['a'], 'Short1!')).error).toMatch(/at least 10 characters/i)
+    expect((await resetPasswordsBatch(['a'], 'alllowercase')).error).toMatch(/too simple/i)
+    expect(log.authUpdates).toHaveLength(0)
   })
 })
 

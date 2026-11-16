@@ -26,6 +26,7 @@ import { UpdateUserContactsDialog } from '@/components/admin/UpdateUserContactsD
 import { TicketHandoverDialog, type TicketHandoverChoice } from '@/components/admin/TicketHandoverDialog'
 import { BulkPasswordResetDialog } from '@/components/admin/BulkPasswordResetDialog'
 import { ExportButton } from '@/components/requests/ExportButton'
+import { PASSWORD_MIN_LENGTH } from '@/lib/security/password-policy'
 import { normalizeMobileNumber } from '@/lib/users/mobile'
 
 // Every role the DB/RLS actually recognizes (user_role enum) — the role select
@@ -198,13 +199,13 @@ function PasswordSection({ userId, email }: { userId: string; email: string | nu
             type="password"
             value={newPassword}
             onChange={e => setNewPassword(e.target.value)}
-            placeholder="Min. 8 characters"
+            placeholder={`Min. ${PASSWORD_MIN_LENGTH} characters`}
             className="input-field flex-1"
           />
           <button
             type="button"
             onClick={handleSetPassword}
-            disabled={pending || newPassword.length < 8}
+            disabled={pending || newPassword.length < PASSWORD_MIN_LENGTH}
             className="btn-gradient disabled:opacity-40 shrink-0"
           >
             Set
