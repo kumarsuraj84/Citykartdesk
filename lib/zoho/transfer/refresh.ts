@@ -12,11 +12,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveServiceFormSections } from '@/lib/forms/sections'
 import { logger } from '@/lib/observability/logger'
 import type { FormField } from '@/types'
-import { loadSavedMapping, loadTicketsForPreview, toMappings } from './data'
+import { loadSavedMapping, loadTicketsForPreview, loadZohoMoveDetail, toMappings } from './data'
 import { coerceFieldValue, formDataEntry, type CoerceField } from './coerce'
 import { fieldKey } from './plan'
 import { addMissingFieldDefinitions, formDataHas } from './refresh-pure'
-import { loadZohoFieldLabels } from './move'
+import { copyAttachments, loadZohoFieldLabels } from './move'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any }
@@ -24,7 +24,7 @@ const db = () => createAdminClient() as unknown as AnyClient
 
 export const REFRESH_BATCH_LIMIT = 100
 
-export type RefreshResult = { zohoNo: number; ok: boolean; requestNo?: string; filled: string[]; left: string[]; reason?: string }
+export type RefreshResult = { zohoNo: number; ok: boolean; requestNo?: string; filled: string[]; left: string[]; files?: { copied: number; missing: number; already: number }; reason?: string }
 
 export async function refreshMovedFields(args: { orgId: string; actorId: string; numbers: number[] }): Promise<RefreshResult[]> {
   const { orgId, actorId } = args
@@ -81,7 +81,8 @@ async function refreshOne(orgId: string, actorId: string, n: number, maps: Retur
     filled.push(`${label} → ${field.label ?? field.id}`)
     lines.push(`  • ${label} → ${field.label ?? field.id}: ${value}`)
   }
-  if (filledIds.length === 0) return { zohoNo: n, ok: true, requestNo: req.request_no, filled, left }
+  const files = await addMissingFiles(d, actorId, req.id, n)
+  if (filledIds.length === 0) return { zohoNo: n, ok: true, requestNo: req.request_no, filled, left, files }
 
   const snapshot = addMissingFieldDefinitions(req.form_sections_snapshot, current, filledIds)
   const { error } = await d.from('requests').update({ form_data: formData, form_sections_snapshot: snapshot }).eq('id', req.id).eq('org_id', orgId)
@@ -90,5 +91,20 @@ async function refreshOne(orgId: string, actorId: string, n: number, maps: Retur
     request_id: req.id, author_id: actorId, is_internal: true, source: 'portal',
     body: ['FILLED IN FROM ZOHO LATER — these Zoho values were added to empty CK Desk fields of this ticket:', ...lines].join('\n'),
   })
-  return { zohoNo: n, ok: true, requestNo: req.request_no, filled, left }
+  return { zohoNo: n, ok: true, requestNo: req.request_no, filled, left, files }
 }
+
+/** Attaches the Zoho files that are not on the CK Desk ticket yet (matched by file name, so a file already there is never added twice). */
+async function addMissingFiles(d: AnyClient, actorId: string, requestId: string, n: number): Promise<{ copied: number; missing: number; already: number }> {
+  const detail = await loadZohoMoveDetail(n)
+  const all = detail?.attachments ?? []
+  if (all.length === 0) return { copied: 0, missing: 0, already: 0 }
+  const { data: have } = await d.from('request_attachments').select('file_name').eq('request_id', requestId)
+  const names = new Set(((have ?? []) as { file_name: string }[]).map((x) => x.file_name))
+  const todo = all.filter((a) => !names.has(a.fileName))
+  if (todo.length === 0) return { copied: 0, missing: 0, already: all.length }
+  const notes = await copyAttachments({ actorId }, requestId, new Date().toISOString(), todo, { later: true })
+  const copied = Number((notes.find((x) => x.includes('attachment(s) copied')) ?? '').split(' ')[0]) || 0
+  return { copied, missing: todo.length - copied, already: all.length - todo.length }
+}
+

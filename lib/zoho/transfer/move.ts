@@ -350,7 +350,8 @@ async function ensureInactiveRequester(c: Ctx, ticket: { requesterName: string |
   return uid
 }
 
-async function copyAttachments(c: Ctx, requestId: string, createdAt: string, atts: ZohoMoveDetail['attachments']): Promise<string[]> {
+/** `later: true` = the ticket was moved earlier: the files and the note are stamped with today's time, not the ticket's. */
+export async function copyAttachments(c: { actorId: string }, requestId: string, createdAt: string, atts: ZohoMoveDetail['attachments'], opts: { later?: boolean } = {}): Promise<string[]> {
   const d = db()
   const root = process.env.ZOHO_ATTACHMENTS_ROOT?.trim()
   const notes: string[] = []
@@ -369,7 +370,7 @@ async function copyAttachments(c: Ctx, requestId: string, createdAt: string, att
       const storagePath = `${requestId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`
       const up = await d.storage.from('request-attachments').upload(storagePath, buf, { contentType: a.contentType || 'application/octet-stream', upsert: false })
       if (up.error) throw new Error('the file could not be stored')
-      const { error } = await d.from('request_attachments').insert({ request_id: requestId, uploaded_by: c.actorId, file_name: a.fileName, file_size: buf.length, mime_type: a.contentType || 'application/octet-stream', storage_path: storagePath, is_internal: false, uploaded_at: createdAt })
+      const { error } = await d.from('request_attachments').insert({ request_id: requestId, uploaded_by: c.actorId, file_name: a.fileName, file_size: buf.length, mime_type: a.contentType || 'application/octet-stream', storage_path: storagePath, is_internal: false, uploaded_at: opts.later ? new Date().toISOString() : createdAt })
       if (error) { await d.storage.from('request-attachments').remove([storagePath]); throw new Error('the file could not be recorded') }
       copied++
     } catch (e) {
@@ -379,7 +380,7 @@ async function copyAttachments(c: Ctx, requestId: string, createdAt: string, att
   if (copied) notes.push(`${copied} attachment(s) copied.`)
   if (notCopied.length) {
     notes.push(`${notCopied.length} attachment(s) not copied (listed in the Zoho note).`)
-    await d.from('request_comments').insert({ request_id: requestId, author_id: c.actorId, body: `[Zoho attachments not copied]\n${notCopied.map((x) => `  • ${x}`).join('\n')}`, is_internal: true, source: 'portal', created_at: new Date(new Date(createdAt).getTime() + 3).toISOString() })
+    await d.from('request_comments').insert({ request_id: requestId, author_id: c.actorId, body: `${opts.later ? '[Zoho attachments added later — these were not copied]' : '[Zoho attachments not copied]'}\n${notCopied.map((x) => `  • ${x}`).join('\n')}`, is_internal: true, source: 'portal', created_at: opts.later ? new Date().toISOString() : new Date(new Date(createdAt).getTime() + 3).toISOString() })
   }
   return notes
 }
