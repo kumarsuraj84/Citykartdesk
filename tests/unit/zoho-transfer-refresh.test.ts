@@ -89,3 +89,32 @@ describe('a Zoho date field arrives as an object', () => {
     expect(new Date(nameOf({ display_value: 'Nov 10, 2026 11:00 AM' })).getFullYear()).toBe(2026)
   })
 })
+
+describe('the warning about people CK Desk does not recognise', () => {
+  const plan = (o: { reqHow?: string; reqName?: string | null; reqMail?: string | null; techName?: string | null; techHow?: string; moved?: boolean }) => ({
+    requester: { name: o.reqName ?? null, email: o.reqMail ?? null, how: o.reqHow ?? 'email' },
+    technician: { zohoName: o.techName ?? null, ckName: null, how: o.techHow ?? 'none' },
+    problems: o.moved ? [{ code: 'already_moved', text: '' }] : [],
+  }) as never
+  it('lists each unmatched requester once with how many tickets, and unmatched technicians separately', async () => {
+    const { unmatchedPeople } = await import('@/lib/zoho/transfer/people-warning')
+    const r = unmatchedPeople([
+      plan({ reqHow: 'new-inactive', reqName: 'Quality Control', techName: 'Manish Yadav' }),
+      plan({ reqHow: 'new-inactive', reqName: 'quality control', techName: 'Manish Yadav' }),
+      plan({ reqHow: 'new-inactive', reqName: 'NLD', techName: 'Ajay Kumar', techHow: 'email' }),
+      plan({ reqHow: 'email', reqName: 'Himanshu', techName: null }),
+    ])
+    expect(r.requesters).toEqual([{ name: 'Quality Control', tickets: 2 }, { name: 'NLD', tickets: 1 }])
+    expect(r.technicians).toEqual([{ name: 'Manish Yadav', tickets: 2 }])
+  })
+  it('says nothing when everybody is matched, and ignores tickets that are already moved', async () => {
+    const { unmatchedPeople } = await import('@/lib/zoho/transfer/people-warning')
+    expect(unmatchedPeople([plan({ reqHow: 'saved', techName: 'Ajay', techHow: 'saved' })])).toEqual({ requesters: [], technicians: [] })
+    expect(unmatchedPeople([plan({ reqHow: 'new-inactive', reqName: 'NLD', techName: 'X', moved: true })])).toEqual({ requesters: [], technicians: [] })
+  })
+  it('a requester with only an e-mail, or nothing at all, is still named', async () => {
+    const { unmatchedPeople } = await import('@/lib/zoho/transfer/people-warning')
+    const r = unmatchedPeople([plan({ reqHow: 'new-inactive', reqMail: 'x@y.z' }), plan({ reqHow: 'new-inactive' })])
+    expect(r.requesters.map((p) => p.name).sort()).toEqual(['(no name in Zoho)', 'x@y.z'])
+  })
+})

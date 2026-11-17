@@ -16,6 +16,7 @@ import { MoveControls } from './MoveControls'
 import { RunPanel } from './RunPanel'
 import { MovedSwitch } from './MovedSwitch'
 import { RefreshPanel } from './RefreshPanel'
+import { unmatchedPeople } from '@/lib/zoho/transfer/people-warning'
 import { SERVICE_FIELDS } from '@/lib/zoho/queries'
 import { zohoUdfLabel } from '@/lib/zoho/transfer/udf-labels'
 import { loadRecentRuns } from '@/lib/zoho/transfer/batch'
@@ -111,6 +112,9 @@ export default async function ZohoMovePage({ searchParams }: { searchParams: Pro
   const ready = rows.filter((r) => r.plan.ready).length
   const reasons = new Map<PlanProblemCode, number>()
   for (const r of rows) for (const p of r.plan.problems) reasons.set(p.code, (reasons.get(p.code) ?? 0) + 1)
+  const people = unmatchedPeople(rows.map((r) => r.plan))
+  const unmatchedCount = people.requesters.length + people.technicians.length
+  const scopeQs = encodeURIComponent(new URLSearchParams(Object.entries(filters).filter(([, v]) => v).map(([k, v]) => [k, String(v)])).toString())
 
   return (
     <div className="space-y-4">
@@ -183,7 +187,19 @@ export default async function ZohoMovePage({ searchParams }: { searchParams: Pro
                 ))}
               </ul>
             )}
-            <div className="mt-3"><MoveControls canMove={canMove} readyCount={ready} limit={MOVE_BATCH_LIMIT} /></div>
+            {unmatchedCount > 0 && (
+              <div role="alert" className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+                <p className="font-semibold">CK Desk does not recognise {unmatchedCount} {unmatchedCount === 1 ? 'person' : 'people'} on these tickets yet</p>
+                <p className="mt-1">If you move them as they are, an empty inactive profile is made for each one, and the ticket or the conversation entries are attached to it. Match them first, then move.</p>
+                {people.requesters.length > 0 && <p className="mt-1"><strong>Requesters:</strong> {people.requesters.map((p) => `${p.name} (${p.tickets} ticket${p.tickets === 1 ? '' : 's'})`).join(', ')}</p>}
+                {people.technicians.length > 0 && <p className="mt-1"><strong>Technicians:</strong> {people.technicians.map((p) => `${p.name} (${p.tickets} ticket${p.tickets === 1 ? '' : 's'})`).join(', ')}</p>}
+                <p className="mt-2 flex flex-wrap gap-3">
+                  {people.requesters.length > 0 && <Link href={`/zoho/mapping?tab=requesters&scope=${scopeQs}`} className="font-medium underline">Match the requesters →</Link>}
+                  {people.technicians.length > 0 && <Link href={`/zoho/mapping?tab=technicians&scope=${scopeQs}`} className="font-medium underline">Match the technicians →</Link>}
+                </p>
+              </div>
+            )}
+            <div className="mt-3"><MoveControls canMove={canMove} readyCount={ready} limit={MOVE_BATCH_LIMIT} unmatched={unmatchedCount} /></div>
           </section>
 
           <form id="move-form" onSubmit={undefined} />

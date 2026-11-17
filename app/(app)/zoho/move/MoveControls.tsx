@@ -8,7 +8,7 @@ import { moveZohoTicketsAction, type MoveActionResult } from '@/lib/actions/zoho
  * The "Move" step. The ticket check boxes are in the table (they belong to the form `move-form`); this reads the ticked ones, asks once more, then moves.
  * Two steps on purpose: first "Move N tickets", then "Yes, move them now". Nothing is sent to anyone.
  */
-export function MoveControls({ canMove, readyCount, limit }: { canMove: boolean; readyCount: number; limit: number }) {
+export function MoveControls({ canMove, readyCount, limit, unmatched = 0 }: { canMove: boolean; readyCount: number; limit: number; unmatched?: number }) {
   const [ticked, setTicked] = useState<number[]>([])
   const [asking, setAsking] = useState(false)
   const [res, setRes] = useState<MoveActionResult | null>(null)
@@ -38,6 +38,7 @@ export function MoveControls({ canMove, readyCount, limit }: { canMove: boolean;
       {asking && (
         <div ref={dlg} role="alertdialog" aria-label="Confirm the move" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
           <p className="font-semibold">Move {ticked.length} Zoho ticket{ticked.length === 1 ? '' : 's'} into CK Desk now?</p>
+          {unmatched > 0 && <p className="mt-1 font-semibold">Careful: {unmatched} {unmatched === 1 ? 'person is' : 'people are'} not matched yet (see the yellow box above). An empty inactive profile will be made for each one.</p>}
           <p className="mt-1">They become real CK Desk tickets (<code>ZOHO-…</code>) with the Zoho created time. No mail, WhatsApp, push or survey is sent. This cannot be undone from this screen.</p>
           <div className="mt-2 flex gap-2">
             <button type="button" onClick={go} className="rounded-md bg-primary px-3 py-1.5 font-semibold text-primary-foreground">Yes, move them now</button>
