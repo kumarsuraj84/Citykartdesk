@@ -10,6 +10,7 @@ import type { FormField } from '@/types'
 import { zohoQuery } from '@/lib/zoho/db'
 import { SERVICE_FIELDS } from '@/lib/zoho/queries'
 import { atOfRaw, describeRaw, msToIso, nameOf, whoOfRaw } from './data-pure'
+import { zohoUdfLabel, ZOHO_UDF_IN_NAMED_COLUMN } from './udf-labels'
 import { categoryKey, fieldKey, itemKey, serviceKey, type CkService, type CkTemplate, type Mappings, type PersonMatch, type ZohoTicketForPlan } from './plan'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -112,22 +113,27 @@ export type ZohoFacts = {
 
 const n = (v: unknown) => Number(v ?? 0)
 
-export async function loadZohoFacts(): Promise<ZohoFacts> {
+/** Limits what is read to the tickets of one search: the SQL "where" and its values (see buildTicketWhere). */
+export type TicketScope = { where: string[]; p: unknown[] }
+
+export async function loadZohoFacts(scope?: TicketScope): Promise<ZohoFacts> {
+  const w = scope && scope.where.length ? scope.where.join(' and ') : ''
+  const sp = scope?.p ?? []
   const cols = SERVICE_FIELDS.map((f, i) => `count(*) filter (where "${f.col}" is not null and btrim("${f.col}"::text) <> '') as c${i}`).join(', ')
   const [tpl, tree, st, use, udf] = await Promise.all([
-    zohoQuery<{ t: string; n: string }>(`select coalesce(template, '') as t, count(*)::text as n from zoho_ticket group by 1 order by count(*) desc`),
+    zohoQuery<{ t: string; n: string }>(`select coalesce(template, '') as t, count(*)::text as n from zoho_ticket ${w ? 'where ' + w : ''} group by 1 order by count(*) desc`, sp),
     zohoQuery<{ t: string; c: string; s: string; i: string; n: string }>(
-      `select coalesce(template, '') t, coalesce(category, '') c, coalesce(subcategory, '') s, coalesce(item, '') i, count(*)::text n from zoho_ticket group by 1, 2, 3, 4 order by 1, 2, 3, 4`),
-    zohoQuery<{ s: string; n: string }>(`select coalesce(status, '') as s, count(*)::text as n from zoho_ticket group by 1 order by count(*) desc`),
-    zohoQuery<Record<string, string>>(`select coalesce(template, '') as t, ${cols} from zoho_ticket group by 1`),
+      `select coalesce(template, '') t, coalesce(category, '') c, coalesce(subcategory, '') s, coalesce(item, '') i, count(*)::text n from zoho_ticket ${w ? 'where ' + w : ''} group by 1, 2, 3, 4 order by 1, 2, 3, 4`, sp),
+    zohoQuery<{ s: string; n: string }>(`select coalesce(status, '') as s, count(*)::text as n from zoho_ticket ${w ? 'where ' + w : ''} group by 1 order by count(*) desc`, sp),
+    zohoQuery<Record<string, string>>(`select coalesce(template, '') as t, ${cols} from zoho_ticket ${w ? 'where ' + w : ''} group by 1`, sp),
     zohoQuery<{ t: string; k: string; n: string }>(
       `select coalesce(template, '') t, k, count(*)::text n
          from zoho_ticket, jsonb_object_keys(case when jsonb_typeof(udf) = 'object' then udf else '{}'::jsonb end) k
-        where coalesce(udf ->> k, '') <> '' group by 1, 2`),
+        where coalesce(udf ->> k, '') <> '' ${w ? 'and (' + w + ')' : ''} group by 1, 2`, sp),
   ])
   const fieldUse: ZohoFieldUse[] = []
   for (const r of use) SERVICE_FIELDS.forEach((f, i) => { const c = n(r[`c${i}`]); if (c > 0) fieldUse.push({ template: r.t, field: f.col, label: f.label, tickets: c }) })
-  for (const r of udf) fieldUse.push({ template: r.t, field: `udf:${r.k}`, label: `Zoho custom field ${r.k}`, tickets: n(r.n) })
+  for (const r of udf) if (!ZOHO_UDF_IN_NAMED_COLUMN.has(r.k)) fieldUse.push({ template: r.t, field: `udf:${r.k}`, label: zohoUdfLabel(r.k), tickets: n(r.n) })
   return {
     total: tpl.reduce((a, r) => a + n(r.n), 0),
     templates: tpl.map((r) => ({ template: r.t, tickets: n(r.n) })),
@@ -186,12 +192,13 @@ export function savedPeopleMap(m: SavedMapping, kind: 'requester' | 'technician'
 export type ZohoPersonRow = { key: string; name: string | null; email: string | null; tickets: number }
 
 /** The distinct people on Zoho tickets (as requester or as technician), with how many tickets each has. */
-export async function loadZohoPeople(kind: 'requester' | 'technician'): Promise<ZohoPersonRow[]> {
+export async function loadZohoPeople(kind: 'requester' | 'technician', scope?: TicketScope): Promise<ZohoPersonRow[]> {
+  const w = scope && scope.where.length ? ' and (' + scope.where.join(' and ') + ')' : ''
   const nameCol = kind === 'requester' ? 'requester_name' : 'technician_name'
   const mailCol = kind === 'requester' ? 'requester_email' : 'technician_email'
   const rows = await zohoQuery<{ k: string; name: string | null; email: string | null; n: string }>(
     `select lower(coalesce(nullif(btrim(${mailCol}), ''), btrim(${nameCol}))) as k, max(btrim(${nameCol})) as name, max(btrim(${mailCol})) as email, count(*)::text as n
-       from zoho_ticket where coalesce(nullif(btrim(${mailCol}), ''), nullif(btrim(${nameCol}), '')) is not null group by 1 order by count(*) desc`)
+       from zoho_ticket where coalesce(nullif(btrim(${mailCol}), ''), nullif(btrim(${nameCol}), '')) is not null${w} group by 1 order by count(*) desc`, scope?.p ?? [])
   return rows.map((r) => ({ key: r.k, name: r.name, email: r.email, tickets: n(r.n) }))
 }
 
@@ -227,8 +234,8 @@ export function parseNumberList(text: string | undefined): { singles: number[]; 
 
 export const PREVIEW_LIMIT = 200
 
-export async function loadTicketsForPreview(f: MoveFilters, movedNumbers: number[], opts: { limit?: number; beforeNo?: number } = {}): Promise<{ total: number; rows: ZohoTicketForPlan[]; truncated: boolean }> {
-  const limit = Math.min(Math.max(1, opts.limit ?? PREVIEW_LIMIT), 1000)
+/** The SQL "where" (and its values) for a search of Zoho tickets. One place, so the Move page and the Mapping page always mean the same tickets. */
+export function buildTicketWhere(f: MoveFilters, movedNumbers: number[], opts: { beforeNo?: number } = {}): { where: string[]; p: unknown[] } {
   const where: string[] = []
   const p: unknown[] = []
   const add = (sql: string, v: unknown) => { p.push(v); where.push(sql.split('$$').join(`$${p.length}`)) }
@@ -250,6 +257,17 @@ export async function loadTicketsForPreview(f: MoveFilters, movedNumbers: number
   if (wantMoved === 'not' && movedNumbers.length) add(`display_id <> all($$::bigint[])`, movedNumbers)
   if (wantMoved === 'only') { if (movedNumbers.length) add(`display_id = any($$::bigint[])`, movedNumbers); else where.push('false') }
   if (opts.beforeNo) add(`display_id < $$`, opts.beforeNo)
+  return { where, p }
+}
+
+/** True when the search names at least one condition (a search with none means "everything"). */
+export function hasTicketFilter(f: MoveFilters): boolean {
+  return !!(f.numbers || f.status || f.template || f.category || f.technician || f.requester || f.from || f.to || f.moved || f.notMoved)
+}
+
+export async function loadTicketsForPreview(f: MoveFilters, movedNumbers: number[], opts: { limit?: number; beforeNo?: number } = {}): Promise<{ total: number; rows: ZohoTicketForPlan[]; truncated: boolean }> {
+  const limit = Math.min(Math.max(1, opts.limit ?? PREVIEW_LIMIT), 1000)
+  const { where, p } = buildTicketWhere(f, movedNumbers, { beforeNo: opts.beforeNo })
 
   const fieldCols = SERVICE_FIELDS.map((x) => `"${x.col}"`).join(', ')
   const rows = await zohoQuery<Record<string, unknown>>(
@@ -264,7 +282,7 @@ export async function loadTicketsForPreview(f: MoveFilters, movedNumbers: number
     const fields: Record<string, string> = {}
     for (const x of SERVICE_FIELDS) { const v = text(r[x.col]); if (v) fields[x.col] = v }
     const udf = r.udf && typeof r.udf === 'object' ? (r.udf as Record<string, unknown>) : {}
-    for (const [k, v] of Object.entries(udf)) { const t = text(v); if (t && t !== 'null') fields[`udf:${k}`] = t }
+    for (const [k, v] of Object.entries(udf)) { if (ZOHO_UDF_IN_NAMED_COLUMN.has(k)) continue; const t = text(v); if (t && t !== 'null') fields[`udf:${k}`] = t }
     return {
       displayId: Number(r.display_id), template: text(r.template) || null, category: text(r.category) || null, subcategory: text(r.subcategory) || null, item: text(r.item) || null,
       status: text(r.status) || null, priority: text(r.priority) || null, subject: text(r.subject) || null,

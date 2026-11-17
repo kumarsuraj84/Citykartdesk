@@ -15,6 +15,7 @@ import { MOVE_BATCH_LIMIT } from '@/lib/zoho/transfer/move'
 import { MoveControls } from './MoveControls'
 import { RunPanel } from './RunPanel'
 import { MovedSwitch } from './MovedSwitch'
+import { RefreshPanel } from './RefreshPanel'
 import { loadRecentRuns } from '@/lib/zoho/transfer/batch'
 import { movedTicketsActive } from '@/lib/zoho/transfer/silent'
 
@@ -140,12 +141,18 @@ export default async function ZohoMovePage({ searchParams }: { searchParams: Pro
             <select name="moved" defaultValue={sp.moved ?? (sp.notMoved === '1' ? 'not' : '')} className={input}><option value="">All tickets</option><option value="not">Not moved yet</option><option value="only">Already moved</option></select></label>
           <button type="submit" className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">Preview these tickets</button>
           <Link href="/zoho/move" className="text-xs text-muted-foreground hover:text-foreground">Clear</Link>
-          <Link href="/zoho/mapping" className="ml-auto text-xs font-medium text-primary hover:underline">Open the mapping →</Link>
+          <span className="ml-auto flex flex-wrap items-center gap-3">
+            {Object.values(filters).some(Boolean) && (
+              <Link href={`/zoho/mapping?scope=${encodeURIComponent(new URLSearchParams(Object.entries(filters).filter(([, v]) => v).map(([k, v]) => [k, String(v)])).toString())}`} className="text-xs font-medium text-primary hover:underline">Map only what these tickets need →</Link>
+            )}
+            <Link href="/zoho/mapping" className="text-xs text-muted-foreground hover:text-foreground">Open the whole mapping</Link>
+          </span>
         </div>
       </form>
 
       <MovedSwitch active={movedActive} canChange={canMove} />
       <RunPanel filters={filters} canMove={canMove} />
+      <RefreshPanel canMove={canMove} />
       {recentRuns.length > 0 && (
         <details className="rounded-lg border border-border bg-card p-3 text-xs">
           <summary className="cursor-pointer text-sm font-semibold text-foreground">Recent runs ({recentRuns.length})</summary>

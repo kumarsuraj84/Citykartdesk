@@ -27,6 +27,7 @@ import { planTicket, type TicketPlan } from './plan'
 import { approvalAction, approverEmail } from './approval'
 import { coerceFieldValue, formDataEntry, type CoerceField } from './coerce'
 import { isFinishedCkStatus } from './suggest'
+import { ZOHO_UDF_LABELS, zohoUdfLabel } from './udf-labels'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: any; storage: any }
@@ -317,9 +318,11 @@ async function createEverything(a: {
 }
 
 /** Zoho field key -> the plain name shown on the screens. */
-async function loadZohoFieldLabels(): Promise<Map<string, string>> {
+export async function loadZohoFieldLabels(): Promise<Map<string, string>> {
   const { SERVICE_FIELDS } = await import('@/lib/zoho/queries')
-  return new Map(SERVICE_FIELDS.map((f) => [f.col, f.label]))
+  const m = new Map(SERVICE_FIELDS.map((f) => [f.col, f.label]))
+  for (const k of Object.keys(ZOHO_UDF_LABELS)) m.set(`udf:${k}`, zohoUdfLabel(k))
+  return m
 }
 
 /** A requester CK Desk has never seen becomes an INACTIVE profile (cannot sign in): the history stays correct and nobody is invited. */

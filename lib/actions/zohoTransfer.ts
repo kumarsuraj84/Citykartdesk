@@ -150,6 +150,29 @@ export async function moveZohoTicketsAction(numbers: number[]): Promise<MoveActi
   return { results }
 }
 
+export type RefreshActionResult = { error?: string; results?: import('@/lib/zoho/transfer/refresh').RefreshResult[] }
+
+/**
+ * Fills in EMPTY CK Desk fields of tickets that were already moved, using the mapping as it is now (for example a contact number mapped after the move).
+ * A value already on the ticket is never overwritten; nothing else on the ticket changes; nobody is notified. Administrators only.
+ */
+export async function refreshMovedFieldsAction(numbers: number[]): Promise<RefreshActionResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return { error: guard.error }
+  const { refreshMovedFields, REFRESH_BATCH_LIMIT } = await import('@/lib/zoho/transfer/refresh')
+  const clean = [...new Set((Array.isArray(numbers) ? numbers : []).map(Number).filter((n) => Number.isSafeInteger(n) && n > 0))]
+  if (clean.length === 0) return { error: 'Type at least one Zoho ticket number.' }
+  if (clean.length > REFRESH_BATCH_LIMIT) return { error: `Fill in at most ${REFRESH_BATCH_LIMIT} tickets at a time.` }
+  const results = await refreshMovedFields({ orgId: guard.orgId, actorId: guard.profile.id, numbers: clean })
+  const changed = results.filter((r) => r.ok && r.filled.length > 0)
+  await logAdminAudit({
+    orgId: guard.orgId, actorId: guard.profile.id, entityType: 'zoho_transfer', entityId: guard.profile.id, action: 'zoho_transfer.fields_filled',
+    metadata: { asked: clean.length, changed: changed.length, numbers: changed.map((r) => r.requestNo) },
+  })
+  revalidatePath('/requests')
+  return { results }
+}
+
 // ── STAGE 3: move everything that matches the filters, in chunks, with a record ─────────────────────────────────────────────
 
 type RunFilters = import('@/lib/zoho/transfer/data').MoveFilters

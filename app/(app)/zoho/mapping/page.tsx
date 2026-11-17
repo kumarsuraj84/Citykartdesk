@@ -4,6 +4,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { zohoDbStatus } from '@/lib/zoho/db'
 import { NotConnected } from '../_components/NotConnected'
 import {
+  buildTicketWhere, hasTicketFilter, loadMovedNumbers, type MoveFilters,
   loadCkCatalogue, loadPeopleDirectory, loadSavedMapping, loadZohoFacts, loadZohoPeople, matchPerson, personKey, savedPeopleMap,
 } from '@/lib/zoho/transfer/data'
 import { TemplateMapper, type SavedForTemplate } from './TemplateMapper'
@@ -12,7 +13,7 @@ import { PeopleMapper, StatusMapper, type PersonRow } from './StatusAndPeopleMap
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Zoho to CK Desk mapping' }
 
-type Search = { tab?: string; template?: string }
+type Search = { tab?: string; template?: string; scope?: string }
 const SEP = '\u0001'
 
 const TABS = [
@@ -33,6 +34,13 @@ export default async function ZohoMappingPage({ searchParams }: { searchParams: 
   const canEdit = ['admin', 'platform_owner'].includes(profile?.role ?? '')
   const tab = TABS.some((t) => t.key === sp.tab) ? (sp.tab as (typeof TABS)[number]['key']) : 'templates'
 
+  // "Map only what these tickets need": the Move page sends its search here, and everything below is limited to those tickets.
+  const sc = new URLSearchParams(typeof sp.scope === 'string' ? sp.scope : '')
+  const g = (k: string) => { const v = sc.get(k); return v && v.trim() ? v.trim().slice(0, 2000) : undefined }
+  const filters: MoveFilters = { numbers: g('numbers'), status: g('status'), template: g('template'), category: g('category'), technician: g('technician'), requester: g('requester'), from: g('from'), to: g('to'), moved: g('moved') === 'not' || g('moved') === 'only' ? (g('moved') as 'not' | 'only') : undefined }
+  const scoped = hasTicketFilter(filters)
+  const scopeQs = scoped ? `&scope=${encodeURIComponent(sc.toString())}` : ''
+
   // The data is read inside the try; the page is built OUTSIDE it (JSX is never built inside a try/catch).
   type Facts = Awaited<ReturnType<typeof loadZohoFacts>>
   type Cat = Awaited<ReturnType<typeof loadCkCatalogue>>
@@ -40,11 +48,12 @@ export default async function ZohoMappingPage({ searchParams }: { searchParams: 
   let data: { facts: Facts; cat: Cat; saved: Saved; people?: { kind: 'requester' | 'technician'; rows: PersonRow[]; matched: number; total: number; emailsRead: boolean; options: { id: string; label: string }[] } } | null = null
   let failure: string | null = null
   try {
-    const [facts, cat, saved] = await Promise.all([loadZohoFacts(), loadCkCatalogue(orgId), loadSavedMapping(orgId)])
+    const scope = scoped ? buildTicketWhere(filters, filters.moved ? [...(await loadMovedNumbers(orgId))] : []) : undefined
+    const [facts, cat, saved] = await Promise.all([loadZohoFacts(scope), loadCkCatalogue(orgId), loadSavedMapping(orgId)])
     data = { facts, cat, saved }
     if (tab === 'requesters' || tab === 'technicians') {
       const kind = tab === 'requesters' ? 'requester' : 'technician'
-      const [dir, zohoPeople] = await Promise.all([loadPeopleDirectory(orgId), loadZohoPeople(kind)])
+      const [dir, zohoPeople] = await Promise.all([loadPeopleDirectory(orgId), loadZohoPeople(kind, scope)])
       const hand = savedPeopleMap(saved, kind, dir)
       const rows: PersonRow[] = zohoPeople.map((z) => {
         const m = matchPerson(dir, hand, { email: z.email, name: z.name })
@@ -72,7 +81,7 @@ export default async function ZohoMappingPage({ searchParams }: { searchParams: 
       <div className="grid gap-2 sm:grid-cols-3">
         <Stat label="Zoho templates mapped" value={`${facts.templates.filter((t) => tplMapped.has(t.template)).length} of ${facts.templates.length}`} />
         <Stat label="Zoho statuses mapped" value={`${facts.statuses.filter((s) => statusMapped.has(s.status)).length} of ${facts.statuses.length}`} />
-        <Stat label="Zoho tickets in the copy" value={facts.total.toLocaleString('en-IN')} />
+        <Stat label={scoped ? 'Tickets in your search' : 'Zoho tickets in the copy'} value={facts.total.toLocaleString('en-IN')} />
       </div>
     )
     let inner: React.ReactNode = null
@@ -91,7 +100,7 @@ export default async function ZohoMappingPage({ searchParams }: { searchParams: 
             {facts.templates.map((t) => {
               const active = t.template === chosen?.template
               return (
-                <Link key={t.template || '__blank'} href={`/zoho/mapping?tab=templates&template=${encodeURIComponent(t.template)}`} aria-current={active ? 'page' : undefined}
+                <Link key={t.template || '__blank'} href={`/zoho/mapping?tab=templates&template=${encodeURIComponent(t.template)}${scopeQs}`} aria-current={active ? 'page' : undefined}
                   className={`rounded-full border px-3 py-1 text-xs ${active ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-muted'}`}>
                   {t.template || '(blank)'} <span className="opacity-70">· {t.tickets.toLocaleString('en-IN')}</span>{tplMapped.has(t.template) && <span aria-label="mapped"> ✓</span>}
                 </Link>
@@ -119,7 +128,18 @@ export default async function ZohoMappingPage({ searchParams }: { searchParams: 
         </div>
       )
     }
-    body = <div className="space-y-4">{progress}{inner}</div>
+    body = (
+      <div className="space-y-4">
+        {scoped && (
+          <p role="status" className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200">
+            Showing only what the <strong>{facts.total.toLocaleString('en-IN')}</strong> ticket{facts.total === 1 ? '' : 's'} of your search need
+            {filters.numbers ? <> (<span className="font-mono">{filters.numbers.length > 60 ? filters.numbers.slice(0, 60) + '…' : filters.numbers}</span>)</> : null}.
+            {' '}<Link href="/zoho/move" className="font-medium underline">Back to the search</Link> · <Link href={`/zoho/mapping?tab=${tab}`} className="font-medium underline">Show everything</Link>
+          </p>
+        )}
+        {progress}{inner}
+      </div>
+    )
   }
 
   return (
@@ -127,7 +147,7 @@ export default async function ZohoMappingPage({ searchParams }: { searchParams: 
       {head}
       <nav aria-label="Mapping sections" className="flex flex-wrap gap-1 border-b border-border">
         {TABS.map((t) => (
-          <Link key={t.key} href={`/zoho/mapping?tab=${t.key}`} aria-current={tab === t.key ? 'page' : undefined}
+          <Link key={t.key} href={`/zoho/mapping?tab=${t.key}${scopeQs}`} aria-current={tab === t.key ? 'page' : undefined}
             className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${tab === t.key ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>{t.label}</Link>
         ))}
       </nav>
