@@ -12,7 +12,7 @@ const facts = (o: Omit<Partial<TicketFacts>, 'state'> & { state?: Partial<Ticket
     id: 'r1', request_no: 'CKSD-1', org_id: 'o', title: 'T', description: '', status: 'open', created_at: '2026-10-29T11:00:00Z', assigned_to: null, requester_id: 'u', category_id: 'c', categoryName: 'AC',
     programId: 'p', programName: 'RO', programActive: true, programRowType: 'store', oemKind: null, oemQuiet: false, isPms: false, cvmApproval: false,
     state: { exists: true, expected: { rules: true, vendor_mail: true, cvm: false }, mail_started_at: null, started_at: '2026-10-29T11:00:00Z', rules_ran_at: '2026-10-29T11:00:05Z', finished_at: '2026-10-29T11:00:09Z', auto_attempts: 0, auto_last_at: null, gave_up_at: null, last_rerun_at: null, ...state },
-    mailSent: false, hasApproval: false, anyCreatedRule: false, storeCode: 'ALC', chosenAcValue: '', chosenMachineValue: '', mailProblem: null, cvmProblem: null,
+    mailSent: false, hasApproval: false, anyCreatedRule: false, moved: false, storeCode: 'ALC', chosenAcValue: '', chosenMachineValue: '', mailProblem: null, cvmProblem: null,
     ...rest,
   }
 }
@@ -92,5 +92,27 @@ describe('a table that cannot be read is an error (C-19)', () => {
   it('with every table readable the check goes through', async () => {
     const out = await loadAutomationFacts(db('none'), ['r1'], { check: false })
     expect(out).toHaveLength(1)
+  })
+})
+
+describe('a ticket moved from Zoho (it keeps the status Zoho had)', () => {
+  it('can be given a technician by the rules even when it is waiting for the requester, and only that', () => {
+    const f = facts({ moved: true, status: 'waiting_user', assigned_to: null, anyCreatedRule: true, programId: 'p1', programActive: true, cvmApproval: true, oemKind: null, state: { rules_ran_at: '2026-11-17T10:00:00Z', finished_at: '2026-11-17T10:00:00Z' } })
+    const d = evaluateAutomation(f, NOW)
+    expect(d.eligible).toBe(true)
+    expect(d.kind).toBe('unassigned')
+    expect(step(f, 'rules').state).toBe('missing')
+    expect(step(f, 'rules').autoSafe).toBe(false)                 // never by the automatic retry: only a person presses the button
+    expect(step(f, 'vendor_mail').state).toBe('not_needed')       // no mail to a vendor for a moved ticket, ever
+    expect(step(f, 'cvm').state).toBe('not_needed')               // and no approval request
+  })
+  it('an ordinary ticket in that status is still left alone, and a moved ticket that has a person is fine', () => {
+    expect(step(facts({ moved: false, status: 'waiting_user', assigned_to: null, anyCreatedRule: true }), 'rules').state).toBe('not_needed')
+    const done = facts({ moved: true, status: 'waiting_user', assigned_to: 'tech-1', anyCreatedRule: true })
+    expect(step(done, 'rules').state).toBe('done')
+    expect(evaluateAutomation(done, NOW).kind).toBe('ok')
+  })
+  it('a finished moved ticket has nothing to run', () => {
+    expect(evaluateAutomation(facts({ moved: true, status: 'resolved', assigned_to: null, anyCreatedRule: true }), NOW).eligible).toBe(false)
   })
 })

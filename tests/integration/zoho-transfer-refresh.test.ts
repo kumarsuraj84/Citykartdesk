@@ -114,6 +114,32 @@ skip('a ticket with no technician gets the assignment rules run again (quietly);
     }
   })
 
+  skip('"Run automation again" (the ticket page button) works for a moved ticket that is waiting for the requester: assign only, quietly, and never a vendor mail', async () => {
+    const { runCreatedAssignRules } = await import('@/lib/automation/assign-rules')
+    const { loadAutomationFacts, evaluateAutomation } = await import('@/lib/automation/diagnose')
+    const techId = sql(`select id from profiles where role = 'agent' limit 1`)
+    sql(`delete from business_rules where name = 'ZOHO-RERUN-TEST'`)
+    const actions = JSON.stringify([{ type: 'assign', params: { strategy: 'direct', assigneeIds: [techId] } }, { type: 'notify', params: { roles: ['manager'], channels: ['in_app', 'email'], notifyAssignee: true, notifyRequester: true } }])
+    const conditions = JSON.stringify([{ field: 'title', operator: 'contains', value: `#${zohoNo - 700000}` }])
+    sql(`insert into business_rules (org_id, name, is_active, trigger, conditions, conditions_logic, actions, execution_order) values ('${orgId}', 'ZOHO-RERUN-TEST', true, '{created}', '${conditions}', 'AND', '${actions}', 1)`)
+    try {
+      sql(`update requests set assigned_to = null, status = 'waiting_user' where id = '${reqId}'`)
+      const admin = (await import('@/lib/supabase/admin')).createAdminClient()
+      const [facts] = await loadAutomationFacts(admin as never, [reqId], { check: false })
+      const d = evaluateAutomation(facts)
+      expect(d.eligible).toBe(true)
+      expect(d.kind).toBe('unassigned')                                           // so the button shows on the ticket page
+      const notes = countNotifications()
+      const r = await runCreatedAssignRules(reqId)
+      expect(r.ran).toBe(true)
+      expect(sql(`select assigned_to from requests where id = '${reqId}'`)).toBe(techId)
+      expect(sql(`select status from requests where id = '${reqId}'`)).toBe('waiting_user')   // the status Zoho had is kept
+      expect(countNotifications()).toBe(notes)                                        // nobody is told
+    } finally {
+      sql(`delete from business_rules where name = 'ZOHO-RERUN-TEST'`)
+    }
+  })
+
   skip('refuses a ticket that was never moved', async () => {
     const { refreshMovedFields } = await import('@/lib/zoho/transfer/refresh')
     const [res] = await refreshMovedFields({ orgId, actorId, numbers: [999999991] })

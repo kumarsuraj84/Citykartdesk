@@ -101,6 +101,8 @@ export type TicketFacts = {
   /** ANY approval exists on the ticket (a manual one counts too: a person's decision must not be answered by a second, automatic approval) */
   hasApproval: boolean
   anyCreatedRule: boolean
+  /** the ticket was moved here from Zoho: it may be given a technician by the rules at any status that is not finished, quietly; it is never sent to a vendor or a CVM by this feature */
+  moved: boolean
   storeCode: string | null
   chosenAcValue: string
   chosenMachineValue: string
@@ -135,6 +137,9 @@ export function evaluateAutomation(f: TicketFacts, now: Date = new Date()): Auto
   if (CLOSED.has(f.status)) return { ...base, eligible: false, ineligibleReason: 'This ticket is already resolved, closed or cancelled, so there is nothing to run.', autoPending: false, steps: [], kind: 'ok' }
 
   const isOpen = f.status === 'open'
+  // a ticket moved from Zoho can be given a technician at any unfinished status (it keeps the status Zoho had); its vendor mail and CVM approval are never part of this
+  const canGive = isOpen || f.moved
+  const g = f.moved ? { ...f, programId: null, programActive: false, oemKind: null, cvmApproval: false } : f
   const exp = f.state.exists ? f.state.expected : null   // no record = the automatic retry never works on this ticket
   const steps: AutomationStep[] = []
   const notExpectedNote = ' (This was not one of the automatic steps when the ticket was made, so only a person can run it.)'
@@ -145,7 +150,7 @@ export function evaluateAutomation(f: TicketFacts, now: Date = new Date()): Auto
     let state: StepState = 'not_needed'
     let detail = 'The ticket already has a person, or has moved on.'
     let autoSafe = false
-    if (isOpen && !f.assigned_to) {
+    if (canGive && !f.assigned_to) {
       if (!f.anyCreatedRule) {
         detail = 'There is no Business Rule that gives new tickets to anybody.'
       } else if (f.state.exists && !f.state.rules_ran_at) {
@@ -166,11 +171,11 @@ export function evaluateAutomation(f: TicketFacts, now: Date = new Date()): Auto
   // 2. The e-mail to the OEM / vendor (a Vendor Program, or the old AC / Genset setting)
   {
     const wasExpected = exp?.vendor_mail === true
-    const expected = isMailExpected(f)
+    const expected = isMailExpected(g)
     let state: StepState = 'not_needed'
     let detail = 'This ticket is not sent to an OEM or vendor by e-mail.'
     let autoSafe = false
-    if (f.programId && !f.programActive) {
+    if (g.programId && !g.programActive) {
       detail = 'The vendor program of this category is switched off.'
     } else if (expected) {
       if (f.mailSent) { state = 'done'; detail = 'The e-mail to the OEM / vendor was sent.' }
@@ -194,7 +199,7 @@ export function evaluateAutomation(f: TicketFacts, now: Date = new Date()): Auto
     let state: StepState = 'not_needed'
     let detail = 'This category does not ask the store\'s CVM to approve.'
     let autoSafe = false
-    if (f.cvmApproval) {
+    if (g.cvmApproval) {
       if (f.hasApproval || f.status === 'pending_approval') { state = 'done'; detail = 'The ticket was sent to the CVM for approval.' }
       else if (!isOpen) { detail = 'The ticket has moved on without the CVM approval; nothing to run.' }
       else if (f.cvmProblem) { state = 'blocked'; detail = f.cvmProblem }
@@ -256,7 +261,7 @@ const STATE_COLUMNS = 'request_id, expected_steps, mail_started_at, started_at, 
 export async function loadAutomationFacts(db: Db, requestIds: string[], opts: { check: boolean } = { check: true }): Promise<TicketFacts[]> {
   const ids = [...new Set(requestIds)]
   if (ids.length === 0) return []
-  const reqs = await inIds<Record<string, unknown>>(ids, 'the tickets', (part) => db.from('requests').select('id, request_no, org_id, title, description, status, created_at, assigned_to, requester_id, category_id, service_id, form_data, form_sections_snapshot').in('id', part))
+  const reqs = await inIds<Record<string, unknown>>(ids, 'the tickets', (part) => db.from('requests').select('id, request_no, org_id, title, description, status, created_at, assigned_to, requester_id, category_id, service_id, form_data, form_sections_snapshot, source_metadata').in('id', part))
   if (reqs.length === 0) return []
   const str = (v: unknown) => (v == null ? '' : String(v))
   const unique = (xs: (string | null | undefined)[]) => [...new Set(xs.filter((x): x is string => !!x))]
@@ -317,6 +322,7 @@ export async function loadAutomationFacts(db: Db, requestIds: string[], opts: { 
         auto_last_at: (st.auto_last_at as string | null) ?? null, gave_up_at: (st.gave_up_at as string | null) ?? null, last_rerun_at: (st.last_rerun_at as string | null) ?? null,
       } : emptyState(),
       mailSent: sentSet.has(str(r.id)), hasApproval: approvalSet.has(str(r.id)), anyCreatedRule: ruleOrgs.has(str(r.org_id)),
+      moved: (r.source_metadata as { created_via?: string } | null)?.created_via === 'zoho',
       storeCode: storeId ? codeByStore.get(storeId) ?? null : null, chosenAcValue: chosen.ac, chosenMachineValue: chosen.machine, mailProblem: null, cvmProblem: null,
     }
   })

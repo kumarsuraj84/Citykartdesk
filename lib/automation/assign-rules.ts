@@ -25,8 +25,12 @@ export async function runCreatedAssignRules(requestId: string): Promise<{ ran: b
   const admin = createAdminClient() as unknown as AnyClient
   let request = await fetchRequest(admin, requestId)
   if (!request || !request.org_id) return { ran: false }
+  // a ticket moved from Zoho keeps the status Zoho had; it may be given a technician at any status that is not finished, and quietly (nobody is told)
+  const meta = await admin.from('requests').select('source_metadata').eq('id', requestId).maybeSingle()
+  const moved = (meta.data?.source_metadata as { created_via?: string } | null)?.created_via === 'zoho'
   // somebody (or another run) already took care of it: nothing to give
-  if (request.assigned_to || request.status !== 'open') return { ran: false }
+  if (request.assigned_to) return { ran: false }
+  if (request.status !== 'open' && !(moved && !['resolved', 'closed', 'cancelled'].includes(request.status))) return { ran: false }
 
   const { data: rules, error } = await admin.from('business_rules')
     .select('id, name, conditions, conditions_logic, actions, execution_order')
@@ -39,7 +43,7 @@ export async function runCreatedAssignRules(requestId: string): Promise<{ ran: b
     const assignOnly = (rule.actions ?? []).filter((a) => a.type === 'assign')
     if (assignOnly.length === 0) continue
     if (!matchesConditions(evalRequest, rule.conditions ?? [], rule.conditions_logic)) continue
-    await executeActions(admin, toActionRequest(request), assignOnly, { ruleId: rule.id, ruleName: rule.name, trigger: 'created' })
+    await executeActions(admin, toActionRequest(request), assignOnly, { ruleId: rule.id, ruleName: rule.name, trigger: 'created', quiet: moved })
     ran = true
     const refreshed = await fetchRequest(admin, requestId)
     if (refreshed) { request = refreshed; evalRequest = await buildRuleEvaluationRequest(admin, request) }
