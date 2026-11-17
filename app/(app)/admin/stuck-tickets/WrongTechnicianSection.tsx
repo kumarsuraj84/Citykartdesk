@@ -113,7 +113,7 @@ export function WrongTechnicianSection({ rows, technicians, loadError }: {
               {pending ? 'Working…' : `Send back for routing (${ids.length})`}
             </button>
             <span className="text-xs text-muted-foreground">or</span>
-            <select value={to} onChange={(e) => setTo(e.target.value)} className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs">
+            <select aria-label="Technician to hand the tickets over to" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs">
               <option value="">Choose a technician…</option>
               {technicians.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>

@@ -347,6 +347,8 @@ function WorkflowCard({
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50">
         <button
           onClick={toggleExpanded}
+          aria-label={expanded ? 'Collapse workflow' : 'Expand workflow'}
+          aria-expanded={expanded}
           className="text-muted-foreground hover:text-foreground"
         >
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}

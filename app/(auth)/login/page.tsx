@@ -50,7 +50,7 @@ function LoginForm() {
     <>
       {/* Error from callback */}
       {callbackError && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <div role="alert" className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           Authentication failed. Please try again.
         </div>
       )}
@@ -59,7 +59,7 @@ function LoginForm() {
         <div className="p-6">
           {/* Server error */}
           {serverError && (
-            <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <div role="alert" className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {serverError}
             </div>
           )}

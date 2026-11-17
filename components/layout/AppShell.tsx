@@ -134,6 +134,9 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
       <NotificationPopups viewerId={profile.id} />
       <NewVersionBanner />
 
+      {/* Keyboard users jump past the top bar and the menu straight to the page (WCAG 2.4.1). Hidden until it gets focus. */}
+      <a href="#main-content" className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground focus:not-sr-only focus:absolute focus:left-2 focus:top-2">Skip to main content</a>
+
       {/* ── Dark top bar (full width) ─────────────────────────────────────── */}
       <header className="flex h-16 shrink-0 items-center gap-2 px-2 sm:gap-4 sm:px-4 border-b border-black/10 bg-[image:var(--gradient-nav)] z-40">
 
@@ -185,7 +188,7 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
           <DeferredSidebar promise={navCountsPromise} profile={profile} navVisibility={navVisibility} />
         </Suspense>
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden">
+        <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto overflow-x-hidden focus:outline-none">
           <div className="page">
             {children}
           </div>

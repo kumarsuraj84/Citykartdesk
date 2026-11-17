@@ -65,3 +65,56 @@ describe('technician group expander (QA-D012)', () => {
     expect(read('app', '(app)', 'admin', 'teams', 'TeamManagementClient.tsx')).toMatch(/setExpanded\(\(v\) => !v\)\} aria-expanded=\{expanded\} aria-label=/)
   })
 })
+
+// QA 2026-11 (full audit, UI-001..UI-005): axe-core over 564 page views found controls without a name on admin screens, public pages without a main landmark and
+// sideways-scrolling tables the keyboard could not reach. Static guards (the running-app check is docs/qa-full-audit-2026-11/ui/ui-a11y-regress.mjs).
+describe('QA 2026-11 accessibility fixes', () => {
+  it('the public pages (sign in, forgot/reset password, rating, e-mail approval) sit inside one main landmark', () => {
+    for (const f of [['app', '(auth)', 'layout.tsx'], ['app', 'csat', 'layout.tsx'], ['app', 'approve', 'layout.tsx']]) expect(read(...f), f.join('/')).toMatch(/<main>\{children\}<\/main>/)
+  })
+  it('the date, select and icon controls of the admin screens carry a name', () => {
+    const need: [string[], RegExp[]][] = [
+      [['app', '(app)', 'admin', 'logs', 'AuditLogClient.tsx'], [/aria-label="Entity type"/, /aria-label="Actor"/, /aria-label="Date from"/, /aria-label="Date to"/]],
+      [['app', '(app)', 'admin', 'reports', 'page.tsx'], [/aria-label="Report from date"/, /aria-label="Report to date"/]],
+      [['app', '(app)', 'admin', 'stuck-tickets', 'WrongTechnicianSection.tsx'], [/aria-label="Technician to hand the tickets over to"/]],
+      [['app', '(app)', 'intake', 'inbox', 'InboxList.tsx'], [/aria-label="Sort messages"/]],
+      [['app', '(app)', 'intake', 'settings', 'ReclassifyButton.tsx'], [/aria-label="Only messages from this date"/]],
+      [['app', '(app)', 'admin', 'approvals', 'WorkflowBuilderClient.tsx'], [/aria-label=\{expanded \? 'Collapse workflow' : 'Expand workflow'\}/]],
+      [['app', '(app)', 'admin', 'master-data', 'MasterDataClient.tsx'], [/aria-label="Move up"/, /aria-label="Move down"/]],
+      [['app', '(app)', 'admin', 'task-config', 'TaskConfigClient.tsx'], [/aria-label="Move up"/, /aria-label="Move down"/, /aria-label=\{`Colour \$\{c\}`\}/, /role="switch"/, /aria-label=\{`Delete \$\{s\.name\}`\}/, /aria-label=\{`Delete \$\{p\.name\}`\}/]],
+      [['app', '(app)', 'admin', 'task-config', 'TaskTemplatesClient.tsx'], [/aria-label="Delete template"/]],
+      [['components', 'analytics', 'DetailDrawer.tsx'], [/aria-label="Close details"/, /inert=\{!open\}/]],
+    ]
+    for (const [file, res] of need) { const src = read(...file); for (const re of res) expect(src, `${file.join('/')} ${re}`).toMatch(re) }
+  })
+  it('every move up / move down button of the task settings has a name (none left without)', () => {
+    const src = read('app', '(app)', 'admin', 'task-config', 'TaskConfigClient.tsx')
+    for (const m of src.matchAll(/<button\b[^>]*onClick=\{\(\) => move\(i, -?1\)\}[\s\S]*?>/g)) expect(m[0], m[0]).toMatch(/aria-label="Move (up|down)"/)
+  })
+  it('the tables that scroll sideways on a phone can be reached from the keyboard', () => {
+    for (const [f, re] of [[['app', '(app)', 'zoho', 'page.tsx'], /tabIndex=\{0\} role="region"/], [['app', '(app)', 'zoho', 'reports', 'page.tsx'], /tabIndex=\{0\} role="region"/], [['app', '(app)', 'zoho', 'tickets', 'page.tsx'], /tabIndex=\{0\} role="region"/],
+      [['app', '(app)', 'admin', 'logs', 'AuditLogClient.tsx'], /tabIndex=\{0\} role="region"/], [['app', '(app)', 'admin', 'logs', 'EventLogClient.tsx'], /tabIndex=\{0\} role="region"/], [['app', '(app)', 'admin', 'logs', 'SystemLogClient.tsx'], /tabIndex=\{0\} role="region"/],
+      [['components', 'tasks', 'TaskTable.tsx'], /tabIndex=\{0\} role="region"/], [['app', '(app)', 'admin', 'reports', 'AnalyticsDashboard.tsx'], /tabIndex=\{0\} role="region"/]] as [string[], RegExp][]) expect(read(...f), f.join('/')).toMatch(re)
+  })
+  it('the runbooks page has no second main landmark inside the app shell, and Runbooks and Tasks each have a page heading', () => {
+    const rb = read('app', '(app)', 'admin', 'runbooks', 'RunbooksClient.tsx')
+    expect(rb).not.toMatch(/<main\b/)
+    expect(rb).toMatch(/<h1 className="sr-only">Runbooks<\/h1>/)
+    expect(read('app', '(app)', 'tasks', 'page.tsx')).toMatch(/<h1 className="sr-only">Tasks<\/h1>/)
+  })
+})
+
+describe('QA 2026-11 sign-in errors and skip link (UI-008, UI-009)', () => {
+  it('the error boxes of sign in, forgot password and reset password are announced to a screen reader (role=alert)', () => {
+    for (const [f, n] of [[['app', '(auth)', 'login', 'page.tsx'], 2], [['app', '(auth)', 'forgot-password', 'page.tsx'], 1], [['app', '(auth)', 'reset-password', 'page.tsx'], 2]] as [string[], number][]) {
+      const src = read(...f)
+      expect([...src.matchAll(/<div role="alert" className="[^"]*bg-destructive\/10/g)].length, f.join('/')).toBe(n)
+      expect(src, f.join('/') + ' has an error box without role=alert').not.toMatch(/<div className="[^"]*bg-destructive\/10/)
+    }
+  })
+  it('the app has a skip link to the main area', () => {
+    const src = read('components', 'layout', 'AppShell.tsx')
+    expect(src).toMatch(/href="#main-content"[^>]*>Skip to main content<\/a>/)
+    expect(src).toMatch(/<main id="main-content" tabIndex=\{-1\}/)
+  })
+})

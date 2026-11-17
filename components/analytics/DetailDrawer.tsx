@@ -145,6 +145,10 @@ export function DetailDrawer({ filter, onClose, groupIds, storeFilter, people }:
 
       {/* Panel */}
       <div
+        role="dialog"
+        aria-label={filter?.title || 'Details'}
+        aria-hidden={!open}
+        inert={!open}
         className={`fixed right-0 top-0 z-50 h-full w-full max-w-[480px] bg-background border-l border-border shadow-2xl flex flex-col transition-transform duration-300 ease-out ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
@@ -157,7 +161,7 @@ export function DetailDrawer({ filter, onClose, groupIds, storeFilter, people }:
               <p className="text-xs text-muted-foreground mt-0.5">{filter.description}</p>
             )}
           </div>
-          <button onClick={onClose} className="rounded-md p-1.5 hover:bg-muted transition-colors ml-4 shrink-0">
+          <button onClick={onClose} aria-label="Close details" className="rounded-md p-1.5 hover:bg-muted transition-colors ml-4 shrink-0">
             <X className="h-4 w-4" />
           </button>
         </div>

@@ -121,7 +121,7 @@ export function EventLogClient({ users }: { users: { id: string; full_name: stri
         {loading && rows.length === 0 ? 'Loading…' : `Showing the latest ${rows.length} matching events (the download includes up to 50,000).`}{updatedAt ? ` Updated ${updatedAt.toLocaleTimeString()}.` : ''}
       </p>
 
-      <div className="overflow-x-auto rounded-xl border border-[#E2E8F4] bg-white">
+      <div tabIndex={0} role="region" aria-label="Event log table (scrolls sideways)" className="overflow-x-auto rounded-xl border border-[#E2E8F4] bg-white">
         <table className="w-full border-collapse text-left text-[12px]">
           <thead>
             <tr className="border-b border-[#E2E8F4] bg-[#F8FAFD] text-[10px] font-bold uppercase tracking-wider text-[#7B8DB0]">

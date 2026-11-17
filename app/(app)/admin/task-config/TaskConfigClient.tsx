@@ -51,6 +51,8 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
           key={c}
           type="button"
           onClick={() => onChange(c)}
+          aria-label={`Colour ${c}`}
+          aria-pressed={value === c}
           className="h-5 w-5 rounded-full border-2 transition-transform hover:scale-110"
           style={{
             backgroundColor: c,
@@ -64,6 +66,7 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
         onChange={(e) => onChange(e.target.value)}
         className="h-5 w-5 cursor-pointer rounded border border-border bg-transparent p-0"
         title="Custom color"
+        aria-label="Custom colour"
       />
     </div>
   )
@@ -180,6 +183,7 @@ function TaskStatusBuilder({ initialStatuses }: { initialStatuses: TaskStatus[] 
             <div className="flex flex-col gap-0.5">
               <button
                 onClick={() => move(i, -1)}
+                aria-label="Move up"
                 disabled={i === 0 || isPending}
                 className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20"
               >
@@ -187,6 +191,7 @@ function TaskStatusBuilder({ initialStatuses }: { initialStatuses: TaskStatus[] 
               </button>
               <button
                 onClick={() => move(i, 1)}
+                aria-label="Move down"
                 disabled={i === statuses.length - 1 || isPending}
                 className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20"
               >
@@ -216,6 +221,8 @@ function TaskStatusBuilder({ initialStatuses }: { initialStatuses: TaskStatus[] 
             <div className="flex justify-center">
               <button
                 onClick={() => handleToggle(s.id, 'is_terminal', !s.is_terminal)}
+                aria-label={`${s.name}: finishes the task`}
+                aria-pressed={s.is_terminal}
                 disabled={isPending}
                 className={`h-5 w-5 rounded border-2 flex items-center justify-center transition-colors ${
                   s.is_terminal
@@ -231,6 +238,9 @@ function TaskStatusBuilder({ initialStatuses }: { initialStatuses: TaskStatus[] 
             <div className="flex justify-center">
               <button
                 onClick={() => handleToggle(s.id, 'is_active', !s.is_active)}
+                role="switch"
+                aria-checked={s.is_active}
+                aria-label={`${s.name}: active`}
                 disabled={isPending}
                 className={`relative inline-flex h-5 w-9 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${
                   s.is_active ? 'bg-primary' : 'bg-muted'
@@ -248,6 +258,7 @@ function TaskStatusBuilder({ initialStatuses }: { initialStatuses: TaskStatus[] 
             <div className="flex justify-end">
               <button
                 onClick={() => handleDelete(s.id)}
+                aria-label={`Delete ${s.name}`}
                 disabled={isPending}
                 className="rounded p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
               >
@@ -411,6 +422,7 @@ function TaskPriorityBuilder({ initialPriorities }: { initialPriorities: TaskPri
             <div className="flex flex-col gap-0.5">
               <button
                 onClick={() => move(i, -1)}
+                aria-label="Move up"
                 disabled={i === 0 || isPending}
                 className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20"
               >
@@ -418,6 +430,7 @@ function TaskPriorityBuilder({ initialPriorities }: { initialPriorities: TaskPri
               </button>
               <button
                 onClick={() => move(i, 1)}
+                aria-label="Move down"
                 disabled={i === priorities.length - 1 || isPending}
                 className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20"
               >
@@ -447,6 +460,9 @@ function TaskPriorityBuilder({ initialPriorities }: { initialPriorities: TaskPri
             <div className="flex justify-center">
               <button
                 onClick={() => handleToggleActive(p.id, !p.is_active)}
+                role="switch"
+                aria-checked={p.is_active}
+                aria-label={`${p.name}: active`}
                 disabled={isPending}
                 className={`relative inline-flex h-5 w-9 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${
                   p.is_active ? 'bg-primary' : 'bg-muted'
@@ -464,6 +480,7 @@ function TaskPriorityBuilder({ initialPriorities }: { initialPriorities: TaskPri
             <div className="flex justify-end">
               <button
                 onClick={() => handleDelete(p.id)}
+                aria-label={`Delete ${p.name}`}
                 disabled={isPending}
                 className="rounded p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
               >

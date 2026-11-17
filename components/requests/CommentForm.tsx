@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useTransition, useRef, useCallback } from 'react'
+import { useState, useTransition, useRef, useCallback, useEffect } from 'react'
 import { Loader2, Send, ChevronDown, Paperclip, X, FileIcon, AlertCircle, AtSign } from 'lucide-react'
 import { addComment, deleteEmptyComment } from '@/lib/actions/requests'
 import { uploadAttachment } from '@/lib/actions/attachments'
 import { copyCommentByEmail } from '@/lib/actions/ticketCopy'
 import { CcField, type CcChip } from './CcField'
 import { validateAttachment } from '@/lib/attachments/validate'
+import { filesToAttachFromTransfer } from '@/lib/attachments/paste'
 import { CANNED_RESPONSES, CANNED_CATEGORIES } from '@/lib/constants/canned-responses'
 import { AlertModal } from '@/components/ui/AlertModal'
 
@@ -60,6 +61,30 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
     if (problems.length > 0) setFileError(problems.join(' · '))
     if (valid.length > 0) setFiles((cur) => [...cur, ...valid])
   }, [])
+
+  // The Templates list closes when the person clicks anywhere outside it, or presses Escape (it used to close only by clicking the Templates button again).
+  useEffect(() => {
+    if (!showCanned) return
+    const onDown = (e: PointerEvent) => { if (cannedRef.current && !cannedRef.current.contains(e.target as Node)) { setShowCanned(false); setCannedSearch('') } }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setShowCanned(false); setCannedSearch('') } }
+    document.addEventListener('pointerdown', onDown, true)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('pointerdown', onDown, true); document.removeEventListener('keydown', onKey) }
+  }, [showCanned])
+
+  // Ctrl+V of a copied file or a screenshot, and dropping files on the box, attach them exactly like the Attach button. Plain text still pastes as text.
+  function onPasteIntoBox(e: React.ClipboardEvent) {
+    const pasted = filesToAttachFromTransfer(e.clipboardData)
+    if (pasted.length === 0) return
+    e.preventDefault()
+    void addFiles(pasted)
+  }
+  function onDropIntoBox(e: React.DragEvent) {
+    const dropped = filesToAttachFromTransfer(e.dataTransfer, new Date(), { textWins: false })
+    if (dropped.length === 0) return
+    e.preventDefault()
+    void addFiles(dropped)
+  }
 
   function onFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? [])
@@ -209,6 +234,9 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
           aria-label={isInternal ? 'Internal note' : 'Public comment'}
           value={body}
           onChange={(e) => setBody(e.target.value)}
+          onPaste={onPasteIntoBox}
+          onDrop={onDropIntoBox}
+          onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }}
           placeholder={
             isInternal
               ? 'Add an internal note (only visible to agents and managers)…'
@@ -271,7 +299,7 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            title="Attach files (max 25 MB each)"
+            title="Attach files (max 25 MB each). You can also paste a copied file or screenshot (Ctrl+V) or drop files into the box."
             className="flex min-h-[36px] cursor-pointer select-none items-center gap-1.5 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
           >
             <Paperclip className="h-3.5 w-3.5" />

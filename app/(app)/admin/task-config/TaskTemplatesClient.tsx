@@ -212,7 +212,7 @@ function TemplateCard({
         <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
           {items.length} task{items.length !== 1 ? 's' : ''}
         </span>
-        <button onClick={handleDelete} disabled={isPending} className="rounded-lg p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors">
+        <button onClick={handleDelete} disabled={isPending} aria-label="Delete template" className="rounded-lg p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors">
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>

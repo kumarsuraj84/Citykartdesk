@@ -129,15 +129,29 @@ function libraryReportKey(libraryFieldId: string): string {
   return `${FORM_FIELD_PREFIX}lib:${libraryFieldId}`
 }
 
-function toReportFields(formFields: ServiceFormFieldRef[]): ReportField[] {
+export function toReportFields(formFields: ServiceFormFieldRef[]): ReportField[] {
   const seen = new Set<string>()
+  const seenKeys = new Map<string, number>()   // report key -> index in `out`
+  const servicesOfKey = new Map<string, Set<string>>()
   const out: ReportField[] = []
   for (const f of formFields) {
     if (f.libraryFieldId) {
       if (seen.has(f.libraryFieldId)) continue
       seen.add(f.libraryFieldId)
     }
-    out.push(serviceFormFieldToReportField(f))
+    const field = serviceFormFieldToReportField(f)
+    // Two services whose forms use the same field id are ONE column: a request's answers are read by that id. Listing it twice gave the picker two entries with one key (QA 2026-11 UI-006).
+    const had = seenKeys.get(field.key)
+    if (had !== undefined) {
+      const services = servicesOfKey.get(field.key)!
+      services.add(f.serviceId)
+      // the column now covers several services, so it is named by the field itself, not by the first service that happened to have it
+      if (!f.libraryFieldId && services.size > 1) out[had] = { ...out[had], label: f.label }
+      continue
+    }
+    seenKeys.set(field.key, out.length)
+    servicesOfKey.set(field.key, new Set([f.serviceId]))
+    out.push(field)
   }
   return out
 }

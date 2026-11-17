@@ -53,6 +53,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
 
   return (
     <div className="flex flex-col gap-2">
+      <h1 className="sr-only">Tasks</h1>
       <TasksClient
         tasks={tasks}
         profiles={profiles}

@@ -342,6 +342,7 @@ export function InboxList({
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">{total} message{total === 1 ? '' : 's'}{pending ? ' …' : ''}</span>
             <select
+              aria-label="Sort messages"
               value={sort}
               onChange={(e) => go({ sort: e.target.value === 'priority_smart' ? '' : e.target.value })}
               className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-muted-foreground outline-none focus:border-primary"

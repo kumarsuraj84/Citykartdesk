@@ -1117,7 +1117,7 @@ export function TaskTable({ tasks: initialTasks, onTaskClick, customFields, cust
           })}
         </div>
 
-        <div className="overflow-x-auto">
+        <div tabIndex={0} role="region" aria-label="Task table (scrolls sideways)" className="overflow-x-auto">
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-border bg-primary">

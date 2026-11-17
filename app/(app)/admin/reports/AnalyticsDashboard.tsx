@@ -486,7 +486,7 @@ export function AnalyticsDashboard({ data, technicianWorkload, userId, groupIds,
             {data.byTeam.length === 0 ? (
               <p className="text-xs text-muted-foreground">No technician group data available</p>
             ) : (
-              <div className="overflow-x-auto -mx-1">
+              <div tabIndex={0} role="region" aria-label="Widget table (scrolls sideways)" className="overflow-x-auto -mx-1">
                 <table className="w-full text-sm min-w-[500px]">
                   <thead>
                     <tr className="border-b border-border text-left">

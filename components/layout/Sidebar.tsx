@@ -325,7 +325,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
 
       {/* Collapsed icon rail — flat list of all items, tooltips on hover */}
       {isCollapsed ? (
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 space-y-1">
+        <nav aria-label="Main menu" className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 space-y-1">
           {flatItems.map(item => {
             const Icon = item.icon
             const active = isActive(item)
@@ -354,7 +354,7 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
           })}
         </nav>
       ) : (
-      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
+      <nav aria-label="Main menu" className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
         {sections.map(section => {
           const open = openSections[section.key] ?? true
 

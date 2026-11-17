@@ -1058,11 +1058,12 @@ export default function RunbooksClient() {
       </nav>
 
       {/* Content */}
-      <main className="min-w-0 flex-1 overflow-y-auto px-10 py-6">
+      <div className="min-w-0 flex-1 overflow-y-auto px-10 py-6">
+        <h1 className="sr-only">Runbooks</h1>
         {activeContent ?? (
           <p className="text-sm text-muted-foreground">Select a topic from the sidebar.</p>
         )}
-      </main>
+      </div>
     </div>
   )
 }

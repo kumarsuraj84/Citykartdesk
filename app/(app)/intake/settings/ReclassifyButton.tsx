@@ -126,6 +126,7 @@ export function ReclassifyButton() {
             <label className="text-xs text-muted-foreground">From</label>
             <input
               type="date"
+              aria-label="Only messages from this date"
               value={sinceDate}
               onChange={(e) => setSinceDate(e.target.value)}
               className="rounded-md border border-border bg-background px-2 py-1 text-xs"

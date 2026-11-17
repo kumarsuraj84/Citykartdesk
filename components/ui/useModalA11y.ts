@@ -9,6 +9,16 @@ const FOCUSABLE =
 // Open dialogs, newest last. Only the newest one reacts to Escape / Tab, so a dialog opened on top of another one does not close both.
 const openDialogs: symbol[] = []
 
+// The last control that had focus OUTSIDE any pop-up. A pop-up whose first box has autoFocus takes focus before the hook below runs, so `document.activeElement`
+// is then already inside the pop-up; this is what the person was on when they opened it (QA 2026-11 UI-010).
+let lastFocusOutsideDialog: HTMLElement | null = null
+if (typeof document !== 'undefined') {
+  document.addEventListener('focusin', (e) => {
+    const t = e.target
+    if (t instanceof HTMLElement && !t.closest('[role="dialog"][aria-modal="true"]')) lastFocusOutsideDialog = t
+  }, true)
+}
+
 // (a control that is hidden cannot take focus, so it is not part of the Tab loop)
 function isVisible(el: HTMLElement): boolean {
   if (el.closest('[hidden], [inert]')) return false
@@ -61,8 +71,9 @@ export function useModalA11y({ onClose, label, enabled = true, initialFocus }: O
     const id = Symbol('dialog')
     openDialogs.push(id)
     const release = pushBusy()
-    const returnTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const root = ref.current
+    const active = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const returnTo = active && !(root && root.contains(active)) ? active : lastFocusOutsideDialog
 
     // move focus inside, unless an input inside already took it (autoFocus)
     if (root && !root.contains(document.activeElement)) {

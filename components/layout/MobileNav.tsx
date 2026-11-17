@@ -97,7 +97,7 @@ export function MobileNav({ profile, navVisibility, navCounts }: MobileNavProps)
       {/* Primary shortcuts — capped to MAX_PRIMARY so every item is always
           fully visible, never clipped or scrolled out of reach (see
           MAX_PRIMARY's comment above). */}
-      <nav className="flex flex-1 min-w-0">
+      <nav aria-label="Quick links" className="flex flex-1 min-w-0">
         {primary.map((item) => {
           const Icon = item.icon
           const isActive = item === activeItem

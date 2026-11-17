@@ -164,6 +164,7 @@ export default async function ReportsPage({
               <input
                 type="date"
                 name="from"
+                aria-label="Report from date"
                 defaultValue={hasCustomRange ? sp.from : undefined}
                 className="bg-transparent text-xs text-foreground outline-none"
               />
@@ -171,6 +172,7 @@ export default async function ReportsPage({
               <input
                 type="date"
                 name="to"
+                aria-label="Report to date"
                 defaultValue={hasCustomRange ? sp.to : undefined}
                 className="bg-transparent text-xs text-foreground outline-none"
               />

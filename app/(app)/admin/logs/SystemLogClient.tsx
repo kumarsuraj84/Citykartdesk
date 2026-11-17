@@ -226,7 +226,7 @@ export function SystemLogClient({ users }: { users: { id: string; full_name: str
           <p className="text-xs text-muted-foreground">
             {loading && rows.length === 0 ? 'Loading…' : `Showing ${rows.length} record${rows.length === 1 ? '' : 's'} (page ${page + 1}).`}{updatedAt ? ` Updated ${updatedAt.toLocaleTimeString()}.` : ''}
           </p>
-          <div className="overflow-x-auto rounded-xl border border-[#E2E8F4] bg-white">
+          <div tabIndex={0} role="region" aria-label="System log table (scrolls sideways)" className="overflow-x-auto rounded-xl border border-[#E2E8F4] bg-white">
             <table className="w-full border-collapse text-left text-[12px]">
               <thead>
                 <tr className="border-b border-[#E2E8F4] bg-[#F8FAFD] text-[10px] font-bold uppercase tracking-wider text-[#7B8DB0]">
@@ -270,7 +270,7 @@ export function SystemLogClient({ users }: { users: { id: string; full_name: str
           <p className="text-xs text-muted-foreground">
             {loading && groups.length === 0 ? 'Loading…' : `${groups.length} distinct problem${groups.length === 1 ? '' : 's'} found in ${scanned.toLocaleString()} error records.`}{updatedAt ? ` Updated ${updatedAt.toLocaleTimeString()}.` : ''}
           </p>
-          <div className="overflow-x-auto rounded-xl border border-[#E2E8F4] bg-white">
+          <div tabIndex={0} role="region" aria-label="System log table (scrolls sideways)" className="overflow-x-auto rounded-xl border border-[#E2E8F4] bg-white">
             <table className="w-full border-collapse text-left text-[12px]">
               <thead>
                 <tr className="border-b border-[#E2E8F4] bg-[#F8FAFD] text-[10px] font-bold uppercase tracking-wider text-[#7B8DB0]">

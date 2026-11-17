@@ -116,6 +116,7 @@ function PrioritiesTab({ priorities }: { priorities: RequestPriority[] }) {
                     <div className="flex flex-col gap-0.5">
                       <button
                         onClick={() => moveOrder(p.id, 'up')}
+                        aria-label="Move up"
                         disabled={idx === 0 || isPending}
                         className="rounded p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"
                       >
@@ -123,6 +124,7 @@ function PrioritiesTab({ priorities }: { priorities: RequestPriority[] }) {
                       </button>
                       <button
                         onClick={() => moveOrder(p.id, 'down')}
+                        aria-label="Move down"
                         disabled={idx === items.length - 1 || isPending}
                         className="rounded p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"
                       >
