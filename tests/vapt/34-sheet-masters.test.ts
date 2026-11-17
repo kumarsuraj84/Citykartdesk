@@ -129,9 +129,16 @@ describe('the sheets are copied into the database', () => {
     expect(issues.some((i) => i.kind === 'ac' && i.code === 'no_email' && i.store_code === D)).toBe(true)
     expect(issues.some((i) => i.kind === 'cvm' && i.code === 'unknown_store')).toBe(false)
   })
-  it('the AC sheet feeds the store details one way (count of Active ACs, address, opening date)', async () => {
+  it('the AC sheet feeds the store card with the MACHINE facts only (count of Active ACs, brand); a store\'s place and dates come from the Store Details tab', async () => {
+    // QA 2026-11 (F-002): this used to expect the AC sheet to fill address / city / state / opening date. That was changed on purpose in 8470d3d
+    // ("Store Master is the only source of a store's place": the AC sheet repeated State wrongly on every AC row), so a sheet run with no Store Details
+    // tab must leave those fields as they were and change only what the AC rows really know.
     const s = (await db().from('stores').select('ac_total, address, city, state, open_date, ac_brand').eq('id', ids.storeA).single()).data
-    expect(s).toMatchObject({ ac_total: 2, address: 'Khata 490 Pakur', city: 'Pakur', state: 'JH', open_date: '2026-08-16', ac_brand: 'BLUESTAR' })
+    expect(s).toMatchObject({ ac_total: 2, ac_brand: 'BLUESTAR' })
+    expect(s.address).not.toBe('Khata 490 Pakur')   // the AC row's address is NOT copied onto the card
+    expect(s.city).toBeNull()
+    expect(s.state).toBeNull()
+    expect(s.open_date).toBeNull()
   })
   it('an AC marked Inactive leaves the list at the next update, and comes back when it is Active again', async () => {
     sheets[SHEET.ac][3] = acRow(A, 3, 'SER-A3', 'Inactive')

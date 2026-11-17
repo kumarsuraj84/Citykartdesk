@@ -33,6 +33,7 @@ const actAs = (u: { accessToken: string }) => vi.mocked(createClient).mockResolv
 const mails = () => vi.mocked(sendEmail).mock.calls.map((c) => c[0]) as unknown as { to: string | string[]; subject: string; attachments?: { filename: string }[] }[]
 
 let co1 = '', co2 = ''
+let storeId = ''
 let v1a: TestUser, v1b: TestUser, v1m: TestUser, v2a: TestUser
 const made: string[] = []
 const vendorUsers: TestUser[] = []
@@ -79,6 +80,10 @@ beforeAll(async () => {
   co2 = (await a.from('vendor_companies').insert({ org_id: fx.orgId, name: `${tag} Blue Star` }).select('id').single()).data.id
   v1a = await vendorUser('v1a', co1, 'technician'); v1b = await vendorUser('v1b', co1, 'technician'); v1m = await vendorUser('v1m', co1, 'manager'); v2a = await vendorUser('v2a', co2, 'technician')
   await a.from('services').update({ form_sections: SECTIONS }).eq('id', fx.teamA.serviceId)
+  // QA 2026-11 (F-005): a rule's store_region / state / cluster are read ONLY from the requester's store card since 8470d3d (not from the AC row), so the
+  // requester needs a store whose card says region R1; the AC unit's own region (below) is no longer what the rule sees.
+  storeId = (await a.from('stores').insert({ org_id: fx.orgId, code: (tag + 'S').toUpperCase().slice(0, 12), name: tag + ' store', region: 'R1', state: 'DL', cluster: 'C1', is_active: true }).select('id').single()).data.id
+  await a.from('profiles').update({ store_id: storeId }).eq('id', fx.requesterA.id)
   await a.from('app_settings').upsert({ key: PO_APPROVER_SETTING, value: fx.agentA.id }, { onConflict: 'key' })
 }, 300_000)
 
@@ -93,6 +98,8 @@ afterAll(async () => {
     await a.from('request_activity').delete().in('request_id', made); await a.from('request_comments').delete().in('request_id', made); await a.from('requests').delete().in('id', made)
   }
   await a.from('services').update({ form_sections: [] }).eq('id', fx.teamA.serviceId)
+  await a.from('profiles').update({ store_id: null }).eq('id', fx.requesterA.id)
+  if (storeId) await a.from('stores').delete().eq('id', storeId)
   await a.from('profiles').update({ vendor_company_id: null, vendor_role: null }).in('id', vendorUsers.map((u) => u.id))
   await a.from('vendor_companies').delete().in('id', [co1, co2].filter(Boolean))
   await fx?.cleanup()

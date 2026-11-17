@@ -8,6 +8,7 @@ vi.mock('server-only', () => ({}))
 vi.mock('next/headers', () => ({ headers: vi.fn().mockResolvedValue({ get: () => null }), cookies: vi.fn().mockResolvedValue({ get: () => undefined, getAll: () => [], set: () => {} }) }))
 
 import { handleDataApi } from '@/lib/data-api/handler'
+import { ENTITIES } from '@/lib/data-api/entities'
 
 vi.setConfig({ testTimeout: 120_000 })
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -60,7 +61,10 @@ afterAll(async () => {
 describe('meta', () => {
   it('lists the two new entities as snapshots, with ids only and no names', async () => {
     const m = (await call('meta')).body.entities as Row[]
-    expect(m.length).toBe(19)
+    // QA 2026-11 (F-001): this was a hard-coded 19. The API deliberately gained `ac_units` (c7036a5, deployed 10 Nov), so the number is the
+    // length of the entity list itself, and the new entity is named, instead of a count that goes stale with every addition.
+    expect(m.length).toBe(ENTITIES.length)
+    expect(m.map((x) => x.name)).toContain('ac_units')
     for (const name of ['approval_workflow_steps', 'team_members']) {
       const e = m.find((x) => x.name === name)!
       expect(e.mode).toBe('snapshot')

@@ -74,11 +74,15 @@ describe('the Store Details tab fills the store card', () => {
     expect(r.ac.status).toBe('ok')
     expect(await cardOf(A)).toMatchObject({ city: 'TAB CITY A', state: 'UP', address: 'tab address', pincode: '226005', cluster: 'UP2', region: 'R4', priority_list: 'Top 50', festival: 'DIWALI', open_date: '2011-07-01', ac_total: 2, ac_brand: 'DAIKIN', ac_amc_vendor: 'UMS' })
     expect(await cardOf(C)).toMatchObject({ city: 'TAB CITY C', pincode: '4778', ac_total: 0 })   // no AC row in the sheet: counts as no AC (old total 7 -> 0), and the problem list names it
-    expect((await issuesOf()).find((i) => i.code === 'store_without_ac_rows')?.message).toContain(C)
-    expect(await cardOf(B)).toMatchObject({ city: 'AC CITY B', address: 'ac address' })   // B is not in the tab: its card keeps what it has
+    // QA 2026-11 (F-003): the problem line names at most 20 stores ("... and N more", noAcStoresIssue), so on a database that holds other stores
+    // without AC rows (the audit database has 211) store C is not necessarily named. The line must exist and say how many; C's own card (above) proves it counted as no AC.
+    expect((await issuesOf()).find((i) => i.code === 'store_without_ac_rows')?.message).toMatch(/active store\(s\) have no AC row in the AC sheet/)
+    // QA 2026-11 (F-003): B is not in the tab, and since 8470d3d the AC rows no longer fill a store's place, so B keeps exactly what it had.
+    expect(await cardOf(B)).toMatchObject({ city: 'OLD CITY', address: 'old address' })
     const issues = await issuesOf()
     expect(issues.find((i) => i.code === 'unknown_store' && i.message.includes('Store Details tab'))?.message).toContain(Z)
-    expect(issues.find((i) => i.code === 'store_without_details')?.message).toContain(B)
+    // QA 2026-11 (F-003): same 20-store cap as above, so assert the line (and its count) rather than that this one store is among the first 20 named.
+    expect(issues.find((i) => i.code === 'store_without_details')?.message).toMatch(/active store\(s\) have no row in the Store Details tab/)
     expect(issues.some((i) => i.code === 'bad_pincode')).toBe(true)
     expect((await db().from('app_settings').select('value').eq('key', usedKey()).single()).data?.value).toBe('1')
   })
@@ -95,7 +99,7 @@ describe('the Store Details tab fills the store card', () => {
     const r = await sync()
     expect(r.ac.status).toBe('ok')
     expect(await cardOf(A)).toMatchObject({ city: 'TAB CITY A2' })
-    expect(await cardOf(B)).toMatchObject({ city: 'AC CITY B' })
+    expect(await cardOf(B)).toMatchObject({ city: 'OLD CITY' })   // QA 2026-11 (F-004): never AC CHANGED / AC CITY B: the AC rows do not fill a place any more (8470d3d)
     expect((await issuesOf()).some((i) => i.code === 'store_details_tab_missing' && i.severity === 'error')).toBe(true)
   })
 
