@@ -50,6 +50,8 @@ export type RuleActionContext = {
   trigger?: 'created' | 'updated' | 'schedule'
   /** Set for a deliberate re-routing (the category was changed): then an assign action of an 'updated' rule may replace the current assignee. */
   allowReassign?: boolean
+  /** A ticket moved in from another system (Zoho): the rules still choose the person, but nobody is told (no notification, no mail) and the status stays as it was moved. */
+  quiet?: boolean
 }
 
 export type ActionRequest = {
@@ -236,6 +238,7 @@ async function runAssign(
     metadata: { assigned_to: chosenId, via: 'business_rule', rule_id: ctx.ruleId, rule_name: ctx.ruleName },
   })
   // B-20: nobody "assigned" this - a rule did - so no person is named as the actor (it used to read "assigned by <the assignee>")
+  if (ctx.quiet) return { assigned_to: chosenId, status: nextStatus }
   notify([
     {
       recipientId: chosenId,
@@ -583,9 +586,9 @@ export async function executeActionsWithResult(
       let patch: RequestPatch | void | null = undefined
       if (action.type === 'assign') patch = await runAssign(admin, request, action.params, ctx)
       else if (action.type === 'set_priority') patch = await runSetPriority(admin, request, action.params.priority, ctx)
-      else if (action.type === 'set_status') patch = await runSetStatus(admin, request, action.params.status, ctx)
+      else if (action.type === 'set_status' && !ctx.quiet) patch = await runSetStatus(admin, request, action.params.status, ctx)
       else if (action.type === 'set_team') patch = await runSetTeam(admin, request, action.params.teamId, ctx)
-      else if (action.type === 'notify') await runNotify(admin, request, action.params, ctx)
+      else if (action.type === 'notify' && !ctx.quiet) await runNotify(admin, request, action.params, ctx)
       if (patch) request = { ...request, ...patch }
       succeeded++
     } catch (e) {

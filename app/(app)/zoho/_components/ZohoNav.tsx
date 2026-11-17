@@ -2,13 +2,15 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Archive, BarChart3, FileSearch, Table2 } from 'lucide-react'
+import { Archive, ArrowRightLeft, BarChart3, FileSearch, GitCompareArrows, Table2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const TABS = [
   { href: '/zoho', label: 'Overview', icon: BarChart3, exact: true },
   { href: '/zoho/reports', label: 'Reports', icon: Table2 },
   { href: '/zoho/tickets', label: 'Find a ticket', icon: FileSearch },
+  { href: '/zoho/mapping', label: 'Mapping', icon: GitCompareArrows },
+  { href: '/zoho/move', label: 'Move to CK Desk', icon: ArrowRightLeft },
 ]
 
 export function ZohoNav() {
@@ -19,10 +21,10 @@ export function ZohoNav() {
         <Archive className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <p className="text-xs text-muted-foreground">
           <span className="font-semibold text-foreground">Zoho data.</span> Everything on these pages comes from the old Zoho (ManageEngine) system, kept in its own
-          database. It is read only, it keeps Zoho&apos;s own words for statuses, services, technicians and stores, and it is not joined to CK Desk in any way.
+          database. The Zoho data itself is read only and keeps Zoho&apos;s own words. The Mapping and Move pages are the one bridge to CK Desk: they only ever write into CK Desk, never into Zoho.
         </p>
       </div>
-      <nav className="flex flex-wrap gap-1 border-b border-border">
+      <nav aria-label="Zoho sections" className="flex flex-wrap gap-1 border-b border-border">
         {TABS.map((t) => {
           const active = t.exact ? path === t.href : path === t.href || path.startsWith(t.href + '/')
           return (

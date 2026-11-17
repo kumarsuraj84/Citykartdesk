@@ -2,7 +2,7 @@
  * Shared badge primitives for request status, priority, and SLA.
  * All badge styles source from lib/constants/requests — no duplicates.
  */
-import { RotateCcw, Globe, MessageCircle, Inbox, Mail, Phone, UserRound, Webhook, type LucideIcon } from 'lucide-react'
+import { RotateCcw, Globe, MessageCircle, Inbox, Mail, Phone, UserRound, Webhook, Archive, type LucideIcon } from 'lucide-react'
 import { ticketSourceKey, TICKET_SOURCE_LABELS, type TicketSourceKey } from '@/lib/sources'
 import { STATUS_LABELS, STATUS_STYLES, PRIORITY_BADGE_STYLES, PRIORITY_LABELS, PRIORITY_ARROWS } from '@/lib/constants/requests'
 import type { RequestStatus, RequestPriority } from '@/types'
@@ -90,6 +90,7 @@ const SOURCE_ICONS: Record<TicketSourceKey, LucideIcon> = {
   phone: Phone,
   manual: UserRound,
   api: Webhook,
+  zoho: Archive,
 }
 
 const SOURCE_STYLES: Record<TicketSourceKey, string> = {
@@ -100,6 +101,7 @@ const SOURCE_STYLES: Record<TicketSourceKey, string> = {
   phone: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
   manual: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
   api: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300',
+  zoho: 'border-teal-300 bg-teal-50 text-teal-800 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-300',
 }
 
 interface SourceBadgeProps {
@@ -115,7 +117,7 @@ export function SourceBadge({ sourceMetadata, size = 'md' }: SourceBadgeProps) {
       ? 'inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap shrink-0'
       : 'inline-flex items-center gap-1.5 rounded border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap shrink-0'
   return (
-    <span className={`${base} ${SOURCE_STYLES[key]}`} title={`Raised via ${TICKET_SOURCE_LABELS[key]}`}>
+    <span className={`${base} ${SOURCE_STYLES[key]}`} title={key === 'zoho' ? 'Moved to CK Desk from the old Zoho system' : `Raised via ${TICKET_SOURCE_LABELS[key]}`}>
       <Icon className={size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
       {TICKET_SOURCE_LABELS[key]}
     </span>

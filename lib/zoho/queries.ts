@@ -196,7 +196,7 @@ export async function getStoreAcReport(): Promise<StoreAcReport> {
 // ── one ticket, by its Zoho ticket number ────────────────────────────────────────────────────────────────────────────
 
 /** The fields only some services use. An empty one is simply not shown. */
-const SERVICE_FIELDS: { col: string; label: string }[] = [
+export const SERVICE_FIELDS: { col: string; label: string }[] = [
   { col: 'ac_number', label: 'AC number' }, { col: 'ac_style', label: 'AC style' }, { col: 'ac_serial_no', label: 'AC serial no' },
   { col: 'ac_serial_raw', label: 'AC serial (as typed)' }, { col: 'ac_model', label: 'AC model' }, { col: 'ac_code', label: 'AC code' },
   { col: 'ac_floor', label: 'AC floor' }, { col: 'ac_area', label: 'AC area' }, { col: 'ac_tonnage', label: 'AC tonnage' },

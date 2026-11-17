@@ -4,6 +4,7 @@ import { notify, type NotifyInput } from '@/lib/notifications'
 import { sendEmail } from '@/lib/email/send'
 import { escapeHtml } from '@/lib/email/escape'
 import { verifyCronSecret } from '@/lib/cron-auth'
+import { movedTicketsActive, withoutSilentMoved } from '@/lib/zoho/transfer/silent'
 import { mapWithConcurrency } from '@/lib/async/concurrency'
 import { logger } from '@/lib/observability/logger'
 import { alertOperator } from '@/lib/observability/alert'
@@ -35,6 +36,8 @@ export async function GET(req: NextRequest) {
   }
 
   const admin = createAdminClient()
+  // tickets moved in from Zoho stay silent (no "unassigned for N minutes" alert) until an administrator switches them on
+  const movedActive = await movedTicketsActive(admin as never)
   const now = new Date()
   // "today" is the INDIA day, whatever zone the server runs in; task and milestone due dates are plain dates compared with that day's text (audit F-11)
   const today = istToday(now)
@@ -426,13 +429,13 @@ export async function GET(req: NextRequest) {
 
       } else if (rule.alert_type === 'unassigned' && rule.entity_type === 'request') {
         const cutoff = new Date(now.getTime() - (rule.threshold_minutes ?? 120) * 60 * 1000)
-        const requests = await readAll<{ id: string; title: string; created_at: string }>((from, to) => admin
+        const requests = await readAll<{ id: string; title: string; created_at: string }>((from, to) => withoutSilentMoved(admin
           .from('requests')
           .select('id, title, created_at')
           .eq('org_id', rule.org_id!)
           .is('assigned_to', null)
           .not('status', 'in', '("resolved","cancelled","closed")')
-          .lt('created_at', cutoff.toISOString())
+          .lt('created_at', cutoff.toISOString()), movedActive)
           .order('id', { ascending: true }).range(from, to))
 
         const unassignedFlags = await mapWithConcurrency(requests, ALERT_ITEM_CONCURRENCY, async (request) => {

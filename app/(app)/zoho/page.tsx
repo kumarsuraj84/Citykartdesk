@@ -1,6 +1,8 @@
 import { PageHeader } from '@/components/ui/PageHeader'
 import { getZohoDashboard } from '@/lib/zoho/queries'
 import { zohoDbStatus } from '@/lib/zoho/db'
+import { getCurrentProfile } from '@/lib/queries/profiles'
+import { loadMovedNumbers } from '@/lib/zoho/transfer/data'
 import { NotConnected } from './_components/NotConnected'
 import type { Counted } from '@/lib/zoho/report-shapes'
 
@@ -37,7 +39,7 @@ function BarList({ title, rows, note, limit = 10 }: { title: string; rows: Count
               <span className="truncate text-foreground" title={r.label}>{r.label}</span>
               <span className="shrink-0 tabular-nums text-muted-foreground">
                 {fmt(r.total)} tickets
-                {r.open > 0 && <span className="font-semibold text-amber-600 dark:text-amber-500">{' · '}{fmt(r.open)} open</span>}
+                {r.open > 0 && <span className="font-semibold text-amber-700 dark:text-amber-400">{' · '}{fmt(r.open)} open</span>}
               </span>
             </div>
             <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
@@ -75,6 +77,9 @@ export default async function ZohoOverviewPage() {
   }
 
   const { totals, months } = data
+  // how many Zoho tickets are already in CK Desk (the list of moved tickets lives in CK Desk; Zoho itself is never written to)
+  const profile = await getCurrentProfile()
+  const movedCount = profile?.org_id ? (await loadMovedNumbers(profile.org_id as string).catch(() => new Set<number>())).size : 0
   const maxMonth = Math.max(1, ...months.map((m) => Math.max(m.raised, m.finished)))
 
   return (
@@ -98,6 +103,7 @@ export default async function ZohoOverviewPage() {
         <Stat label="All tickets" value={fmt(totals.tickets)} note={totals.oldest ? `${totals.oldest} to ${totals.newest}` : undefined} />
         <Stat label="Still open" value={fmt(totals.open)} note="Zoho's own open statuses" />
         <Stat label="Finished" value={fmt(totals.finished)} note={`${fmt(data.finishedWithoutResolvedDate)} of them have no finish date`} />
+        <Stat label="Moved to CK Desk" value={fmt(movedCount)} note={totals.tickets ? `${((movedCount / totals.tickets) * 100).toFixed(1)}% of all Zoho tickets` : undefined} />
         <Stat
           label="Copied up to"
           value={data.lastSync.at ? new Date(data.lastSync.at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'unknown'}
@@ -119,7 +125,7 @@ export default async function ZohoOverviewPage() {
 
       <div className="rounded-lg border border-border bg-card p-3">
         <h2 className="mb-2 text-sm font-semibold text-foreground">Raised and finished, month by month</h2>
-        <div className="flex items-end gap-1 overflow-x-auto pb-1">
+        <div tabIndex={0} role="region" aria-label="Tickets per month chart (scrolls sideways)" className="flex items-end gap-1 overflow-x-auto pb-1">
           {months.map((m) => (
             <div key={m.month} className="flex min-w-[42px] flex-1 flex-col items-center gap-1" title={`${m.month}: ${fmt(m.raised)} raised, ${fmt(m.finished)} finished`}>
               <div className="flex h-28 w-full items-end justify-center gap-0.5">

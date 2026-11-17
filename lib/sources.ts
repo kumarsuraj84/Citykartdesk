@@ -22,7 +22,7 @@ export function sourceLabel(key: string | null | undefined): string | null {
 // createRequestCore() at creation. Tickets created before that was recorded have
 // no value — they were all raised on the web portal, so absent reads as Web.
 
-export type TicketSourceKey = 'portal' | 'whatsapp' | 'intake' | 'email' | 'phone' | 'manual' | 'api'
+export type TicketSourceKey = 'portal' | 'whatsapp' | 'intake' | 'email' | 'phone' | 'manual' | 'api' | 'zoho'
 
 export const TICKET_SOURCE_LABELS: Record<TicketSourceKey, string> = {
   portal: 'Web',
@@ -32,6 +32,7 @@ export const TICKET_SOURCE_LABELS: Record<TicketSourceKey, string> = {
   phone: 'Phone',
   manual: 'Manual',
   api: 'API',
+  zoho: 'From Zoho',   // a ticket moved in from the old Zoho (ManageEngine) system; its number is ZOHO-<the Zoho number>
 }
 
 const CREATED_VIA_TO_SOURCE: Record<string, TicketSourceKey> = {
@@ -44,6 +45,7 @@ const CREATED_VIA_TO_SOURCE: Record<string, TicketSourceKey> = {
   phone: 'phone',
   manual: 'manual',
   api: 'api',
+  zoho: 'zoho',
 }
 
 export function ticketSourceKey(sourceMetadata: unknown): TicketSourceKey {

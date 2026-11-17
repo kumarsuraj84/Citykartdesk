@@ -63,7 +63,7 @@ export default async function ZohoReportsPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border border-border bg-card">
+        <div tabIndex={0} role="region" aria-label="Report table (scrolls sideways)" className="overflow-x-auto rounded-lg border border-border bg-card">
           <table className="w-full min-w-[820px] text-sm">
             <thead className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
               <tr>

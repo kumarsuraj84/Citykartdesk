@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyCronSecret } from '@/lib/cron-auth'
+import { movedTicketsActive, withoutSilentMoved } from '@/lib/zoho/transfer/silent'
 import { computeElapsedBusinessMinutes, pauseCreditMs } from '@/lib/sla/business-hours'
 import { slaClockStart } from '@/lib/sla/resolve'
 import { matchesConditions, type RuleCondition, type RuleConditionsLogic } from '@/lib/rules/evaluate'
@@ -165,9 +166,11 @@ const CLOSED_SQL_LIST = `(${CLOSED_LIKE_REQUEST_STATUSES.map((st) => `"${st}"`).
 /** Every open ticket of the organisation that matches the filter, page by page (a plain select stops at 1000 rows). A failed page throws. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function openTickets(admin: AnyClient, orgId: string, narrow: (q: any) => any): Promise<RawRequest[]> {
+  // tickets moved in from Zoho are left out of the scheduled rules (no escalation / overdue notice for an old ticket) until an administrator switches them on
+  const movedActive = await movedTicketsActive(admin)
   const { rows } = await fetchAllPages<RawRequest>((from, to) =>
     narrow(
-      admin.from('requests').select(RULE_REQUEST_SELECT).eq('org_id', orgId).not('status', 'in', CLOSED_SQL_LIST)
+      withoutSilentMoved(admin.from('requests').select(RULE_REQUEST_SELECT).eq('org_id', orgId).not('status', 'in', CLOSED_SQL_LIST), movedActive)
     ).order('id', { ascending: true }).range(from, to)
   )
   return rows

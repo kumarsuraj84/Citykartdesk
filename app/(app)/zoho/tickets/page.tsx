@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { zohoDbStatus } from '@/lib/zoho/db'
+import { getCurrentProfile } from '@/lib/queries/profiles'
+import { loadMovedNumbers, loadTransferState } from '@/lib/zoho/transfer/data'
 import { getZohoTicket, parseZohoTicketNo, searchZohoTickets } from '@/lib/zoho/queries'
 import { NotConnected } from '../_components/NotConnected'
 import { TicketSearchForm } from './TicketSearchForm'
@@ -18,27 +20,34 @@ type Hit = Awaited<ReturnType<typeof searchZohoTickets>>[number]
 type Result =
   | { kind: 'nothing-asked' }
   | { kind: 'not-a-number'; typed: string }
-  | { kind: 'ticket'; ticket: ZohoTicketDetail }
+  | { kind: 'ticket'; ticket: ZohoTicketDetail; moved: { requestNo: string; requestId: string | null; movedAt: string } | null }
   | { kind: 'no-such-ticket'; ticketNo: number }
-  | { kind: 'hits'; hits: Hit[]; text: string }
+  | { kind: 'hits'; hits: Hit[]; text: string; moved: Set<number> }
   | { kind: 'failed'; reason: string }
 
-async function lookUp(typed: string, text: string): Promise<Result> {
+async function lookUp(typed: string, text: string, orgId: string | null): Promise<Result> {
   const ticketNo = typed ? parseZohoTicketNo(typed) : null
   try {
     if (typed && ticketNo === null) return { kind: 'not-a-number', typed }
     if (ticketNo !== null) {
       const ticket = await getZohoTicket(ticketNo)
-      return ticket ? { kind: 'ticket', ticket } : { kind: 'no-such-ticket', ticketNo }
+      if (!ticket) return { kind: 'no-such-ticket', ticketNo }
+      // has it been moved into CK Desk already? (the list of moved tickets lives in CK Desk; Zoho itself is never written to)
+      const st = orgId ? await loadTransferState(orgId, ticketNo).catch(() => null) : null
+      return { kind: 'ticket', ticket, moved: st && st.state === 'moved' ? { requestNo: st.requestNo, requestId: st.requestId, movedAt: st.movedAt } : null }
     }
-    if (text) return { kind: 'hits', hits: await searchZohoTickets(text), text }
+    if (text) {
+      const hits = await searchZohoTickets(text)
+      const moved = orgId && hits.length ? await loadMovedNumbers(orgId, hits.map((h) => h.ticketNo)).catch(() => new Set<number>()) : new Set<number>()
+      return { kind: 'hits', hits, text, moved }
+    }
     return { kind: 'nothing-asked' }
   } catch (e) {
     return { kind: 'failed', reason: e instanceof Error ? e.message : 'The Zoho database could not be read.' }
   }
 }
 
-function Hits({ hits, text }: { hits: Hit[]; text: string }) {
+function Hits({ hits, text, moved }: { hits: Hit[]; text: string; moved: Set<number> }) {
   if (hits.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
@@ -47,7 +56,7 @@ function Hits({ hits, text }: { hits: Hit[]; text: string }) {
     )
   }
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card">
+    <div tabIndex={0} role="region" aria-label="Ticket table (scrolls sideways)" className="overflow-x-auto rounded-lg border border-border bg-card">
       <table className="w-full text-sm">
         <thead className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
           <tr>
@@ -56,6 +65,7 @@ function Hits({ hits, text }: { hits: Hit[]; text: string }) {
             <th className="px-3 py-2 font-medium">Status</th>
             <th className="px-3 py-2 font-medium">Raised by</th>
             <th className="px-3 py-2 font-medium">Raised on</th>
+            <th className="px-3 py-2 font-medium">CK Desk</th>
           </tr>
         </thead>
         <tbody>
@@ -68,6 +78,7 @@ function Hits({ hits, text }: { hits: Hit[]; text: string }) {
               <td className="px-3 py-2 text-muted-foreground">{h.status}</td>
               <td className="px-3 py-2 text-muted-foreground">{h.requester ?? '—'}</td>
               <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{h.createdAt ?? '—'}</td>
+              <td className="whitespace-nowrap px-3 py-2">{moved.has(h.ticketNo) ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">Moved → ZOHO-{h.ticketNo}</span> : <span className="text-[11px] text-muted-foreground">not moved</span>}</td>
             </tr>
           ))}
         </tbody>
@@ -91,7 +102,18 @@ function Body({ result }: { result: Result }) {
         </div>
       )
     case 'ticket':
-      return <ZohoTicketView ticket={result.ticket} />
+      return (
+        <div className="space-y-3">
+          {result.moved && (
+            <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200">
+              <strong>Moved to CK Desk</strong> as{' '}
+              {result.moved.requestId ? <Link href={`/requests/${result.moved.requestId}`} className="font-mono font-semibold underline">{result.moved.requestNo}</Link> : <span className="font-mono font-semibold">{result.moved.requestNo}</span>}
+              {' '}on {new Date(result.moved.movedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })}. Everything on this ticket, with its whole conversation, is in CK Desk now.
+            </div>
+          )}
+          <ZohoTicketView ticket={result.ticket} />
+        </div>
+      )
     case 'no-such-ticket':
       return (
         <div className="rounded-lg border border-border bg-card p-4 text-sm">
@@ -103,7 +125,7 @@ function Body({ result }: { result: Result }) {
         </div>
       )
     case 'hits':
-      return <Hits hits={result.hits} text={result.text} />
+      return <Hits hits={result.hits} text={result.text} moved={result.moved} />
     default:
       return (
         <EmptyState
@@ -121,7 +143,8 @@ export default async function ZohoTicketPage({ searchParams }: { searchParams: P
   const text = (sp.q ?? '').trim()
 
   const status = zohoDbStatus()
-  const result: Result = status.ready ? await lookUp(typed, text) : { kind: 'failed', reason: status.reason }
+  const profile = await getCurrentProfile()
+  const result: Result = status.ready ? await lookUp(typed, text, (profile?.org_id as string | undefined) ?? null) : { kind: 'failed', reason: status.reason }
 
   return (
     <div className="space-y-4">

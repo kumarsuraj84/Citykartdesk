@@ -109,3 +109,61 @@ never breaks anything else.
 - A Zoho **report builder** (choose the columns and the filters yourself), like CK Desk's own.
 - More ready-made reports: how long tickets take per service, technician workload, and the service-by-month table.
 - Downloading a report as Excel.
+
+## Moving Zoho tickets to CK Desk — STAGE 1 (mapping + preview only, built locally, not released)
+
+Two new tabs, **Mapping** and **Move to CK Desk**. This is the one deliberate bridge between the two systems and it only ever writes
+**into CK Desk** (its own mapping tables), never into Zoho. **No ticket is created in stage 1.** Full plan: `docs/ZOHO-TO-CKDESK-TRANSFER-PROPOSAL.md`.
+
+The owner's basic mapping (Zoho → CK Desk):
+
+| Zoho | CK Desk |
+|---|---|
+| Template | Form Template |
+| Template + Category | Service |
+| Sub Category | Category |
+| Item | Sub Category |
+| Requester | Requester (matched by saved hand match, then e-mail, then exact full name) |
+| Technician | Technician (matched the same way; an open ticket is still given to a technician by CK Desk's own rules) |
+| Status | Status |
+
+Plus the Zoho fields of each template → the fields of the mapped CK Desk form template. Priority is **not** mapped: CK Desk's own rule
+decides it (the sub-category's SLA priority, else the service's default). SLA deadlines are worked out from the **Zoho created time**.
+
+- `/zoho/mapping` — one Zoho template at a time (Template → Service → Category → Sub Category → fields), Statuses, Requesters, Technicians.
+  "Suggest the blanks" fills a best guess in yellow; nothing is saved until **Save**. Only an administrator can save; managers can look.
+- `/zoho/move` — filters (ticket numbers and ranges, template, category, status, requester, technician, dates, "not moved yet"), then a
+  preview of up to 200 tickets: the number `ZOHO-<Zoho number>` (exactly as Zoho has it), created time, where it would go, requester and
+  technician matches, status, CK Desk priority, SLA deadlines and whether it would be breached, and a plain reason when a ticket cannot move yet.
+  The **Move** button is switched off.
+- Database: migration `196_zoho_transfer_mapping.sql` (7 tables, server key only). Code: `lib/zoho/transfer/*`, `lib/actions/zohoTransfer.ts`.
+- Tests: `tests/unit/zoho-transfer.test.ts` (21).
+- Still to build (stages 2–5): the silent move itself, the "Moved" badge and filter in the Zoho tab, the ZOHO- number rule in the database, local QA, live.
+
+### STAGE 2 — the move itself (built locally, not released)
+
+`/zoho/move` now has tick boxes and **Move the ticked tickets** (administrators only, up to 25 at a time, with a "Yes, move them now" confirmation). A move:
+- creates the CK Desk ticket **`ZOHO-<Zoho number>`** with the **Zoho created time**; SLA, priority and (for an open ticket) the technician are worked out by CK Desk, the technician by the Business Rules run **quietly**;
+- sends **no mail, WhatsApp, push, survey or notification**; the automation is recorded as finished, so the 15-minute retry and "Run automation again" never mail for it;
+- copies **everything Zoho held**: the store's message, every field, the e-mails and the requester's replies, notes, conversation items, tasks, work logs, the history, and the attachments (when `ZOHO_ATTACHMENTS_ROOT` is set on the server; otherwise they are listed);
+- keeps **Zoho's dates, times and people** on every entry: the person who wrote a note, the technician who sent a ticket for approval, the approver who approved or rejected it, each at the Zoho time (a person CK Desk has never seen becomes an inactive profile, which cannot sign in);
+- is **all or nothing** and can **never happen twice** (one row per Zoho number in `zoho_transfers`);
+- marks the Zoho ticket page "**Moved to CK Desk as ZOHO-…**".
+
+Migration `197_zoho_request_no.sql` lets the number trigger keep a `ZOHO-<digits>` number, only for the server (never for a signed-in user). Code: `lib/zoho/transfer/move.ts`, `approval.ts`, `coerce.ts`, `data-pure.ts`. Tests: `tests/unit/zoho-transfer*.test.ts`, `tests/integration/zoho-transfer-move.test.ts` (9).
+
+### STAGE 3 — move everything that matches, markers, and "silent until switched on" (built locally, not released)
+
+- **Move everything that matches** (`/zoho/move`, administrators): "Check what would move" reads **every** matching Zoho ticket (up to 20,000) and says how many are ready (open / finished), how many cannot yet and why. Then "Move these N tickets…" asks once more and moves them **25 at a time** from the browser, with **Pause / Resume / Stop** between steps. Each run is recorded in `zoho_transfer_runs` (who, when, filters, asked / moved / failed, the first 200 failures); the last runs are listed on the page.
+- **Moved filter:** All tickets / Not moved yet / Already moved.
+- **Markers:** Zoho **Overview** has a "Moved to CK Desk" card (count and share); **Find a ticket** shows "Moved → ZOHO-…" in the list and a green note with a link on the ticket; CK Desk tickets carry a **"From Zoho"** badge (ticket page, list, board). To list them all, search `ZOHO-` in Requests.
+- **Moved tickets are SILENT until switched on.** A moved ticket keeps its Zoho created time, so an old open one is already late. The scheduled Business Rules ("unassigned for N minutes", SLA % elapsed, overdue) and the "unassigned" alert would otherwise notify about thousands of old tickets at the next run. Tickets with a `ZOHO-` number are therefore **left out of those jobs** by default (`lib/zoho/transfer/silent.ts`, applied in `app/api/business-rules/run` and `app/api/alerts/run`). One switch on the Move page (`app_settings` key `zoho.moved_tickets_active`, default OFF) lets them take part when the owner is ready. They remain searchable, countable and workable.
+- **Migration 198** (`zoho_transfer_runs`). Code: `lib/zoho/transfer/batch.ts`, `silent.ts`; screens `RunPanel.tsx`, `MovedSwitch.tsx`. Tests: `tests/unit/zoho-transfer-silent.test.ts`, `tests/integration/zoho-transfer-run.test.ts`.
+
+### Approvals in Zoho — what exists (checked 2026-11-17, read-only)
+
+- **The live copy already carries approvals, in the history lines** (live `zohomigrationdb`, 107,648 tickets): approval status Approved 25,337 · Pending Approval 574 · Denied 270 · Pending Clarification 3; history lines `approver_added` 28,054 · `req_approval` 28,051 · `approve` 26,283 · `reject` 285 · `approver_removed` 398 · `approval_reminder_sent` 9,554 · `approval_status_change` 52,612. Every `approve` / `reject` line (26,568) carries the approver's name and the "Approval Comments". The move writes each of these as an entry with its Zoho time and person; reminders and the system's status lines stay only in the history list.
+- **The Zoho API also has them in full** (read-only, tested on live ticket #42366): `GET /api/v3/requests/{id}/approval_levels` (level number, who sent it, created / completed time, status) and `GET /api/v3/requests/{id}/approval_levels/{level}/approvals` (the approver with e-mail, employee id and department, `comments`, `sent_on`, `action_taken_on`, status). It is **not** pulled by the sync today (one more call per level per approved ticket, about 28,000 tickets). The history lines hold the same facts for the tickets copied so far, so it is an option, not a need: add it only if the stage-by-stage list for **pending** approvals becomes important.
+
+### What a technician sees on a moved ticket that was already In Process in Zoho
+Zoho "In Process" becomes CK Desk **In progress** (the mapping you confirm). The ticket arrives already **In progress**, so the technician does **not** press **Start Working** (that button is shown only while a ticket is Open or Assigned). The move also marks it as already responded to, so it does not open with "response overdue". A Zoho "Open" ticket stays **Open** and needs Start Working as usual. The technician is chosen by the Business Rules **quietly**, so there is no "assigned to you" bell: the ticket is in their queue with the **From Zoho** badge. Open question for the owner: whether a ticket already worked on in Zoho should keep the same technician (when he exists in CK Desk and is on the team) instead of the rule's choice.

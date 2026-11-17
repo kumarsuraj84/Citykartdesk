@@ -250,7 +250,7 @@ export function toActionRequest(request: RawRequest): ActionRequest {
  * status to resolved, rule B is conditioned on status = resolved) would
  * evaluate against pre-write data and silently never fire.
  */
-export async function runRulesForTrigger(trigger: 'created' | 'updated', requestId: string, opts: { allowReassign?: boolean } = {}): Promise<void> {
+export async function runRulesForTrigger(trigger: 'created' | 'updated', requestId: string, opts: { allowReassign?: boolean; quiet?: boolean } = {}): Promise<void> {
   const admin = createAdminClient() as unknown as AnyClient
 
   let request = await fetchRequest(admin, requestId)
@@ -277,7 +277,7 @@ export async function runRulesForTrigger(trigger: 'created' | 'updated', request
   for (const rule of rules as BusinessRuleRow[]) {
     if (!matchesConditions(evalRequest, rule.conditions ?? [], rule.conditions_logic)) continue
 
-    await executeActions(admin, toActionRequest(request), rule.actions ?? [], { ruleId: rule.id, ruleName: rule.name, trigger, allowReassign: opts.allowReassign })
+    await executeActions(admin, toActionRequest(request), rule.actions ?? [], { ruleId: rule.id, ruleName: rule.name, trigger, allowReassign: opts.allowReassign, quiet: opts.quiet })
 
     const refreshed = await fetchRequest(admin, requestId)
     if (refreshed) {
