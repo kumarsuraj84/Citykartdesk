@@ -16,6 +16,8 @@ import { MoveControls } from './MoveControls'
 import { RunPanel } from './RunPanel'
 import { MovedSwitch } from './MovedSwitch'
 import { RefreshPanel } from './RefreshPanel'
+import { SERVICE_FIELDS } from '@/lib/zoho/queries'
+import { zohoUdfLabel } from '@/lib/zoho/transfer/udf-labels'
 import { loadRecentRuns } from '@/lib/zoho/transfer/batch'
 import { movedTicketsActive } from '@/lib/zoho/transfer/silent'
 
@@ -27,6 +29,8 @@ type Sla = { response: string | null; resolution: string | null; state: 'met' | 
 type Row = { plan: TicketPlan; subject: string | null; sla: Sla | null }
 
 const input = 'rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground'
+/** The plain Zoho name of a field key: a named column ("Serial number") or a custom field ("ETR"). */
+const fieldName = (key: string) => (key.startsWith('udf:') ? zohoUdfLabel(key.slice(4)) : SERVICE_FIELDS.find((f) => f.col === key)?.label ?? key)
 const ist = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }) : '—')
 const HOW: Record<string, string> = { saved: 'matched by hand', email: 'matched by e-mail', name: 'matched by name', 'new-inactive': 'will be created (inactive)', none: 'no CK Desk person' }
 
@@ -202,7 +206,10 @@ export default async function ZohoMovePage({ searchParams }: { searchParams: Pro
                       <span className="block text-muted-foreground">{[p.zoho.template, p.zoho.category, p.zoho.subcategory, p.zoho.item].filter(Boolean).join(' › ') || '—'}</span>
                       <span className="block text-foreground">{p.service ? <>{p.service.name}{p.category ? ` › ${p.category.name}` : ''}{p.subCategory ? ` › ${p.subCategory.name}` : ''}</> : <em className="text-red-700 dark:text-red-400">not mapped</em>}</span>
                       {p.template && <span className="block text-[11px] text-muted-foreground">form: {p.template.name}</span>}
-                      <span className="block text-[11px] text-muted-foreground">fields: {p.mappedFields.length} mapped{p.unmappedFields.length ? `, ${p.unmappedFields.length} not mapped` : ''}</span>
+                      <span className="block text-[11px] text-muted-foreground" title={p.mappedFields.length ? `Mapped: ${p.mappedFields.map((f) => fieldName(f.zohoField)).join(', ')}` : undefined}>
+                        fields: {p.mappedFields.length} mapped{p.mappedFields.length ? ` (${p.mappedFields.map((f) => fieldName(f.zohoField)).join(', ')})` : ''}
+                        {p.unmappedFields.length ? <span className="text-amber-700 dark:text-amber-400">; {p.unmappedFields.length} not mapped ({p.unmappedFields.map(fieldName).join(', ')})</span> : ''}
+                      </span>
                     </td>
                     <td className="px-2 py-2"><span className="block text-foreground">{p.requester.name ?? '—'}</span><span className="block text-[11px] text-muted-foreground">{HOW[p.requester.how]}</span></td>
                     <td className="px-2 py-2"><span className="block text-foreground">{p.technician.zohoName ?? '—'}</span><span className="block text-[11px] text-muted-foreground">{p.technician.ckName ? `CK Desk: ${p.technician.ckName} (${HOW[p.technician.how]})` : 'no CK Desk person; open tickets use CK Desk rules'}</span></td>
