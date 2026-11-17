@@ -91,7 +91,7 @@ async function moveOne(c: Ctx): Promise<MoveResult> {
   const reqHand = savedPeopleMap(c.saved, 'requester', dir)
   const techHand = savedPeopleMap(c.saved, 'technician', dir)
   const reqMatch = matchPerson(dir, reqHand, { email: ticket.requesterEmail, name: ticket.requesterName })
-  const techMatch = matchPerson(dir, techHand, { email: null, name: ticket.technicianName })
+  const techMatch = matchPerson(dir, techHand, { email: ticket.technicianEmail ?? null, name: ticket.technicianName })
   const moved = await loadMovedNumbers(orgId, [n])
   const plan: TicketPlan = planTicket({ ticket, maps: c.maps, services: c.services, templates: c.templates, requester: reqMatch, technician: techMatch, alreadyMoved: moved.has(n) })
   if (!plan.ready || !plan.newNo || !plan.service || !plan.status || !plan.createdAt || !plan.priority) {
@@ -229,8 +229,12 @@ async function createEverything(a: {
     if (plan.zoho.requester && nm.toLowerCase() === plan.zoho.requester.toLowerCase()) id = requesterId
     else if (plan.zoho.technician && nm.toLowerCase() === plan.zoho.technician.toLowerCase() && a.techPerson) id = a.techPerson.id
     else {
-      const hit = matchPerson(c.getDir(), new Map(), { email: emailHint ?? null, name: nm })
-      id = hit.person?.id ?? (await ensureInactiveRequester(c, { requesterName: nm, requesterEmail: emailHint ?? null }, notes))
+      // a name Zoho gives without an e-mail (an approval sent "By: Ajay Kumar") is matched with what the ticket itself tells about that person, and with the hand matches of the Mapping page; two CK Desk people with one name are never guessed
+      const sameName = (v: string | null | undefined) => !!v && v.trim().toLowerCase() === nm.toLowerCase()
+      const mail = emailHint || (sameName(plan.zoho.technician) ? ticket.technicianEmail : sameName(plan.zoho.requester) ? ticket.requesterEmail : null) || null
+      const hands = new Map([...savedPeopleMap(c.saved, 'requester', c.getDir()), ...savedPeopleMap(c.saved, 'technician', c.getDir())])
+      const hit = matchPerson(c.getDir(), hands, { email: mail, name: nm })
+      id = hit.person?.id ?? (await ensureInactiveRequester(c, { requesterName: nm, requesterEmail: mail }, notes))
     }
     personCache.set(k, id)
     return id

@@ -59,7 +59,7 @@ export async function prepareRun(orgId: string, filters: MoveFilters): Promise<R
       const plan = planTicket({
         ticket: t, maps, services, templates,
         requester: matchPerson(dir, reqHand, { email: t.requesterEmail, name: t.requesterName }),
-        technician: matchPerson(dir, techHand, { email: null, name: t.technicianName }),
+        technician: matchPerson(dir, techHand, { email: t.technicianEmail ?? null, name: t.technicianName }),
         alreadyMoved: moved.has(t.displayId),
       })
       if (plan.ready) {

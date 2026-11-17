@@ -62,3 +62,21 @@ describe('the search that limits the Mapping screen', () => {
     expect(some.p).toEqual([[1], 5, 9, 'Open', [3, 4]])
   })
 })
+
+describe('matching a Zoho person when two CK Desk people share a name', () => {
+  const mk = (id: string, name: string, email: string) => ({ id, name, email, role: 'agent', active: true }) as never
+  const a = mk('a', 'Ajay Kumar', 'ajay.kumar@citykart.org'), b = mk('b', 'Ajay Kumar', 'ajay.kumar1@citykart.org')
+  const dir = { people: [a, b], byEmail: new Map([['ajay.kumar@citykart.org', a], ['ajay.kumar1@citykart.org', b]]), byName: new Map([['ajay kumar', [a, b]]]), emailsRead: true } as never
+  it('the e-mail Zoho holds picks the right one', async () => {
+    const { matchPerson } = await import('@/lib/zoho/transfer/data')
+    expect(matchPerson(dir, new Map(), { email: 'ajay.kumar@citykart.org', name: 'Ajay Kumar' })).toMatchObject({ how: 'email', person: { id: 'a' } })
+  })
+  it('the name alone is never guessed between two people', async () => {
+    const { matchPerson } = await import('@/lib/zoho/transfer/data')
+    expect(matchPerson(dir, new Map(), { email: null, name: 'Ajay Kumar' }).how).toBe('none')
+  })
+  it('a hand match from the Mapping page settles it', async () => {
+    const { matchPerson } = await import('@/lib/zoho/transfer/data')
+    expect(matchPerson(dir, new Map([['ajay kumar', a]]), { email: null, name: 'Ajay Kumar' })).toMatchObject({ how: 'saved', person: { id: 'a' } })
+  })
+})

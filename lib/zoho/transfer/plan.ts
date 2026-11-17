@@ -42,6 +42,7 @@ export type ZohoTicketForPlan = {
   requesterName: string | null
   requesterEmail: string | null
   technicianName: string | null
+  technicianEmail?: string | null
   /** every Zoho field that holds a value on this ticket: key (column name, or `udf:<name>`) -> text */
   fields: Record<string, string>
 }

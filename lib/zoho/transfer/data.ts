@@ -272,7 +272,7 @@ export async function loadTicketsForPreview(f: MoveFilters, movedNumbers: number
   const fieldCols = SERVICE_FIELDS.map((x) => `"${x.col}"`).join(', ')
   const rows = await zohoQuery<Record<string, unknown>>(
     `select display_id, template, category, subcategory, item, status, priority, subject, created_at, resolved_at,
-            requester_name, requester_email, technician_name, udf, ${fieldCols}, count(*) over() as total
+            requester_name, requester_email, technician_name, technician_email, udf, ${fieldCols}, count(*) over() as total
        from zoho_ticket ${where.length ? 'where ' + where.join(' and ') : ''}
       order by display_id desc limit ${limit}`,
     p,
@@ -287,7 +287,7 @@ export async function loadTicketsForPreview(f: MoveFilters, movedNumbers: number
       displayId: Number(r.display_id), template: text(r.template) || null, category: text(r.category) || null, subcategory: text(r.subcategory) || null, item: text(r.item) || null,
       status: text(r.status) || null, priority: text(r.priority) || null, subject: text(r.subject) || null,
       createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : null, resolvedAt: r.resolved_at instanceof Date ? r.resolved_at.toISOString() : null,
-      requesterName: text(r.requester_name) || null, requesterEmail: text(r.requester_email) || null, technicianName: text(r.technician_name) || null, fields,
+      requesterName: text(r.requester_name) || null, requesterEmail: text(r.requester_email) || null, technicianName: text(r.technician_name) || null, technicianEmail: text(r.technician_email) || null, fields,
     }
   })
   const total = rows.length ? Number(rows[0].total) : 0
