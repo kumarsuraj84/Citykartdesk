@@ -17,6 +17,7 @@ import { resolveServiceFormSections } from '@/lib/forms/sections'
 import { isSlaPausedStatus } from '@/lib/constants/requests'
 import { generateOneTimePassword } from '@/lib/auth/one-time-password'
 import { ALLOWED_EXTENSIONS, MAX_FILE_SIZE_BYTES } from '@/lib/attachments/validate'
+import { inspectBytes } from '@/lib/attachments/scan'
 import { logger } from '@/lib/observability/logger'
 import type { FormField } from '@/types'
 import {
@@ -366,6 +367,8 @@ export async function copyAttachments(c: { actorId: string }, requestId: string,
       if (!ALLOWED_EXTENSIONS.has(ext)) throw new Error('this kind of file is not allowed in CK Desk')
       const buf = await fs.readFile(full)
       if (buf.length > MAX_FILE_SIZE_BYTES) throw new Error('the file is larger than the CK Desk limit')
+      const check = await inspectBytes(new Uint8Array(buf))
+      if (!check.ok) throw new Error(check.code === 'macro' ? 'the file contains macros, which CK Desk does not accept' : check.error ?? 'the file did not pass the safety check')
       const safe = a.fileName.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_')
       const storagePath = `${requestId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`
       const up = await d.storage.from('request-attachments').upload(storagePath, buf, { contentType: a.contentType || 'application/octet-stream', upsert: false })

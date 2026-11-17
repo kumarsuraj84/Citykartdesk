@@ -340,7 +340,7 @@ export function TaskActivityFeed({
             type="file"
             className="hidden"
             onChange={handleFileChange}
-            accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip,.mp4"
+            accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.xlsb,.txt,.csv,.zip,.mp4"
           />
 
           <button

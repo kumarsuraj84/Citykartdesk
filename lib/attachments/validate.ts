@@ -11,6 +11,10 @@ export const ALLOWED_MIME_TYPES: string[] = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  // Excel binary workbook (.xlsb), allowed by the owner's decision of 2026-11-17 (Zoho tickets carry such files). It is a ZIP package like .xlsx and goes through the same
+  // macro check as every other office file (a workbook with a VBA project is refused). Browsers label it in lower case, so both spellings are listed.
+  'application/vnd.ms-excel.sheet.binary.macroEnabled.12',
+  'application/vnd.ms-excel.sheet.binary.macroenabled.12',
   'application/vnd.ms-powerpoint',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'text/plain',
@@ -57,6 +61,8 @@ const ZIP_BASED_MIME_TYPES = new Set([
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-excel.sheet.binary.macroEnabled.12',
+  'application/vnd.ms-excel.sheet.binary.macroenabled.12',
 ])
 
 const ZIP_SIGNATURES = [
@@ -69,7 +75,7 @@ export const ALLOWED_MIME_SET: ReadonlySet<string> = new Set(ALLOWED_MIME_TYPES)
 /** File-name endings that go with the types above. */
 export const ALLOWED_EXTENSIONS: ReadonlySet<string> = new Set([
   'png', 'jpg', 'jpeg', 'gif', 'webp',
-  'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+  'pdf', 'doc', 'docx', 'xls', 'xlsx', 'xlsb', 'ppt', 'pptx',
   'txt', 'csv', 'zip',
   'mp4', 'webm', 'mp3', 'wav',
 ])

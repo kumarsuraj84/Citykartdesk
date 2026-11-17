@@ -13,7 +13,11 @@ describe('one set of upload rules for every upload path (D-055)', () => {
   it('the set and the list agree, and the usual office, picture, video and audio types are in', () => {
     expect(ALLOWED_MIME_SET.size).toBe(ALLOWED_MIME_TYPES.length)
     for (const t of ['image/png', 'application/pdf', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'video/webm', 'audio/mpeg', 'text/csv']) expect(ALLOWED_MIME_SET.has(t), t).toBe(true)
-    for (const e of ['png', 'pdf', 'docx', 'pptx', 'webm', 'mp3', 'wav', 'csv']) expect(ALLOWED_EXTENSIONS.has(e), e).toBe(true)
+    for (const e of ['png', 'pdf', 'docx', 'pptx', 'webm', 'mp3', 'wav', 'csv', 'xlsb']) expect(ALLOWED_EXTENSIONS.has(e), e).toBe(true)
+    // .xlsb: a ZIP package, so its content must start like a ZIP; a macro-enabled macro-less workbook is fine, one with a VBA project is refused by the macro check (scan.ts)
+    expect(contentMatchesDeclaredType(bytes(0x50, 0x4b, 0x03, 0x04), 'application/vnd.ms-excel.sheet.binary.macroenabled.12')).toBe(true)
+    expect(contentMatchesDeclaredType(bytes(0x4d, 0x5a, 0x90, 0), 'application/vnd.ms-excel.sheet.binary.macroEnabled.12')).toBe(false)
+    expect(ALLOWED_MIME_SET.has('application/vnd.ms-excel.sheet.binary.macroenabled.12')).toBe(true)
     expect(MAX_FILE_SIZE_BYTES).toBe(25 * 1024 * 1024)
   })
   it('the content check knows PNG, PDF, ZIP-based office files and MP4, and lets types without a signature through', () => {
