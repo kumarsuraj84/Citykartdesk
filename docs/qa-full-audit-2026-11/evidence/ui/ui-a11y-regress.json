@@ -1,0 +1,149 @@
+{
+ "ran": "2026-11-16T09:30:50.171Z",
+ "results": [
+  {
+   "page": "/login",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/forgot-password",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/reset-password",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/csat/not-a-real-token",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/approve/not-a-real-token",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/admin/reports",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/dashboards",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/admin/audit",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/admin/stuck-tickets",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/intake/inbox",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/intake/settings",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/admin/approvals",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/admin/master-data",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/admin/task-config",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/dashboards/executive",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/admin/runbooks",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/tasks",
+   "vw": 1366,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/admin/users",
+   "vw": 1920,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/admin/reports",
+   "vw": 1920,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/requests",
+   "vw": 1920,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/zoho/reports",
+   "vw": 360,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/zoho",
+   "vw": 360,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/admin/event-log",
+   "vw": 360,
+   "status": "PASS",
+   "violations": []
+  },
+  {
+   "page": "/tasks",
+   "vw": 360,
+   "status": "PASS",
+   "violations": []
+  }
+ ]
+}

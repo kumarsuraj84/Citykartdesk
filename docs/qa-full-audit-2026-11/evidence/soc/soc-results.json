@@ -1,0 +1,83 @@
+{
+ "ran": "2026-11-16T11:15:29.528Z",
+ "results": [
+  {
+   "id": "SOC01",
+   "status": "PASS",
+   "title": "Log inventory: what is recorded, how much, and how complete each entry is (actor, address, request id, outcome)",
+   "detail": "733841 entries; log-like tables: desktime_app_logs, pms_ticket_log, owner_audit_log, request_activity, intake_audit_log, project_activity, business_rule_events, program_pms_log, conversation_events, desktime_time_logs, system_log_archive, system_log_chain_head, app_event_log, admin_audit_log, sla_escalation_events, system_log, task_activity; quality by category: audit: actor 0.1%, ip 0%, request-id 0.1% | error: actor 5.4%, ip 0%, request-id 6.5% | security: actor 1.9%, ip 0%, request-id 1%"
+  },
+  {
+   "id": "SOC02",
+   "status": "PASS",
+   "title": "No secrets in the logs: scan every entry for passwords, tokens, keys, cookies and long random strings",
+   "detail": "733841 entries scanned, no secret-like text"
+  },
+  {
+   "id": "SOC03",
+   "status": "PASS",
+   "title": "Tamper evidence: the hash chain verifies, and a change made behind the application's back (as the database owner) is DETECTED",
+   "detail": "chain intact (0 broken); after changing one entry behind the application: 1 broken link(s) reported; after rollback 0 again"
+  },
+  {
+   "id": "SOC04",
+   "status": "PASS",
+   "title": "Append-only: an ordinary application login cannot change or delete log entries (even an administrator through the data API)",
+   "detail": "update and delete refused for the administrator and for the service key"
+  },
+  {
+   "id": "SOC05",
+   "status": "PASS",
+   "title": "Who can READ the logs: administrator yes, store requester and vendor no",
+   "detail": "qa11.admin:can read, qa11.store:cannot, qa11.vtech:cannot, qa11.tech:cannot"
+  },
+  {
+   "id": "SOC06",
+   "status": "PASS",
+   "title": "Detection replay: 6 failed sign-ins then a rate limit -> \"auth.login_failed\" entries (and \"auth.login_rate_limited\") exist with address and request id",
+   "detail": "2 failed + 4 rate-limited entries; address present on 0/2; request id present on 2/2 (address missing: TRUSTED_PROXY_HOPS not set on this instance, per-address detection is off by design)"
+  },
+  {
+   "id": "SOC07",
+   "status": "PASS",
+   "title": "Detection replay: a successful sign-in and a sign-out are recorded with the person (actor)",
+   "detail": "auth.login_succeeded(actor yes)"
+  },
+  {
+   "id": "SOC08",
+   "status": "NOTE",
+   "title": "Detection replay: a store user probing admin pages and admin APIs leaves a trace (denied/forbidden entry)",
+   "detail": "no log entry for 5 forbidden-access attempts by a signed-in user (GAP: an insider probing admin screens is not visible in the log; the pages simply redirect)"
+  },
+  {
+   "id": "SOC09",
+   "status": "NOTE",
+   "title": "Changes to people (role, active flag, details) are recorded by a database trigger with before and after values",
+   "detail": "18532 profile-change entries; with before+after values 18532; with a named actor 15 (0%: changes made by the application's service key often carry no person unless the application supplies one). Direct role change through the data API by an administrator is refused."
+  },
+  {
+   "id": "SOC10",
+   "status": "PASS",
+   "title": "Detection replay: an export of the AC master by an administrator is recorded (what was exported, by whom, without the contents)",
+   "detail": "data.exported.master_ac(actor yes)"
+  },
+  {
+   "id": "SOC11",
+   "status": "NOTE",
+   "title": "Detection replay: a webhook with a bad signature and a scheduler call with a wrong secret are logged",
+   "detail": "bad webhook signature, wrong scheduler secret and wrong data-API token left NO log entry (GAP: machine-to-machine probing is invisible to a SOC)"
+  },
+  {
+   "id": "SOC12",
+   "status": "PASS",
+   "title": "Retention and archiving exist and are configured (nothing is kept forever by accident, nothing is deleted without archive)",
+   "detail": "archive function + table present; settings: (no explicit setting: defaults apply)"
+  },
+  {
+   "id": "SOC13",
+   "status": "NOTE",
+   "title": "Alerting path: an operator alert channel exists in code and its configuration state is reported",
+   "detail": "alert route /api/alerts/run exists in code; OPERATOR_ALERT_WEBHOOK_URL is EMPTY in the audit environment (by design: nothing leaves the PC), so alert delivery was NOT RUN; alert tables present: 1"
+  }
+ ]
+}

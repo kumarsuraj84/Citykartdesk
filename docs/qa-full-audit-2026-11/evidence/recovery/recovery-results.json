@@ -1,0 +1,47 @@
+{
+ "ran": "2026-11-16T10:54:18.682Z",
+ "results": [
+  {
+   "id": "FR01",
+   "status": "PASS",
+   "title": "Database stops for ~10 s: people see a plain message (no technical text), the app stays up, and recovers by itself",
+   "detail": "outage handled (signed-in /home: 500 in 2552 ms; signed-in /requests: 500 in 2553 ms; sign-in page: 200 in 3 ms; health: 503); back to normal 7 s after restart, no app restart"
+  },
+  {
+   "id": "FR02",
+   "status": "PASS",
+   "title": "The data gateway (PostgREST) stops: same expectations",
+   "detail": "outage handled (signed-in /home: 500 in 22568 ms; signed-in /requests: 500 in 2548 ms; sign-in page: 200 in 2 ms; health: 503); back to normal 5 s after restart, no app restart"
+  },
+  {
+   "id": "FR03",
+   "status": "PASS",
+   "title": "The sign-in service (GoTrue) stops: people already signed in keep working; sign-in says so plainly; recovers",
+   "detail": "outage handled (signed-in /home: 200 in 57 ms; signed-in /requests: 200 in 51 ms; sign-in page: 200 in 2 ms; health: 200; already-signed-in /home still 200); back to normal 0 s after restart, no app restart"
+  },
+  {
+   "id": "FR04",
+   "status": "PASS",
+   "title": "File storage stops: opening an attachment gives a clear \"temporarily unavailable\" (503), not a wrong \"not found\"; recovers",
+   "detail": "503 after 20 s (the 20 s wait to the storage service is by design); back after 2 s"
+  },
+  {
+   "id": "FR05",
+   "status": "NOTE",
+   "title": "A scheduled rule whose \"claim\" was written but whose actions never ran (simulated crash) is NOT retried: reports the at-most-once behaviour and how it would be noticed",
+   "detail": "normal ticket escalated; crashed-claim ticket was NOT escalated and nothing reports it (silent loss window of the claim-first design, at-most-once)"
+  },
+  {
+   "id": "FR06",
+   "status": "PASS",
+   "title": "Scheduler run is safe to repeat after an interruption: running it again right away changes nothing for already-handled tickets",
+   "detail": "events stay 2; fired 0/0"
+  },
+  {
+   "id": "FR07",
+   "status": "PASS",
+   "title": "Scheduler is refused without its secret even while the database is busy; and an interrupted request (client gives up after 50 ms) does not leave the app unhealthy",
+   "detail": "401 without secret; 6 abandoned scheduler calls, app healthy and same process"
+  }
+ ]
+}

@@ -1,0 +1,88 @@
+{
+ "label": "ds500k",
+ "users": 1,
+ "think": 2000,
+ "durationSec": 60,
+ "requests": 35,
+ "errors": 0,
+ "errorRate": 0,
+ "rps": 0.6,
+ "overall": {
+  "p50": 96,
+  "p95": 1766,
+  "p99": 1880,
+  "max": 1880
+ },
+ "serverRssMB": {
+  "min": 226,
+  "max": 552,
+  "first": 526,
+  "last": 226
+ },
+ "serverCpuPct": 15,
+ "dbCpuSamples": [
+  "112.99%",
+  "517.98%",
+  "378.64%",
+  "96.09%",
+  "468.22%",
+  "439.48%",
+  "219.25%",
+  "476.46%",
+  "436.22%",
+  "66.53%",
+  "0.03%",
+  "0.09%",
+  "0.04%"
+ ],
+ "requestsInDb": "503284",
+ "errSamples": [],
+ "rows": [
+  {
+   "page": "tech /approvals",
+   "n": 4,
+   "p50": 44,
+   "p95": 1880,
+   "p99": 1880,
+   "max": 1880,
+   "errors": 0
+  },
+  {
+   "page": "tech /requests/queue",
+   "n": 14,
+   "p50": 103,
+   "p95": 1766,
+   "p99": 1766,
+   "max": 1766,
+   "errors": 0
+  },
+  {
+   "page": "tech /requests",
+   "n": 7,
+   "p50": 416,
+   "p95": 464,
+   "p99": 464,
+   "max": 464,
+   "errors": 0
+  },
+  {
+   "page": "tech /requests/:id",
+   "n": 5,
+   "p50": 48,
+   "p95": 57,
+   "p99": 57,
+   "max": 57,
+   "errors": 0
+  },
+  {
+   "page": "tech /home",
+   "n": 5,
+   "p50": 52,
+   "p95": 54,
+   "p99": 54,
+   "max": 54,
+   "errors": 0
+  }
+ ],
+ "ran": "2026-11-16T10:11:08.643Z"
+}

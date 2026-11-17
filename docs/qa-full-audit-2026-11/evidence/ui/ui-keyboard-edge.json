@@ -1,0 +1,72 @@
+{
+ "ran": "2026-11-16T09:39:30.289Z",
+ "browser": "edge",
+ "results": [
+  {
+   "id": "K01",
+   "status": "PASS",
+   "title": "Login page: Tab reaches e-mail, password, sign-in in order and every stop shows a visible focus indicator",
+   "detail": "order ok: input:you@citykart.org > input:•••••••• > button:Sign in"
+  },
+  {
+   "id": "K02",
+   "status": "PASS",
+   "title": "Login by keyboard only (type, Tab, Enter) signs the person in",
+   "detail": "landed on /home"
+  },
+  {
+   "id": "K03",
+   "status": "PASS",
+   "title": "Wrong password: an error message appears, is exposed to screen readers (role=alert / aria-live) and does not reveal which part was wrong",
+   "detail": "announced: \"Invalid login credentials\""
+  },
+  {
+   "id": "K04",
+   "status": "PASS",
+   "title": "Landmarks and page structure on the signed-in home: html lang, one main landmark, exactly one h1, descriptive title, skip-to-content reachable",
+   "detail": "{\"lang\":\"en\",\"mains\":1,\"h1\":1,\"title\":\"Citykart Desk\",\"nav\":2,\"skip\":true}"
+  },
+  {
+   "id": "K05",
+   "status": "PASS",
+   "title": "Dialog on /admin/users (admin): opens, focus moves inside, Tab stays inside, Escape closes, focus returns to the opener",
+   "detail": "\"Invite User\" ok"
+  },
+  {
+   "id": "K06",
+   "status": "NOTE",
+   "title": "Dialog on /vendor/tickets/<id> (vendor tech): opens, focus moves inside, Tab stays inside, Escape closes, focus returns to the opener",
+   "detail": "no dialog opener matched on this page for this persona (nothing to test here)"
+  },
+  {
+   "id": "K07",
+   "status": "NOTE",
+   "title": "Dialog on /requests/<id> (technician): opens, focus moves inside, Tab stays inside, Escape closes, focus returns to the opener",
+   "detail": "no dialog opener matched on this page for this persona (nothing to test here)"
+  },
+  {
+   "id": "K08",
+   "status": "NOTE",
+   "title": "Dark mode (prefers-color-scheme: dark): colour-contrast violations on home, requests and admin users",
+   "detail": "/home: 0 contrast issues, page is light (app has no OS-dark follow) | /requests: 0 contrast issues, page is light (app has no OS-dark follow) | /admin/users: 0 contrast issues, page is light (app has no OS-dark follow)"
+  },
+  {
+   "id": "K09",
+   "status": "PASS",
+   "title": "320px wide (400% zoom equivalent): no sideways scrolling on home, requests, ticket and login",
+   "detail": "no overflow"
+  },
+  {
+   "id": "K10",
+   "status": "PASS",
+   "title": "Text spacing and 200% text size: home page remains usable (no clipped or overlapping text blocks)",
+   "detail": "no page-level overflow; 1 controls clip their text with ellipsis"
+  },
+  {
+   "id": "K11",
+   "status": "NOTE",
+   "title": "Ask CK Desk assistant panel: opens from its launcher; reports how it behaves for the keyboard (non-modal dock)",
+   "detail": "{\"modal\":false,\"name\":\"Ask CK Desk\"} — Escape does not close it (non-modal chat dock; close with its own button)"
+  }
+ ]
+}

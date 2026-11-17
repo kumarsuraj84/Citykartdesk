@@ -1,0 +1,10 @@
+stress100k users=100 req=1300 err=0 (0%) rps=21.7 | P50 4041  P95 8896  P99 20076  max 36958 ms | server RSS 844->1119 MB, CPU ~123% of one core
+   slowest: admin /dashboards/executive        n=   5 P50 23958 P95 36958 P99 36958 err 0
+   slowest: techmgr /dashboards/executive      n=  29 P50 19393 P95 23345 P99 23358 err 0
+   slowest: admin /admin/reports               n=   6 P50 11936 P95 20036 P99 20036 err 0
+   slowest: techmgr /admin/reports             n=  25 P50  6040 P95  9913 P99 10173 err 0
+stress100k users=200 req=1381 err=0 (0%) rps=23 | P50 9196  P95 20679  P99 34060  max 42013 ms | server RSS 1037->1326 MB, CPU ~145% of one core
+   slowest: admin /dashboards/executive        n=  11 P50 34060 P95 42013 P99 42013 err 0
+   slowest: admin /admin/reports               n=  16 P50 30498 P95 37764 P99 37764 err 0
+   slowest: techmgr /dashboards/executive      n=  28 P50 20090 P95 37126 P99 37293 err 0
+   slowest: store /requests/:id                n= 220 P50  9991 P95 20553 P99 21255 err 0

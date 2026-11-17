@@ -1,0 +1,203 @@
+edge Edg/157.0.4341.60  ticket=fa802cbb-1303-4a64-a104-0294496e8cce vendor=f0d26e79-a719-4d24-b2e9-f89ba9b070e3 svc=fin-invoice
+PASS store requester /home @360 
+PASS store requester /home @1024 
+PASS store requester /home @1366 
+PASS store requester /services @360 
+PASS store requester /services @1024 
+PASS store requester /services @1366 
+PASS store requester /services/fin-invoice @360 AXE-SERIOUS
+PASS store requester /services/fin-invoice @1024 AXE-SERIOUS
+PASS store requester /services/fin-invoice @1366 AXE-SERIOUS
+PASS store requester /requests @360 
+PASS store requester /requests @1024 
+PASS store requester /requests @1366 
+PASS store requester /requests/fa802cbb-1303-4a64-a104-0294496e8cce @360 AXE-SERIOUS
+PASS store requester /requests/fa802cbb-1303-4a64-a104-0294496e8cce @1024 AXE-SERIOUS
+PASS store requester /requests/fa802cbb-1303-4a64-a104-0294496e8cce @1366 AXE-SERIOUS
+PASS store requester /notifications @360 AXE-SERIOUS
+PASS store requester /notifications @1024 AXE-SERIOUS
+PASS store requester /notifications @1366 AXE-SERIOUS
+PASS store requester /profile @360 
+PASS store requester /profile @1024 
+PASS store requester /profile @1366 
+PASS head-office requester /home @360 
+PASS head-office requester /home @1024 
+PASS head-office requester /home @1366 
+PASS head-office requester /services @360 
+PASS head-office requester /services @1024 
+PASS head-office requester /services @1366 
+PASS head-office requester /requests @360 
+PASS head-office requester /requests @1024 
+PASS head-office requester /requests @1366 
+PASS head-office requester /notifications @360 AXE-SERIOUS
+PASS head-office requester /notifications @1024 AXE-SERIOUS
+PASS head-office requester /notifications @1366 AXE-SERIOUS
+PASS technician /home @360 AXE-SERIOUS
+PASS technician /home @1024 AXE-SERIOUS
+PASS technician /home @1366 AXE-SERIOUS
+PASS technician /requests @360 
+PASS technician /requests @1024 
+PASS technician /requests @1366 
+PASS technician /requests/queue @360 
+PASS technician /requests/queue @1024 
+PASS technician /requests/queue @1366 
+PASS technician /requests/f0d26e79-a719-4d24-b2e9-f89ba9b070e3 @360 AXE-SERIOUS
+PASS technician /requests/f0d26e79-a719-4d24-b2e9-f89ba9b070e3 @1024 AXE-SERIOUS
+PASS technician /requests/f0d26e79-a719-4d24-b2e9-f89ba9b070e3 @1366 AXE-SERIOUS
+PASS technician /tasks @360 AXE-SERIOUS redirected to /home
+PASS technician /tasks @1024 AXE-SERIOUS redirected to /home
+PASS technician /tasks @1366 AXE-SERIOUS redirected to /home
+PASS technician /approvals @360 
+PASS technician /approvals @1024 
+PASS technician /approvals @1366 
+PASS technician /notifications @360 
+PASS technician /notifications @1024 AXE-SERIOUS
+PASS technician /notifications @1366 AXE-SERIOUS
+PASS technician manager /home @360 
+PASS technician manager /home @1024 
+PASS technician manager /home @1366 
+PASS technician manager /requests/queue @360 
+PASS technician manager /requests/queue @1024 
+PASS technician manager /requests/queue @1366 
+PASS technician manager /dashboards @360 AXE-SERIOUS redirected to /admin/reports
+PASS technician manager /dashboards @1024 AXE-SERIOUS redirected to /admin/reports
+PASS technician manager /dashboards @1366 AXE-SERIOUS redirected to /admin/reports
+PASS technician manager /dashboards/executive @360 AXE-SERIOUS
+PASS technician manager /dashboards/executive @1024 AXE-SERIOUS
+PASS technician manager /dashboards/executive @1366 AXE-SERIOUS
+PASS technician manager /reports/analytics @360 
+PASS technician manager /reports/analytics @1024 
+PASS technician manager /reports/analytics @1366 
+PASS technician manager /reports/pivot @360 JSERR
+PASS technician manager /reports/pivot @1024 AXE-SERIOUS JSERR
+PASS technician manager /reports/pivot @1366 AXE-SERIOUS JSERR
+PASS technician manager /zoho @360 AXE-SERIOUS JSERR
+PASS technician manager /zoho @1024 
+PASS technician manager /zoho @1366 
+PASS technician manager /projects @360 redirected to /home
+PASS technician manager /projects @1024 redirected to /home
+PASS technician manager /projects @1366 redirected to /home
+PASS technician manager /purchase-orders @360 
+PASS technician manager /purchase-orders @1024 
+PASS technician manager /purchase-orders @1366 
+PASS approver /home @360 
+PASS approver /home @1024 
+PASS approver /home @1366 
+PASS approver /approvals @360 
+PASS approver /approvals @1024 
+PASS approver /approvals @1366 
+PASS approver /notifications @360 AXE-SERIOUS
+PASS approver /notifications @1024 AXE-SERIOUS
+PASS approver /notifications @1366 AXE-SERIOUS
+PASS administrator /home @360 
+PASS administrator /home @1024 
+PASS administrator /home @1366 
+PASS administrator /admin/teams @360 AXE-SERIOUS
+PASS administrator /admin/teams @1024 AXE-SERIOUS
+PASS administrator /admin/teams @1366 AXE-SERIOUS
+PASS administrator /admin/services @360 AXE-SERIOUS
+PASS administrator /admin/services @1024 AXE-SERIOUS
+PASS administrator /admin/services @1366 AXE-SERIOUS
+PASS administrator /admin/sla-policies @360 
+PASS administrator /admin/sla-policies @1024 
+PASS administrator /admin/sla-policies @1366 
+PASS administrator /admin/approvals @360 AXE-SERIOUS
+PASS administrator /admin/approvals @1024 AXE-SERIOUS
+PASS administrator /admin/approvals @1366 AXE-SERIOUS
+PASS administrator /admin/programs @360 
+PASS administrator /admin/programs @1024 
+PASS administrator /admin/programs @1366 
+PASS administrator /admin/org @360 
+PASS administrator /admin/org @1024 AXE-SERIOUS
+PASS administrator /admin/org @1366 AXE-SERIOUS
+PASS administrator /admin/master-data @360 AXE-SERIOUS
+PASS administrator /admin/master-data @1024 AXE-SERIOUS
+PASS administrator /admin/master-data @1366 AXE-SERIOUS
+PASS administrator /admin/field-library @360 
+PASS administrator /admin/field-library @1024 
+PASS administrator /admin/field-library @1366 
+PASS administrator /admin/task-config @360 AXE-SERIOUS
+PASS administrator /admin/task-config @1024 AXE-SERIOUS
+PASS administrator /admin/task-config @1366 AXE-SERIOUS
+PASS administrator /admin/reports @360 AXE-SERIOUS
+PASS administrator /admin/reports @1024 
+PASS administrator /admin/reports @1366 
+PASS administrator /admin/logs @360 
+PASS administrator /admin/logs @1024 
+PASS administrator /admin/logs @1366 AXE-SERIOUS
+PASS administrator /admin/event-log @360 redirected to /admin/logs
+PASS administrator /admin/event-log @1024 AXE-SERIOUS redirected to /admin/logs
+PASS administrator /admin/event-log @1366 AXE-SERIOUS redirected to /admin/logs
+PASS administrator /admin/runbooks @360 AXE-SERIOUS
+PASS administrator /admin/runbooks @1024 
+PASS administrator /admin/runbooks @1366 
+PASS administrator /admin/desktime @360 
+PASS administrator /admin/desktime @1024 
+PASS administrator /admin/desktime @1366 
+PASS administrator /intake/inbox @360 AXE-SERIOUS
+PASS administrator /intake/inbox @1024 AXE-SERIOUS
+PASS administrator /intake/inbox @1366 AXE-SERIOUS
+PASS administrator /intake/channels @360 AXE-SERIOUS
+PASS administrator /intake/channels @1024 AXE-SERIOUS
+PASS administrator /intake/channels @1366 AXE-SERIOUS
+PASS administrator /intake/settings @360 AXE-SERIOUS
+PASS administrator /intake/settings @1024 AXE-SERIOUS
+PASS administrator /intake/settings @1366 AXE-SERIOUS
+PASS administrator /dashboards/executive @360 AXE-SERIOUS
+PASS administrator /dashboards/executive @1024 AXE-SERIOUS
+PASS administrator /dashboards/executive @1366 AXE-SERIOUS
+PASS administrator /reports/pivot @360 JSERR
+PASS administrator /reports/pivot @1024 AXE-SERIOUS JSERR
+PASS administrator /reports/pivot @1366 JSERR
+PASS administrator /zoho/reports @360 AXE-SERIOUS
+PASS administrator /zoho/reports @1024 AXE-SERIOUS
+PASS administrator /zoho/reports @1366 AXE-SERIOUS
+PASS administrator /projects @360 
+PASS administrator /projects @1024 
+PASS administrator /projects @1366 
+PASS administrator /ckoneai @360 JSERR
+PASS administrator /ckoneai @1024 JSERR
+PASS administrator /ckoneai @1366 JSERR
+PASS administrator /requests/queue @360 JSERR
+PASS administrator /requests/queue @1024 
+PASS administrator /requests/queue @1366 
+PASS administrator /tasks @360 AXE-SERIOUS
+PASS administrator /tasks @1024 AXE-SERIOUS
+PASS administrator /tasks @1366 AXE-SERIOUS
+PASS administrator /notifications @360 
+PASS administrator /notifications @1024 
+PASS administrator /notifications @1366 
+PASS administrator /services @360 
+PASS administrator /services @1024 
+PASS administrator /services @1366 
+PASS vendor technician /vendor @360 
+PASS vendor technician /vendor @1024 
+PASS vendor technician /vendor @1366 
+PASS vendor technician /vendor/pos @360 
+PASS vendor technician /vendor/pos @1024 
+PASS vendor technician /vendor/pos @1366 
+PASS vendor technician /vendor/tickets/f0d26e79-a719-4d24-b2e9-f89ba9b070e3 @360 
+PASS vendor technician /vendor/tickets/f0d26e79-a719-4d24-b2e9-f89ba9b070e3 @1024 
+PASS vendor technician /vendor/tickets/f0d26e79-a719-4d24-b2e9-f89ba9b070e3 @1366 
+PASS vendor manager /vendor @360 
+PASS vendor manager /vendor @1024 
+PASS vendor manager /vendor @1366 
+PASS vendor manager /vendor/pos @360 
+PASS vendor manager /vendor/pos @1024 
+PASS vendor manager /vendor/pos @1366 
+PASS not signed in /login @360 
+PASS not signed in /login @1024 
+PASS not signed in /login @1366 
+PASS not signed in /forgot-password @360 
+PASS not signed in /forgot-password @1024 
+PASS not signed in /forgot-password @1366 
+PASS not signed in /reset-password @360 
+PASS not signed in /reset-password @1024 
+PASS not signed in /reset-password @1366 
+PASS not signed in /csat/not-a-real-token @360 
+PASS not signed in /csat/not-a-real-token @1024 
+PASS not signed in /csat/not-a-real-token @1366 
+PASS not signed in /approve/not-a-real-token @360 
+PASS not signed in /approve/not-a-real-token @1024 
+PASS not signed in /approve/not-a-real-token @1366 
+done 201 checks

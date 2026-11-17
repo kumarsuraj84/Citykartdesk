@@ -1,0 +1,9 @@
+{
+ "pid": 40980,
+ "argv": [
+  "D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\audit-2026-10\\guard\\selftest-live.cjs"
+ ],
+ "loopbackConnects": {
+  "127.0.0.1:55421": 1
+ }
+}

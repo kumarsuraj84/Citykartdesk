@@ -1,0 +1,357 @@
+{
+ "ran": "2026-11-17T06:07:34.392Z",
+ "results": [
+  {
+   "name": "admin /zoho @360",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/mapping @360",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/mapping?tab=statuses @360",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/mapping?tab=requesters @360",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/mapping?tab=technicians @360",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/mapping?tab=templates&template=AC%20Issues%20Log%20System%20Only%20-%20Admin%20Team @360",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/move @360",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/move?go=1&numbers=700001-700012&moved=not @360",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/tickets?no=700001 @360",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/tickets?q=Demo%20Admin-AC @360",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho @768",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/mapping @768",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/mapping?tab=statuses @768",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/mapping?tab=requesters @768",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/mapping?tab=technicians @768",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/mapping?tab=templates&template=AC%20Issues%20Log%20System%20Only%20-%20Admin%20Team @768",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/move @768",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/move?go=1&numbers=700001-700012&moved=not @768",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/tickets?no=700001 @768",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/tickets?q=Demo%20Admin-AC @768",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho @1366",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/mapping @1366",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/mapping?tab=statuses @1366",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/mapping?tab=requesters @1366",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/mapping?tab=technicians @1366",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/mapping?tab=templates&template=AC%20Issues%20Log%20System%20Only%20-%20Admin%20Team @1366",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/move @1366",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/move?go=1&numbers=700001-700012&moved=not @1366",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/tickets?no=700001 @1366",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin /zoho/tickets?q=Demo%20Admin-AC @1366",
+   "status": "PASS",
+   "axe": [],
+   "overflow": 0,
+   "consoleErrors": [],
+   "note": ""
+  },
+  {
+   "name": "admin run panel: after \"Check what would move\"",
+   "status": "PASS",
+   "axe": []
+  },
+  {
+   "name": "run confirm dialog moves focus inside",
+   "status": "PASS",
+   "note": ""
+  },
+  {
+   "name": "run confirm dialog axe",
+   "status": "PASS",
+   "axe": []
+  },
+  {
+   "name": "Escape closes the run confirm dialog",
+   "status": "PASS"
+  },
+  {
+   "name": "move confirm dialog moves focus inside",
+   "status": "PASS",
+   "note": ""
+  },
+  {
+   "name": "Escape closes the move confirm dialog",
+   "status": "PASS"
+  },
+  {
+   "name": "switch confirm dialog moves focus inside",
+   "status": "PASS",
+   "note": ""
+  },
+  {
+   "name": "Escape closes the switch confirm dialog",
+   "status": "PASS"
+  },
+  {
+   "name": "mapping page: every select / input / button has a name",
+   "status": "PASS",
+   "note": ""
+  },
+  {
+   "name": "manager sees the mapping read-only (no Save, selects disabled, a note says so)",
+   "status": "PASS",
+   "note": "{\"save\":false,\"disabled\":true,\"note\":true}"
+  },
+  {
+   "name": "manager can preview but has no move / run / switch buttons",
+   "status": "PASS",
+   "note": "{\"tick\":0,\"moveBtn\":false}"
+  },
+  {
+   "name": "qa11.store cannot open /zoho",
+   "status": "PASS",
+   "note": "ended on /home"
+  },
+  {
+   "name": "qa11.store cannot open /zoho/mapping",
+   "status": "PASS",
+   "note": "ended on /home"
+  },
+  {
+   "name": "qa11.store cannot open /zoho/move",
+   "status": "PASS",
+   "note": "ended on /home"
+  },
+  {
+   "name": "qa11.store cannot open /zoho/tickets",
+   "status": "PASS",
+   "note": "ended on /home"
+  },
+  {
+   "name": "qa11.tech cannot open /zoho",
+   "status": "PASS",
+   "note": "ended on /home"
+  },
+  {
+   "name": "qa11.tech cannot open /zoho/mapping",
+   "status": "PASS",
+   "note": "ended on /home"
+  },
+  {
+   "name": "qa11.tech cannot open /zoho/move",
+   "status": "PASS",
+   "note": "ended on /home"
+  },
+  {
+   "name": "qa11.tech cannot open /zoho/tickets",
+   "status": "PASS",
+   "note": "ended on /home"
+  },
+  {
+   "name": "qa11.vtech cannot open /zoho",
+   "status": "PASS",
+   "note": "ended on /vendor"
+  },
+  {
+   "name": "qa11.vtech cannot open /zoho/mapping",
+   "status": "PASS",
+   "note": "ended on /vendor"
+  },
+  {
+   "name": "qa11.vtech cannot open /zoho/move",
+   "status": "PASS",
+   "note": "ended on /vendor"
+  },
+  {
+   "name": "qa11.vtech cannot open /zoho/tickets",
+   "status": "PASS",
+   "note": "ended on /vendor"
+  }
+ ]
+}

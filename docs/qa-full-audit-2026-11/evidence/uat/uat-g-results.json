@@ -1,0 +1,78 @@
+{
+ "ran": "2026-11-16T07:49:35.978Z",
+ "tag": "qa11wa361990",
+ "results": [
+  {
+   "id": "G00",
+   "status": "PASS",
+   "title": "Set-up: synthetic WhatsApp channel + one registered requester (WhatsApp on) and one stranger",
+   "detail": "channel 61a84193, phone id 1555361990"
+  },
+  {
+   "id": "G01",
+   "status": "PASS",
+   "title": "Handshake: right verify token echoes the challenge; wrong token, wrong mode and a script-like challenge are all refused (403)",
+   "detail": "echo 12345 as text/plain; 3 refusals 403"
+  },
+  {
+   "id": "G02",
+   "status": "PASS",
+   "title": "Unsigned, wrongly signed and tampered messages are rejected and change nothing",
+   "detail": "statuses 401/401/401/401; no rows created"
+  },
+  {
+   "id": "G03",
+   "status": "PASS",
+   "title": "Oversized body (>1 MB) is refused with 413 before it is read",
+   "detail": "413"
+  },
+  {
+   "id": "G04",
+   "status": "PASS",
+   "title": "Malformed JSON with a VALID signature gets 200 (no retry storm) and creates nothing",
+   "detail": "200, nothing created"
+  },
+  {
+   "id": "G05",
+   "status": "PASS",
+   "title": "Unknown destination phone-number id (not our channel) is ignored safely; creates nothing",
+   "detail": "status 200, nothing created"
+  },
+  {
+   "id": "G06",
+   "status": "PASS",
+   "title": "Stranger (number not registered to any user) writing \"Hi\": no ticket and no conversation is created for them",
+   "detail": "status 200; no ticket, no conversation"
+  },
+  {
+   "id": "G07",
+   "status": "PASS",
+   "title": "Registered requester says \"Hi\": a conversation starts for THAT person; Meta being unreachable does not crash the webhook",
+   "detail": "200; conversation state \"awaiting_service\" for the right person"
+  },
+  {
+   "id": "G08",
+   "status": "PASS",
+   "title": "Replaying the SAME message id is idempotent: no second conversation and no duplicate processing",
+   "detail": "two replays changed nothing"
+  },
+  {
+   "id": "G09",
+   "status": "PASS",
+   "title": "A one-person conversation is never shared: the stranger cannot read or change the requester's conversation",
+   "detail": "state unchanged (\"awaiting_service\")"
+  },
+  {
+   "id": "G10",
+   "status": "PASS",
+   "title": "No secret leaks: webhook responses never contain the app secret, token or verify token",
+   "detail": "no secrets in the response body"
+  },
+  {
+   "id": "G11",
+   "status": "PASS",
+   "title": "Meta replies were attempted and refused by the egress guard (nothing left the machine)",
+   "detail": "18 refused attempt(s) to graph.facebook.com in this run"
+  }
+ ]
+}

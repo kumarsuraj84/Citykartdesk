@@ -1,0 +1,5 @@
+soak100k users=25 req=7117 err=0 (0%) rps=7.9 | P50 400  P95 3273  P99 5046  max 10219 ms | server RSS 678->906 MB, CPU ~87% of one core
+   slowest: admin /dashboards/executive        n= 183 P50  2891 P95  7149 P99  9079 err 0
+   slowest: techmgr /dashboards/executive      n= 239 P50  2104 P95  5177 P99  6951 err 0
+   slowest: admin /admin/reports               n= 263 P50  2778 P95  5019 P99  5266 err 0
+   slowest: tech /requests                     n= 290 P50  1021 P95  3204 P99  4983 err 0

@@ -1,0 +1,22 @@
+FAIL /login @1366 landmark-one-mainx1
+FAIL /forgot-password @1366 landmark-one-mainx1
+FAIL /reset-password @1366 landmark-one-mainx1
+FAIL /csat/not-a-real-token @1366 landmark-one-mainx1
+FAIL /approve/not-a-real-token @1366 landmark-one-mainx1
+FAIL /admin/reports @1366 button-namex1 empty-headingx1 labelx2
+FAIL /dashboards @1366 button-namex1 empty-headingx1 labelx2
+PASS /admin/logs @1366 
+FAIL /admin/stuck-tickets @1366 select-namex1
+FAIL /intake/inbox @1366 select-namex1
+FAIL /intake/settings @1366 labelx1
+FAIL /admin/approvals @1366 button-namex802
+FAIL /admin/master-data @1366 button-namex8
+FAIL /admin/task-config @1366 button-namex75 label-title-onlyx5
+FAIL /dashboards/executive @1366 nested-interactivex2
+FAIL /admin/runbooks @1366 landmark-no-duplicate-mainx1 page-has-heading-onex1
+FAIL /tasks @1366 page-has-heading-onex1
+FAIL /zoho/reports @360 scrollable-region-focusablex1
+FAIL /zoho @360 scrollable-region-focusablex1
+FAIL /admin/event-log @360 scrollable-region-focusablex1
+FAIL /tasks @360 scrollable-region-focusablex1
+1/21 pages clean

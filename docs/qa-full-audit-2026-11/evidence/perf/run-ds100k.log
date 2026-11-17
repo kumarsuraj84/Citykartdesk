@@ -1,0 +1,25 @@
+ds100k users=1 req=24 err=0 (0%) rps=0.4 | P50 66  P95 88  P99 1429  max 1429 ms | server RSS 733->734 MB, CPU ~2% of one core
+   slowest: store /requests                    n=  10 P50    74 P95  1429 P99  1429 err 0
+   slowest: store /home                        n=   7 P50    63 P95    77 P99    77 err 0
+   slowest: store /requests/:id                n=   5 P50    64 P95    73 P99    73 err 0
+   slowest: store /notifications               n=   1 P50    66 P95    66 P99    66 err 0
+ds100k users=10 req=271 err=0 (0%) rps=4.5 | P50 58  P95 399  P99 1633  max 1789 ms | server RSS 741->738 MB, CPU ~13% of one core
+   slowest: tech /requests                     n=  17 P50   399 P95  1789 P99  1789 err 0
+   slowest: store /notifications               n=   8 P50    58 P95  1484 P99  1484 err 0
+   slowest: store /requests                    n=  55 P50    64 P95   196 P99  1449 err 0
+   slowest: tech /requests/queue               n=  29 P50    80 P95   195 P99   195 err 0
+ds100k users=25 req=620 err=0 (0%) rps=10.3 | P50 72  P95 1020  P99 1965  max 4635 ms | server RSS 749->846 MB, CPU ~35% of one core
+   slowest: techmgr /dashboards/executive      n=   5 P50  2567 P95  4635 P99  4635 err 0
+   slowest: tech /requests                     n=  22 P50   417 P95  1309 P99  1448 err 0
+   slowest: tech /requests/queue               n=  56 P50   130 P95  1032 P99  1851 err 0
+   slowest: tech /home                         n=  41 P50    46 P95  1027 P99  1542 err 0
+ds100k users=50 req=696 err=0 (0%) rps=11.6 | P50 2159  P95 4983  P99 10072  max 11109 ms | server RSS 850->840 MB, CPU ~97% of one core
+   slowest: techmgr /dashboards/executive      n=  27 P50  6393 P95 10623 P99 11109 err 0
+   slowest: admin /dashboards/executive        n=   7 P50  6812 P95 10549 P99 10549 err 0
+   slowest: admin /admin/reports               n=   7 P50  5349 P95  5733 P99  5733 err 0
+   slowest: techmgr /home                      n=  13 P50  2771 P95  5713 P99  5713 err 0
+ds100k users=100 req=981 err=0 (0%) rps=16.4 | P50 4588  P95 8883  P99 15012  max 24498 ms | server RSS 879->1016 MB, CPU ~114% of one core
+   slowest: admin /dashboards/executive        n=   4 P50 20211 P95 24498 P99 24498 err 0
+   slowest: techmgr /dashboards/executive      n=  37 P50 10678 P95 16644 P99 17294 err 0
+   slowest: techmgr /home                      n=  27 P50  4609 P95  9673 P99  9912 err 0
+   slowest: techmgr /admin/reports             n=  16 P50  4962 P95  9362 P99  9362 err 0

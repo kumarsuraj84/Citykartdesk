@@ -1,0 +1,10 @@
+{
+ "pid": 46660,
+ "argv": [
+  "D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\.next-audit-prod\\build\\chunks\\pool_entry-[turbopack-node]_transforms_postcss_ts_0tp-k2v._.js",
+  "52511"
+ ],
+ "loopbackConnects": {
+  "127.0.0.1:52511": 1
+ }
+}

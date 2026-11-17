@@ -1,0 +1,10 @@
+{
+ "pid": 70480,
+ "argv": [
+  "D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\scripts\\log-shipper.mjs",
+  "--once"
+ ],
+ "loopbackConnects": {
+  "127.0.0.1:54854": 1
+ }
+}

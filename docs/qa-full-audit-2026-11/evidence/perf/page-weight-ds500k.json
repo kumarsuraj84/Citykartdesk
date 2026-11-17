@@ -1,0 +1,75 @@
+{
+ "tickets": "503284",
+ "out": [
+  {
+   "who": "qa11.techmgr",
+   "page": "/dashboards/executive",
+   "firstMs": 1010,
+   "bestMs": 939,
+   "KB": 18612
+  },
+  {
+   "who": "qa11.techmgr",
+   "page": "/admin/reports",
+   "firstMs": 2869,
+   "bestMs": 2541,
+   "KB": 246
+  },
+  {
+   "who": "qa11.techmgr",
+   "page": "/home",
+   "firstMs": 2279,
+   "bestMs": 2279,
+   "KB": 145
+  },
+  {
+   "who": "qa11.techmgr",
+   "page": "/requests/queue",
+   "firstMs": 38,
+   "bestMs": 38,
+   "KB": 124
+  },
+  {
+   "who": "qa11.techmgr",
+   "page": "/requests",
+   "firstMs": 33,
+   "bestMs": 30,
+   "KB": 121
+  },
+  {
+   "who": "qa11.techmgr",
+   "page": "/reports/pivot",
+   "firstMs": 31,
+   "bestMs": 30,
+   "KB": 96
+  },
+  {
+   "who": "qa11.admin",
+   "page": "/admin/users",
+   "firstMs": 134,
+   "bestMs": 125,
+   "KB": 2432
+  },
+  {
+   "who": "qa11.admin",
+   "page": "/admin/reports",
+   "firstMs": 15770,
+   "bestMs": 13036,
+   "KB": 290
+  },
+  {
+   "who": "qa11.store",
+   "page": "/home",
+   "firstMs": 78,
+   "bestMs": 49,
+   "KB": 167
+  },
+  {
+   "who": "qa11.store",
+   "page": "/requests",
+   "firstMs": 72,
+   "bestMs": 69,
+   "KB": 316
+  }
+ ]
+}

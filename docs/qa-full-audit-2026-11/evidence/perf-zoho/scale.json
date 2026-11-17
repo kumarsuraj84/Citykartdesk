@@ -1,0 +1,46 @@
+{
+  "startedAt": "2026-11-17T05:55:10.736Z",
+  "moveCount": 10000,
+  "prepare10000": {
+    "ms": 305,
+    "matching": 10000,
+    "scanned": 10000,
+    "ready": 10000,
+    "readyOpen": 4000,
+    "readyFinished": 6000,
+    "blocked": 0
+  },
+  "previewQuery200": {
+    "msEach": [
+      14,
+      15,
+      15,
+      15,
+      14
+    ]
+  },
+  "move": {
+    "asked": 10000,
+    "moved": 10000,
+    "failed": 0,
+    "firstFailures": [],
+    "totalMs": 408008,
+    "msPerTicket": 41,
+    "chunkMsP50": 1006,
+    "chunkMsP95": 1119,
+    "chunkMsMax": 2441,
+    "ticketsPerMinute": 1471,
+    "estimatedMinutesFor10000": 7,
+    "databaseGrowthMB": 34,
+    "commentsMade": 59667,
+    "inactiveProfilesMade": 12
+  },
+  "scheduledRuleRun": {
+    "movedOpenUnassigned": 4000,
+    "silentMs": 6668,
+    "silentNotifications": 0,
+    "activeMs": 47460,
+    "activeNotifications": 4000
+  },
+  "finishedAt": "2026-11-17T06:03:09.987Z"
+}

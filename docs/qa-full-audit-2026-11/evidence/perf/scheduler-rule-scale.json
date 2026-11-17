@@ -1,0 +1,35 @@
+{
+ "ran": "2026-11-16T11:02:16.088Z",
+ "rows": [
+  {
+   "total": 3284,
+   "overdueOpen": 8,
+   "ms": 213,
+   "status": 200
+  },
+  {
+   "total": 8284,
+   "overdueOpen": 2088,
+   "ms": 27143,
+   "status": 200
+  },
+  {
+   "total": 15284,
+   "overdueOpen": 5002,
+   "ms": 62433,
+   "status": 200
+  },
+  {
+   "total": 27284,
+   "overdueOpen": 9994,
+   "ms": 126378,
+   "status": 200
+  },
+  {
+   "total": 51284,
+   "overdueOpen": 19977,
+   "ms": 248518,
+   "status": 200
+  }
+ ]
+}

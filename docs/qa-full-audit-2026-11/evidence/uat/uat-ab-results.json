@@ -1,0 +1,74 @@
+{
+ "ran": "2026-11-16T07:23:34.294Z",
+ "stamp": "748451",
+ "ticketA": "CKSD-519764",
+ "ticketB": "CKSD-519765",
+ "results": [
+  {
+   "id": "A00",
+   "status": "PASS",
+   "title": "Admin loads the sheets (Sheet Masters > Update from sheets now)",
+   "detail": "25 AC units loaded"
+  },
+  {
+   "id": "A01",
+   "status": "PASS",
+   "title": "ALC store sees AC serials of its own store only in the form",
+   "detail": "6 AC choices: 1 | 2 | 3 | 4 | 5 | 7"
+  },
+  {
+   "id": "A02",
+   "status": "PASS",
+   "title": "Submit AC complaint -> ticket created with number",
+   "detail": "CKSD-519764"
+  },
+  {
+   "id": "A03",
+   "status": "PASS",
+   "title": "Ticket row in database: right org, requester, status, subject, store",
+   "detail": "CKSD-519764 status=in_progress priority=medium acno=\"1\" team=set assigned=null"
+  },
+  {
+   "id": "A04",
+   "status": "PASS",
+   "title": "Routing: AC complaint went to the OEM mail (mail trap) or is in the conversation",
+   "detail": "2 mail file(s) mentioning CKSD-519764; 1 comment(s); mail to: service.desk@bluestar-demo.test,engineer.lead@bluestar-demo.test,raushan.kumar@citylartstores.com, alc.demo@audit.test"
+  },
+  {
+   "id": "A05",
+   "status": "PASS",
+   "title": "Status timeline / audit trail recorded for the new ticket",
+   "detail": "2 event(s): status_changed, created"
+  },
+  {
+   "id": "A06",
+   "status": "PASS",
+   "title": "Another store (MAR) cannot open ALC ticket",
+   "detail": "ticket not visible to another store"
+  },
+  {
+   "id": "B01",
+   "status": "PASS",
+   "title": "Store raises Fixture request (Qty required) -> ticket",
+   "detail": "CKSD-519765"
+  },
+  {
+   "id": "B02",
+   "status": "PASS",
+   "title": "Ticket waits for approval; CVM is the approver",
+   "detail": "1 approval(s), status pending, step 0; ticket status pending_approval/in_progress"
+  },
+  {
+   "id": "B03",
+   "status": "PASS",
+   "title": "CVM sees the approval request on the Approvals page and approves it in the UI",
+   "detail": "approval recorded as approved"
+  },
+  {
+   "id": "B04",
+   "status": "PASS",
+   "title": "After approval the ticket leaves Pending Approval and the requester sees the decision",
+   "detail": "ticket status now in_progress; 1 decision row(s): approved"
+  }
+ ]
+}

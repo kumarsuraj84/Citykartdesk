@@ -1,0 +1,14 @@
+{
+ "note": "254 node processes ran under the egress guard during the QA run; each wrote a per-process loopback summary which were folded away to save space. The meaningful evidence is egress-denied-2026-11-16.jsonl (every refused outbound attempt).",
+ "processesUnderGuard": 254,
+ "sampleOfOneProcess": {
+  "pid": 10460,
+  "argv": [
+   "D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\scripts\\log-shipper.mjs",
+   "--once"
+  ],
+  "loopbackConnects": {
+   "127.0.0.1:49587": 1
+  }
+ }
+}

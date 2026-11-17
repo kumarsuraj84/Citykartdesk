@@ -1,0 +1,414 @@
+{
+ "ran": "2026-11-16T09:00:20.625Z",
+ "browser": "chrome",
+ "version": "Chrome/157.0.8103.78",
+ "viewports": [
+  [
+   360,
+   740
+  ],
+  [
+   390,
+   844
+  ],
+  [
+   768,
+   1024
+  ],
+  [
+   1024,
+   768
+  ],
+  [
+   1366,
+   768
+  ],
+  [
+   1920,
+   1080
+  ]
+ ],
+ "results": [
+  {
+   "role": "approver",
+   "page": "/home",
+   "vw": 360,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [],
+   "note": "",
+   "http": 200,
+   "final": "/home",
+   "scrollWidth": 360,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/home",
+   "vw": 390,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [],
+   "note": "",
+   "http": 200,
+   "final": "/home",
+   "scrollWidth": 390,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/home",
+   "vw": 768,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [],
+   "note": "",
+   "http": 200,
+   "final": "/home",
+   "scrollWidth": 768,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/home",
+   "vw": 1024,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [],
+   "note": "",
+   "http": 200,
+   "final": "/home",
+   "scrollWidth": 1024,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/home",
+   "vw": 1366,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [],
+   "note": "",
+   "http": 200,
+   "final": "/home",
+   "scrollWidth": 1366,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/home",
+   "vw": 1920,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [
+    {
+     "id": "color-contrast",
+     "impact": "serious",
+     "tags": "wcag2aa,wcag143",
+     "n": 3,
+     "help": "Elements must meet minimum color contrast ratio thresholds",
+     "sample": [
+      ".mt-1:nth-child(1) > .text-\\[9\\.5px\\].tracking-\\[0\\.14em\\].text-\\[oklch\\(0\\.65_0\\.02_250\\)\\] > span",
+      ".mt-1:nth-child(2) > .text-\\[9\\.5px\\].tracking-\\[0\\.14em\\].text-\\[oklch\\(0\\.65_0\\.02_250\\)\\] > span"
+     ]
+    },
+    {
+     "id": "target-size",
+     "impact": "serious",
+     "tags": "wcag22aa,wcag258",
+     "n": 3,
+     "help": "All touch targets must be 24px large, or leave sufficient space",
+     "sample": [
+      ".mt-1:nth-child(1) > .text-\\[9\\.5px\\].tracking-\\[0\\.14em\\].text-\\[oklch\\(0\\.65_0\\.02_250\\)\\]",
+      ".mt-1:nth-child(2) > .text-\\[9\\.5px\\].tracking-\\[0\\.14em\\].text-\\[oklch\\(0\\.65_0\\.02_250\\)\\]"
+     ]
+    }
+   ],
+   "note": "",
+   "http": 200,
+   "final": "/home",
+   "scrollWidth": 1920,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/approvals",
+   "vw": 360,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [],
+   "note": "",
+   "http": 200,
+   "final": "/approvals",
+   "scrollWidth": 360,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/approvals",
+   "vw": 390,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [],
+   "note": "",
+   "http": 200,
+   "final": "/approvals",
+   "scrollWidth": 390,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/approvals",
+   "vw": 768,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [],
+   "note": "",
+   "http": 200,
+   "final": "/approvals",
+   "scrollWidth": 768,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/approvals",
+   "vw": 1024,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [],
+   "note": "",
+   "http": 200,
+   "final": "/approvals",
+   "scrollWidth": 1024,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/approvals",
+   "vw": 1366,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [],
+   "note": "",
+   "http": 200,
+   "final": "/approvals",
+   "scrollWidth": 1366,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/approvals",
+   "vw": 1920,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [
+    {
+     "id": "color-contrast",
+     "impact": "serious",
+     "tags": "wcag2aa,wcag143",
+     "n": 3,
+     "help": "Elements must meet minimum color contrast ratio thresholds",
+     "sample": [
+      ".mt-1:nth-child(1) > .text-\\[9\\.5px\\].tracking-\\[0\\.14em\\].text-\\[oklch\\(0\\.65_0\\.02_250\\)\\] > span",
+      ".mt-1:nth-child(2) > .text-\\[9\\.5px\\].tracking-\\[0\\.14em\\].text-\\[oklch\\(0\\.65_0\\.02_250\\)\\] > span"
+     ]
+    },
+    {
+     "id": "target-size",
+     "impact": "serious",
+     "tags": "wcag22aa,wcag258",
+     "n": 3,
+     "help": "All touch targets must be 24px large, or leave sufficient space",
+     "sample": [
+      ".mt-1:nth-child(1) > .text-\\[9\\.5px\\].tracking-\\[0\\.14em\\].text-\\[oklch\\(0\\.65_0\\.02_250\\)\\]",
+      ".mt-1:nth-child(2) > .text-\\[9\\.5px\\].tracking-\\[0\\.14em\\].text-\\[oklch\\(0\\.65_0\\.02_250\\)\\]"
+     ]
+    }
+   ],
+   "note": "",
+   "http": 200,
+   "final": "/approvals",
+   "scrollWidth": 1920,
+   "title": "(8) Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/notifications",
+   "vw": 360,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [
+    {
+     "id": "color-contrast",
+     "impact": "serious",
+     "tags": "wcag2aa,wcag143",
+     "n": 3,
+     "help": "Elements must meet minimum color contrast ratio thresholds",
+     "sample": [
+      ".block:nth-child(1) > .gap-4.px-5.py-4 > .bg-sky-100.text-sky-600.mt-0\\.5",
+      ".block:nth-child(2) > .gap-4.px-5.py-4 > .bg-sky-100.text-sky-600.mt-0\\.5"
+     ]
+    }
+   ],
+   "note": "",
+   "http": 200,
+   "final": "/notifications",
+   "scrollWidth": 360,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/notifications",
+   "vw": 390,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [
+    {
+     "id": "color-contrast",
+     "impact": "serious",
+     "tags": "wcag2aa,wcag143",
+     "n": 4,
+     "help": "Elements must meet minimum color contrast ratio thresholds",
+     "sample": [
+      ".block:nth-child(1) > .gap-4.px-5.py-4 > .bg-sky-100.text-sky-600.mt-0\\.5",
+      ".block:nth-child(2) > .gap-4.px-5.py-4 > .bg-sky-100.text-sky-600.mt-0\\.5"
+     ]
+    }
+   ],
+   "note": "",
+   "http": 200,
+   "final": "/notifications",
+   "scrollWidth": 390,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/notifications",
+   "vw": 768,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [
+    {
+     "id": "color-contrast",
+     "impact": "serious",
+     "tags": "wcag2aa,wcag143",
+     "n": 5,
+     "help": "Elements must meet minimum color contrast ratio thresholds",
+     "sample": [
+      ".block:nth-child(1) > .gap-4.px-5.py-4 > .bg-sky-100.text-sky-600.mt-0\\.5",
+      ".block:nth-child(2) > .gap-4.px-5.py-4 > .bg-sky-100.text-sky-600.mt-0\\.5"
+     ]
+    }
+   ],
+   "note": "",
+   "http": 200,
+   "final": "/notifications",
+   "scrollWidth": 768,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/notifications",
+   "vw": 1024,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [
+    {
+     "id": "color-contrast",
+     "impact": "serious",
+     "tags": "wcag2aa,wcag143",
+     "n": 5,
+     "help": "Elements must meet minimum color contrast ratio thresholds",
+     "sample": [
+      ".block:nth-child(1) > .gap-4.px-5.py-4 > .bg-sky-100.text-sky-600.mt-0\\.5",
+      ".block:nth-child(2) > .gap-4.px-5.py-4 > .bg-sky-100.text-sky-600.mt-0\\.5"
+     ]
+    }
+   ],
+   "note": "",
+   "http": 200,
+   "final": "/notifications",
+   "scrollWidth": 1024,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/notifications",
+   "vw": 1366,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [
+    {
+     "id": "color-contrast",
+     "impact": "serious",
+     "tags": "wcag2aa,wcag143",
+     "n": 5,
+     "help": "Elements must meet minimum color contrast ratio thresholds",
+     "sample": [
+      ".block:nth-child(1) > .gap-4.px-5.py-4 > .bg-sky-100.text-sky-600.mt-0\\.5",
+      ".block:nth-child(2) > .gap-4.px-5.py-4 > .bg-sky-100.text-sky-600.mt-0\\.5"
+     ]
+    }
+   ],
+   "note": "",
+   "http": 200,
+   "final": "/notifications",
+   "scrollWidth": 1366,
+   "title": "Citykart Desk"
+  },
+  {
+   "role": "approver",
+   "page": "/notifications",
+   "vw": 1920,
+   "status": "PASS",
+   "overflow": false,
+   "errors": [],
+   "axe": [
+    {
+     "id": "color-contrast",
+     "impact": "serious",
+     "tags": "wcag2aa,wcag143",
+     "n": 8,
+     "help": "Elements must meet minimum color contrast ratio thresholds",
+     "sample": [
+      ".mt-1:nth-child(1) > .text-\\[9\\.5px\\].tracking-\\[0\\.14em\\].text-\\[oklch\\(0\\.65_0\\.02_250\\)\\] > span",
+      ".mt-1:nth-child(2) > .text-\\[9\\.5px\\].tracking-\\[0\\.14em\\].text-\\[oklch\\(0\\.65_0\\.02_250\\)\\] > span"
+     ]
+    },
+    {
+     "id": "target-size",
+     "impact": "serious",
+     "tags": "wcag22aa,wcag258",
+     "n": 3,
+     "help": "All touch targets must be 24px large, or leave sufficient space",
+     "sample": [
+      ".mt-1:nth-child(1) > .text-\\[9\\.5px\\].tracking-\\[0\\.14em\\].text-\\[oklch\\(0\\.65_0\\.02_250\\)\\]",
+      ".mt-1:nth-child(2) > .text-\\[9\\.5px\\].tracking-\\[0\\.14em\\].text-\\[oklch\\(0\\.65_0\\.02_250\\)\\]"
+     ]
+    }
+   ],
+   "note": "",
+   "http": 200,
+   "final": "/notifications",
+   "scrollWidth": 1920,
+   "title": "(8) Citykart Desk"
+  }
+ ]
+}

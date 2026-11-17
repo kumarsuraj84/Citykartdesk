@@ -1,0 +1,35 @@
+{
+ "ran": "2026-11-16T10:29:53.447Z",
+ "rows": [
+  {
+   "total": 3284,
+   "openWithSla": 13,
+   "ms": 122,
+   "status": 200
+  },
+  {
+   "total": 10284,
+   "openWithSla": 2932,
+   "ms": 102,
+   "status": 200
+  },
+  {
+   "total": 25284,
+   "openWithSla": 9182,
+   "ms": 107,
+   "status": 200
+  },
+  {
+   "total": 50284,
+   "openWithSla": 19601,
+   "ms": 92,
+   "status": 200
+  },
+  {
+   "total": 100284,
+   "openWithSla": 40435,
+   "ms": 2544,
+   "status": 200
+  }
+ ]
+}

@@ -1,0 +1,65 @@
+{
+ "ran": "2026-11-16T07:42:24.593Z",
+ "results": [
+  {
+   "id": "E01",
+   "status": "PASS",
+   "title": "Administrator opens the Zoho Data overview; ticket total equals the database",
+   "detail": "page shows 61 tickets (database 61)"
+  },
+  {
+   "id": "E02",
+   "status": "PASS",
+   "title": "Reports page loads (store AC report) without errors",
+   "detail": "loaded, no browser errors"
+  },
+  {
+   "id": "E03",
+   "status": "PASS",
+   "title": "Look up one ticket by number shows its subject, status and requester",
+   "detail": "ticket 900060 shown"
+  },
+  {
+   "id": "E04",
+   "status": "PASS",
+   "title": "Text search finds tickets; a number that does not exist and non-numeric input give a clear message",
+   "detail": "search ok, unknown and non-numeric answered clearly"
+  },
+  {
+   "id": "E05",
+   "status": "PASS",
+   "title": "Injection-style search text is treated as plain text; tables intact",
+   "detail": "handled as text; table still has 61 rows"
+  },
+  {
+   "id": "E06",
+   "status": "PASS",
+   "title": "Roles: manager may open Zoho Data; requester, store user and technician are sent away",
+   "detail": "qa11.techmgr:in, qa11.store:out, qa11.ho:out, qa11.tech:out, qa11.vtech:out"
+  },
+  {
+   "id": "E07",
+   "status": "PASS",
+   "title": "Read-only proof: the report login can SELECT but every write is refused by the database",
+   "detail": "select ok; insert: ERROR:  cannot execute INSERT in a read-; update: ERROR:  cannot execute UPDATE in a read-; delete: ERROR:  cannot execute DELETE in a read-; truncate: ERROR:  cannot execute TRUNCATE TABLE in; drop: ERROR:  cannot execute DROP TABLE in a r; create: ERROR:  cannot execute CREATE TABLE in a"
+  },
+  {
+   "id": "E08",
+   "status": "PASS",
+   "title": "Code check: no write statement against the Zoho database exists in lib/zoho or the Zoho pages",
+   "detail": "none found by git grep"
+  },
+  {
+   "id": "E09",
+   "status": "PASS",
+   "title": "Zoho database unreachable: the screen says \"not connected\" instead of crashing; recovers when access returns",
+   "detail": "clear message while down; back to normal after access restored"
+  },
+  {
+   "id": "E10",
+   "status": "PASS",
+   "title": "Nothing in the Zoho database changed during the whole scenario",
+   "detail": "tickets 61, history 2, checksum unchanged"
+  }
+ ]
+}

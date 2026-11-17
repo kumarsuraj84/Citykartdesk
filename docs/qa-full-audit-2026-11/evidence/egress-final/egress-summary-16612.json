@@ -1,0 +1,9 @@
+{
+ "pid": 16612,
+ "argv": [
+  "D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\scripts\\cron-tick.mjs"
+ ],
+ "loopbackConnects": {
+  "127.0.0.1:54541": 1
+ }
+}

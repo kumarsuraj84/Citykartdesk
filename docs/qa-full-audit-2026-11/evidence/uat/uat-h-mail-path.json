@@ -1,0 +1,89 @@
+{
+ "ran": "2026-11-17T06:57:37.727Z",
+ "results": [
+  {
+   "id": "H01",
+   "status": "PASS",
+   "title": "the three tickets were moved",
+   "detail": "ZOHO-700001:in_progress ZOHO-700002:open"
+  },
+  {
+   "id": "H02",
+   "status": "PASS",
+   "title": "the move sent no mail and made no notification",
+   "detail": "mails: (none) | notifications 8814 -> 8814"
+  },
+  {
+   "id": "H03",
+   "status": "PASS",
+   "title": "CK Desk's rule gave each ticket to the technician, quietly",
+   "detail": "QA11 Technician One"
+  },
+  {
+   "id": "H04",
+   "status": "PASS",
+   "title": "a ticket that was In Process in Zoho shows NO \"Start Working\" button",
+   "detail": "hidden, as expected"
+  },
+  {
+   "id": "H05",
+   "status": "PASS",
+   "title": "a ticket that was Open in Zoho still shows \"Start Working\"",
+   "detail": ""
+  },
+  {
+   "id": "H06",
+   "status": "PASS",
+   "title": "Start Working moves the moved ticket to In progress",
+   "detail": "status in_progress"
+  },
+  {
+   "id": "H07",
+   "status": "INFO",
+   "title": "mail and notifications after Start Working (normal CK Desk behaviour)",
+   "detail": "mails: [qa11.store@audit.test] Request updated: ZOHO-700002 — Demo Admin-AC - Split AC #2 | new notifications 1"
+  },
+  {
+   "id": "H08",
+   "status": "PASS",
+   "title": "a technician's public comment mails the requester, with the ticket number in the subject",
+   "detail": "mails: [qa11.store@audit.test] New comment on: ZOHO-700002 — Demo Admin-AC - Split AC #2"
+  },
+  {
+   "id": "H09",
+   "status": "INFO",
+   "title": "notifications after the technician's comment",
+   "detail": "1 new"
+  },
+  {
+   "id": "H10",
+   "status": "PASS",
+   "title": "the requester's reply mails the technician",
+   "detail": "mails: [qa11.tech@audit.test] New comment on: ZOHO-700002 — Demo Admin-AC - Split AC #2"
+  },
+  {
+   "id": "H11",
+   "status": "PASS",
+   "title": "the requester's reply makes a bell notification for the technician",
+   "detail": "1 new"
+  },
+  {
+   "id": "H12",
+   "status": "INFO",
+   "title": "comment on a ticket whose requester is an INACTIVE profile (a person CK Desk did not know)",
+   "detail": "mails: [store.s0123@example.test] New comment on: ZOHO-700001 — Demo Admin-AC - Window AC #1"
+  },
+  {
+   "id": "H13",
+   "status": "PASS",
+   "title": "the technician can resolve a moved ticket",
+   "detail": "status resolved"
+  },
+  {
+   "id": "H14",
+   "status": "PASS",
+   "title": "resolving mails the requester (resolved mail / satisfaction survey)",
+   "detail": "mails: [qa11.store@audit.test] Resolved: ZOHO-700002 — Demo Admin-AC - Split AC #2 | new notifications 1"
+  }
+ ]
+}

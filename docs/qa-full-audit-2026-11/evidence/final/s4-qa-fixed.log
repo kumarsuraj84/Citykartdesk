@@ -1,0 +1,55 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_db_ckdesk_audit, supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [none]
+
+ISOLATION GATE: PASSED  (21/21)
+
+ RUN  v3.2.7 D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate
+
+ ✓ tests/integration/zoho-transfer-qa.test.ts (6 tests) 8906ms
+   ✓ moving Zoho tickets: the hard cases (stage 4 QA, local database) > two administrators moving the same tickets at the same moment: every ticket is made exactly once  1988ms
+   ✓ moving Zoho tickets: the hard cases (stage 4 QA, local database) > a server that stopped between taking a ticket and making it does not lock the ticket for ever  1375ms
+   ✓ moving Zoho tickets: the hard cases (stage 4 QA, local database) > a claim made a moment ago (a move still in progress) is respected: nobody takes it over  1277ms
+   ✓ moving Zoho tickets: the hard cases (stage 4 QA, local database) > a withdrawn ticket can be moved again, and a number that is not a ticket is refused  1058ms
+   ✓ moving Zoho tickets: the hard cases (stage 4 QA, local database) > a run record belongs to one organisation: another organisation's run cannot be added to  513ms
+stderr | tests/integration/zoho-transfer-move.test.ts > moving a Zoho ticket into CK Desk (stage 2, local database) > is all or nothing: a failure leaves no ticket and releases the claim
+{"ts":"2026-11-17T05:49:12.965Z","level":"error","event":"zoho_transfer.move_rolled_back","message":"Zoho ticket 700012 was not moved: the ticket could not be created (duplicate key value violates unique constraint \"requests_request_no_key\")","route":"lib/zoho/transfer/move.ts","orgId":"00000000-0000-0000-0000-000000000001","errorCode":"zoho_move_rolled_back","context":{"zohoNo":700012},"error":{"message":"the ticket could not be created (duplicate key value violates unique constraint \"requests_request_no_key\")","stack":"Error: the ticket could not be created (duplicate key value violates unique constraint \"requests_request_no_key\")\n    at createEverything (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\lib\\zoho\\transfer\\move.ts:204:32)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at moveOne (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\lib\\zoho\\transfer\\move.ts:122:18)\n    at moveZohoTickets (D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\lib\\zoho\\transfer\\move.ts:59:16)\n    at D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\tests\\integration\\zoho-transfer-move.test.ts:175:19\n    at D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\tests\\integration\\zoho-transfer-move.test.ts:59:100\n    at file:///D:/ANKUR%20AI%20PROJECTS/CitykartDesk-ZOHO%20Alternate/node_modules/@vitest/runner/dist/chunk-hooks.js:752:20"}}
+
+ERROR:  permission denied for table requests
+HINT:  Grant the required privileges to the current role with: GRANT INSERT ON public.requests TO authenticated;
+ ✓ tests/integration/zoho-transfer-move.test.ts (9 tests) 18449ms
+   ✓ moving a Zoho ticket into CK Desk (stage 2, local database) > moves a finished ticket silently, with the Zoho number and the Zoho created time  2438ms
+   ✓ moving a Zoho ticket into CK Desk (stage 2, local database) > copies the whole conversation: the e-mails, the requester's reply, the notes and the history, in their Zoho order and times  1490ms
+   ✓ moving a Zoho ticket into CK Desk (stage 2, local database) > copies the attachments that exist and lists the ones that do not  976ms
+   ✓ moving a Zoho ticket into CK Desk (stage 2, local database) > runs the Business Rules quietly: the technician is chosen, nobody is told, the status stays as moved  6736ms
+   ✓ moving a Zoho ticket into CK Desk (stage 2, local database) > is all or nothing: a failure leaves no ticket and releases the claim  1668ms
+   ✓ moving a Zoho ticket into CK Desk (stage 2, local database) > a person signed in cannot choose a ZOHO- number: only the server can  494ms
+   ✓ moving a Zoho ticket into CK Desk (stage 2, local database) > refuses a ticket whose mapping is not complete, and keeps the claim free  543ms
+ ✓ tests/integration/zoho-transfer-run.test.ts (4 tests) 14108ms
+   ✓ move everything that matches (stage 3, local database) > reads every matching ticket and says how many are ready, open and finished, and why the others are not  446ms
+   ✓ move everything that matches (stage 3, local database) > records a run: who, how many moved, how many failed; a finished run takes no more chunks  1018ms
+   ✓ move everything that matches (stage 3, local database) > moved tickets stay SILENT in the scheduled Business Rules until an administrator switches them on  8658ms
+
+ Test Files  3 passed (3)
+      Tests  19 passed (19)
+   Start at  11:18:47
+   Duration  42.60s (transform 240ms, setup 43ms, collect 69ms, tests 41.46s, environment 0ms, prepare 117ms)
+

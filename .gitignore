@@ -82,3 +82,9 @@ supabase/.temp
 
 # local Claude Code permissions (pre-approves git/docker/npm commands): never commit. It is tracked from the past: run `git rm --cached .claude/settings.local.json` once.
 /.claude/settings.local.json
+
+# QA 2026-11 audit: the 73 MB database snapshot, the local mail folder and the big raw logs stay on the owner's machine / in the archive
+/docs/qa-full-audit-2026-11/evidence/db/
+/docs/qa-full-audit-2026-11/evidence/mail-sink/
+/docs/qa-full-audit-2026-11/evidence/audit-app-*.log
+/docs/qa-full-audit-2026-11/evidence/final/*.json

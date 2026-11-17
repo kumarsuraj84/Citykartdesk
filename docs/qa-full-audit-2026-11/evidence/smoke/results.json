@@ -1,0 +1,101 @@
+{
+ "when": "2026-11-16T07:11:55.788Z",
+ "base": "http://localhost:3310",
+ "ticket": "CKSD-519760",
+ "total": 13,
+ "pass": 13,
+ "fail": 0,
+ "results": [
+  {
+   "id": "S01",
+   "title": "Application starts and reports healthy",
+   "status": "PASS",
+   "ms": 55,
+   "detail": "status ok, db ok"
+  },
+  {
+   "id": "S02",
+   "title": "Requester can sign in",
+   "status": "PASS",
+   "ms": 2218,
+   "detail": ""
+  },
+  {
+   "id": "S03",
+   "title": "Requester dashboard loads",
+   "status": "PASS",
+   "ms": 4244,
+   "detail": ""
+  },
+  {
+   "id": "S04",
+   "title": "Ticket creation works (form -> submit -> ticket page)",
+   "status": "PASS",
+   "ms": 11772,
+   "detail": "CKSD-519760 (QA IT SUPPORT > Laptop problem)"
+  },
+  {
+   "id": "S05",
+   "title": "Technician can see the new ticket and pick it up",
+   "status": "PASS",
+   "ms": 8936,
+   "detail": "was in the group queue; picked up"
+  },
+  {
+   "id": "S06",
+   "title": "Status updates work (Start Working -> In Progress)",
+   "status": "PASS",
+   "ms": 10706,
+   "detail": ""
+  },
+  {
+   "id": "S07",
+   "title": "Approval flow works (send -> approver approves -> back to In Progress)",
+   "status": "PASS",
+   "ms": 26508,
+   "detail": ""
+  },
+  {
+   "id": "S08",
+   "title": "Attachment upload and download work",
+   "status": "PASS",
+   "ms": 16431,
+   "detail": "downloaded (HTTP 200, image/png); anonymous request refused with HTTP 401"
+  },
+  {
+   "id": "S09",
+   "title": "Search finds the ticket",
+   "status": "PASS",
+   "ms": 4113,
+   "detail": ""
+  },
+  {
+   "id": "S10",
+   "title": "Administrator configuration pages load",
+   "status": "PASS",
+   "ms": 16166,
+   "detail": "8 pages"
+  },
+  {
+   "id": "S11",
+   "title": "Vendor login is restricted to the vendor area",
+   "status": "PASS",
+   "ms": 9406,
+   "detail": ""
+  },
+  {
+   "id": "S12",
+   "title": "Critical dashboards load",
+   "status": "PASS",
+   "ms": 15484,
+   "detail": "5 pages"
+  },
+  {
+   "id": "S13",
+   "title": "Logout works and ends the session",
+   "status": "PASS",
+   "ms": 4272,
+   "detail": ""
+  }
+ ]
+}

@@ -1,0 +1,27 @@
+ds500k users=1 req=35 err=0 (0%) rps=0.6 | P50 96  P95 1766  P99 1880  max 1880 ms | server RSS 526->226 MB, CPU ~15% of one core
+   slowest: tech /approvals                    n=   4 P50    44 P95  1880 P99  1880 err 0
+   slowest: tech /requests/queue               n=  14 P50   103 P95  1766 P99  1766 err 0
+   slowest: tech /requests                     n=   7 P50   416 P95   464 P99   464 err 0
+   slowest: tech /requests/:id                 n=   5 P50    48 P95    57 P99    57 err 0
+ds500k users=10 req=215 err=0 (0%) rps=3.6 | P50 96  P95 2974  P99 5620  max 16543 ms | server RSS 442->651 MB, CPU ~36% of one core
+   slowest: admin /admin/reports               n=   2 P50 16543 P95 16543 P99 16543 err 0
+   slowest: techmgr /dashboards/executive      n=   2 P50  5620 P95  5620 P99  5620 err 0
+   slowest: admin /dashboards/executive        n=   3 P50  1249 P95  4929 P99  4929 err 0
+   slowest: techmgr /home                      n=   4 P50  4114 P95  4162 P99  4162 err 0
+ds500k users=25 req=520 err=0 (0%) rps=8.7 | P50 320  P95 3199  P99 5323  max 7676 ms | server RSS 813->849 MB, CPU ~77% of one core
+   slowest: techmgr /admin/reports             n=  11 P50  4421 P95  7676 P99  7676 err 0
+   slowest: techmgr /dashboards/executive      n=  16 P50  3118 P95  6464 P99  6464 err 0
+   slowest: techmgr /home                      n=  13 P50  3382 P95  6171 P99  6171 err 0
+   slowest: tech /requests                     n=  18 P50  1127 P95  3102 P99  3102 err 0
+ds500k users=50 req=644 err=3 (0.47%) rps=10.7 | P50 1484  P95 7980  P99 18316  max 60010 ms | server RSS 762->1072 MB, CPU ~86% of one core
+   slowest: admin /admin/reports               n=   6 P50 60006 P95 60010 P99 60010 err 3
+   slowest: techmgr /dashboards/executive      n=   7 P50  7980 P95 20988 P99 20988 err 0
+   slowest: techmgr /home                      n=  13 P50  9878 P95 15540 P99 15540 err 0
+   slowest: techmgr /admin/reports             n=  11 P50 12242 P95 13925 P99 13925 err 0
+   errors e.g.: /admin/reports -> ERR The operation was aborted due to timeout | /admin/reports -> ERR The operation was aborted due to timeout | /admin/reports -> ERR The operation was aborted due to timeout
+ds500k users=100 req=901 err=2 (0.22%) rps=15 | P50 4179  P95 10670  P99 20532  max 60457 ms | server RSS 1386->1305 MB, CPU ~117% of one core
+   slowest: admin /admin/reports               n=   2 P50 60457 P95 60457 P99 60457 err 2
+   slowest: techmgr /admin/reports             n=  15 P50 18930 P95 23978 P99 23978 err 0
+   slowest: techmgr /home                      n=  17 P50 16444 P95 23020 P99 23020 err 0
+   slowest: techmgr /dashboards/executive      n=  21 P50 10464 P95 14008 P99 30688 err 0
+   errors e.g.: /admin/reports -> ERR The operation was aborted due to timeout | /admin/reports -> ERR The operation was aborted due to timeout

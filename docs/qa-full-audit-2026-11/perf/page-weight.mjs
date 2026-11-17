@@ -1,0 +1,12 @@
+// Single-user page cost (time to last byte + bytes) for the heaviest pages, production build, current data volume.
+import { createRequire } from 'node:module'; import { execFileSync } from 'node:child_process'; import { writeFileSync } from 'node:fs'
+const puppeteer = createRequire(import.meta.url)('C:/Users/User2/AppData/Local/Temp/claude/c0a797de48150dab/b1171928-38ee-4239-9671-0c883722e31b/scratchpad/deck/node_modules/puppeteer-core')
+const label = process.argv[2] || 'now'; const n = execFileSync('docker', ['exec', 'supabase_db_ckdesk_audit', 'psql', '-U', 'postgres', '-d', 'postgres', '-Atc', 'select count(*) from requests'], { encoding: 'utf8' }).trim()
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--no-sandbox'] }); const out = []
+for (const [who, pages] of [['qa11.techmgr@audit.test', ['/dashboards/executive', '/admin/reports', '/home', '/requests/queue', '/requests', '/reports/pivot']], ['qa11.admin@audit.test', ['/admin/users', '/admin/reports']], ['qa11.store@audit.test', ['/home', '/requests']]]) {
+  const ctx = await b.createBrowserContext(); const p = await ctx.newPage(); await p.goto('http://localhost:3311/login'); await p.type('input[type="email"]', who); await p.type('input[type="password"]', 'QA-Audit-Pw-2026!'); await Promise.all([p.waitForNavigation().catch(() => {}), p.click('button[type="submit"]')])
+  const cookie = (await p.cookies()).map((c) => `${c.name}=${c.value}`).join('; '); await ctx.close()
+  for (const u of pages) { const times = []; let bytes = 0; for (let i = 0; i < 3; i++) { const s = performance.now(); const r = await fetch('http://localhost:3311' + u, { headers: { cookie }, redirect: 'manual' }); const t = await r.arrayBuffer(); times.push(performance.now() - s); bytes = t.byteLength } out.push({ who: who.split('@')[0], page: u, firstMs: Math.round(times[0]), bestMs: Math.round(Math.min(...times)), KB: Math.round(bytes / 1024) }) }
+}
+await b.close(); writeFileSync(`D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate/docs/qa-full-audit-2026-11/evidence/perf/page-weight-${label}.json`, JSON.stringify({ tickets: n, out }, null, 1))
+console.log('tickets in db', n); for (const r of out) console.log(r.who.padEnd(8), r.page.padEnd(24), 'first', String(r.firstMs).padStart(6), 'ms  best', String(r.bestMs).padStart(6), 'ms ', String(r.KB).padStart(6), 'KB')

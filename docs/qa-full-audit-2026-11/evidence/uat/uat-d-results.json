@@ -1,0 +1,79 @@
+{
+ "ran": "2026-11-16T07:33:15.442Z",
+ "stamp": "UATD308299",
+ "ticket": "CKSD-519773",
+ "results": [
+  {
+   "id": "D00",
+   "status": "PASS",
+   "title": "Set-up: PO approver chosen, vendor ticket assigned to the vendor technician",
+   "detail": "CKSD-519773 assigned to the vendor technician; PO approver = QA11 Approver"
+  },
+  {
+   "id": "D01",
+   "status": "PASS",
+   "title": "Vendor technician sees the ticket on the vendor dashboard and opens it",
+   "detail": "dashboard does not list (checked box layout) CKSD-519773; ticket page opens"
+  },
+  {
+   "id": "D02",
+   "status": "PASS",
+   "title": "Start working with the OEM ticket number -> In Progress",
+   "detail": "status in_progress"
+  },
+  {
+   "id": "D03",
+   "status": "PASS",
+   "title": "PO required: items + prices + quote file -> ticket goes on hold for Citykart",
+   "detail": "on hold; PO request v1 status pending; clicked \"Send for approval\""
+  },
+  {
+   "id": "D04",
+   "status": "PASS",
+   "title": "Another vendor company cannot open this vendor ticket",
+   "detail": "ticket hidden from the other vendor company"
+  },
+  {
+   "id": "D05",
+   "status": "PASS",
+   "title": "Vendor manager (same company) can see the technician's ticket",
+   "detail": "vendor manager sees it"
+  },
+  {
+   "id": "D06",
+   "status": "PASS",
+   "title": "PO approver asks for a revised price; vendor sends revised quote (version 2)",
+   "detail": "versions: v1:superseded, v2:pending"
+  },
+  {
+   "id": "D07",
+   "status": "PASS",
+   "title": "PO approver approves with PO number, date and PO document -> ticket back to In Progress",
+   "detail": "ticket in_progress; PO rows v1:superseded,v2:approved"
+  },
+  {
+   "id": "D08",
+   "status": "PASS",
+   "title": "Citykart can see the PO on the Purchase orders page",
+   "detail": "PO listed"
+  },
+  {
+   "id": "D09",
+   "status": "PASS",
+   "title": "Part required (no PO) -> hold; Parts received -> In Progress",
+   "detail": "hold then in_progress"
+  },
+  {
+   "id": "D10",
+   "status": "PASS",
+   "title": "Resolve with a resolution choice, remarks and an FSR file -> ticket Resolved, store can see it",
+   "detail": "status resolved; resolution choice \"Other\""
+  },
+  {
+   "id": "D11",
+   "status": "PASS",
+   "title": "Audit trail: every vendor step is in the ticket activity log",
+   "detail": "10 rows: status_changed, attachment_added"
+  }
+ ]
+}

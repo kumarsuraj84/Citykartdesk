@@ -1,0 +1,1910 @@
+{
+ "ran": "2026-11-16T09:50:58.640Z",
+ "note": "rows visible per table per persona through PostgREST with that persona's own JWT; err = refused",
+ "matrix": {
+  "_grant_snapshots": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "_m169_function_grants": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "ac_visit_items": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "ac_visit_reports": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "ac_visit_settings": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "admin_audit_log": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "ai_applications": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "alert_claims": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "alert_rules": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 4
+   }
+  },
+  "app_event_log": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "app_settings": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 1
+   },
+   "vendor": {
+    "n": 1
+   },
+   "tech": {
+    "n": 1
+   }
+  },
+  "approval_decisions": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 4
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 7
+   }
+  },
+  "approval_email_codes": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "approval_workflow_steps": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 4
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 12
+   }
+  },
+  "approval_workflows": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 4
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 802
+   }
+  },
+  "approvals": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 4
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 7
+   }
+  },
+  "assignment_rules": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "business_hours": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 7
+   },
+   "vendor": {
+    "n": 7
+   },
+   "tech": {
+    "n": 7
+   }
+  },
+  "business_rule_events": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "business_rules": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "conversation_attachments": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "conversation_events": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "cost_centers": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "csat_surveys": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "custom_roles": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "departments": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 8
+   },
+   "vendor": {
+    "n": 8
+   },
+   "tech": {
+    "n": 8
+   }
+  },
+  "designations": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "desktime_app_logs": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "desktime_project_map": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "desktime_sync_runs": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "desktime_time_logs": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "email_smtp_settings": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "error_reports": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "escalation_policies": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "field_sla_overrides": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "form_field_library": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "form_templates": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 4
+   },
+   "vendor": {
+    "n": 4
+   },
+   "tech": {
+    "n": 4
+   }
+  },
+  "global_sla_config": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 4
+   },
+   "vendor": {
+    "n": 4
+   },
+   "tech": {
+    "n": 4
+   }
+  },
+  "holidays": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "intake_attachments": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "intake_audit_log": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "intake_channels": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 1
+   }
+  },
+  "intake_classifications": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "intake_messages": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "intake_notes": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "intake_outbound": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "intake_pipeline_config": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 1
+   }
+  },
+  "intake_reviews": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "intake_rules": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "intake_threads": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "job_functions": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "kb_article_services": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "kb_articles": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "license_keys": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "locations": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 3
+   },
+   "vendor": {
+    "n": 3
+   },
+   "tech": {
+    "n": 3
+   }
+  },
+  "master_ac_units": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "master_gensets": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "master_google_connection": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "master_issues": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "master_mail_templates": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "master_pms_dates": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "master_sources": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "master_store_cvm": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "milestones": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "notification_preferences": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "notification_rules": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "notifications": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 20
+   },
+   "vendor": {
+    "n": 4
+   },
+   "tech": {
+    "n": 14
+   }
+  },
+  "oems": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "org_module_access": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 9
+   },
+   "vendor": {
+    "n": 9
+   },
+   "tech": {
+    "n": 9
+   }
+  },
+  "org_signup_requests": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "organizations": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 1
+   },
+   "vendor": {
+    "n": 1
+   },
+   "tech": {
+    "n": 1
+   }
+  },
+  "owner_audit_log": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "permission_overrides": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "pms_ticket_log": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "processed_inbound_emails": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "profile_mobile_numbers": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "profiles": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 3
+   },
+   "vendor": {
+    "n": 3
+   },
+   "tech": {
+    "n": 684
+   }
+  },
+  "program_issues": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "program_pms_dates": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "program_pms_log": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "program_rows": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "project_activity": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "project_members": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "project_updates": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "projects": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "push_subscriptions": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "rate_limit_counters": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "related_requests": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "request_activity": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 1724
+   }
+  },
+  "request_attachments": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 4
+   },
+   "vendor": {
+    "n": 9
+   },
+   "tech": {
+    "n": 18
+   }
+  },
+  "request_automation_state": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "request_collaborators": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "request_comments": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 8
+   },
+   "vendor": {
+    "n": 16
+   },
+   "tech": {
+    "n": 1401
+   }
+  },
+  "request_conversations": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "request_master_snapshots": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "request_priorities": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 4
+   },
+   "vendor": {
+    "n": 4
+   },
+   "tech": {
+    "n": 4
+   }
+  },
+  "request_program_snapshots": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "request_sequences": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "request_time_entries": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 4
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 6
+   }
+  },
+  "requests": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 4
+   },
+   "vendor": {
+    "n": 4
+   },
+   "tech": {
+    "n": 1772
+   }
+  },
+  "retention_policies": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "saved_reports": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "scheduled_reports": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "service_categories": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 14
+   },
+   "vendor": {
+    "n": 14
+   },
+   "tech": {
+    "n": 14
+   }
+  },
+  "service_location_tags": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 35
+   },
+   "vendor": {
+    "n": 35
+   },
+   "tech": {
+    "n": 35
+   }
+  },
+  "service_sub_categories": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 21
+   },
+   "vendor": {
+    "n": 21
+   },
+   "tech": {
+    "n": 21
+   }
+  },
+  "service_sub_category_tags": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 15
+   },
+   "vendor": {
+    "n": 15
+   },
+   "tech": {
+    "n": 15
+   }
+  },
+  "services": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 18
+   },
+   "vendor": {
+    "n": 18
+   },
+   "tech": {
+    "n": 18
+   }
+  },
+  "sla_escalation_events": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "sla_escalation_rules": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 4
+   },
+   "vendor": {
+    "n": 4
+   },
+   "tech": {
+    "n": 4
+   }
+  },
+  "sla_policies": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 1
+   },
+   "vendor": {
+    "n": 1
+   },
+   "tech": {
+    "n": 1
+   }
+  },
+  "stores": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 210
+   },
+   "vendor": {
+    "n": 210
+   },
+   "tech": {
+    "n": 210
+   }
+  },
+  "system_log": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "system_log_archive": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "system_log_chain_head": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "task_activity": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "task_assignees": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "task_attachments": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "task_comments": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "task_custom_field_values": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "task_custom_fields": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "task_dependencies": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "task_priorities": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 4
+   },
+   "vendor": {
+    "n": 4
+   },
+   "tech": {
+    "n": 4
+   }
+  },
+  "task_statuses": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 5
+   },
+   "vendor": {
+    "n": 5
+   },
+   "tech": {
+    "n": 5
+   }
+  },
+  "task_template_items": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "task_templates": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "tasks": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 0
+   }
+  },
+  "team_members": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 0
+   },
+   "vendor": {
+    "n": 0
+   },
+   "tech": {
+    "n": 43
+   }
+  },
+  "teams": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "n": 8
+   },
+   "vendor": {
+    "n": 8
+   },
+   "tech": {
+    "n": 8
+   }
+  },
+  "vendor_companies": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "vendor_programs": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "vendor_request_items": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "vendor_requests": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "weather_city_daily": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "weather_city_geo": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  },
+  "webhook_seen": {
+   "anon": {
+    "err": ""
+   },
+   "store": {
+    "err": ""
+   },
+   "vendor": {
+    "err": ""
+   },
+   "tech": {
+    "err": ""
+   }
+  }
+ }
+}

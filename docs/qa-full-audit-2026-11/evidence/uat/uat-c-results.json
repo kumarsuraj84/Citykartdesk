@@ -1,0 +1,78 @@
+{
+ "ran": "2026-11-16T07:26:33.300Z",
+ "stamp": "UATC991511",
+ "tickets": {
+  "A-overdue": "CKSD-519766",
+  "B-at90": "CKSD-519767",
+  "C-resolved": "CKSD-519768",
+  "D-paused": "CKSD-519769"
+ },
+ "results": [
+  {
+   "id": "C00",
+   "status": "PASS",
+   "title": "Set-up: two scheduled SLA rules (80% notify manager; 100% set Urgent + notify admin) limited to this scenario's tickets",
+   "detail": "rules e8105d56 / 0dcc6fab"
+  },
+  {
+   "id": "C01",
+   "status": "PASS",
+   "title": "Seed 4 tickets: A overdue, B ~90% elapsed, C overdue but RESOLVED, D overdue but SLA PAUSED (waiting on user)",
+   "detail": "CKSD-519766, CKSD-519767, CKSD-519768, CKSD-519769"
+  },
+  {
+   "id": "C02",
+   "status": "PASS",
+   "title": "Cron refuses a call with no secret and with a wrong secret (401), accepts the right one (200)",
+   "detail": "none 401, wrong 401, right 200; fired=3 processed=2 failed=0"
+  },
+  {
+   "id": "C03",
+   "status": "PASS",
+   "title": "Ticket A (overdue): both rules fired; priority became Urgent",
+   "detail": "2 rule events; priority urgent"
+  },
+  {
+   "id": "C04",
+   "status": "PASS",
+   "title": "Ticket B (~90% elapsed): only the 80% rule fired; priority unchanged",
+   "detail": "80% rule only; priority still medium"
+  },
+  {
+   "id": "C05",
+   "status": "PASS",
+   "title": "Ticket C (resolved) and D (SLA paused) were NOT escalated",
+   "detail": "no events for resolved or paused tickets"
+  },
+  {
+   "id": "C06",
+   "status": "PASS",
+   "title": "Managers were notified in the bell for A and B; admin + assignee for A (100% rule)",
+   "detail": "25 notification rows, recipients correct"
+  },
+  {
+   "id": "C07",
+   "status": "PASS",
+   "title": "E-mails for the escalation reached the mail trap only",
+   "detail": "25 mail file(s); subjects: Business rule: UATC991511 SLA 80% warn manager | Business rule: UATC991511 SLA 100% breach"
+  },
+  {
+   "id": "C08",
+   "status": "PASS",
+   "title": "Idempotent: a second run fires nothing new and sends no duplicate notifications/mail",
+   "detail": "rule events 3, notifications 25, mails 25 unchanged (this run fired 0 on other tickets: none)"
+  },
+  {
+   "id": "C09",
+   "status": "PASS",
+   "title": "Paused ticket escalates once the pause is lifted (D back to Open, still overdue)",
+   "detail": "2 rule event(s) after the pause ended"
+  },
+  {
+   "id": "C10",
+   "status": "PASS",
+   "title": "Audit trail: the priority change is recorded for ticket A",
+   "detail": "1 activity row(s): priority_changed"
+  }
+ ]
+}

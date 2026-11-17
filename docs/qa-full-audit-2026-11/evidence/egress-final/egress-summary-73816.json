@@ -1,0 +1,10 @@
+{
+ "pid": 73816,
+ "argv": [
+  "D:\\ANKUR AI PROJECTS\\CitykartDesk-ZOHO Alternate\\.next-audit-build\\build\\56416d4ae4ce586f.js",
+  "58566"
+ ],
+ "loopbackConnects": {
+  "127.0.0.1:58566": 1
+ }
+}

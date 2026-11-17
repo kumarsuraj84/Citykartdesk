@@ -1,0 +1,133 @@
+{
+ "label": "ds100k",
+ "users": 10,
+ "think": 2000,
+ "durationSec": 60,
+ "requests": 271,
+ "errors": 0,
+ "errorRate": 0,
+ "rps": 4.5,
+ "overall": {
+  "p50": 58,
+  "p95": 399,
+  "p99": 1633,
+  "max": 1789
+ },
+ "serverRssMB": {
+  "min": 738,
+  "max": 746,
+  "first": 741,
+  "last": 738
+ },
+ "serverCpuPct": 13,
+ "dbCpuSamples": [
+  "0.03%",
+  "0.19%",
+  "0.02%",
+  "0.07%",
+  "0.05%",
+  "0.09%",
+  "0.03%",
+  "0.10%",
+  "0.02%",
+  "0.13%",
+  "0.03%",
+  "0.15%",
+  "0.02%"
+ ],
+ "requestsInDb": "103284",
+ "errSamples": [],
+ "rows": [
+  {
+   "page": "tech /requests",
+   "n": 17,
+   "p50": 399,
+   "p95": 1789,
+   "p99": 1789,
+   "max": 1789,
+   "errors": 0
+  },
+  {
+   "page": "store /notifications",
+   "n": 8,
+   "p50": 58,
+   "p95": 1484,
+   "p99": 1484,
+   "max": 1484,
+   "errors": 0
+  },
+  {
+   "page": "store /requests",
+   "n": 55,
+   "p50": 64,
+   "p95": 196,
+   "p99": 1449,
+   "max": 1449,
+   "errors": 0
+  },
+  {
+   "page": "tech /requests/queue",
+   "n": 29,
+   "p50": 80,
+   "p95": 195,
+   "p99": 195,
+   "max": 195,
+   "errors": 0
+  },
+  {
+   "page": "store /home",
+   "n": 44,
+   "p50": 48,
+   "p95": 191,
+   "p99": 1470,
+   "max": 1470,
+   "errors": 0
+  },
+  {
+   "page": "store /requests/:id",
+   "n": 40,
+   "p50": 57,
+   "p95": 179,
+   "p99": 1436,
+   "max": 1436,
+   "errors": 0
+  },
+  {
+   "page": "tech /approvals",
+   "n": 7,
+   "p50": 50,
+   "p95": 177,
+   "p99": 177,
+   "max": 177,
+   "errors": 0
+  },
+  {
+   "page": "tech /requests/:id",
+   "n": 28,
+   "p50": 45,
+   "p95": 162,
+   "p99": 192,
+   "max": 192,
+   "errors": 0
+  },
+  {
+   "page": "tech /home",
+   "n": 17,
+   "p50": 40,
+   "p95": 123,
+   "p99": 123,
+   "max": 123,
+   "errors": 0
+  },
+  {
+   "page": "store /services",
+   "n": 26,
+   "p50": 50,
+   "p95": 107,
+   "p99": 161,
+   "max": 161,
+   "errors": 0
+  }
+ ],
+ "ran": "2026-11-16T10:04:29.641Z"
+}

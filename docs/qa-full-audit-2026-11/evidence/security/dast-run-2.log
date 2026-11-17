@@ -1,0 +1,23 @@
+PASS  S01  Unauthenticated: all 37 API routes refuse to return data (GET and POST), except the ones public by design  — 37 routes x 2 methods; public-by-design answering 200: /api/health, /api/intake/webhook/outlook, /api/intake/webhook/whatsapp, /api/version
+NOTE  S02  Security headers on the login page and an API answer (CSP, frame, nosniff, referrer, permissions)  — headers present | CSP is REPORT-ONLY (not enforced; owner decision D-033 pending) | script-src allows 'unsafe-inline'/'unsafe-eval', so even once enforced it would not stop injected scripts | HSTS: absent over plain HTTP (expected in dev; live is HTTP-only by owner decision) | server header: none | x-powered-by: none
+NOTE  S03  Session cookie flags: HttpOnly and SameSite present  — session cookie is readable by page scripts (not HttpOnly) - documented design (docs/HTTPS-AND-CSP-PLAN.md): the browser Supabase client reads it; used on 2 screens only. cookies: sb-127-auth-token[httpOnly=false,sameSite=Lax,secure=false] | Secure flag absent: site is HTTP only (known owner decision, residual risk R-HTTP)
+PASS  S04  Open redirect: login ?next= pointing at another site is not followed  — 4 hostile next= values all stayed on the app
+PASS  S05  Brute force: after repeated wrong passwords the app slows or locks sign-in (and says so), and the right password is then refused for a while  — throttled/locked: messages seen: Invalid login credentials | Too many login attempts. Please wait a minute.; right password afterwards refused (Too many login attempts. Please wait a minute.)
+PASS  S06  Forgot password: same answer for a real and an unknown e-mail (no account enumeration)  — identical answer for both (2544ms vs 2563ms)
+PASS  S07  Public token pages (/approve, /csat) with random tokens reveal nothing and do not error  — statuses 200,200,200,200
+PASS  S08  CSRF: the sign-in Server Action replayed with a foreign Origin is refused, while the same call from the app's own origin works  — foreign Origin -> 500 (0:{"a":"$@1","f":"","q":"","i":true,"b":"developme); own origin -> 500
+PASS  S10  IDOR: a store user cannot open or download another person's ticket (page, PDF, attachment list)  — all three refused or empty
+PASS  S11  Vertical access: a store user and a vendor are refused on admin / export / report endpoints and pages  — 8 targets x 2 personas refused
+PASS  S12  Vendor isolation: a vendor cannot open Citykart-only ticket pages or PDFs (a ticket not assigned to his company)  — refused
+FAIL  S13  Stored XSS: script/HTML in a ticket title, description and comment is shown as text for a technician (no script runs)  — could not seed probe ticket: null value in column "team_id" of relation "requests" violates not-null constraint
+PASS  S14  Hostile search text and parameters on list pages never cause a server error or leak internals  — 27 hostile requests, no 5xx, no internals
+PASS  S15  Path traversal / odd paths against storage and file routes are refused  — 7 traversal probes refused
+PASS  R01  Anonymous (no login) cannot read any of the 136 public tables  — zero rows visible to anonymous in every table
+NOTE  R02  Store requester sees only own tickets; none of the internal tables (system log, settings, secrets, audit) are readable by a store user or a vendor  — store sees 4 own tickets, 0 foreign; app_settings (global key/value: retention days, policy.*, PO approver id) is readable by every signed-in user incl. vendors (1 row(s)) - not secret today, but a secret must never be stored there; sensitive tables checked: 8
+PASS  R03  Vendor sees only tickets assigned to his company  — vendor can read 4 of 3284 tickets (all his company's)
+PASS  R04  Privilege escalation through the data API is refused: a store user cannot make himself admin, change org, edit others' tickets/profiles, or insert as someone else  — 8 hostile writes all refused
+PASS  R05  Functions callable by anonymous people: list, and call each with empty/hostile arguments to prove none returns data or changes data  — 31 anon-executable functions (list saved); none returned data to an anonymous call
+FAIL  R06  Multi-organisation isolation: a person of organisation 2 sees nothing of organisation 1 and cannot write into it (and the reverse)  — could not create second org
+PASS  R07  Storage buckets: anonymous and a store user cannot list or read other people's attachments  — 4 buckets (task-attachments:private, icons:public, request-attachments:private, intake-attachments:private) — nothing listable by anonymous or a store user
+
+19/21 not failing

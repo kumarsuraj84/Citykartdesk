@@ -1,0 +1,35 @@
+{
+ "ran": "2026-11-16T10:29:31.866Z",
+ "results": [
+  {
+   "id": "W01",
+   "status": "PASS",
+   "title": "Two conflicting scheduled rules (order 0: priority High, order 1: priority Urgent) on 6 overdue tickets; 8 scheduler calls fired AT THE SAME TIME: every ticket is acted on exactly once per rule, the later rule wins, no duplicates",
+   "detail": "12 events (no duplicates), fired=12 across 8 simultaneous calls, all 6 tickets Urgent (later rule won), max 2 priority entries per ticket"
+  },
+  {
+   "id": "W02",
+   "status": "PASS",
+   "title": "A second wave of 4 simultaneous scheduler calls later changes nothing (nothing acted on twice)",
+   "detail": "events still 12, fired 0"
+  },
+  {
+   "id": "W03",
+   "status": "PASS",
+   "title": "Two technicians click \"Pick up\" on the same unassigned ticket at the same moment: exactly one gets it; the other is told; one history entry",
+   "detail": "clicks: clicked/clicked; owner=767e3407 status=assigned; history entries mentioning assignment: 1; messages to the two people: \"someone else\" / \"\""
+  },
+  {
+   "id": "W04",
+   "status": "PASS",
+   "title": "60 tickets created in parallel get 60 different ticket numbers (no duplicates, none missing)",
+   "detail": "60 distinct numbers CKSD-519985..: range 519984-520043 (60 slots for 60 tickets)"
+  },
+  {
+   "id": "W05",
+   "status": "PASS",
+   "title": "One scheduler run completes quickly even with all existing tickets in the database (rule scan cost)",
+   "detail": "3351 tickets in the database, scheduler run took 1439 ms (processed=2)"
+  }
+ ]
+}

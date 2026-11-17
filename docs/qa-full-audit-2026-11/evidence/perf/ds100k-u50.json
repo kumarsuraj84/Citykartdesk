@@ -1,0 +1,207 @@
+{
+ "label": "ds100k",
+ "users": 50,
+ "think": 2000,
+ "durationSec": 60,
+ "requests": 696,
+ "errors": 0,
+ "errorRate": 0,
+ "rps": 11.6,
+ "overall": {
+  "p50": 2159,
+  "p95": 4983,
+  "p99": 10072,
+  "max": 11109
+ },
+ "serverRssMB": {
+  "min": 840,
+  "max": 991,
+  "first": 850,
+  "last": 840
+ },
+ "serverCpuPct": 97,
+ "dbCpuSamples": [
+  "199.94%",
+  "87.36%",
+  "0.21%",
+  "27.46%",
+  "0.31%",
+  "89.84%",
+  "157.46%",
+  "122.16%",
+  "0.12%",
+  "25.66%",
+  "25.50%",
+  "20.81%",
+  "189.47%",
+  "0.13%",
+  "0.17%"
+ ],
+ "requestsInDb": "103284",
+ "errSamples": [],
+ "rows": [
+  {
+   "page": "techmgr /dashboards/executive",
+   "n": 27,
+   "p50": 6393,
+   "p95": 10623,
+   "p99": 11109,
+   "max": 11109,
+   "errors": 0
+  },
+  {
+   "page": "admin /dashboards/executive",
+   "n": 7,
+   "p50": 6812,
+   "p95": 10549,
+   "p99": 10549,
+   "max": 10549,
+   "errors": 0
+  },
+  {
+   "page": "admin /admin/reports",
+   "n": 7,
+   "p50": 5349,
+   "p95": 5733,
+   "p99": 5733,
+   "max": 5733,
+   "errors": 0
+  },
+  {
+   "page": "techmgr /home",
+   "n": 13,
+   "p50": 2771,
+   "p95": 5713,
+   "p99": 5713,
+   "max": 5713,
+   "errors": 0
+  },
+  {
+   "page": "tech /requests",
+   "n": 23,
+   "p50": 2455,
+   "p95": 4372,
+   "p99": 4907,
+   "max": 4907,
+   "errors": 0
+  },
+  {
+   "page": "tech /requests/queue",
+   "n": 67,
+   "p50": 1880,
+   "p95": 4279,
+   "p99": 5409,
+   "max": 5409,
+   "errors": 0
+  },
+  {
+   "page": "store /requests/:id",
+   "n": 101,
+   "p50": 1978,
+   "p95": 4272,
+   "p99": 5050,
+   "max": 5579,
+   "errors": 0
+  },
+  {
+   "page": "store /notifications",
+   "n": 24,
+   "p50": 2186,
+   "p95": 4262,
+   "p99": 4264,
+   "max": 4264,
+   "errors": 0
+  },
+  {
+   "page": "tech /requests/:id",
+   "n": 60,
+   "p50": 2105,
+   "p95": 4261,
+   "p99": 4263,
+   "max": 4263,
+   "errors": 0
+  },
+  {
+   "page": "store /requests",
+   "n": 106,
+   "p50": 2116,
+   "p95": 4211,
+   "p99": 4280,
+   "max": 4280,
+   "errors": 0
+  },
+  {
+   "page": "techmgr /requests/queue",
+   "n": 25,
+   "p50": 2493,
+   "p95": 4180,
+   "p99": 4264,
+   "max": 4264,
+   "errors": 0
+  },
+  {
+   "page": "store /home",
+   "n": 111,
+   "p50": 1875,
+   "p95": 4003,
+   "p99": 4270,
+   "max": 4272,
+   "errors": 0
+  },
+  {
+   "page": "tech /approvals",
+   "n": 10,
+   "p50": 2052,
+   "p95": 3990,
+   "p99": 3990,
+   "max": 3990,
+   "errors": 0
+  },
+  {
+   "page": "store /services",
+   "n": 38,
+   "p50": 2179,
+   "p95": 3784,
+   "p99": 3909,
+   "max": 3909,
+   "errors": 0
+  },
+  {
+   "page": "tech /home",
+   "n": 57,
+   "p50": 1897,
+   "p95": 3614,
+   "p99": 4274,
+   "max": 4274,
+   "errors": 0
+  },
+  {
+   "page": "techmgr /admin/reports",
+   "n": 14,
+   "p50": 2419,
+   "p95": 3290,
+   "p99": 3290,
+   "max": 3290,
+   "errors": 0
+  },
+  {
+   "page": "admin /admin/users",
+   "n": 5,
+   "p50": 1894,
+   "p95": 2645,
+   "p99": 2645,
+   "max": 2645,
+   "errors": 0
+  },
+  {
+   "page": "admin /admin/services",
+   "n": 1,
+   "p50": 2228,
+   "p95": 2228,
+   "p99": 2228,
+   "max": 2228,
+   "errors": 0
+  }
+ ],
+ "ran": "2026-11-16T10:07:17.983Z"
+}

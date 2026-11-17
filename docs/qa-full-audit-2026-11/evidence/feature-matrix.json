@@ -1,0 +1,508 @@
+{
+ "generated": "2026-11-16T07:00:32.331Z",
+ "pages": 75,
+ "apiRoutes": 40,
+ "sourceFiles": 1031,
+ "testFiles": 431,
+ "migrations": 195,
+ "areas": {
+  "01 Login, authentication, passwords": {
+   "codeFiles": 14,
+   "linesOfCode": 981,
+   "testFiles": 111,
+   "byLayer": {
+    "unit": 49,
+    "integration": 20,
+    "remediation": 19,
+    "vapt": 19
+   },
+   "sampleCode": [
+    "app/(auth)/forgot-password/page.tsx",
+    "app/(auth)/login/page.tsx",
+    "app/(auth)/reset-password/page.tsx",
+    "app/auth/callback/route.ts"
+   ]
+  },
+  "02 User and employee administration": {
+   "codeFiles": 13,
+   "linesOfCode": 3797,
+   "testFiles": 49,
+   "byLayer": {
+    "unit": 12,
+    "integration": 26,
+    "remediation": 4,
+    "vapt": 7
+   },
+   "sampleCode": [
+    "app/(app)/admin/users/loading.tsx",
+    "app/(app)/admin/users/page.tsx",
+    "app/(app)/admin/users/UserManagementClient.tsx",
+    "components/admin/BulkImportUsersDialog.tsx"
+   ]
+  },
+  "03 Roles, permissions, organisation scope": {
+   "codeFiles": 10,
+   "linesOfCode": 1116,
+   "testFiles": 155,
+   "byLayer": {
+    "unit": 73,
+    "integration": 39,
+    "remediation": 19,
+    "vapt": 18
+   },
+   "sampleCode": [
+    "app/(app)/admin/roles/loading.tsx",
+    "app/(app)/admin/roles/page.tsx",
+    "app/(app)/admin/roles/PermissionMatrixClient.tsx",
+    "lib/actions/admin/orgScopeGuard.ts"
+   ]
+  },
+  "04 Requester dashboard / home": {
+   "codeFiles": 5,
+   "linesOfCode": 1238,
+   "testFiles": 4,
+   "byLayer": {
+    "unit": 0,
+    "integration": 0,
+    "remediation": 0,
+    "vapt": 4
+   },
+   "sampleCode": [
+    "app/(app)/home/error.tsx",
+    "app/(app)/home/loading.tsx",
+    "app/(app)/home/page.tsx",
+    "components/home/StoreSnapshotCard.tsx"
+   ]
+  },
+  "05 Ticket creation and service catalogue": {
+   "codeFiles": 8,
+   "linesOfCode": 2847,
+   "testFiles": 36,
+   "byLayer": {
+    "unit": 7,
+    "integration": 13,
+    "remediation": 0,
+    "vapt": 16
+   },
+   "sampleCode": [
+    "app/(app)/services/error.tsx",
+    "app/(app)/services/loading.tsx",
+    "app/(app)/services/page.tsx",
+    "app/(app)/services/[slug]/loading.tsx"
+   ]
+  },
+  "06 Categories and subcategories": {
+   "codeFiles": 6,
+   "linesOfCode": 1679,
+   "testFiles": 116,
+   "byLayer": {
+    "unit": 54,
+    "integration": 32,
+    "remediation": 6,
+    "vapt": 21
+   },
+   "sampleCode": [
+    "app/(app)/admin/categories/CategoriesAdminClient.tsx",
+    "app/(app)/admin/categories/CategoryTreeView.tsx",
+    "app/(app)/admin/categories/loading.tsx",
+    "app/(app)/admin/categories/page.tsx"
+   ]
+  },
+  "07 Dynamic forms and mandatory fields": {
+   "codeFiles": 10,
+   "linesOfCode": 2272,
+   "testFiles": 33,
+   "byLayer": {
+    "unit": 16,
+    "integration": 15,
+    "remediation": 0,
+    "vapt": 2
+   },
+   "sampleCode": [
+    "components/forms/DynamicForm.tsx",
+    "components/forms/FieldRenderer.tsx",
+    "components/forms/PendingFileField.tsx",
+    "lib/actions/admin/field-library.ts"
+   ]
+  },
+  "08 Assignment and technician groups": {
+   "codeFiles": 1,
+   "linesOfCode": 192,
+   "testFiles": 150,
+   "byLayer": {
+    "unit": 60,
+    "integration": 37,
+    "remediation": 18,
+    "vapt": 31
+   },
+   "sampleCode": [
+    "lib/actions/admin/teams.ts"
+   ]
+  },
+  "09 Ticket lifecycle and status transitions": {
+   "codeFiles": 3,
+   "linesOfCode": 930,
+   "testFiles": 220,
+   "byLayer": {
+    "unit": 79,
+    "integration": 76,
+    "remediation": 21,
+    "vapt": 42
+   },
+   "sampleCode": [
+    "lib/constants/request-transitions.ts",
+    "lib/constants/requests.ts",
+    "lib/requests/status-change.ts"
+   ]
+  },
+  "10 Priority, SLA and escalations": {
+   "codeFiles": 7,
+   "linesOfCode": 1460,
+   "testFiles": 78,
+   "byLayer": {
+    "unit": 41,
+    "integration": 18,
+    "remediation": 6,
+    "vapt": 10
+   },
+   "sampleCode": [
+    "app/api/alerts/run/route.ts",
+    "lib/actions/admin/sla-matrix.ts",
+    "lib/actions/admin/sla-policies.ts",
+    "lib/sla/breach.ts"
+   ]
+  },
+  "11 Business Rules and automation": {
+   "codeFiles": 9,
+   "linesOfCode": 2269,
+   "testFiles": 45,
+   "byLayer": {
+    "unit": 16,
+    "integration": 10,
+    "remediation": 3,
+    "vapt": 16
+   },
+   "sampleCode": [
+    "lib/actions/admin/business-rules.ts",
+    "lib/actions/automation.ts",
+    "lib/automation/assign-rules.ts",
+    "lib/automation/diagnose.ts"
+   ]
+  },
+  "12 Approval workflows and delegation": {
+   "codeFiles": 24,
+   "linesOfCode": 3337,
+   "testFiles": 115,
+   "byLayer": {
+    "unit": 74,
+    "integration": 9,
+    "remediation": 8,
+    "vapt": 22
+   },
+   "sampleCode": [
+    "components/requests/ApprovalHistoryBox.tsx",
+    "components/requests/ApprovalPanel.tsx",
+    "components/requests/ApprovalPreviewDialog.tsx",
+    "components/requests/ApprovalQuickActions.tsx"
+   ]
+  },
+  "13 Conversations and attachments": {
+   "codeFiles": 17,
+   "linesOfCode": 1737,
+   "testFiles": 139,
+   "byLayer": {
+    "unit": 60,
+    "integration": 32,
+    "remediation": 6,
+    "vapt": 39
+   },
+   "sampleCode": [
+    "app/api/storage/attachment/intake/[id]/route.ts",
+    "app/api/storage/attachment/request/[id]/preview/route.ts",
+    "app/api/storage/attachment/request/[id]/route.ts",
+    "app/api/storage/public/[bucket]/[...path]/route.ts"
+   ]
+  },
+  "14 Notifications, e-mail and WhatsApp": {
+   "codeFiles": 41,
+   "linesOfCode": 4520,
+   "testFiles": 307,
+   "byLayer": {
+    "unit": 149,
+    "integration": 72,
+    "remediation": 27,
+    "vapt": 52
+   },
+   "sampleCode": [
+    "lib/actions/notifications.ts",
+    "lib/actions/push.ts",
+    "lib/email/approval-reminder.ts",
+    "lib/email/auth-mail.ts"
+   ]
+  },
+  "15 Search, filters and exports": {
+   "codeFiles": 8,
+   "linesOfCode": 1159,
+   "testFiles": 206,
+   "byLayer": {
+    "unit": 101,
+    "integration": 40,
+    "remediation": 15,
+    "vapt": 37
+   },
+   "sampleCode": [
+    "lib/actions/export.ts",
+    "lib/actions/fixedReportExport.ts",
+    "lib/actions/reportExport.ts",
+    "lib/actions/search.ts"
+   ]
+  },
+  "16 Dashboards and reports": {
+   "codeFiles": 49,
+   "linesOfCode": 7767,
+   "testFiles": 150,
+   "byLayer": {
+    "unit": 95,
+    "integration": 26,
+    "remediation": 10,
+    "vapt": 16
+   },
+   "sampleCode": [
+    "app/(app)/dashboards/executive/loading.tsx",
+    "app/(app)/dashboards/executive/page.tsx",
+    "app/(app)/dashboards/page.tsx",
+    "app/(app)/reports/analytics/page.tsx"
+   ]
+  },
+  "17 Knowledge Base": {
+   "codeFiles": 4,
+   "linesOfCode": 385,
+   "testFiles": 30,
+   "byLayer": {
+    "unit": 19,
+    "integration": 7,
+    "remediation": 0,
+    "vapt": 3
+   },
+   "sampleCode": [
+    "app/(app)/admin/knowledge-base/KnowledgeBaseClient.tsx",
+    "app/(app)/admin/knowledge-base/loading.tsx",
+    "app/(app)/admin/knowledge-base/page.tsx",
+    "lib/actions/knowledge-base.ts"
+   ]
+  },
+  "18 CSAT and feedback": {
+   "codeFiles": 9,
+   "linesOfCode": 560,
+   "testFiles": 28,
+   "byLayer": {
+    "unit": 20,
+    "integration": 1,
+    "remediation": 0,
+    "vapt": 7
+   },
+   "sampleCode": [
+    "app/api/csat/run/route.ts",
+    "components/requests/CsatSurvey.tsx",
+    "lib/actions/csatPublic.ts",
+    "lib/csat/alerts.ts"
+   ]
+  },
+  "19 Vendor / OEM access and workflows": {
+   "codeFiles": 43,
+   "linesOfCode": 4762,
+   "testFiles": 92,
+   "byLayer": {
+    "unit": 63,
+    "integration": 5,
+    "remediation": 0,
+    "vapt": 24
+   },
+   "sampleCode": [
+    "app/(app)/admin/programs/page.tsx",
+    "app/(app)/admin/programs/ProgramsClient.tsx",
+    "app/(app)/admin/programs/[id]/page.tsx",
+    "app/(app)/admin/programs/[id]/ProgramEditorClient.tsx"
+   ]
+  },
+  "20 AC and genset management": {
+   "codeFiles": 29,
+   "linesOfCode": 3597,
+   "testFiles": 97,
+   "byLayer": {
+    "unit": 61,
+    "integration": 18,
+    "remediation": 0,
+    "vapt": 18
+   },
+   "sampleCode": [
+    "app/(app)/admin/masters/MastersClient.tsx",
+    "app/(app)/admin/masters/page.tsx",
+    "app/(app)/admin/masters/[kind]/page.tsx",
+    "lib/masters/comment-view.ts"
+   ]
+  },
+  "21 Parts, quotations and purchase orders": {
+   "codeFiles": 9,
+   "linesOfCode": 1191,
+   "testFiles": 34,
+   "byLayer": {
+    "unit": 23,
+    "integration": 1,
+    "remediation": 3,
+    "vapt": 7
+   },
+   "sampleCode": [
+    "app/(app)/purchase-orders/page.tsx",
+    "app/(app)/vendor-po/[id]/page.tsx",
+    "app/api/vendor/pos/export/route.ts",
+    "components/vendor/PoDecisionForm.tsx"
+   ]
+  },
+  "22 Field Service Reports": {
+   "codeFiles": 1,
+   "linesOfCode": 131,
+   "testFiles": 7,
+   "byLayer": {
+    "unit": 3,
+    "integration": 0,
+    "remediation": 0,
+    "vapt": 4
+   },
+   "sampleCode": [
+    "lib/vendor/fields.ts"
+   ]
+  },
+  "23 Preventive maintenance (PMS)": {
+   "codeFiles": 6,
+   "linesOfCode": 568,
+   "testFiles": 13,
+   "byLayer": {
+    "unit": 7,
+    "integration": 0,
+    "remediation": 0,
+    "vapt": 6
+   },
+   "sampleCode": [
+    "app/api/pms/daily/route.ts",
+    "lib/pms/is-pms.ts",
+    "lib/pms/tickets.ts",
+    "lib/pms/window.ts"
+   ]
+  },
+  "24 Google Sheet Masters and sync": {
+   "codeFiles": 24,
+   "linesOfCode": 2626,
+   "testFiles": 323,
+   "byLayer": {
+    "unit": 145,
+    "integration": 82,
+    "remediation": 32,
+    "vapt": 53
+   },
+   "sampleCode": [
+    "app/(app)/admin/masters/MastersClient.tsx",
+    "app/(app)/admin/masters/page.tsx",
+    "app/(app)/admin/masters/[kind]/page.tsx",
+    "app/api/masters/export/route.ts"
+   ]
+  },
+  "25 CVM and fixtures approval": {
+   "codeFiles": 0,
+   "linesOfCode": 0,
+   "testFiles": 178,
+   "byLayer": {
+    "unit": 17,
+    "integration": 79,
+    "remediation": 19,
+    "vapt": 53
+   },
+   "sampleCode": []
+  },
+  "26 Zoho historical tickets": {
+   "codeFiles": 12,
+   "linesOfCode": 1578,
+   "testFiles": 2,
+   "byLayer": {
+    "unit": 2,
+    "integration": 0,
+    "remediation": 0,
+    "vapt": 0
+   },
+   "sampleCode": [
+    "app/(app)/zoho/layout.tsx",
+    "app/(app)/zoho/page.tsx",
+    "app/(app)/zoho/reports/page.tsx",
+    "app/(app)/zoho/tickets/page.tsx"
+   ]
+  },
+  "27 CKOneAI assistant": {
+   "codeFiles": 10,
+   "linesOfCode": 441,
+   "testFiles": 96,
+   "byLayer": {
+    "unit": 50,
+    "integration": 31,
+    "remediation": 3,
+    "vapt": 11
+   },
+   "sampleCode": [
+    "app/(app)/ckoneai/page.tsx",
+    "app/api/ckoneai/[...path]/route.ts",
+    "app/ckoneai-ui/[[...path]]/route.ts",
+    "lib/ckoneai/access.ts"
+   ]
+  },
+  "28 Scheduled tasks and background jobs": {
+   "codeFiles": 10,
+   "linesOfCode": 918,
+   "testFiles": 72,
+   "byLayer": {
+    "unit": 38,
+    "integration": 13,
+    "remediation": 6,
+    "vapt": 12
+   },
+   "sampleCode": [
+    "app/api/alerts/run/route.ts",
+    "app/api/approvals/reminders/route.ts",
+    "app/api/automation/retry/route.ts",
+    "app/api/csat/run/route.ts"
+   ]
+  },
+  "29 Audit trails and system logs": {
+   "codeFiles": 21,
+   "linesOfCode": 2393,
+   "testFiles": 136,
+   "byLayer": {
+    "unit": 42,
+    "integration": 14,
+    "remediation": 28,
+    "vapt": 46
+   },
+   "sampleCode": [
+    "app/(app)/admin/logs/AuditLogClient.tsx",
+    "app/(app)/admin/logs/EventLogClient.tsx",
+    "app/(app)/admin/logs/loading.tsx",
+    "app/(app)/admin/logs/page.tsx"
+   ]
+  },
+  "30 Other (projects, tasks, intake inbox, data API, weather, profile)": {
+   "codeFiles": 51,
+   "linesOfCode": 9668,
+   "testFiles": 207,
+   "byLayer": {
+    "unit": 86,
+    "integration": 54,
+    "remediation": 19,
+    "vapt": 40
+   },
+   "sampleCode": [
+    "app/(app)/intake/channels/ChannelsClient.tsx",
+    "app/(app)/intake/channels/page.tsx",
+    "app/(app)/intake/inbox/InboxList.tsx",
+    "app/(app)/intake/inbox/InboxWorkspace.tsx"
+   ]
+  }
+ }
+}

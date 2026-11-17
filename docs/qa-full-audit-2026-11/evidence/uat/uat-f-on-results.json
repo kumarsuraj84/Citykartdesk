@@ -1,0 +1,102 @@
+{
+ "ran": "2026-11-16T07:47:55.706Z",
+ "phase": "on",
+ "results": [
+  {
+   "id": "F03",
+   "status": "PASS",
+   "title": "Anonymous caller is refused (401) and nothing reaches CKOneAI",
+   "detail": "401, stub untouched"
+  },
+  {
+   "id": "F04",
+   "status": "PASS",
+   "title": "Vendor (OEM) login is refused (403) even when listed as a pilot user",
+   "detail": "403, stub untouched"
+  },
+  {
+   "id": "F05",
+   "status": "PASS",
+   "title": "A person not on the pilot list is refused (403)",
+   "detail": "403 \"not open to you yet\", stub untouched"
+  },
+  {
+   "id": "F06",
+   "status": "PASS",
+   "title": "Pilot requester: call is forwarded, correctly signed (verified independently), with the right person and role",
+   "detail": "signature verified; user ok; roles \"requester\"; ts skew 0.7s"
+  },
+  {
+   "id": "F07",
+   "status": "PASS",
+   "title": "Forged identity headers, Authorization and Cookie from the browser never reach CKOneAI",
+   "detail": "identity, roles, Authorization and Cookie all replaced or dropped"
+  },
+  {
+   "id": "F08",
+   "status": "PASS",
+   "title": "Chat POST: body is signed byte-for-byte, a fresh nonce is used on each call, upstream Set-Cookie is not passed back",
+   "detail": "both signed, nonces differ, no Set-Cookie passed back"
+  },
+  {
+   "id": "F09",
+   "status": "PASS",
+   "title": "The question text is not kept anywhere in CK Desk (only who and when)",
+   "detail": "marker found 0 times in a full data dump; 46 'ask' event row(s) in the system log (who + byte count + roles, no text)"
+  },
+  {
+   "id": "F10",
+   "status": "PASS",
+   "title": "Path abuse is refused (traversal, double slash, unknown routes, wrong method, query tricks) and never forwarded",
+   "detail": "statuses /api/ckoneai/..%2f..%2fadmin=ERR:ECONNRESET,/api/ckoneai//health=308,/api/ckoneai/admin=400,/api/ckoneai/conversations/../../x=404,/ckoneai-ui/..%2f..%2f.env=400,/ckoneai-ui/%2e%2e/%2e%2e/secret=404,405; stub untouched"
+  },
+  {
+   "id": "F10b",
+   "status": "PASS",
+   "title": "A query with a second \"?\" cannot split or smuggle: upstream gets ONE encoded query, correctly signed",
+   "detail": "upstream saw /api/ckoneai/health?a=1%3Fb%3D2&c=%0D%0AX-Evil%3A1 (one query, signed, no injected header)"
+  },
+  {
+   "id": "F11",
+   "status": "PASS",
+   "title": "Oversized message (>256 KB) is refused with 413 and never forwarded",
+   "detail": "413, stub untouched"
+  },
+  {
+   "id": "F12",
+   "status": "PASS",
+   "title": "Technician (pilot) is allowed and signed with a technician role",
+   "detail": "roles \"requester,technician\""
+  },
+  {
+   "id": "F14",
+   "status": "PASS",
+   "title": "Rate limit: the 21st chat question inside a minute is answered 429",
+   "detail": "first 429 at question #21 (limit 20/min)"
+  },
+  {
+   "id": "F15",
+   "status": "PASS",
+   "title": "CKOneAI down: person gets a clear 502 message and the outage is written to the audit log; it recovers when CKOneAI is back",
+   "detail": "502 \"The assistant did not answer. Please try again in a moment.\"; 5 unreachable audit row(s); recovered with 200"
+  },
+  {
+   "id": "F16",
+   "status": "PASS",
+   "title": "Data API: no token / wrong token -> 401; right token -> 200",
+   "detail": "401/401/200; 20 entities"
+  },
+  {
+   "id": "F17",
+   "status": "PASS",
+   "title": "Data API is read-only: POST/PUT/DELETE are refused; page size is capped; unknown entity 404; bad cursor 400",
+   "detail": "write methods 405/405/405/405; huge limit -> 400 (0 rows); unknown entity 404; bad cursor 400"
+  },
+  {
+   "id": "F18",
+   "status": "PASS",
+   "title": "Data API exposes no secrets: no password, token, key or hash-like column in any entity",
+   "detail": "20 entities checked, none sensitive-looking"
+  }
+ ]
+}

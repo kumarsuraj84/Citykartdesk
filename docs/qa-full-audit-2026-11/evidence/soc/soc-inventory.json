@@ -1,0 +1,449 @@
+{
+ "appWrittenSecurity": {
+  "n": 669,
+  "pct_actor": 88,
+  "pct_ip": 0,
+  "pct_request_id": 74.4,
+  "pct_outcome": 100
+ },
+ "total": 733841,
+ "bySource": [
+  {
+   "category": "audit",
+   "source": "database",
+   "n": 639268
+  },
+  {
+   "category": "security",
+   "source": "database",
+   "n": 48719
+  },
+  {
+   "category": "audit",
+   "source": "server_action",
+   "n": 38032
+  },
+  {
+   "category": "error",
+   "source": "shipper",
+   "n": 2814
+  },
+  {
+   "category": "error",
+   "source": "app_server",
+   "n": 2689
+  },
+  {
+   "category": "audit",
+   "source": "admin",
+   "n": 721
+  },
+  {
+   "category": "security",
+   "source": "auth",
+   "n": 532
+  },
+  {
+   "category": "security",
+   "source": "server_action",
+   "n": 445
+  },
+  {
+   "category": "error",
+   "source": "server_action",
+   "n": 178
+  },
+  {
+   "category": "error",
+   "source": "database",
+   "n": 124
+  },
+  {
+   "category": "audit",
+   "source": "api_route",
+   "n": 91
+  },
+  {
+   "category": "error",
+   "source": "integration",
+   "n": 85
+  },
+  {
+   "category": "error",
+   "source": "cron",
+   "n": 46
+  },
+  {
+   "category": "error",
+   "source": "browser",
+   "n": 41
+  },
+  {
+   "category": "error",
+   "source": "api_route",
+   "n": 23
+  },
+  {
+   "category": "error",
+   "source": "process",
+   "n": 19
+  },
+  {
+   "category": "audit",
+   "source": "cron",
+   "n": 14
+  }
+ ],
+ "quality": [
+  {
+   "category": "audit",
+   "n": 678126,
+   "pct_actor": 0.1,
+   "pct_ip": 0,
+   "pct_request_id": 0.1,
+   "pct_outcome": 100,
+   "pct_agent": 0
+  },
+  {
+   "category": "error",
+   "n": 6019,
+   "pct_actor": 5.4,
+   "pct_ip": 0,
+   "pct_request_id": 6.5,
+   "pct_outcome": 100,
+   "pct_agent": 6.8
+  },
+  {
+   "category": "security",
+   "n": 49696,
+   "pct_actor": 1.9,
+   "pct_ip": 0,
+   "pct_request_id": 1,
+   "pct_outcome": 100,
+   "pct_agent": 1.2
+  }
+ ],
+ "securityAuditActions": [
+  {
+   "action": "requests.insert",
+   "n": 520092
+  },
+  {
+   "action": "perf.append",
+   "n": 37800
+  },
+  {
+   "action": "profiles.update",
+   "n": 18532
+  },
+  {
+   "action": "requests.delete",
+   "n": 16808
+  },
+  {
+   "action": "profiles.insert",
+   "n": 14385
+  },
+  {
+   "action": "profiles.delete",
+   "n": 13701
+  },
+  {
+   "action": "approvals.insert",
+   "n": 11390
+  },
+  {
+   "action": "approvals.delete",
+   "n": 11378
+  },
+  {
+   "action": "requests.update",
+   "n": 8808
+  },
+  {
+   "action": "team_members.insert",
+   "n": 5001
+  },
+  {
+   "action": "team_members.delete",
+   "n": 4958
+  },
+  {
+   "action": "app_settings.delete",
+   "n": 4563
+  },
+  {
+   "action": "app_settings.insert",
+   "n": 4563
+  },
+  {
+   "action": "services.insert",
+   "n": 4040
+  },
+  {
+   "action": "services.delete",
+   "n": 4004
+  },
+  {
+   "action": "teams.insert",
+   "n": 3964
+  },
+  {
+   "action": "teams.delete",
+   "n": 3938
+  },
+  {
+   "action": "departments.insert",
+   "n": 2379
+  },
+  {
+   "action": "departments.delete",
+   "n": 2338
+  },
+  {
+   "action": "approval_workflow_steps.insert",
+   "n": 2122
+  },
+  {
+   "action": "approval_workflow_steps.delete",
+   "n": 2110
+  },
+  {
+   "action": "stores.insert",
+   "n": 1961
+  },
+  {
+   "action": "request_attachments.insert",
+   "n": 1838
+  },
+  {
+   "action": "request_attachments.delete",
+   "n": 1816
+  },
+  {
+   "action": "stores.delete",
+   "n": 1751
+  },
+  {
+   "action": "approval_workflows.insert",
+   "n": 1686
+  },
+  {
+   "action": "service_categories.insert",
+   "n": 1671
+  },
+  {
+   "action": "service_categories.delete",
+   "n": 1657
+  },
+  {
+   "action": "global_sla_config.insert",
+   "n": 1644
+  },
+  {
+   "action": "service_sub_categories.insert",
+   "n": 1556
+  },
+  {
+   "action": "service_sub_categories.delete",
+   "n": 1535
+  },
+  {
+   "action": "services.update",
+   "n": 1146
+  },
+  {
+   "action": "stores.update",
+   "n": 1028
+  },
+  {
+   "action": "approvals.update",
+   "n": 954
+  },
+  {
+   "action": "approval_workflows.delete",
+   "n": 884
+  },
+  {
+   "action": "business_rules.insert",
+   "n": 738
+  },
+  {
+   "action": "business_rules.delete",
+   "n": 686
+  },
+  {
+   "action": "global_sla_config.delete",
+   "n": 616
+  },
+  {
+   "action": "sla_policies.insert",
+   "n": 595
+  },
+  {
+   "action": "sla_policies.delete",
+   "n": 594
+  },
+  {
+   "action": "intake_channels.insert",
+   "n": 499
+  },
+  {
+   "action": "intake_channels.delete",
+   "n": 498
+  },
+  {
+   "action": "intake_channels.update",
+   "n": 475
+  },
+  {
+   "action": "auth.login_succeeded",
+   "n": 425
+  },
+  {
+   "action": "organizations.insert",
+   "n": 411
+  },
+  {
+   "action": "service_categories.update",
+   "n": 365
+  },
+  {
+   "action": "business_rules.update",
+   "n": 212
+  },
+  {
+   "action": "scheduled_reports.update",
+   "n": 180
+  },
+  {
+   "action": "scheduled_reports.insert",
+   "n": 160
+  },
+  {
+   "action": "scheduled_reports.delete",
+   "n": 160
+  },
+  {
+   "action": "organizations.delete",
+   "n": 154
+  },
+  {
+   "action": "category_oem_routing_changed",
+   "n": 150
+  },
+  {
+   "action": "app_settings.update",
+   "n": 133
+  },
+  {
+   "action": "oems.insert",
+   "n": 126
+  },
+  {
+   "action": "oems.delete",
+   "n": 126
+  },
+  {
+   "action": "alert_rules.update",
+   "n": 90
+  },
+  {
+   "action": "request_collaborators.delete",
+   "n": 78
+  },
+  {
+   "action": "request_collaborators.insert",
+   "n": 78
+  },
+  {
+   "action": "alert_rules.delete",
+   "n": 70
+  },
+  {
+   "action": "alert_rules.insert",
+   "n": 70
+  }
+ ],
+ "logTables": "desktime_app_logs, pms_ticket_log, owner_audit_log, request_activity, intake_audit_log, project_activity, business_rule_events, program_pms_log, conversation_events, desktime_time_logs, system_log_archive, system_log_chain_head, app_event_log, admin_audit_log, sla_escalation_events, system_log, task_activity",
+ "secretScan": {
+  "rowsScanned": 733841,
+  "hits": 0
+ },
+ "chain": {
+  "brokenBefore": 0,
+  "brokenAfterTamper": 1,
+  "brokenAfterRollback": 0
+ },
+ "replaySignIn": [
+  {
+   "action": "auth.login_failed",
+   "category": "security",
+   "outcome": "failure",
+   "severity": "warning",
+   "has_actor": false,
+   "has_ip": false,
+   "has_req": true,
+   "path": "/login",
+   "message": "Sign-in refused"
+  },
+  {
+   "action": "auth.login_rate_limited",
+   "category": "security",
+   "outcome": "denied",
+   "severity": "warning",
+   "has_actor": false,
+   "has_ip": false,
+   "has_req": true,
+   "path": "/login",
+   "message": "Too many sign-in attempts"
+  },
+  {
+   "action": "auth.login_rate_limited",
+   "category": "security",
+   "outcome": "denied",
+   "severity": "warning",
+   "has_actor": false,
+   "has_ip": false,
+   "has_req": true,
+   "path": "/login",
+   "message": "Too many sign-in attempts"
+  },
+  {
+   "action": "auth.login_rate_limited",
+   "category": "security",
+   "outcome": "denied",
+   "severity": "warning",
+   "has_actor": false,
+   "has_ip": false,
+   "has_req": true,
+   "path": "/login",
+   "message": "Too many sign-in attempts"
+  },
+  {
+   "action": "auth.login_failed",
+   "category": "security",
+   "outcome": "failure",
+   "severity": "warning",
+   "has_actor": false,
+   "has_ip": false,
+   "has_req": true,
+   "path": "/login",
+   "message": "Sign-in refused"
+  },
+  {
+   "action": "auth.login_rate_limited",
+   "category": "security",
+   "outcome": "denied",
+   "severity": "warning",
+   "has_actor": false,
+   "has_ip": false,
+   "has_req": true,
+   "path": "/login",
+   "message": "Too many sign-in attempts"
+  }
+ ],
+ "replayForbidden": [],
+ "replayMachineAuth": [],
+ "retention": "(no explicit setting: defaults apply)"
+}

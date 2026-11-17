@@ -1,0 +1,13 @@
+PASS  K01  Login page: Tab reaches e-mail, password, sign-in in order and every stop shows a visible focus indicator  — order ok: input:you@citykart.org > input:•••••••• > button:Sign in
+PASS  K02  Login by keyboard only (type, Tab, Enter) signs the person in  — landed on /home
+PASS  K03  Wrong password: an error message appears, is exposed to screen readers (role=alert / aria-live) and does not reveal which part was wrong  — announced: "Invalid login credentials"
+PASS  K04  Landmarks and page structure on the signed-in home: html lang, one main landmark, exactly one h1, descriptive title, skip-to-content reachable  — {"lang":"en","mains":1,"h1":1,"title":"Citykart Desk","nav":2,"skip":true}
+PASS  K05  Dialog on /admin/users (admin): opens, focus moves inside, Tab stays inside, Escape closes, focus returns to the opener  — "Invite User" ok
+NOTE  K06  Dialog on /vendor/tickets/<id> (vendor tech): opens, focus moves inside, Tab stays inside, Escape closes, focus returns to the opener  — no dialog opener matched on this page for this persona (nothing to test here)
+NOTE  K07  Dialog on /requests/<id> (technician): opens, focus moves inside, Tab stays inside, Escape closes, focus returns to the opener  — no dialog opener matched on this page for this persona (nothing to test here)
+NOTE  K08  Dark mode (prefers-color-scheme: dark): colour-contrast violations on home, requests and admin users  — /home: 0 contrast issues, page is light (app has no OS-dark follow) | /requests: 0 contrast issues, page is light (app has no OS-dark follow) | /admin/users: 0 contrast issues, page is light (app has no OS-dark follow)
+PASS  K09  320px wide (400% zoom equivalent): no sideways scrolling on home, requests, ticket and login  — no overflow
+PASS  K10  Text spacing and 200% text size: home page remains usable (no clipped or overlapping text blocks)  — no page-level overflow; 1 controls clip their text with ellipsis
+NOTE  K11  Ask CK Desk assistant panel: opens from its launcher; reports how it behaves for the keyboard (non-modal dock)  — {"modal":false,"name":"Ask CK Desk"} — Escape does not close it (non-modal chat dock; close with its own button)
+
+11/11 not failing

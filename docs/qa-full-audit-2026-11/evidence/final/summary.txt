@@ -1,0 +1,6 @@
+tsc exit=0
+eslint exit=0 sec=27
+main exit=1 sec=407
+CLEANUP: 100,000 PERFLOAD tickets removed (3,284 left) before the next lines
+DONE2
+DONE3

@@ -1,0 +1,5 @@
+D:\ANKUR AI PROJECTS\CitykartDesk-ZOHO Alternate\audit-2026-10\guard\run.ps1 : A positional parameter cannot be found 
+that accepts argument 'node_modules/typescript/lib/tsc.js'.
+    + CategoryInfo          : InvalidArgument: (:) [run.ps1], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : PositionalParameterNotFound,run.ps1
+ 

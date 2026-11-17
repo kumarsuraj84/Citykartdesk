@@ -1,0 +1,18 @@
+{
+ "ran": "2026-11-16T07:44:26.432Z",
+ "phase": "off",
+ "results": [
+  {
+   "id": "F01",
+   "status": "PASS",
+   "title": "Assistant OFF (default): every route answers \"switched off\" (503) for a signed-in person, 401/503 for anonymous; nothing is forwarded",
+   "detail": "signed-in 503, anonymous 401, chat page 503"
+  },
+  {
+   "id": "F02",
+   "status": "PASS",
+   "title": "Data API OFF by default: no token configured -> 503 \"not switched on\"",
+   "detail": "503 as designed"
+  }
+ ]
+}

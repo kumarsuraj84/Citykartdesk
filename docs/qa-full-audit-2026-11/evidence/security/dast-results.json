@@ -1,0 +1,131 @@
+{
+ "ran": "2026-11-16T09:51:01.114Z",
+ "results": [
+  {
+   "id": "S01",
+   "status": "PASS",
+   "title": "Unauthenticated: all 37 API routes refuse to return data (GET and POST), except the ones public by design",
+   "detail": "37 routes x 2 methods; public-by-design answering 200: /api/health, /api/intake/webhook/outlook, /api/intake/webhook/whatsapp, /api/version"
+  },
+  {
+   "id": "S02",
+   "status": "NOTE",
+   "title": "Security headers on the login page and an API answer (CSP, frame, nosniff, referrer, permissions)",
+   "detail": "headers present | CSP is REPORT-ONLY (not enforced; owner decision D-033 pending) | script-src allows 'unsafe-inline'/'unsafe-eval', so even once enforced it would not stop injected scripts | HSTS: absent over plain HTTP (expected in dev; live is HTTP-only by owner decision) | server header: none | x-powered-by: none"
+  },
+  {
+   "id": "S03",
+   "status": "NOTE",
+   "title": "Session cookie flags: HttpOnly and SameSite present",
+   "detail": "session cookie is readable by page scripts (not HttpOnly) - documented design (docs/HTTPS-AND-CSP-PLAN.md): the browser Supabase client reads it; used on 2 screens only. cookies: sb-127-auth-token[httpOnly=false,sameSite=Lax,secure=false] | Secure flag absent: site is HTTP only (known owner decision, residual risk R-HTTP)"
+  },
+  {
+   "id": "S04",
+   "status": "PASS",
+   "title": "Open redirect: login ?next= pointing at another site is not followed",
+   "detail": "4 hostile next= values all stayed on the app"
+  },
+  {
+   "id": "S05",
+   "status": "PASS",
+   "title": "Brute force: after repeated wrong passwords the app slows or locks sign-in (and says so), and the right password is then refused for a while",
+   "detail": "throttled/locked: messages seen: Invalid login credentials | Too many login attempts. Please wait a minute.; right password afterwards refused (Too many login attempts. Please wait a minute.)"
+  },
+  {
+   "id": "S06",
+   "status": "PASS",
+   "title": "Forgot password: same answer for a real and an unknown e-mail (no account enumeration)",
+   "detail": "identical answer for both (2535ms vs 2540ms)"
+  },
+  {
+   "id": "S07",
+   "status": "PASS",
+   "title": "Public token pages (/approve, /csat) with random tokens reveal nothing and do not error",
+   "detail": "statuses 200,200,200,200"
+  },
+  {
+   "id": "S08",
+   "status": "PASS",
+   "title": "CSRF: a page on ANOTHER site cannot make the browser act as the signed-in user (cross-site POST with the cookie)",
+   "detail": "cross-site form POST with cookie: not authenticated, no row written (event rows 68 -> 66); response seen by attacker page: Sign in to Citykart Desk Your company's"
+  },
+  {
+   "id": "S10",
+   "status": "PASS",
+   "title": "IDOR: a store user cannot open or download another person's ticket (page, PDF, attachment list)",
+   "detail": "all three refused or empty"
+  },
+  {
+   "id": "S11",
+   "status": "PASS",
+   "title": "Vertical access: a store user and a vendor are refused on admin / export / report endpoints and pages",
+   "detail": "8 targets x 2 personas refused"
+  },
+  {
+   "id": "S12",
+   "status": "PASS",
+   "title": "Vendor isolation: a vendor cannot open Citykart-only ticket pages or PDFs (a ticket not assigned to his company)",
+   "detail": "refused"
+  },
+  {
+   "id": "S13",
+   "status": "PASS",
+   "title": "Stored XSS: script/HTML in a ticket title, description and comment is shown as text for a technician (no script runs)",
+   "detail": "rendered as text on ticket page, list and queue"
+  },
+  {
+   "id": "S14",
+   "status": "PASS",
+   "title": "Hostile search text and parameters on list pages never cause a server error or leak internals",
+   "detail": "27 hostile requests, no 5xx, no internals"
+  },
+  {
+   "id": "S15",
+   "status": "PASS",
+   "title": "Path traversal / odd paths against storage and file routes are refused",
+   "detail": "7 traversal probes refused"
+  },
+  {
+   "id": "R01",
+   "status": "PASS",
+   "title": "Anonymous (no login) cannot read any of the 136 public tables",
+   "detail": "zero rows visible to anonymous in every table"
+  },
+  {
+   "id": "R02",
+   "status": "NOTE",
+   "title": "Store requester sees only own tickets; none of the internal tables (system log, settings, secrets, audit) are readable by a store user or a vendor",
+   "detail": "store sees 4 own tickets, 0 foreign; app_settings (global key/value: retention days, policy.*, PO approver id) is readable by every signed-in user incl. vendors (1 row(s)) - not secret today, but a secret must never be stored there; sensitive tables checked: 8"
+  },
+  {
+   "id": "R03",
+   "status": "PASS",
+   "title": "Vendor sees only tickets assigned to his company",
+   "detail": "vendor can read 4 of 3284 tickets (all his company's)"
+  },
+  {
+   "id": "R04",
+   "status": "PASS",
+   "title": "Privilege escalation through the data API is refused: a store user cannot make himself admin, change org, edit others' tickets/profiles, or insert as someone else",
+   "detail": "8 hostile writes all refused"
+  },
+  {
+   "id": "R05",
+   "status": "PASS",
+   "title": "Functions callable by anonymous people: list, and call each with empty/hostile arguments to prove none returns data or changes data",
+   "detail": "31 anon-executable functions (list saved); none returned data to an anonymous call"
+  },
+  {
+   "id": "R06",
+   "status": "PASS",
+   "title": "Multi-organisation isolation: a person of organisation 2 sees nothing of organisation 1 and cannot write into it (and the reverse)",
+   "detail": "organisation 2 admin: 0 foreign rows across 12 tables, 0 cross-org writes; reverse direction also clean"
+  },
+  {
+   "id": "R07",
+   "status": "PASS",
+   "title": "Storage buckets: anonymous and a store user cannot list or read other people's attachments",
+   "detail": "4 buckets (task-attachments:private, icons:public, request-attachments:private, intake-attachments:private) — nothing listable by anonymous or a store user"
+  }
+ ]
+}

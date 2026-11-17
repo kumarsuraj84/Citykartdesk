@@ -1,0 +1,9 @@
+PASS  FR01  Database stops for ~10 s: people see a plain message (no technical text), the app stays up, and recovers by itself  — outage handled (signed-in /home: 500 in 2569 ms; signed-in /requests: 500 in 2537 ms; sign-in page: 200 in 3 ms; health: 503); back to normal 5 s after restart, no app restart
+PASS  FR02  The data gateway (PostgREST) stops: same expectations  — outage handled (signed-in /home: 500 in 22579 ms; signed-in /requests: 500 in 2550 ms; sign-in page: 200 in 2 ms; health: 503); back to normal 5 s after restart, no app restart
+PASS  FR03  The sign-in service (GoTrue) stops: people already signed in keep working; sign-in says so plainly; recovers  — outage handled (signed-in /home: 200 in 62 ms; signed-in /requests: 200 in 70 ms; sign-in page: 200 in 13 ms; health: 200; already-signed-in /home still 200); back to normal 0 s after restart, no app restart
+FAIL  FR04  File storage stops: opening an attachment gives a clear "temporarily unavailable" (503), not a wrong "not found"; recovers  — while storage was down the answer was 0 NO ANSWER: The operation was aborted due to timeout
+FAIL  FR05  A scheduled rule whose "claim" was written but whose actions never ran (simulated crash) is NOT retried: reports the at-most-once behaviour and how it would be noticed  — The operation was aborted due to timeout
+FAIL  FR06  Scheduler run is safe to repeat after an interruption: running it again right away changes nothing for already-handled tickets  — The operation was aborted due to timeout
+PASS  FR07  Scheduler is refused without its secret even while the database is busy; and an interrupted request (client gives up after 50 ms) does not leave the app unhealthy  — 401 without secret; 6 abandoned scheduler calls, app healthy and same process
+
+4/7 not failing

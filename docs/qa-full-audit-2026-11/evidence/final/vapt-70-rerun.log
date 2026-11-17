@@ -1,0 +1,72 @@
+PASS  C1  every URL-valued setting resolves to loopback
+PASS  C2  no setting contains a production / retired address
+PASS  C3  email / messaging / OAuth / LLM settings are blank (outbound business notifications disabled)
+PASS  C4  Supabase URL is the audit stack (127.0.0.1:554xx), not the dev stack (54321) or anything else  [http://127.0.0.1:55421]
+PASS  C5  app URL and cron target are localhost:33xx  [http://localhost:3310 / http://localhost:3310]
+PASS  C6  every key in .env.local is overridden by the audit env (nothing falls through to the dev file)
+PASS  C7  NODE_OPTIONS preloads the egress guard in this process  [set]
+PASS  C8  every outward-facing environment variable the code reads is explicitly defined in the audit env
+PASS  G1  guard refuses 9 forbidden/non-loopback targets before any socket is opened
+PASS  G2  guard lets loopback targets through
+PASS  G3  net.Socket#connect is patched when the guard is preloaded  [patched in this process]
+PASS  D1  audit stack containers running (db, auth, rest, kong, storage, inbucket/mail trap)  [supabase_db_ckdesk_audit, supabase_storage_ckdesk_audit, supabase_rest_ckdesk_audit, supabase_realtime_ckdesk_audit, supabase_inbucket_ckdesk_audit, supabase_auth_ckdesk_audit, supabase_kong_ckdesk_audit]
+PASS  D2  Auth (GoTrue) sends mail only to the local mail trap  [supabase_inbucket_ckdesk_audit]
+PASS  D3  Storage uses the file backend on a local Docker volume (no NAS / SMB / S3)  [file volume:supabase_storage_ckdesk_audit/_data;]
+PASS  D4  no audit-container setting references a production / retired address
+PASS  D5  the user's dev stack (citykart_desk) is a different set of containers, untouched by the audit  [11 dev containers present, not used]
+PASS  B1  no mailbox (SMTP) settings stored in the audit database  [0]
+PASS  B2  no active WhatsApp / email intake channel in the audit database  [0]
+PASS  B3  every auth user in the audit database is synthetic (@example.test / @audit.test) apart from the seeded bootstrap admin  [0]
+PASS  B4  every ticket in the audit database belongs to a synthetic requester (@audit.test / @example.test) - no migrated business tickets  [0]
+PASS  N1  no socket owned by node / docker / ssh / psql / any non-browser process towards 10.0.1.98 / 10.0.0.205 / 10.0.0.25 / 10.0.1.12 / 182.72.84.10  [only the user's own browser: chrome.exe(pid 23076) 182.72.84.10:3210 CLOSE_WAIT - NOT the audit; the audit never uses this browser]
+
+ISOLATION GATE: PASSED  (21/21)
+
+ RUN  v3.2.7 D:/ANKUR AI PROJECTS/CitykartDesk-ZOHO Alternate
+
+ ❯ tests/vapt/70-data-api-team-steps-manager.test.ts (9 tests | 1 failed) 3019ms
+   ✓ meta > lists the two new entities as snapshots, with ids only and no names 82ms
+   ✓ team_members (composite key, synthetic id) > every row has the id team_id:user_id and the count matches 85ms
+   × team_members (composite key, synthetic id) > paging one row at a time gives every row exactly once, in a stable order 459ms
+     → expected [ …(200) ] to deeply equal [ …(202) ]
+   ✓ team_members (composite key, synthetic id) > the ids list matches the rows, and a removed membership drops out  392ms
+   ✓ team_members (composite key, synthetic id) > a cursor that is not a team_members cursor is refused with 400 11ms
+   ✓ approval_workflow_steps > lists the steps of the workflow with the approver id, null for an any_manager step 8ms
+   ✓ approval_workflow_steps > pages without skipping and the ids list drops a deleted step 89ms
+   ✓ users.manager_id > carries the id of the direct manager, null for everybody else, as the last column 21ms
+   ✓ users.manager_id > a change of manager moves the person into the next incremental read 10ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/vapt/70-data-api-team-steps-manager.test.ts > team_members (composite key, synthetic id) > paging one row at a time gives every row exactly once, in a stable order
+AssertionError: expected [ …(200) ] to deeply equal [ …(202) ]
+
+- Expected
++ Received
+
+@@ -197,8 +197,6 @@
+    "f22f83e5-d4e4-4453-bacd-58c5b6ad1afd:40371f0c-871f-4475-b4eb-13e03695fcb9",
+    "f2807d15-c2a8-45e9-a298-6a219ddf1920:6fcc94d4-86da-4368-8dcd-d95c66945050",
+    "f2807d15-c2a8-45e9-a298-6a219ddf1920:c543f788-a45e-4b17-9ba1-b9579ed28fb6",
+    "f779397b-4608-4e04-947e-afc89372b9a3:bcbead65-4720-451b-b2fd-f03c0b350aa1",
+    "fa875e2a-85bf-4d48-a82c-5cc7b7a255b6:043b354a-944f-464a-b6c0-2b1439334177",
+-   "fa875e2a-85bf-4d48-a82c-5cc7b7a255b6:7c766f64-3f59-4d6d-ac50-bbad1d12a552",
+-   "fd8a87b6-d01c-47b8-94c5-e4e7c7af83e2:bd4de253-8386-40ec-a73d-c71f6e961b0a",
+  ]
+
+ ❯ tests/vapt/70-data-api-team-steps-manager.test.ts:94:38
+     92|     for (const size of [1, 2, 3]) {
+     93|       const paged = await walk('rows', 'team_members', size)
+     94|       expect(paged.map((r) => r.id)).toEqual(all.map((r) => r.id))
+       |                                      ^
+     95|     }
+     96|     expect(all.map((r) => r.id)).toEqual([...all.map((r) => r.id)].sor…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  10:17:06
+   Duration  3.67s (transform 88ms, setup 27ms, collect 158ms, tests 3.02s, environment 0ms, prepare 44ms)
+

@@ -1,0 +1,80 @@
+{
+ "label": "ds3k",
+ "users": 1,
+ "think": 2000,
+ "durationSec": 60,
+ "requests": 24,
+ "errors": 0,
+ "errorRate": 0,
+ "rps": 0.4,
+ "overall": {
+  "p50": 59,
+  "p95": 70,
+  "p99": 73,
+  "max": 73
+ },
+ "serverRssMB": {
+  "min": 156,
+  "max": 212,
+  "first": 179,
+  "last": 186
+ },
+ "serverCpuPct": 2,
+ "dbCpuSamples": [
+  "0.17%",
+  "0.14%",
+  "0.13%",
+  "0.14%",
+  "0.03%",
+  "0.09%",
+  "0.10%",
+  "0.06%",
+  "0.04%",
+  "0.04%",
+  "0.03%",
+  "0.03%",
+  "0.05%",
+  "0.33%"
+ ],
+ "requestsInDb": "3284",
+ "errSamples": [],
+ "rows": [
+  {
+   "page": "techmgr /dashboards/executive",
+   "n": 3,
+   "p50": 54,
+   "p95": 73,
+   "p99": 73,
+   "max": 73,
+   "errors": 0
+  },
+  {
+   "page": "techmgr /admin/reports",
+   "n": 6,
+   "p50": 63,
+   "p95": 70,
+   "p99": 70,
+   "max": 70,
+   "errors": 0
+  },
+  {
+   "page": "techmgr /requests/queue",
+   "n": 9,
+   "p50": 59,
+   "p95": 66,
+   "p99": 66,
+   "max": 66,
+   "errors": 0
+  },
+  {
+   "page": "techmgr /home",
+   "n": 6,
+   "p50": 51,
+   "p95": 60,
+   "p99": 60,
+   "max": 60,
+   "errors": 0
+  }
+ ],
+ "ran": "2026-11-16T09:56:07.870Z"
+}

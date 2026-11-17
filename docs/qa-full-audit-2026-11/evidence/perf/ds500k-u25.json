@@ -1,0 +1,169 @@
+{
+ "label": "ds500k",
+ "users": 25,
+ "think": 2000,
+ "durationSec": 60,
+ "requests": 520,
+ "errors": 0,
+ "errorRate": 0,
+ "rps": 8.7,
+ "overall": {
+  "p50": 320,
+  "p95": 3199,
+  "p99": 5323,
+  "max": 7676
+ },
+ "serverRssMB": {
+  "min": 724,
+  "max": 849,
+  "first": 813,
+  "last": 849
+ },
+ "serverCpuPct": 77,
+ "dbCpuSamples": [
+  "185.33%",
+  "325.71%",
+  "367.49%",
+  "443.96%",
+  "443.20%",
+  "0.22%",
+  "137.38%",
+  "378.30%",
+  "382.93%",
+  "0.21%",
+  "88.30%",
+  "367.10%",
+  "0.20%"
+ ],
+ "requestsInDb": "503284",
+ "errSamples": [],
+ "rows": [
+  {
+   "page": "techmgr /admin/reports",
+   "n": 11,
+   "p50": 4421,
+   "p95": 7676,
+   "p99": 7676,
+   "max": 7676,
+   "errors": 0
+  },
+  {
+   "page": "techmgr /dashboards/executive",
+   "n": 16,
+   "p50": 3118,
+   "p95": 6464,
+   "p99": 6464,
+   "max": 6464,
+   "errors": 0
+  },
+  {
+   "page": "techmgr /home",
+   "n": 13,
+   "p50": 3382,
+   "p95": 6171,
+   "p99": 6171,
+   "max": 6171,
+   "errors": 0
+  },
+  {
+   "page": "tech /requests",
+   "n": 18,
+   "p50": 1127,
+   "p95": 3102,
+   "p99": 3102,
+   "max": 3102,
+   "errors": 0
+  },
+  {
+   "page": "store /services",
+   "n": 33,
+   "p50": 321,
+   "p95": 2971,
+   "p99": 2997,
+   "max": 2997,
+   "errors": 0
+  },
+  {
+   "page": "tech /requests/:id",
+   "n": 27,
+   "p50": 356,
+   "p95": 2772,
+   "p99": 3183,
+   "max": 3183,
+   "errors": 0
+  },
+  {
+   "page": "tech /requests/queue",
+   "n": 32,
+   "p50": 116,
+   "p95": 2669,
+   "p99": 2756,
+   "max": 2756,
+   "errors": 0
+  },
+  {
+   "page": "store /requests/:id",
+   "n": 91,
+   "p50": 256,
+   "p95": 2650,
+   "p99": 3199,
+   "max": 3199,
+   "errors": 0
+  },
+  {
+   "page": "store /home",
+   "n": 105,
+   "p50": 264,
+   "p95": 2599,
+   "p99": 3150,
+   "max": 3340,
+   "errors": 0
+  },
+  {
+   "page": "store /notifications",
+   "n": 17,
+   "p50": 428,
+   "p95": 2431,
+   "p99": 2431,
+   "max": 2431,
+   "errors": 0
+  },
+  {
+   "page": "store /requests",
+   "n": 95,
+   "p50": 240,
+   "p95": 1847,
+   "p99": 2809,
+   "max": 2809,
+   "errors": 0
+  },
+  {
+   "page": "techmgr /requests/queue",
+   "n": 20,
+   "p50": 97,
+   "p95": 1808,
+   "p99": 1808,
+   "max": 1808,
+   "errors": 0
+  },
+  {
+   "page": "tech /home",
+   "n": 33,
+   "p50": 83,
+   "p95": 1493,
+   "p99": 2466,
+   "max": 2466,
+   "errors": 0
+  },
+  {
+   "page": "tech /approvals",
+   "n": 9,
+   "p50": 282,
+   "p95": 1319,
+   "p99": 1319,
+   "max": 1319,
+   "errors": 0
+  }
+ ],
+ "ran": "2026-11-16T10:13:42.830Z"
+}

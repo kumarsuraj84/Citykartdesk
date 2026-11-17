@@ -1,0 +1,88 @@
+{
+ "label": "ds100k",
+ "users": 1,
+ "think": 2000,
+ "durationSec": 60,
+ "requests": 24,
+ "errors": 0,
+ "errorRate": 0,
+ "rps": 0.4,
+ "overall": {
+  "p50": 66,
+  "p95": 88,
+  "p99": 1429,
+  "max": 1429
+ },
+ "serverRssMB": {
+  "min": 729,
+  "max": 745,
+  "first": 733,
+  "last": 734
+ },
+ "serverCpuPct": 2,
+ "dbCpuSamples": [
+  "0.26%",
+  "0.32%",
+  "0.29%",
+  "0.39%",
+  "0.15%",
+  "0.29%",
+  "0.41%",
+  "0.29%",
+  "0.24%",
+  "0.27%",
+  "0.04%",
+  "0.07%",
+  "0.08%"
+ ],
+ "requestsInDb": "103284",
+ "errSamples": [],
+ "rows": [
+  {
+   "page": "store /requests",
+   "n": 10,
+   "p50": 74,
+   "p95": 1429,
+   "p99": 1429,
+   "max": 1429,
+   "errors": 0
+  },
+  {
+   "page": "store /home",
+   "n": 7,
+   "p50": 63,
+   "p95": 77,
+   "p99": 77,
+   "max": 77,
+   "errors": 0
+  },
+  {
+   "page": "store /requests/:id",
+   "n": 5,
+   "p50": 64,
+   "p95": 73,
+   "p99": 73,
+   "max": 73,
+   "errors": 0
+  },
+  {
+   "page": "store /notifications",
+   "n": 1,
+   "p50": 66,
+   "p95": 66,
+   "p99": 66,
+   "max": 66,
+   "errors": 0
+  },
+  {
+   "page": "store /services",
+   "n": 1,
+   "p50": 64,
+   "p95": 64,
+   "p99": 64,
+   "max": 64,
+   "errors": 0
+  }
+ ],
+ "ran": "2026-11-16T10:03:13.015Z"
+}

@@ -1,0 +1,213 @@
+{
+ "label": "ds500k",
+ "users": 50,
+ "think": 2000,
+ "durationSec": 60,
+ "requests": 644,
+ "errors": 3,
+ "errorRate": 0.47,
+ "rps": 10.7,
+ "overall": {
+  "p50": 1484,
+  "p95": 7980,
+  "p99": 18316,
+  "max": 60010
+ },
+ "serverRssMB": {
+  "min": 762,
+  "max": 1385,
+  "first": 762,
+  "last": 1072
+ },
+ "serverCpuPct": 86,
+ "dbCpuSamples": [
+  "334.97%",
+  "1189.37%",
+  "911.38%",
+  "1361.77%",
+  "1257.57%",
+  "1344.18%",
+  "1324.50%",
+  "770.54%",
+  "50.25%",
+  "1213.75%",
+  "1213.85%",
+  "1030.13%",
+  "175.16%",
+  "488.49%",
+  "454.22%",
+  "127.94%",
+  "0.02%"
+ ],
+ "requestsInDb": "503284",
+ "errSamples": [
+  "/admin/reports -> ERR The operation was aborted due to timeout",
+  "/admin/reports -> ERR The operation was aborted due to timeout",
+  "/admin/reports -> ERR The operation was aborted due to timeout"
+ ],
+ "rows": [
+  {
+   "page": "admin /admin/reports",
+   "n": 6,
+   "p50": 60006,
+   "p95": 60010,
+   "p99": 60010,
+   "max": 60010,
+   "errors": 3
+  },
+  {
+   "page": "techmgr /dashboards/executive",
+   "n": 7,
+   "p50": 7980,
+   "p95": 20988,
+   "p99": 20988,
+   "max": 20988,
+   "errors": 0
+  },
+  {
+   "page": "techmgr /home",
+   "n": 13,
+   "p50": 9878,
+   "p95": 15540,
+   "p99": 15540,
+   "max": 15540,
+   "errors": 0
+  },
+  {
+   "page": "techmgr /admin/reports",
+   "n": 11,
+   "p50": 12242,
+   "p95": 13925,
+   "p99": 13925,
+   "max": 13925,
+   "errors": 0
+  },
+  {
+   "page": "admin /dashboards/executive",
+   "n": 3,
+   "p50": 6116,
+   "p95": 11376,
+   "p99": 11376,
+   "max": 11376,
+   "errors": 0
+  },
+  {
+   "page": "tech /requests",
+   "n": 42,
+   "p50": 2142,
+   "p95": 5500,
+   "p99": 5856,
+   "max": 5856,
+   "errors": 0
+  },
+  {
+   "page": "store /requests/:id",
+   "n": 80,
+   "p50": 1645,
+   "p95": 4449,
+   "p99": 5872,
+   "max": 5872,
+   "errors": 0
+  },
+  {
+   "page": "tech /requests/queue",
+   "n": 76,
+   "p50": 1555,
+   "p95": 4448,
+   "p99": 5998,
+   "max": 5998,
+   "errors": 0
+  },
+  {
+   "page": "techmgr /requests/queue",
+   "n": 12,
+   "p50": 2277,
+   "p95": 4433,
+   "p99": 4433,
+   "max": 4433,
+   "errors": 0
+  },
+  {
+   "page": "store /services",
+   "n": 24,
+   "p50": 1104,
+   "p95": 4429,
+   "p99": 5570,
+   "max": 5570,
+   "errors": 0
+  },
+  {
+   "page": "tech /home",
+   "n": 73,
+   "p50": 1011,
+   "p95": 4385,
+   "p99": 5539,
+   "max": 5539,
+   "errors": 0
+  },
+  {
+   "page": "tech /approvals",
+   "n": 11,
+   "p50": 954,
+   "p95": 4273,
+   "p99": 4273,
+   "max": 4273,
+   "errors": 0
+  },
+  {
+   "page": "store /requests",
+   "n": 96,
+   "p50": 1569,
+   "p95": 4114,
+   "p99": 5587,
+   "max": 5587,
+   "errors": 0
+  },
+  {
+   "page": "store /notifications",
+   "n": 13,
+   "p50": 1754,
+   "p95": 3987,
+   "p99": 3987,
+   "max": 3987,
+   "errors": 0
+  },
+  {
+   "page": "admin /admin/services",
+   "n": 6,
+   "p50": 1087,
+   "p95": 3706,
+   "p99": 3706,
+   "max": 3706,
+   "errors": 0
+  },
+  {
+   "page": "store /home",
+   "n": 94,
+   "p50": 969,
+   "p95": 3647,
+   "p99": 4940,
+   "max": 4940,
+   "errors": 0
+  },
+  {
+   "page": "admin /admin/users",
+   "n": 7,
+   "p50": 1580,
+   "p95": 3539,
+   "p99": 3539,
+   "max": 3539,
+   "errors": 0
+  },
+  {
+   "page": "tech /requests/:id",
+   "n": 70,
+   "p50": 1173,
+   "p95": 2965,
+   "p99": 5589,
+   "max": 5589,
+   "errors": 0
+  }
+ ],
+ "ran": "2026-11-16T10:15:18.693Z"
+}
