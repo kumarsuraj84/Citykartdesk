@@ -15,6 +15,7 @@ import type { FormField } from '@/types'
 import { loadSavedMapping, loadTicketsForPreview, loadZohoMoveDetail, toMappings } from './data'
 import { coerceFieldValue, formDataEntry, type CoerceField } from './coerce'
 import { fieldKey } from './plan'
+import { isFinishedCkStatus } from './suggest'
 import { addMissingFieldDefinitions, formDataHas } from './refresh-pure'
 import { copyAttachments, loadZohoFieldLabels } from './move'
 
@@ -24,7 +25,7 @@ const db = () => createAdminClient() as unknown as AnyClient
 
 export const REFRESH_BATCH_LIMIT = 100
 
-export type RefreshResult = { zohoNo: number; ok: boolean; requestNo?: string; filled: string[]; left: string[]; files?: { copied: number; missing: number; already: number }; reason?: string }
+export type RefreshResult = { zohoNo: number; ok: boolean; requestNo?: string; filled: string[]; left: string[]; files?: { copied: number; missing: number; already: number }; technician?: 'had' | 'assigned' | 'none' | 'finished' | 'failed'; reason?: string }
 
 export async function refreshMovedFields(args: { orgId: string; actorId: string; numbers: number[] }): Promise<RefreshResult[]> {
   const { orgId, actorId } = args
@@ -47,7 +48,7 @@ async function refreshOne(orgId: string, actorId: string, n: number, maps: Retur
 
   const { data: tr } = await d.from('zoho_transfers').select('request_id').eq('org_id', orgId).eq('zoho_ticket_no', n).eq('state', 'moved').maybeSingle()
   if (!tr?.request_id) return fail('This Zoho ticket has not been moved to CK Desk.')
-  const { data: req } = await d.from('requests').select('id, request_no, service_id, form_data, form_sections_snapshot').eq('id', tr.request_id).eq('org_id', orgId).maybeSingle()
+  const { data: req } = await d.from('requests').select('id, request_no, status, assigned_to, service_id, form_data, form_sections_snapshot').eq('id', tr.request_id).eq('org_id', orgId).maybeSingle()
   if (!req) return fail('The CK Desk ticket was not found.')
 
   const { rows } = await loadTicketsForPreview({ numbers: String(n) }, [])
@@ -82,7 +83,8 @@ async function refreshOne(orgId: string, actorId: string, n: number, maps: Retur
     lines.push(`  • ${label} → ${field.label ?? field.id}: ${value}`)
   }
   const files = await addMissingFiles(d, actorId, req.id, n)
-  if (filledIds.length === 0) return { zohoNo: n, ok: true, requestNo: req.request_no, filled, left, files }
+  const technician = await assignIfNone(d, req.id, req.status as string, req.assigned_to as string | null)
+  if (filledIds.length === 0) return { zohoNo: n, ok: true, requestNo: req.request_no, filled, left, files, technician }
 
   const snapshot = addMissingFieldDefinitions(req.form_sections_snapshot, current, filledIds)
   const { error } = await d.from('requests').update({ form_data: formData, form_sections_snapshot: snapshot }).eq('id', req.id).eq('org_id', orgId)
@@ -91,7 +93,26 @@ async function refreshOne(orgId: string, actorId: string, n: number, maps: Retur
     request_id: req.id, author_id: actorId, is_internal: true, source: 'portal',
     body: ['FILLED IN FROM ZOHO LATER — these Zoho values were added to empty CK Desk fields of this ticket:', ...lines].join('\n'),
   })
-  return { zohoNo: n, ok: true, requestNo: req.request_no, filled, left, files }
+  return { zohoNo: n, ok: true, requestNo: req.request_no, filled, left, files, technician }
+}
+
+/**
+ * A ticket that has no technician and is not finished gets CK Desk's own Business Rules run again, quietly (the same run the move does): useful when something the rules look at was
+ * wrong at the time of the move (for example the requester was a placeholder and was matched to the right person afterwards). A technician already on the ticket is never changed;
+ * a finished ticket keeps the Zoho technician it was moved with.
+ */
+async function assignIfNone(d: AnyClient, requestId: string, status: string, assignedTo: string | null): Promise<'had' | 'assigned' | 'none' | 'finished' | 'failed'> {
+  if (assignedTo) return 'had'
+  if (isFinishedCkStatus(status)) return 'finished'
+  try {
+    const { runRulesForTrigger } = await import('@/lib/rules/run')
+    await runRulesForTrigger('created', requestId, { quiet: true })
+  } catch (e) {
+    logger.warn({ event: 'zoho_transfer.rules_failed', message: 'Quiet Business Rules failed while filling in a moved ticket', route: 'lib/zoho/transfer/refresh.ts', requestId, error: e })
+    return 'failed'
+  }
+  const { data } = await d.from('requests').select('assigned_to').eq('id', requestId).maybeSingle()
+  return data?.assigned_to ? 'assigned' : 'none'
 }
 
 /** Attaches the Zoho files that are not on the CK Desk ticket yet (matched by file name, so a file already there is never added twice). */

@@ -25,7 +25,7 @@ export function RefreshPanel({ canMove }: { canMove: boolean }) {
       <summary className="cursor-pointer text-sm font-semibold text-foreground">Fill in the fields and files of tickets already moved</summary>
       <div className="mt-2 space-y-2">
         <p className="text-muted-foreground">
-          Use this after you map a Zoho field (for example the contact number), or after the Zoho files folder is set up, for tickets that were moved earlier. Only <strong>empty</strong> CK Desk fields are filled and only files that are <strong>not on the ticket yet</strong> are attached; nothing already there is overwritten or added twice.
+          Use this after you map a Zoho field (for example the contact number), after the Zoho files folder is set up, or after you fix who the requester is, for tickets that were moved earlier. A ticket with no technician also gets the CK Desk assignment rules run again (quietly). Only <strong>empty</strong> CK Desk fields are filled and only files that are <strong>not on the ticket yet</strong> are attached; nothing already there is overwritten or added twice.
           Nothing else on the ticket changes and nobody is notified.
         </p>
         <label className="block">
@@ -39,7 +39,7 @@ export function RefreshPanel({ canMove }: { canMove: boolean }) {
             {res.results.map((r) => (
               <li key={r.zohoNo} className={r.ok ? 'text-foreground' : 'text-red-800 dark:text-red-300'}>
                 {r.ok
-                  ? <>{r.filled.length ? '✓' : '–'} Zoho {r.zohoNo}{r.requestNo ? <> (<strong>{r.requestNo}</strong>)</> : null}: {r.filled.length ? `filled ${r.filled.join('; ')}` : 'no field to fill'}{r.files ? <>; files: {r.files.copied} attached{r.files.missing ? `, ${r.files.missing} could not be attached` : ''}{r.files.already ? `, ${r.files.already} already there` : ''}</> : null}{r.left.length ? <span className="text-amber-700 dark:text-amber-400"> — not filled: {r.left.join('; ')}</span> : null}</>
+                  ? <>{r.filled.length ? '✓' : '–'} Zoho {r.zohoNo}{r.requestNo ? <> (<strong>{r.requestNo}</strong>)</> : null}: {r.filled.length ? `filled ${r.filled.join('; ')}` : 'no field to fill'}{r.files ? <>; files: {r.files.copied} attached{r.files.missing ? `, ${r.files.missing} could not be attached` : ''}{r.files.already ? `, ${r.files.already} already there` : ''}</> : null}{r.technician === 'assigned' ? <span className="text-emerald-700 dark:text-emerald-400"> — a technician was assigned by the CK Desk rules</span> : null}{r.technician === 'none' ? <span className="text-amber-700 dark:text-amber-400"> — still no technician: no CK Desk rule matches this ticket</span> : null}{r.technician === 'failed' ? <span className="text-red-700 dark:text-red-400"> — the rules could not be run</span> : null}{r.left.length ? <span className="text-amber-700 dark:text-amber-400"> — not filled: {r.left.join('; ')}</span> : null}</>
                   : <>✗ Zoho {r.zohoNo}: {r.reason}</>}
               </li>
             ))}
