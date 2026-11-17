@@ -80,3 +80,12 @@ describe('matching a Zoho person when two CK Desk people share a name', () => {
     expect(matchPerson(dir, new Map([['ajay kumar', a]]), { email: null, name: 'Ajay Kumar' })).toMatchObject({ how: 'saved', person: { id: 'a' } })
   })
 })
+
+describe('a Zoho date field arrives as an object', () => {
+  it('is read as the date Zoho shows, never as "[object Object]"', async () => {
+    const { nameOf } = await import('@/lib/zoho/transfer/data-pure')
+    expect(nameOf({ value: '1792062660000', display_value: 'Oct 15, 2026 04:41 PM' })).toBe('Oct 15, 2026 04:41 PM')
+    expect(nameOf({ value: '1794288600000' })).toBe('1794288600000')
+    expect(new Date(nameOf({ display_value: 'Nov 10, 2026 11:00 AM' })).getFullYear()).toBe(2026)
+  })
+})

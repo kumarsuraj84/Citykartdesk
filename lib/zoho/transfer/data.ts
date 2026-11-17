@@ -282,7 +282,7 @@ export async function loadTicketsForPreview(f: MoveFilters, movedNumbers: number
     const fields: Record<string, string> = {}
     for (const x of SERVICE_FIELDS) { const v = text(r[x.col]); if (v) fields[x.col] = v }
     const udf = r.udf && typeof r.udf === 'object' ? (r.udf as Record<string, unknown>) : {}
-    for (const [k, v] of Object.entries(udf)) { if (ZOHO_UDF_IN_NAMED_COLUMN.has(k)) continue; const t = text(v); if (t && t !== 'null') fields[`udf:${k}`] = t }
+    for (const [k, v] of Object.entries(udf)) { if (ZOHO_UDF_IN_NAMED_COLUMN.has(k)) continue; const t = typeof v === 'object' && v !== null ? nameOf(v) : text(v); if (t && t !== 'null') fields[`udf:${k}`] = t }
     return {
       displayId: Number(r.display_id), template: text(r.template) || null, category: text(r.category) || null, subcategory: text(r.subcategory) || null, item: text(r.item) || null,
       status: text(r.status) || null, priority: text(r.priority) || null, subject: text(r.subject) || null,
