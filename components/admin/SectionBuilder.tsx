@@ -9,6 +9,7 @@ import { fieldLimitProblem } from '@/lib/validation/formFields'
 import { fieldFromLibrary, type LibraryFieldDef } from '@/lib/forms/library'
 import type { FormField, FormFieldType, FormFieldOption, FormSection } from '@/types'
 import { useUnsavedGuard } from '@/lib/ui/useUnsavedGuard'
+import { LimitPicker } from './LimitPicker'
 
 type PreviewAudience = 'requester' | 'technician'
 
@@ -1267,25 +1268,14 @@ export function SectionBuilder({
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
                     Leave all unticked to show this field for every category. When some are ticked, the requester sees the field (and, if it is required, must fill it) only after choosing one of them. For other categories it is not shown and not stored.
                   </p>
-                  <div className="mt-2 grid max-h-40 grid-cols-1 gap-1 overflow-y-auto">
-                    {categories.map((c) => {
-                      const on = (selectedField.show_for_categories ?? []).includes(c.id)
-                      return (
-                        <label key={c.id} className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
-                          <input
-                            type="checkbox"
-                            checked={on}
-                            onChange={() => {
-                              const cur = selectedField.show_for_categories ?? []
-                              const next = on ? cur.filter((x) => x !== c.id) : [...cur, c.id]
-                              updateField(selectedSection.id, selectedField.id, { show_for_categories: next.length > 0 ? next : undefined })
-                            }}
-                          />
-                          {c.name}
-                        </label>
-                      )
-                    })}
-                  </div>
+                  <LimitPicker
+                    key={`cat-${selectedField.id}`}
+                    noun="category"
+                    placeholder="Search a category, for example allocation"
+                    items={categories.map((c) => ({ id: c.id, name: c.name }))}
+                    ticked={selectedField.show_for_categories ?? []}
+                    onChange={(next) => updateField(selectedSection.id, selectedField.id, { show_for_categories: next.length > 0 ? next : undefined })}
+                  />
                 </div>
               )}
 
@@ -1295,35 +1285,14 @@ export function SectionBuilder({
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
                     Leave all unticked to show this field for every sub-category. When some are ticked, the requester sees the field (and, if it is required, must fill it) only after choosing one of them, and on the ticket it is shown only while the ticket is in one of them. If a technician moves the ticket to another sub-category the field is hidden; what was typed stays saved and comes back if the ticket moves back. Can be combined with the categories above (both must match).
                   </p>
-                  <div className="mt-2 max-h-56 space-y-2 overflow-y-auto">
-                    {Array.from(new Set(subCategories.map((s) => s.categoryId))).map((cid) => {
-                      const group = subCategories.filter((s) => s.categoryId === cid)
-                      return (
-                        <div key={cid}>
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group[0]?.categoryName || 'Other'}</p>
-                          <div className="mt-1 grid grid-cols-1 gap-1">
-                            {group.map((sc) => {
-                              const on = (selectedField.show_for_sub_categories ?? []).includes(sc.id)
-                              return (
-                                <label key={sc.id} className="flex cursor-pointer items-center gap-2 pl-1 text-xs text-foreground">
-                                  <input
-                                    type="checkbox"
-                                    checked={on}
-                                    onChange={() => {
-                                      const cur = selectedField.show_for_sub_categories ?? []
-                                      const next = on ? cur.filter((x) => x !== sc.id) : [...cur, sc.id]
-                                      updateField(selectedSection.id, selectedField.id, { show_for_sub_categories: next.length > 0 ? next : undefined })
-                                    }}
-                                  />
-                                  {sc.name}
-                                </label>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
+                  <LimitPicker
+                    key={`sub-${selectedField.id}`}
+                    noun="sub-category"
+                    placeholder="Search a sub-category or its category, for example carry bag"
+                    items={subCategories.map((sc) => ({ id: sc.id, name: sc.name, group: sc.categoryName || 'Other' }))}
+                    ticked={selectedField.show_for_sub_categories ?? []}
+                    onChange={(next) => updateField(selectedSection.id, selectedField.id, { show_for_sub_categories: next.length > 0 ? next : undefined })}
+                  />
                 </div>
               )}
 
