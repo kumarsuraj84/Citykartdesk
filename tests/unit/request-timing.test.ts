@@ -42,6 +42,26 @@ describe('the figures of a window', () => {
   })
 })
 
+describe('the window listener (page-speed history on the Health page)', () => {
+  it('gets each window\'s figures once, and a listener that throws never breaks the timer', () => {
+    const got: unknown[] = []
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const fake = { prototype: { emit: (..._args: unknown[]) => true } }
+    const timing = installRequestTiming({ httpServer: fake as never, windowMs: 3_600_000, log: { log: () => {}, warn: () => {} }, onWindow: (s) => { got.push(s); throw new Error('listener failed') } })
+    // nothing recorded in this window: no call
+    timing.flushNow()
+    expect(got).toHaveLength(0)
+    // one finished request: the window's figures reach the listener (which throws) and nothing else breaks
+    let finish: () => void = () => {}
+    fake.prototype.emit('request', { method: 'GET', url: '/requests/123e4567-e89b-12d3-a456-426614174000?x=1' }, { statusCode: 200, once: (_e: string, f: () => void) => { finish = f } })
+    finish()
+    expect(() => timing.flushNow()).not.toThrow()
+    expect(got).toHaveLength(1)
+    expect((got[0] as { route: string; method: string; n: number }[])[0]).toMatchObject({ route: '/requests/:id', method: 'GET', n: 1 })
+    timing.stop()
+  })
+})
+
 describe('the hook on the HTTP server', () => {
   it('records a real request, logs a slow one at once and a summary at the end of the window, and can be switched off again', async () => {
     const lines: { kind: 'log' | 'warn'; text: string }[] = []

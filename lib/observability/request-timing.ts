@@ -63,7 +63,7 @@ type ServerLike = { prototype: { emit: (event: string, ...args: unknown[]) => bo
 type Log = { log: (line: string) => void; warn: (line: string) => void }
 
 /** Wraps the HTTP server's request event. `httpServer` is node's http.Server; `log` and the timings are injectable so a test can use its own. */
-export function installRequestTiming(opts: { httpServer: ServerLike; log?: Log; slowMs?: number; windowMs?: number; now?: () => number } ): { stop: () => void; flushNow: () => void } {
+export function installRequestTiming(opts: { httpServer: ServerLike; log?: Log; slowMs?: number; windowMs?: number; now?: () => number; onWindow?: (stats: RouteStats[]) => void } ): { stop: () => void; flushNow: () => void } {
   const log = opts.log ?? console
   const slowMs = opts.slowMs ?? SLOW_MS
   const now = opts.now ?? (() => performance.now())
@@ -97,7 +97,10 @@ export function installRequestTiming(opts: { httpServer: ServerLike; log?: Log; 
 
   const flushNow = () => {
     const stats = collector.flush()
-    if (stats.length > 0) log.log(JSON.stringify({ request_timing: { window_min: Math.round((opts.windowMs ?? WINDOW_MS) / 60_000), routes: stats } }))
+    if (stats.length > 0) {
+      log.log(JSON.stringify({ request_timing: { window_min: Math.round((opts.windowMs ?? WINDOW_MS) / 60_000), routes: stats } }))
+      try { opts.onWindow?.(stats) } catch { /* a listener must never break the timer */ }
+    }
   }
   const timer = setInterval(flushNow, opts.windowMs ?? WINDOW_MS)
   if (typeof timer.unref === 'function') timer.unref()

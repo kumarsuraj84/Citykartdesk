@@ -10,8 +10,9 @@ import {
   Users, Tag, GitBranch, Building2, Database, Workflow,
   LogOut, BookOpen, KeyRound, ChevronDown, Sparkles, Filter,
   PanelLeftClose, PanelLeftOpen, Table2, Zap, Headset, FileText, Clock, Library, FileBarChart, LayoutDashboard, Wrench,
-  Archive, FileSearch,
+  Archive, FileSearch, Activity,
 } from 'lucide-react'
+import { canSeeHealth } from '@/lib/health/access'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/actions/auth'
 import { ROLE_LABELS } from '@/lib/constants/roles'
@@ -201,6 +202,12 @@ export function Sidebar({ profile, navVisibility, navCounts, className, forceExp
         { label: 'Monitoring', href: '/admin/monitoring', icon: Monitor      },
         { label: 'Runbooks',   href: '/admin/runbooks',   icon: BookOpenText },
       ],
+    },
+    {
+      // Uptime, speed and sync freshness. PLATFORM OWNERS ONLY (not admins, managers, technicians or requesters): lib/health/access.ts
+      key: 'health',
+      show: canSeeHealth(profile.role),
+      items: [{ label: 'Health & Performance', href: '/health', icon: Activity }],
     },
   ].filter(s => s.show !== false)
 

@@ -11,6 +11,7 @@ import { AutoRefresh } from './AutoRefresh'
 import { AutoPushPrompt } from './AutoPushPrompt'
 import { NotificationPopups } from './NotificationPopups'
 import { NewVersionBanner } from './NewVersionBanner'
+import { HealthBanner } from './HealthBanner'
 import { ROLE_LABELS } from '@/lib/constants/roles'
 import type { ProfileWithTeams, NavVisibility, NotificationWithActor } from '@/types'
 import type { NavCounts } from '@/lib/queries/profiles'
@@ -134,6 +135,8 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
       <AutoPushPrompt />
       <NotificationPopups viewerId={profile.id} />
       <NewVersionBanner />
+      {/* outage alert: platform owners only, portal only (it draws nothing for anybody else) */}
+      <Suspense fallback={null}><HealthBanner role={profile.role} /></Suspense>
 
       {/* Keyboard users jump past the top bar and the menu straight to the page (WCAG 2.4.1). Hidden until it gets focus. */}
       <a href="#main-content" className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground focus:not-sr-only focus:absolute focus:left-2 focus:top-2">Skip to main content</a>

@@ -34,6 +34,7 @@ describe('proxy() — public API route allowlist', () => {
   it('every documented cron/webhook/health route stays session-exempt (regression guard for the whole allowlist)', async () => {
     const publicRoutes = [
       '/api/health',
+      '/api/health/collect',
       '/api/alerts/run',
       '/api/business-rules/run',
       '/api/desktime/sync',

@@ -17,7 +17,8 @@ export async function register() {
       const http = (process as unknown as { getBuiltinModule?: (id: string) => { Server: unknown } | undefined }).getBuiltinModule?.('node:http')
       if (http) {
         const { installRequestTiming } = await import('./lib/observability/request-timing')
-        installRequestTiming({ httpServer: http.Server as never })
+        // the per-route figures are also kept in the database for the platform owners' Health & Performance page (lib/observability/perf-store.ts; fire and forget)
+        installRequestTiming({ httpServer: http.Server as never, onWindow: (stats) => { void import('./lib/observability/perf-store').then((m) => m.storeWindow(stats)).catch(() => {}) } })
       }
     }
   } catch { /* timing must never stop the server from starting */ }

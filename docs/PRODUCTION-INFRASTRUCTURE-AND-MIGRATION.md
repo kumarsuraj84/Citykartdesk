@@ -149,3 +149,13 @@ NAS share name must be exact; a test attachment uploaded before the NAS switch i
 * HTTPS (a DNS name such as `desk.<company domain>` instead of the raw public IP over HTTP), enforced content security policy, scheduled tasks under a low-privilege account, the "must do on live" checks (seed password of the owner account, `GOTRUE_DISABLE_SIGNUP`, secrets length, `TRUSTED_PROXY_HOPS`): see **`docs/HTTPS-AND-CSP-PLAN.md`**.
 * Every variable the application reads is listed, with plain-words notes, in `.env.example`. The app logs a warning at start for every missing / weak secret and for a wrong time zone.
 * Drop Main's archived `citykart_desk` database after a couple of weeks of clean running (user decides).
+
+## Health & Performance (added 2026-11-18, phase 1)
+
+Page `/health` and a red alert bar, **platform owners only** (rule: `lib/health/access.ts`; no other role sees the menu entry, the page or the bar). Alerts are on the portal only; no e-mail yet.
+
+* **Database (205):** migration `20240101000200_health_monitoring.sql` adds four tables (`health_samples`, `health_incidents`, `perf_windows`, `health_check_settings`) and seven functions, server key only. Run `supabase\production\run-ckdesk-migration-200.ps1` on 205 (backs up first), then restart `CkDeskPostgrest` on 98.
+* **App (98):** `/api/health/collect` (cron secret, public in the proxy list) runs the app's own checks (database, sign-in, files, Zoho sync, Google Sheet syncs, e-mail poll, weather) and stores them; the per-page speed figures the app already counted every 10 minutes are also kept in `perf_windows`.
+* **Probe (98):** scheduled task `CitykartDesk-HealthProbe`, every minute, SYSTEM, runs `app\scripts\health-probe.mjs` (installed by `scripts\windows\add-health-probe-task.ps1`). It checks the app, PostgREST (127.0.0.1:3001), the gateway (`SUPABASE_URL`) and the NAS folder, writes the samples, opens/closes outages through `health_judge`, then calls `/api/health/collect`. Remove: `Unregister-ScheduledTask -TaskName CitykartDesk-HealthProbe`.
+* An outage opens after 3 failed checks in a row. A check can be switched off on the page (for example the Zoho sync once Zoho is retired); history is kept for 45 days (outages 400 days).
+* Later phases (not built): server CPU / memory / disk / service state, real-user page speed and screen-size problems, e-mail alerts.
