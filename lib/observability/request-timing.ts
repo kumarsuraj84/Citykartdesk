@@ -19,6 +19,9 @@ export function normalizeRoute(url: string | undefined): string | null {
     if (/^\d{2,}$/.test(seg)) return ':n'
     if (/^[0-9a-f]{24,}$/i.test(seg)) return ':id'
     if (/^[A-Z]{2,6}-\d+$/.test(seg)) return ':no'   // a ticket number such as CKSD-000741
+    // A signed link (the approval e-mail's /approve/<id>.<id>.<time>.<signature>, the survey's /csat/<token>) is a secret: it must never reach the log or the Health page.
+    // Long text with a dot, a capital or an underscore is a token; a normal page name or service slug (lower case and hyphens) is not.
+    if (seg.length >= 28 && /[.A-Z_]/.test(seg) && /^[A-Za-z0-9_.~-]+$/.test(seg)) return ':token'
     return seg
   }).join('/')
   return out.length > 120 ? out.slice(0, 120) : out

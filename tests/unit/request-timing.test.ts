@@ -14,6 +14,15 @@ describe('the route that is recorded', () => {
     expect(normalizeRoute('/')).toBe('/')
     expect(normalizeRoute(undefined)).toBe('/')
   })
+  it('never records a signed link: the approval e-mail link and the survey link become :token', () => {
+    const approve = '/approve/a24e16b9-e9c3-4dca-92ac-5c9e7a2dc356.4103ef8c-a912-46e5-9d2c-e5e9a4e6d817.mwvmk3kk.G6SDAuRxDKeBHn4Gkc5L7b_KtbSM'
+    expect(normalizeRoute(approve)).toBe('/approve/:token')
+    expect(normalizeRoute(approve + '?x=1')).toBe('/approve/:token')
+    expect(normalizeRoute('/csat/eyJhbGciOiJIUzI1NiJ9.abcDEF123_456-xyz')).toBe('/csat/:token')
+    expect(normalizeRoute('/csat/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789')).toBe('/csat/:token')
+    // a long but ordinary service name (lower case and hyphens) is not a token
+    expect(normalizeRoute('/services/requirements-admin-repair-maintenance-service')).toBe('/services/requirements-admin-repair-maintenance-service')
+  })
   it('leaves static files out', () => {
     expect(normalizeRoute('/_next/static/chunks/abc.js')).toBeNull()
     expect(normalizeRoute('/favicon.ico')).toBeNull()

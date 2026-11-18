@@ -238,3 +238,50 @@ describe('the sample e-mail (a test of the reminder)', () => {
     expect(r.sent).toBe(0)
   })
 })
+
+describe('a one-off "send it again now" (force) and a look-only run (dryRun)', () => {
+  const bela: Person = { id: 'bela', full_name: 'Bela Rao', role: 'user', org_id: 'o1', is_active: true }
+  const twoPeople = () => fakeAdmin({ pending: [{ id: 'a1', workflow_id: 'w1' }], steps: [{ workflow_id: 'w1', approver_user_id: 'ankur' }, { workflow_id: 'w1', approver_user_id: 'bela' }], people: [ankur, bela] })
+  // Ankur has an older approval; Bela only one that was sent today (the normal job leaves her out: she already got the original e-mail)
+  const pending = vi.fn(async (id: string) => (id === 'ankur' ? [item(1, ago(2)), item(2, ago(0, 9))] : [item(3, ago(0, 9))]))
+
+  it('the normal run mails only Ankur; force also mails Bela, whose approvals were all sent today', async () => {
+    const normal = await sendApprovalReminders(twoPeople() as never, { now, getPending: pending, send })
+    expect(normal).toMatchObject({ approvers: 2, sent: 1, skippedFresh: 1 })
+    send.mockClear()
+    const forced = await sendApprovalReminders(twoPeople() as never, { now, getPending: pending, send, force: true })
+    expect(forced).toMatchObject({ forced: true, approvers: 2, sent: 2, skippedFresh: 0, listed: 3 })
+    expect(send.mock.calls.map((c) => c[0].to).sort()).toEqual(['ankur@citykart.test', 'bela@citykart.test'])
+  })
+
+  it('force works even after today\'s run is done, and leaves the records alone so tomorrow\'s run is not affected', async () => {
+    const admin = twoPeople()
+    await sendApprovalReminders(admin as never, { now, getPending: pending, send })           // the 10:00 run: marks the day and Ankur
+    const before = JSON.stringify(admin.settings)
+    send.mockClear()
+    const forced = await sendApprovalReminders(admin as never, { now, getPending: pending, send, force: true })
+    expect(forced.alreadyRan).toBeUndefined()
+    expect(forced.sent).toBe(2)
+    expect(JSON.stringify(admin.settings)).toBe(before)                                         // nothing recorded, nothing released
+    const tomorrow = new Date(now.getTime() + 86_400_000)
+    send.mockClear()
+    const next = await sendApprovalReminders(admin as never, { now: tomorrow, getPending: vi.fn(async (id: string) => (id === 'ankur' ? [item(1, ago(3))] : [])), send })
+    expect(next.sent).toBe(1)                                                                   // tomorrow's normal reminder still goes out
+  })
+
+  it('a failed send in force mode does not touch any record either', async () => {
+    const admin = twoPeople()
+    send.mockResolvedValue({ error: 'mail server down' })
+    const r = await sendApprovalReminders(admin as never, { now, getPending: pending, send, force: true })
+    expect(r).toMatchObject({ sent: 0, failed: 2 })
+    expect(admin.settings).toEqual({})
+  })
+
+  it('dryRun only counts who would get an e-mail: nothing is sent, nothing recorded', async () => {
+    const admin = twoPeople()
+    const r = await sendApprovalReminders(admin as never, { now, getPending: pending, send, dryRun: true })
+    expect(send).not.toHaveBeenCalled()
+    expect(r).toMatchObject({ dryRun: true, forced: true, approvers: 2, wouldSend: 2, listed: 3, sent: 0 })
+    expect(admin.settings).toEqual({})
+  })
+})

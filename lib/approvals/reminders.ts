@@ -22,6 +22,11 @@ export interface ReminderDeps {
   send?: (p: { to: string; subject: string; html: string; text?: string }) => Promise<{ error?: string }>
   /** a test: send ONE sample e-mail (the compiled list of the approver with most waiting) to this address only, nobody else, and do not use up today's run */
   sampleTo?: string
+  /** a one-off "send it again now": every approver with something waiting gets the e-mail, whatever was sent today. It records nothing (no day is used up, no approver is marked as done),
+   *  so the next normal 10:00 run is not affected. */
+  force?: boolean
+  /** like force, but nothing is sent: only counts who would get an e-mail (to look before sending) */
+  dryRun?: boolean
 }
 
 export interface ReminderResult {
@@ -40,6 +45,11 @@ export interface ReminderResult {
   sampleOf?: string
   /** approvers left out because their reminder for today had already been sent by an earlier or overlapping pass */
   alreadySent?: number
+  /** this was a one-off send-now (force) or a look-only run (dryRun) */
+  forced?: boolean
+  dryRun?: boolean
+  /** dry run: how many approvers would get an e-mail */
+  wouldSend?: number
 }
 
 /** One entry per approver: the day this approver's reminder was last claimed. */
@@ -90,8 +100,12 @@ export async function sendApprovalReminders(admin: AnyClient, deps: ReminderDeps
   const result: ReminderResult = { approvers: 0, sent: 0, skippedFresh: 0, failed: 0, listed: 0 }
 
   const sample = deps.sampleTo
+  const dryRun = !!deps.dryRun
+  const force = !!deps.force || dryRun
+  if (force) result.forced = true
+  if (dryRun) { result.dryRun = true; result.wouldSend = 0 }
   // a finished pass today: nothing more to do (a call that finds it unfinished carries on with the approvers who have not had theirs)
-  if (!sample && (await dayIsDone(admin, today))) return { ...result, alreadyRan: true }
+  if (!sample && !force && (await dayIsDone(admin, today))) return { ...result, alreadyRan: true }
 
   {
     // the people who are asked to decide something that is still waiting
@@ -130,27 +144,31 @@ export async function sendApprovalReminders(admin: AnyClient, deps: ReminderDeps
       if (waiting.length === 0) continue
       result.approvers++
       // everything waiting for them went out today: the original e-mail was their notice
-      if (!waiting.some((w) => istDay(w.createdAt) < today)) { result.skippedFresh++; continue }
+      if (!force && !waiting.some((w) => istDay(w.createdAt) < today)) { result.skippedFresh++; continue }
 
       if (sample) { if (!best || waiting.length > best.waiting.length) best = { p, waiting }; continue }
+      // look only: count who would get an e-mail, send nothing, record nothing
+      if (dryRun) { result.wouldSend = (result.wouldSend ?? 0) + 1; result.listed += waiting.length; continue }
 
       // this approver's reminder was already claimed today (an earlier or overlapping pass): not sent twice
-      const claim = await claimApprover(admin, p.id, today)
+      // (a one-off send-now neither claims nor releases anything: the approver's record for the normal run stays exactly as it was)
+      const claim = force ? { claimed: true, previous: null as string | null } : await claimApprover(admin, p.id, today)
+      const release = async () => { if (!force) await releaseApprover(admin, p.id, claim.previous) }
       if (!claim.claimed) { result.alreadySent = (result.alreadySent ?? 0) + 1; continue }
 
       const { data: u } = await admin.auth.admin.getUserById(p.id)
       const to: string | undefined = u?.user?.email
-      if (!to) { result.failed++; await releaseApprover(admin, p.id, claim.previous); continue }
+      if (!to) { result.failed++; await release(); continue }
 
       const mail = compose(p, waiting)
       let res: { error?: string }
       try {
         res = await send({ to, subject: mail.subject, html: mail.html, text: mail.text })
       } catch (e) {
-        await releaseApprover(admin, p.id, claim.previous)   // the next call tries this approver again
+        await release()   // the next call tries this approver again
         throw e
       }
-      if (res.error) { result.failed++; await releaseApprover(admin, p.id, claim.previous) }
+      if (res.error) { result.failed++; await release() }
       else { result.sent++; result.listed += waiting.length }
     }
     // a test: ONE sample, to the address asked for
@@ -162,7 +180,7 @@ export async function sendApprovalReminders(admin: AnyClient, deps: ReminderDeps
       else { result.sent++; result.listed += best.waiting.length }
     }
     // The day is used up only when nobody's reminder failed; otherwise the next call today tries again, and only for those who have not had theirs.
-    if (!sample && result.failed === 0) await markDayDone(admin, today)
+    if (!sample && !force && result.failed === 0) await markDayDone(admin, today)
   }
   return result
 }

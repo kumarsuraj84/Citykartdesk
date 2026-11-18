@@ -20,10 +20,14 @@ export async function GET(req: NextRequest) {
       const companyDomain = (await loadDbSmtpConfig())?.user?.split('@')[1]?.toLowerCase()
       if (!companyDomain || !sampleTo.toLowerCase().endsWith('@' + companyDomain)) return NextResponse.json({ error: 'sampleTo must be an address at the company mail domain.' }, { status: 400 })
     }
+    // ?dryRun=1 only COUNTS who would get an e-mail (nothing is sent); ?force=1 sends it to every approver with something waiting now, whatever was sent today (a one-off "send the reminder again";
+    // it records nothing, so tomorrow's 10:00 run is not affected). Both need the same secret as the scheduled run.
+    const dryRun = req.nextUrl.searchParams.get('dryRun') === '1'
+    const force = req.nextUrl.searchParams.get('force') === '1'
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await sendApprovalReminders(createAdminClient() as any, sampleTo ? { sampleTo } : {})
-    if (!sampleTo && (result.sent > 0 || result.failed > 0)) {
-      await recordAudit({ action: 'approval.reminders_sent', source: 'cron', entityType: 'approval', message: `${result.sent} approval reminder e-mail(s) sent, ${result.failed} failed`, detail: { ...result } })
+    const result = await sendApprovalReminders(createAdminClient() as any, sampleTo ? { sampleTo } : dryRun ? { dryRun: true } : force ? { force: true } : {})
+    if (!sampleTo && !dryRun && (result.sent > 0 || result.failed > 0)) {
+      await recordAudit({ action: 'approval.reminders_sent', source: 'cron', entityType: 'approval', message: `${result.sent} approval reminder e-mail(s) sent${force ? ' (one-off send-now)' : ''}, ${result.failed} failed`, detail: { ...result } })
     }
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
