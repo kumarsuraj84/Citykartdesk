@@ -16,11 +16,11 @@ export function DayStrip({ days }: { days: { day: string; share: number | null }
 export type TrendPoint = { at: string; a: number; b: number }
 
 /** Typical (a) and 95th percentile (b) over time. y axis is milliseconds. */
-export function Trend({ points, aLabel, bLabel, emptyText }: { points: TrendPoint[]; aLabel: string; bLabel: string; emptyText: string }) {
+export function Trend({ points, aLabel, bLabel, emptyText, unit = 'ms', fixedMax }: { points: TrendPoint[]; aLabel: string; bLabel: string; emptyText: string; unit?: string; fixedMax?: number }) {
   if (points.length < 2) return <p className="py-6 text-center text-xs text-muted-foreground">{emptyText}</p>
   const W = 640, H = 140, PL = 40, PR = 8, PT = 8, PB = 18
   const maxY = Math.max(10, ...points.map((p) => Math.max(p.a, p.b)))
-  const top = niceCeil(maxY)
+  const top = fixedMax ?? niceCeil(maxY)
   const t0 = new Date(points[0].at).getTime(), t1 = new Date(points[points.length - 1].at).getTime() || t0 + 1
   const x = (iso: string) => PL + ((new Date(iso).getTime() - t0) / Math.max(1, t1 - t0)) * (W - PL - PR)
   const y = (v: number) => PT + (1 - v / top) * (H - PT - PB)
@@ -32,7 +32,7 @@ export function Trend({ points, aLabel, bLabel, emptyText }: { points: TrendPoin
         {[0, 0.5, 1].map((f) => (
           <g key={f}>
             <line x1={PL} x2={W - PR} y1={y(top * f)} y2={y(top * f)} stroke="var(--border)" strokeWidth="1" />
-            <text x={PL - 4} y={y(top * f) + 3} textAnchor="end" fontSize="9" fill="var(--muted-foreground)">{Math.round(top * f)} ms</text>
+            <text x={PL - 4} y={y(top * f) + 3} textAnchor="end" fontSize="9" fill="var(--muted-foreground)">{Math.round(top * f)} {unit}</text>
           </g>
         ))}
         <path d={line('b')} fill="none" stroke="var(--chart-b, #f59e0b)" strokeWidth="1.6" />

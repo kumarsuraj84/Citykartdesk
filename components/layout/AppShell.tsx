@@ -17,6 +17,7 @@ import type { ProfileWithTeams, NavVisibility, NotificationWithActor } from '@/t
 import type { NavCounts } from '@/lib/queries/profiles'
 import type { PendingApprovalItem } from '@/lib/queries/approvals'
 import { StickyTables } from '@/components/layout/StickyTables'
+import { RumReporter } from '@/components/layout/RumReporter'
 
 function getInitials(name: string): string {
   return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -197,6 +198,7 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
             {children}
           </div>
           <StickyTables />
+          <RumReporter />
         </main>
       </div>
 

@@ -1,5 +1,5 @@
 // Health & Performance: the decisions, as pure functions (no database, no clock unless passed in), so every rule has a test.
-import { INCIDENT_AFTER, STALE_AFTER_MINUTES, SYNC_LIMITS } from './catalog'
+import { INCIDENT_AFTER, PAGE_LIMITS, SERVER_LIMITS, STALE_AFTER_MINUTES, SYNC_LIMITS } from './catalog'
 
 export type Sample = { ok: boolean; at: string }
 
@@ -30,7 +30,7 @@ export function isNotApplicable(by: 'probe' | 'app', level: Level, appCollectorA
 }
 
 /** The state of the whole system: down if any enabled core check is down, degraded if only a sync is late or data is missing, else healthy. */
-export function overallStatus(items: { group: 'core' | 'sync'; level: Level }[]): 'healthy' | 'degraded' | 'down' | 'unknown' {
+export function overallStatus(items: { group: 'core' | 'server' | 'sync'; level: Level }[]): 'healthy' | 'degraded' | 'down' | 'unknown' {
   if (items.length === 0) return 'unknown'
   if (items.some((i) => i.group === 'core' && i.level === 'down')) return 'down'
   if (items.some((i) => i.level === 'down' || i.level === 'nodata')) return 'degraded'
@@ -92,4 +92,30 @@ export function uptimeText(pct: number | null): string {
   if (pct >= 100) return '100%'
   if (pct > 99.99) return '99.99%'
   return `${pct.toFixed(pct >= 99 ? 2 : 1)}%`
+}
+
+export type DbStats = { connections: number; maxConnections: number; longestQuerySeconds: number; waitingLocks: number }
+/** The database server's load: connections well under the limit, no query running for over 5 minutes, no long pile-up of waiting locks. */
+export function dbLoadVerdict(s: DbStats): Verdict {
+  const pct = s.maxConnections > 0 ? (s.connections / s.maxConnections) * 100 : 0
+  const bad: string[] = []
+  if (pct >= SERVER_LIMITS.dbConnectionsPct) bad.push(`${s.connections} of ${s.maxConnections} connections are in use (${Math.round(pct)}%)`)
+  if (s.longestQuerySeconds >= SERVER_LIMITS.dbQuerySeconds) bad.push(`a query has been running for ${humanMinutes(s.longestQuerySeconds / 60)}`)
+  if (s.waitingLocks >= 10) bad.push(`${s.waitingLocks} requests are waiting on locks`)
+  return bad.length ? { ok: false, detail: bad.join('; ') } : { ok: true, detail: `${s.connections} of ${s.maxConnections} connections in use, longest query ${Math.round(s.longestQuerySeconds)} s` }
+}
+
+export type PerfWindowRow = { n: number; p95: number; errors5xx: number }
+/** Page speed from the per-page windows of the last 30 minutes: slow when the request-weighted 95th percentile reaches 4 s, or when 5% or more of the requests failed (5xx).
+ *  Too little traffic (under 30 requests) is "not enough to judge", which counts as fine. */
+export function pageSpeedVerdict(rows: PerfWindowRow[]): Verdict {
+  const total = rows.reduce((a, r) => a + r.n, 0)
+  if (total < PAGE_LIMITS.minRequests) return { ok: true, detail: `only ${total} requests in the last ${PAGE_LIMITS.lookbackMinutes} min: not enough to judge` }
+  const p95 = Math.round(rows.reduce((a, r) => a + r.p95 * r.n, 0) / total)
+  const errors = rows.reduce((a, r) => a + r.errors5xx, 0)
+  const errPct = Math.round((errors / total) * 1000) / 10
+  const bad: string[] = []
+  if (p95 >= PAGE_LIMITS.p95Ms) bad.push(`slow pages take ${(p95 / 1000).toFixed(1)} s (limit ${PAGE_LIMITS.p95Ms / 1000} s)`)
+  if (errors >= PAGE_LIMITS.minErrors && errPct >= PAGE_LIMITS.errorPct) bad.push(`${errPct}% of requests failed (${errors} of ${total})`)
+  return bad.length ? { ok: false, detail: `${bad.join('; ')}; ${total} requests in the last ${PAGE_LIMITS.lookbackMinutes} min` } : { ok: true, detail: `slow pages ${(p95 / 1000).toFixed(1)} s, ${errors} failed of ${total} requests` }
 }

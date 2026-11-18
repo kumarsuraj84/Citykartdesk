@@ -62,6 +62,11 @@ describe('proxy() — public API route allowlist', () => {
     }
   })
 
+  it('the browser speed reports (/api/rum) need a session: nobody anonymous can write to them', async () => {
+    const res = await proxy(requestFor('/api/rum', { accept: '*/*' }))
+    expect(res.status).toBe(401)
+  })
+
   it('pages still redirect to /login with no session', async () => {
     const res = await proxy(requestFor('/home'))
     expect(res.headers.get('location')).toContain('/login')

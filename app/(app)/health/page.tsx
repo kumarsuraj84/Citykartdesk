@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { formatDateTime } from '@/lib/utils'
-import { CHECKS, labelOf, STALE_AFTER_MINUTES } from '@/lib/health/catalog'
+import { CHECKS, INCIDENT_AFTER, labelOf, METRICS, PAGE_LIMITS, SERVER_LIMITS, STALE_AFTER_MINUTES } from '@/lib/health/catalog'
+import { lcpRating, RUM_GOOD, RUM_POOR, VIEWPORT_LABEL, type ViewportClass } from '@/lib/health/rum'
 import { humanMinutes, uptimeText } from '@/lib/health/evaluate'
-import { getCheckSeries, getHealthOverview, getPerf, type CheckState } from '@/lib/health/queries'
+import { getCheckSeries, getHealthOverview, getMetricSeries, getPerf, getRum, type CheckState } from '@/lib/health/queries'
 import { DayStrip, Trend } from './_components/Charts'
 import { CheckToggles } from './_components/CheckToggles'
 
@@ -74,13 +75,14 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
   const hours = RANGES[range].hours
   const selected = CHECKS.find((c) => c.key === sp.check)?.key ?? 'app'
 
-  const [overview, perf, series] = await Promise.all([getHealthOverview(), getPerf(hours), getCheckSeries(selected, hours)])
+  const [overview, perf, series, metricSeries, rum] = await Promise.all([getHealthOverview(), getPerf(hours), getCheckSeries(selected, hours), Promise.all(METRICS.map((m) => getMetricSeries(m.key, hours))), getRum(hours)])
   const nowMs = overview.nowMs
   const st = STATUS_TEXT[overview.status]
   const lastAge = overview.lastSampleAt ? (nowMs - new Date(overview.lastSampleAt).getTime()) / 60_000 : null
   const probeStopped = lastAge === null || lastAge > STALE_AFTER_MINUTES
   const enabledChecks = overview.checks.filter((c) => c.enabled)
   const core = enabledChecks.filter((c) => c.group === 'core')
+  const servers = enabledChecks.filter((c) => c.group === 'server')
   const syncs = enabledChecks.filter((c) => c.group === 'sync')
 
   const totalReq = perf.series.reduce((a, p) => a + p.n, 0)
@@ -115,6 +117,21 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
         <h2 id="core-h" className="text-sm font-semibold text-foreground">The system</h2>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{core.map((c) => <CheckCard key={c.key} c={c} nowMs={nowMs} />)}</div>
       </section>
+
+      {servers.length > 0 && (
+        <section aria-labelledby="srv-h" className="space-y-2">
+          <h2 id="srv-h" className="text-sm font-semibold text-foreground">The servers</h2>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{servers.map((c) => <CheckCard key={c.key} c={c} nowMs={nowMs} />)}</div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {METRICS.map((m, i) => (
+              <div key={m.key} className="rounded-lg border border-border bg-card p-3">
+                <p className="mb-1 text-xs font-semibold text-foreground">{m.label} — {RANGES[range].label.toLowerCase()}</p>
+                <Trend points={metricSeries[i].map((p) => ({ at: p.at, a: p.avg, b: m.worst === 'max' ? p.max : p.min }))} aLabel="Average" bLabel={m.worst === 'max' ? 'Highest' : 'Lowest'} unit={m.unit} fixedMax={m.max} emptyText="Not enough data for a chart yet." />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {syncs.length > 0 && (
         <section aria-labelledby="sync-h" className="space-y-2">
@@ -160,6 +177,76 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
         )}
       </section>
 
+      <section aria-labelledby="rum-h" className="space-y-2">
+        <h2 id="rum-h" className="text-sm font-semibold text-foreground">What people really experience — {RANGES[range].label.toLowerCase()}</h2>
+        <p className="text-xs text-muted-foreground">Measured in the browsers of people who are signed in (no name or e-mail is kept). “Largest paint” is the time until the main content of a page is on screen: up to {RUM_GOOD.lcpMs / 1000} s is good, over {RUM_POOR.lcpMs / 1000} s is poor.</p>
+        {!rum.summary || (rum.summary.loads === 0 && rum.summary.views === 0) ? (
+          <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">No browser reports yet. They arrive as people use CK Desk after this release (and its database update) is live.</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <Tile label="Full page loads measured" value={fmt(rum.summary.loads)} note={`${fmt(rum.summary.views)} screens checked for fit`} />
+              <Tile label="Main content on screen (75%)" value={rum.summary.lcpP75 === null ? '—' : `${(rum.summary.lcpP75 / 1000).toFixed(1)} s`} note={`typical ${rum.summary.lcpP50 === null ? '—' : (rum.summary.lcpP50 / 1000).toFixed(1) + ' s'} · rating: ${lcpRating(rum.summary.lcpP75) ?? '—'}`} />
+              <Tile label="Loads rated poor" value={rum.summary.loads ? `${Math.round((rum.summary.poorLcp / rum.summary.loads) * 100)}%` : '—'} note={`${fmt(rum.summary.poorLcp)} took over ${RUM_POOR.lcpMs / 1000} s`} />
+              <Tile label="Screens with content cut off" value={rum.summary.views ? `${Math.round((rum.summary.cutOffViews / rum.summary.views) * 100)}%` : '—'} note={`${fmt(rum.summary.cutOffViews)} of ${fmt(rum.summary.views)} screens`} />
+            </div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="overflow-x-auto rounded-lg border border-border bg-card">
+                <table className="w-full text-xs">
+                  <caption className="px-3 py-2 text-left text-sm font-semibold text-foreground">Slowest screens for people (at least 3 loads)</caption>
+                  <thead><tr className="border-t border-border text-left text-muted-foreground"><th className="px-3 py-1.5 font-medium">Screen</th><th className="px-3 py-1.5 text-right font-medium">Loads</th><th className="px-3 py-1.5 text-right font-medium">Content on screen</th><th className="px-3 py-1.5 text-right font-medium">Full load (95th)</th></tr></thead>
+                  <tbody>
+                    {rum.routes.length === 0 && <tr><td colSpan={4} className="px-3 py-3 text-muted-foreground">Not enough loads yet.</td></tr>}
+                    {rum.routes.map((r) => (
+                      <tr key={r.route} className="border-t border-border">
+                        <td className="max-w-[16rem] truncate px-3 py-1.5 font-mono text-foreground" title={r.route}>{r.route}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{fmt(r.loads)}</td>
+                        <td className={`px-3 py-1.5 text-right tabular-nums ${(r.lcpP75 ?? 0) > RUM_POOR.lcpMs ? 'font-semibold text-red-700 dark:text-red-400' : ''}`}>{r.lcpP75 === null ? '—' : `${(r.lcpP75 / 1000).toFixed(1)} s`}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{r.loadP95 === null ? '—' : `${(r.loadP95 / 1000).toFixed(1)} s`}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-border bg-card">
+                <table className="w-full text-xs">
+                  <caption className="px-3 py-2 text-left text-sm font-semibold text-foreground">Screen sizes in use</caption>
+                  <thead><tr className="border-t border-border text-left text-muted-foreground"><th className="px-3 py-1.5 font-medium">Window</th><th className="px-3 py-1.5 text-right font-medium">Screens viewed</th><th className="px-3 py-1.5 text-right font-medium">Content cut off</th><th className="px-3 py-1.5 text-right font-medium">Content on screen (75%)</th></tr></thead>
+                  <tbody>
+                    {rum.viewports.map((v) => (
+                      <tr key={v.vclass} className="border-t border-border">
+                        <td className="px-3 py-1.5 text-foreground">{VIEWPORT_LABEL[v.vclass as ViewportClass] ?? v.vclass}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{fmt(v.views)}</td>
+                        <td className={`px-3 py-1.5 text-right tabular-nums ${v.cutOffViews > 0 ? 'font-semibold text-amber-700 dark:text-amber-400' : ''}`}>{v.views ? `${fmt(v.cutOffViews)} (${Math.round((v.cutOffViews / v.views) * 100)}%)` : '—'}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{v.lcpP75 === null ? '—' : `${(v.lcpP75 / 1000).toFixed(1)} s`}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="overflow-x-auto rounded-lg border border-border bg-card">
+              <table className="w-full text-xs">
+                <caption className="px-3 py-2 text-left text-sm font-semibold text-foreground">Screens where content ran past the page (cut off or needing a sideways scroll)</caption>
+                <thead><tr className="border-t border-border text-left text-muted-foreground"><th className="px-3 py-1.5 font-medium">Screen</th><th className="px-3 py-1.5 font-medium">Window</th><th className="px-3 py-1.5 text-right font-medium">Times seen</th><th className="px-3 py-1.5 text-right font-medium">Of views</th><th className="px-3 py-1.5 text-right font-medium">Most past the edge</th></tr></thead>
+                <tbody>
+                  {rum.issues.length === 0 && <tr><td colSpan={5} className="px-3 py-3 text-muted-foreground">No screen was reported as cut off in this period.</td></tr>}
+                  {rum.issues.map((i) => (
+                    <tr key={`${i.route}|${i.vclass}`} className="border-t border-border">
+                      <td className="max-w-[24rem] truncate px-3 py-1.5 font-mono text-foreground" title={i.route}>{i.route}</td>
+                      <td className="px-3 py-1.5 text-muted-foreground">{VIEWPORT_LABEL[i.vclass as ViewportClass] ?? i.vclass} (about {fmt(i.avgViewportW)} px)</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{fmt(i.cutOffViews)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{Math.round((i.cutOffViews / i.views) * 100)}%</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{fmt(i.maxOverflowPx)} px</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
+
       <section aria-labelledby="resp-h" className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <h2 id="resp-h" className="text-sm font-semibold text-foreground">How quickly a check answers</h2>
@@ -195,6 +282,17 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
             </table>
           </div>
         )}
+      </section>
+
+      <section aria-labelledby="alr-h" className="space-y-2">
+        <h2 id="alr-h" className="text-sm font-semibold text-foreground">When an alert is raised</h2>
+        <div className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
+          <p>An alert is raised when a check fails {INCIDENT_AFTER} times in a row (one lost answer is not an outage). It shows as a red bar on top of every screen and as a notification in your bell, and again when the check recovers. Only platform owners get it, on the portal only (no e-mail or message yet).</p>
+          <ul className="mt-2 grid gap-x-6 gap-y-0.5 sm:grid-cols-2">
+            {enabledChecks.map((c) => <li key={c.key}><span className="font-medium text-foreground">{c.label}:</span> {c.good}</li>)}
+          </ul>
+          <p className="mt-2">Limits: CPU {SERVER_LIMITS.cpuPct}%, memory {SERVER_LIMITS.memoryPct}%, free disk {SERVER_LIMITS.diskFreePct}% / {SERVER_LIMITS.diskFreeGb} GB, database connections {SERVER_LIMITS.dbConnectionsPct}%, a query over {SERVER_LIMITS.dbQuerySeconds / 60} min, slow pages {PAGE_LIMITS.p95Ms / 1000} s or {PAGE_LIMITS.errorPct}% failing (judged over the last {PAGE_LIMITS.lookbackMinutes} min).</p>
+        </div>
       </section>
 
       <section aria-labelledby="set-h" className="space-y-2">

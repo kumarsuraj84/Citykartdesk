@@ -7,9 +7,11 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { zohoDbStatus, zohoQuery } from '@/lib/zoho/db'
 import { istParts, istDay } from '@/lib/reporting/ist'
-import { emailVerdict, sheetsVerdict, weatherVerdict, zohoSyncVerdict, type Verdict } from './evaluate'
+import { PAGE_LIMITS } from './catalog'
+import { dbLoadVerdict, emailVerdict, pageSpeedVerdict, sheetsVerdict, weatherVerdict, zohoSyncVerdict, type Verdict } from './evaluate'
 
 export type Probe = { key: string; ok: boolean; ms: number; detail: string }
+export type MetricRow = { metric: string; value: number }
 
 const PROBE_MS = 4000
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,7 +35,8 @@ async function http(url: string): Promise<Verdict> {
   return res.status < 500 ? { ok: true, detail: `answered (${res.status})` } : { ok: false, detail: `answered with an error (${res.status})` }
 }
 
-export async function runInAppProbes(enabled: (key: string) => boolean): Promise<Probe[]> {
+export async function runInAppProbes(enabled: (key: string) => boolean): Promise<{ probes: Probe[]; metrics: MetricRow[] }> {
+  const metrics: MetricRow[] = []
   const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').replace(/\/$/, '')
   const nowMs = Date.now()
   const jobs: Promise<Probe | null>[] = []
@@ -42,6 +45,20 @@ export async function runInAppProbes(enabled: (key: string) => boolean): Promise
   add('database', async () => {
     const { error } = await db().from('profiles').select('id').limit(1).maybeSingle()
     return error ? { ok: false, detail: `the database returned an error: ${String(error.message).slice(0, 100)}` } : { ok: true, detail: 'answered' }
+  })
+  add('page_speed', async () => {
+    const since = new Date(nowMs - PAGE_LIMITS.lookbackMinutes * 60_000).toISOString()
+    const { data } = await db().from('perf_windows').select('n, p95, errors5xx').gte('at', since)
+    return pageSpeedVerdict(((data ?? []) as { n: number; p95: number; errors5xx: number }[]).map((r) => ({ n: Number(r.n), p95: Number(r.p95), errors5xx: Number(r.errors5xx) })))
+  })
+  add('db_load', async () => {
+    const { data, error } = await (createAdminClient() as unknown as { rpc: (f: string) => Promise<{ data: unknown; error: { message: string } | null }> }).rpc('health_db_stats')
+    if (error) return { ok: false, detail: `could not read the database load: ${String(error.message).slice(0, 100)} (is migration 201 applied?)` }
+    const r = ((data ?? []) as { connections: number; max_connections: number; db_size_mb: number; longest_query_seconds: number; waiting_locks: number }[])[0]
+    if (!r) return null
+    const stats = { connections: Number(r.connections), maxConnections: Number(r.max_connections), longestQuerySeconds: Number(r.longest_query_seconds), waitingLocks: Number(r.waiting_locks) }
+    metrics.push({ metric: 'db_conn_pct', value: stats.maxConnections ? Math.round((stats.connections / stats.maxConnections) * 1000) / 10 : 0 }, { metric: 'db_size_mb', value: Number(r.db_size_mb) })
+    return dbLoadVerdict(stats)
   })
   add('auth', () => (base ? http(`${base}/auth/v1/health`) : Promise.resolve({ ok: false, detail: 'the service address is not set' })))
   add('storage', () => (base ? http(`${base}/storage/v1/`) : Promise.resolve({ ok: false, detail: 'the service address is not set' })))
@@ -78,5 +95,5 @@ export async function runInAppProbes(enabled: (key: string) => boolean): Promise
     return weatherVerdict(latest, istParts(now).day, istDay(new Date(nowMs - 24 * 3_600_000)), istParts(now).hour)
   })
 
-  return (await Promise.all(jobs)).filter((p): p is Probe => p !== null)
+  return { probes: (await Promise.all(jobs)).filter((p): p is Probe => p !== null), metrics }
 }

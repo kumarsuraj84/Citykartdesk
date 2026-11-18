@@ -115,6 +115,36 @@ export async function getCheckSeries(checkKey: string, hours: number): Promise<S
     .map((r) => ({ at: r.bucket, samples: Number(r.samples), okSamples: Number(r.ok_samples), p50: Number(r.p50_ms), p95: Number(r.p95_ms), max: Number(r.max_ms) }))
 }
 
+export type MetricPoint = { at: string; avg: number; max: number; min: number }
+/** One server number over time (CPU %, memory %, free disk %, database connections %) in buckets, for the charts. */
+export async function getMetricSeries(metric: string, hours: number): Promise<MetricPoint[]> {
+  const bucket = hours <= 24 ? 10 : hours <= 24 * 7 ? 60 : 240
+  const { data } = await db().rpc('health_metric_series', { p_metric: metric, p_hours: hours, p_bucket_min: bucket })
+  return ((data ?? []) as { bucket: string; avg_value: number; max_value: number; min_value: number }[]).map((r) => ({ at: r.bucket, avg: Number(r.avg_value), max: Number(r.max_value), min: Number(r.min_value) }))
+}
+
+export type RumSummary = { loads: number; views: number; lcpP50: number | null; lcpP75: number | null; lcpP95: number | null; loadP50: number | null; loadP95: number | null; ttfbP50: number | null; clsP75: number | null; inpP75: number | null; poorLcp: number; cutOffViews: number }
+export type RumRoute = { route: string; loads: number; lcpP75: number | null; loadP95: number | null; ttfbP50: number | null; clsP75: number | null }
+export type RumViewport = { vclass: string; views: number; cutOffViews: number; loads: number; lcpP75: number | null }
+export type RumIssue = { route: string; vclass: string; views: number; cutOffViews: number; maxOverflowPx: number; avgViewportW: number }
+const nn = (v: unknown): number | null => (v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v))
+
+/** What real browsers measured: totals, the slowest screens, the screen sizes in use and the screens whose content was cut off. */
+export async function getRum(hours: number): Promise<{ summary: RumSummary | null; routes: RumRoute[]; viewports: RumViewport[]; issues: RumIssue[] }> {
+  const d = db()
+  const [s, r, v, i] = await Promise.all([
+    d.rpc('rum_summary', { p_hours: hours }), d.rpc('rum_by_route', { p_hours: hours, p_limit: 12 }),
+    d.rpc('rum_by_viewport', { p_hours: hours }), d.rpc('rum_layout_issues', { p_hours: hours, p_limit: 15 }),
+  ])
+  const row = ((s.data ?? []) as Record<string, unknown>[])[0]
+  return {
+    summary: row ? { loads: Number(row.loads), views: Number(row.views), lcpP50: nn(row.lcp_p50), lcpP75: nn(row.lcp_p75), lcpP95: nn(row.lcp_p95), loadP50: nn(row.load_p50), loadP95: nn(row.load_p95), ttfbP50: nn(row.ttfb_p50), clsP75: nn(row.cls_p75), inpP75: nn(row.inp_p75), poorLcp: Number(row.poor_lcp), cutOffViews: Number(row.cut_off_views) } : null,
+    routes: ((r.data ?? []) as Record<string, unknown>[]).map((x) => ({ route: String(x.route), loads: Number(x.loads), lcpP75: nn(x.lcp_p75), loadP95: nn(x.load_p95), ttfbP50: nn(x.ttfb_p50), clsP75: nn(x.cls_p75) })),
+    viewports: ((v.data ?? []) as Record<string, unknown>[]).map((x) => ({ vclass: String(x.vclass), views: Number(x.views), cutOffViews: Number(x.cut_off_views), loads: Number(x.loads), lcpP75: nn(x.lcp_p75) })),
+    issues: ((i.data ?? []) as Record<string, unknown>[]).map((x) => ({ route: String(x.route), vclass: String(x.vclass), views: Number(x.views), cutOffViews: Number(x.cut_off_views), maxOverflowPx: Number(x.max_overflow_px ?? 0), avgViewportW: Number(x.avg_viewport_w ?? 0) })),
+  }
+}
+
 export type PerfPoint = { at: string; n: number; p50: number; p95: number; max: number; errors5xx: number }
 export type SlowRoute = { route: string; method: string; requests: number; p50: number; p95: number; slowest: number; errors5xx: number }
 export async function getPerf(hours: number): Promise<{ series: PerfPoint[]; slowest: SlowRoute[] }> {

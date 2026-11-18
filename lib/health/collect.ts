@@ -29,10 +29,15 @@ export type CollectResult = { probes: Probe[]; opened: string[]; closed: string[
 export async function collectOnce(): Promise<CollectResult> {
   const d = db()
   const enabled = await enabledChecks()
-  const probes = await runInAppProbes(enabled)
+  const { probes, metrics } = await runInAppProbes(enabled)
   if (probes.length) {
     const { error } = await d.from('health_samples').insert(probes.map((p) => ({ check_key: p.key, ok: p.ok, ms: p.ms, detail: p.detail })))
     if (error) throw new Error(`could not store the health samples: ${error.message}`)
+  }
+
+  // numbers for the charts (the database server's load); a missing table (migration 201 not applied yet) never stops the checks
+  if (metrics.length) {
+    try { await d.from('health_metrics').insert(metrics) } catch { /* charts only */ }
   }
 
   // outages: judge the checks the APP measures itself, from their newest samples. (The checks the one-minute probe measures are judged by the probe itself,
