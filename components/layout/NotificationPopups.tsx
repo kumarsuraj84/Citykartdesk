@@ -13,7 +13,9 @@ import { PopupCard } from './PopupCard'
 // 20 s (was 8 s): the load review of 4 Nov 2026 found every open tab polling this route (auth + profile + query through the data-service proxy); a new notification now shows within ~20 s, and the
 // pop-up still accepts anything up to POPUP_MAX_AGE_MS (10 min) old, so nothing is missed.
 const POLL_VISIBLE_MS = 20_000
-const POLL_HIDDEN_MS = 30_000
+// A tab nobody is looking at only refreshes the number in its title, and it is checked again the moment the person comes back to it (onVisible below), so it asks rarely: 120 s (was 30 s).
+// Load review of 18 Nov 2026: this route was asked ~65 times a minute from ~20 open tabs, most of them left in the background all day.
+const POLL_HIDDEN_MS = 120_000
 const SHOWN_KEEP = 200
 
 function readJson<T>(key: string, fallback: T): T {

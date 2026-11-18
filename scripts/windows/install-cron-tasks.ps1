@@ -5,7 +5,7 @@
 # The 11 cron tasks (each one runs run-cron-tick.ps1 -Job <name>, which calls the matching route of the app with CRON_SECRET) plus the log shipper:
 #   CitykartDesk-Cron-Alerts           every 30 min  (due-soon / overdue alerts + 08:00 daily digest)
 #   CitykartDesk-Cron-BusinessRules    every 15 min  (scheduled business rules / SLA escalation)
-#   CitykartDesk-Cron-EmailReplySync   every 1 min   (poll IMAP for replies to outbound emails)
+#   CitykartDesk-Cron-EmailReplySync   every 3 min   (poll IMAP for replies to outbound emails; was every 1 min: each pass takes 4-18 s of Gmail connection time, so a reply shows within 3 minutes instead of 1)
 #   CitykartDesk-Cron-Csat             every 30 min  (auto-close resolved tickets past their reopen window + the one CSAT reminder)
 #   CitykartDesk-Cron-SystemLogArchive every 6 hours (moves old System Log records to the archive; never deletes)
 #   CitykartDesk-Cron-AutomationRetry  every 15 min  (finishes the automatic steps of new tickets that did not happen: mail to the OEM, rules, CVM approval; 3 tries at most)
@@ -30,7 +30,7 @@ function Install-Job($name, $job, $minutes) {
 }
 Install-Job 'CitykartDesk-Cron-Alerts' 'alerts' 30
 Install-Job 'CitykartDesk-Cron-BusinessRules' 'business-rules' 15
-Install-Job 'CitykartDesk-Cron-EmailReplySync' 'email-reply-sync' 1
+Install-Job 'CitykartDesk-Cron-EmailReplySync' 'email-reply-sync' 3
 Install-Job 'CitykartDesk-Cron-Csat' 'csat' 30
 Install-Job 'CitykartDesk-Cron-SystemLogArchive' 'system-log-archive' 360
 Install-Job 'CitykartDesk-Cron-AutomationRetry' 'automation-retry' 15
