@@ -403,7 +403,8 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
   // Sort headers in RequestsTable render on every view (mine/collaborated/queue
   // alike), so a user-selected sort must be honored here too — not just in the
   // queue branch's SLA-urgency default further down.
-  const hasExplicitSort = Boolean(opts.sort) && opts.sort !== 'updated_at'
+  // With no sort chosen the newest CREATED ticket is on top (owner's rule, 2026-11-18); "Updated" is only used when the person picks it.
+  const hasExplicitSort = Boolean(opts.sort)
   const sortAsc = (opts.dir ?? 'desc') === 'asc'
 
   if (view === 'subordinates') {
@@ -418,7 +419,7 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
     query = query.or(`requester_id.in.(${subIds.join(',')}),assigned_to.in.(${subIds.join(',')})`)
     query = hasExplicitSort
       ? query.order(opts.sort!, { ascending: sortAsc, nullsFirst: false })
-      : query.order('updated_at', { ascending: sortAsc })
+      : query.order('created_at', { ascending: sortAsc })
   } else if (view === 'collaborated') {
     // Fetch request IDs where this user is an explicit collaborator
     const { data: collabRows } = await supabase
@@ -430,7 +431,7 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
     query = query.in('id', ids)
     query = hasExplicitSort
       ? query.order(opts.sort!, { ascending: sortAsc, nullsFirst: false })
-      : query.order('updated_at', { ascending: sortAsc })
+      : query.order('created_at', { ascending: sortAsc })
   } else if (view === 'mine') {
     // "My Requests" means exactly one thing: requests I raised as requester —
     // not requests I merely collaborate on (those live only in the dedicated
@@ -441,7 +442,7 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
     query = query.eq('requester_id', userId)
     query = hasExplicitSort
       ? query.order(opts.sort!, { ascending: sortAsc, nullsFirst: false })
-      : query.order('updated_at', { ascending: sortAsc })
+      : query.order('created_at', { ascending: sortAsc })
   } else if (view === 'assigned_me') {
     query = query
       .eq('assigned_to', userId)
@@ -518,18 +519,8 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
         query = query.not('id', 'in', `(${collabIds.join(',')})`)
       }
     }
-    // Sort: user-selected or default SLA urgency
-    if (opts.sort && opts.sort !== 'updated_at') {
-      const asc = (opts.dir ?? 'desc') === 'asc'
-      query = query.order(opts.sort, { ascending: asc, nullsFirst: false })
-    } else if (opts.sort === 'updated_at') {
-      query = query.order('updated_at', { ascending: (opts.dir ?? 'desc') === 'asc' })
-    } else {
-      query = query
-        .order('resolution_due_at', { ascending: true, nullsFirst: false })
-        .order('response_due_at', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: true })
-    }
+    // Sort: the one the person chose, otherwise newest created ticket on top (owner's rule, 2026-11-18; the pages always pass a sort, this is the safety net)
+    query = query.order(opts.sort ?? 'created_at', { ascending: sortAsc, nullsFirst: false })
   }
 
   // ── Status filter ─────────────────────────────────────────────────────────

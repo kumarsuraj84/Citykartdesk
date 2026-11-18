@@ -111,7 +111,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
     ? parseInt(params.pageSize ?? '50', 10)
     : 50
 
-  const sortCol = SORT_COLUMNS.includes(params.sort ?? '') ? params.sort! : 'updated_at'
+  const sortCol = SORT_COLUMNS.includes(params.sort ?? '') ? params.sort! : 'created_at'   // newest created ticket on top until the person picks another sort (owner's rule, 2026-11-18)
   const sortDir: 'asc' | 'desc' = params.dir === 'asc' ? 'asc' : 'desc'
 
   // Technicians see only unresolved work by default; Resolved/Closed/All are explicit choices.
