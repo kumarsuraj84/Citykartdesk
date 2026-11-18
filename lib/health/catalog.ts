@@ -24,6 +24,10 @@ export const CHECKS: CheckDef[] = [
   { key: 'server_cpu', label: 'App server CPU', group: 'server', by: 'probe', good: 'CPU use stays under 90%' },
   { key: 'server_memory', label: 'App server memory', group: 'server', by: 'probe', good: 'memory in use stays under 92%' },
   { key: 'server_disk', label: 'Disk space (server drives and NAS)', group: 'server', by: 'probe', good: 'every drive has at least 10% and 5 GB free' },
+  // the database server itself (10.0.0.205): measured by a small read-only reporter that runs there once a minute and posts to /api/health/db-host (lib/health/db-host.ts); "Not in use" until it is installed
+  { key: 'dbhost_cpu', label: 'Database server CPU (10.0.0.205)', group: 'server', by: 'app', good: 'CPU use of the database server stays under 90%' },
+  { key: 'dbhost_memory', label: 'Database server memory', group: 'server', by: 'app', good: 'memory in use on the database server stays under 92%' },
+  { key: 'dbhost_disk', label: 'Database server disks', group: 'server', by: 'app', good: 'every disk of the database server has at least 10% and 5 GB free' },
   { key: 'page_speed', label: 'Page speed (what people wait for)', group: 'server', by: 'app', good: 'the pages answer in under 4 seconds (95th) and under 5% fail' },
   { key: 'db_load', label: 'Database server load', group: 'server', by: 'app', good: 'connections are well under the limit and no query has run over 5 minutes' },
   { key: 'sync_zoho', label: 'Zoho sync', group: 'sync', by: 'app', good: 'a good Zoho sync run in the last 30 minutes' },
@@ -51,6 +55,15 @@ export const METRICS = [
   { key: 'db_conn_pct', label: 'Database connections used', unit: '%', max: 100, worst: 'max' },
   { key: 'disk_d_free_pct', label: 'Free space on D:', unit: '%', max: 100, worst: 'min' },
   { key: 'nas_free_pct', label: 'Free space on the NAS', unit: '%', max: 100, worst: 'min' },
+  // the database server itself, and the app's own pulse (lib/observability/app-vitals.ts)
+  { key: 'dbhost_cpu_pct', label: 'Database server CPU use', unit: '%', max: 100, worst: 'max' },
+  { key: 'dbhost_mem_pct', label: 'Database server memory in use', unit: '%', max: 100, worst: 'max' },
+  { key: 'dbhost_disk_free_pct', label: 'Database server: lowest free disk', unit: '%', max: 100, worst: 'min' },
+  { key: 'db_latency_ms', label: 'App to database round trip', unit: 'ms', max: 1000, worst: 'max' },
+  { key: 'loop_max_ms', label: 'Longest freeze of the app', unit: 'ms', max: 1000, worst: 'max' },
+  { key: 'data_slow', label: 'Slow calls to the data services (3 s or more)', unit: 'calls', max: 100, worst: 'max' },
+  { key: 'data_hedged', label: 'Stuck calls answered by a second try', unit: 'calls', max: 100, worst: 'max' },
+  { key: 'data_timeouts', label: 'Calls that ran out of time', unit: 'calls', max: 100, worst: 'max' },
 ] as const
 
 /** How old a sync may be before it counts as late. */

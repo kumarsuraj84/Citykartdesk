@@ -6,7 +6,7 @@
 // For a controlled switch-over there is ONE transitional switch, ALLOW_SHARED_SECRET_FALLBACK=1, which lets the purposes below fall back to CRON_SECRET again; it
 // is off by default and is reported by auditSecrets() so it is not forgotten.
 
-export type SecretPurpose = 'approval_link' | 'csat_link' | 'oauth_state' | 'intake_webhook' | 'intake_worker' | 'system_log_ingest' | 'cron' | 'data_api' | 'ckoneai_bridge'
+export type SecretPurpose = 'approval_link' | 'csat_link' | 'oauth_state' | 'intake_webhook' | 'intake_worker' | 'system_log_ingest' | 'cron' | 'data_api' | 'ckoneai_bridge' | 'health_agent'
 
 const ENV_NAME: Record<SecretPurpose, string> = {
   approval_link: 'APPROVAL_LINK_SECRET',
@@ -18,10 +18,11 @@ const ENV_NAME: Record<SecretPurpose, string> = {
   cron: 'CRON_SECRET',
   data_api: 'DATA_API_TOKEN',
   ckoneai_bridge: 'CKONEAI_BRIDGE_SECRET_CKDESK',
+  health_agent: 'HEALTH_AGENT_SECRET',   // the small read-only reporter on the database server (scripts/windows/db-host-agent.ps1) posts its CPU / memory / disk figures with it
 }
 
 /** Features that are simply off while their secret is missing: reported only when a value that IS set is short or shared. */
-const OPTIONAL_PURPOSES = new Set<SecretPurpose>(['data_api', 'ckoneai_bridge'])
+const OPTIONAL_PURPOSES = new Set<SecretPurpose>(['data_api', 'ckoneai_bridge', 'health_agent'])
 export const MIN_SECRET_LENGTH = 16
 const clean = (v: string | undefined) => (typeof v === 'string' && v.trim() !== '' ? v : null)
 export const sharedFallbackAllowed = () => process.env.ALLOW_SHARED_SECRET_FALLBACK === '1'
@@ -30,7 +31,7 @@ export const sharedFallbackAllowed = () => process.env.ALLOW_SHARED_SECRET_FALLB
 export function getSecret(purpose: SecretPurpose): string | null {
   const own = clean(process.env[ENV_NAME[purpose]])
   if (own) return own
-  if (purpose !== 'cron' && purpose !== 'data_api' && purpose !== 'ckoneai_bridge' && sharedFallbackAllowed()) return clean(process.env.CRON_SECRET)   // the data API token and the CKOneAI bridge secret never fall back: each opens data to another system
+  if (purpose !== 'cron' && purpose !== 'data_api' && purpose !== 'ckoneai_bridge' && purpose !== 'health_agent' && sharedFallbackAllowed()) return clean(process.env.CRON_SECRET)   // the data API token and the CKOneAI bridge secret never fall back: each opens data to another system
   return null
 }
 

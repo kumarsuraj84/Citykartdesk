@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { fetchReportData, getReportFieldsForEntity, type ReportDataResult } from '@/lib/queries/reporting'
 import { authorizeReportAccess } from '@/lib/reporting/access'
+import { compactRows } from '@/lib/reporting/compact-rows'
 import type { EntityKey } from '@/lib/reporting/field-registry'
 import type { ReportField } from '@/lib/reporting/field-registry'
 import type { SavedReportConfig } from '@/lib/reporting/pivot-engine'
@@ -21,7 +22,9 @@ export async function getReportData(entity: EntityKey): Promise<{ data?: ReportD
   const auth = await authorizeReportAccess(entity)
   if ('error' in auth) return { error: auth.error }
   const data = await fetchReportData(entity, auth.profile.org_id!, auth.scope)
-  return { data }
+  // (a copy of the cached rows is returned to every caller, so changing it here is safe) empty cells are left out of what is sent; the Report Builder puts them back (lib/reporting/compact-rows.ts)
+  const rowKeys = compactRows(data.rows)
+  return { data: { ...data, rowKeys } }
 }
 
 // ── Saved reports ────────────────────────────────────────────────────────────

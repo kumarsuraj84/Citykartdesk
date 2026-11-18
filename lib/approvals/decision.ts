@@ -12,6 +12,7 @@ import { logger } from '@/lib/observability/logger'
 import { pauseCreditMs, shiftDeadlineByCredit } from '@/lib/sla/business-hours'
 import { stopOpenTimeEntries } from '@/lib/requests/status-change'
 import type { RequestStatus } from '@/types'
+import { resolveSenderNotice } from '@/lib/approvals/sender-notice'
 
 type ActionResult = { error?: string }
 
@@ -295,18 +296,19 @@ async function approveCore(ctx: ApprovalCtx, approvalId: string, comment?: strin
       }).catch(() => {})
     }
 
-    // Also notify whoever sent it for approval (the technician), if that's someone
-    // other than the requester (already notified above) and the approver themself.
-    if (approval.requested_by && approval.requested_by !== req?.requester_id && approval.requested_by !== profile.id) {
+    // Also notify whoever sent it for approval (the technician), if that's someone other than the requester (already notified above) and the approver
+    // themself. When the approval was sent by the Zoho moved-tickets tool, the technician the ticket is assigned to is told instead of the administrator who pressed the button.
+    const senderNotice = await resolveSenderNotice(admin, { requestId: approval.request_id, requestedBy: approval.requested_by ?? null, requesterId: req?.requester_id ?? null, approverId: profile.id })
+    if (senderNotice) {
       notify({
-        recipientId: approval.requested_by,
+        recipientId: senderNotice.recipientId,
         actorId: profile.id,
         type: 'approval_approved',
         title: 'Approval granted',
-        body: `${profile.full_name} approved the request you sent for approval.`,
+        body: senderNotice.role === 'assignee' ? `${profile.full_name} approved the request assigned to you.` : `${profile.full_name} approved the request you sent for approval.`,
         requestId: approval.request_id,
         link: `/requests/${approval.request_id}`,
-        metadata: { approverName: profile.full_name, reason: comment?.trim() || undefined, recipientIsRequester: 'false' },
+        metadata: { approverName: profile.full_name, reason: comment?.trim() || undefined, recipientIsRequester: 'false', ...(senderNotice.role === 'assignee' ? { recipientIsAssignee: 'true' } : {}) },
       }).catch(() => {})
     }
   } else {
@@ -480,18 +482,19 @@ async function rejectCore(ctx: ApprovalCtx, approvalId: string, comment?: string
     }).catch(() => {})
   }
 
-  // Also notify whoever sent it for approval (the technician), if that's someone
-  // other than the requester (already notified above) and the approver themself.
-  if (approval.requested_by && approval.requested_by !== req?.requester_id && approval.requested_by !== profile.id) {
+  // Also notify whoever sent it for approval (the technician), if that's someone other than the requester (already notified above) and the approver themself.
+  // (When the approval was sent by the Zoho moved-tickets tool, the technician the ticket is assigned to is told instead: lib/approvals/sender-notice.ts.)
+  const senderNotice = await resolveSenderNotice(admin, { requestId: approval.request_id, requestedBy: approval.requested_by ?? null, requesterId: req?.requester_id ?? null, approverId: profile.id })
+  if (senderNotice) {
     notify({
-      recipientId: approval.requested_by,
+      recipientId: senderNotice.recipientId,
       actorId: profile.id,
       type: 'approval_rejected',
       title: 'Approval rejected',
-      body: `${profile.full_name} rejected the request you sent for approval.`,
+      body: senderNotice.role === 'assignee' ? `${profile.full_name} rejected the request assigned to you.` : `${profile.full_name} rejected the request you sent for approval.`,
       requestId: approval.request_id,
       link: `/requests/${approval.request_id}?tab=approvals`,
-      metadata: { approverName: profile.full_name, reason: comment?.trim() || undefined, recipientIsRequester: 'false' },
+      metadata: { approverName: profile.full_name, reason: comment?.trim() || undefined, recipientIsRequester: 'false', ...(senderNotice.role === 'assignee' ? { recipientIsAssignee: 'true' } : {}) },
     }).catch(() => {})
   }
 

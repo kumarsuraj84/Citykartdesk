@@ -133,6 +133,18 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
     { name: 'Memory %', color: '#a855f7', dashed: true, points: pts(metricOf('mem_pct'), (r: { avg: number }) => r.avg) },
     { name: 'Free space on D: %', color: '#3b82f6', points: pts(metricOf('disk_d_free_pct'), (r: { avg: number }) => r.avg) },
   ]
+  const dbHostSeries = [
+    { name: 'CPU % (highest)', color: '#10b981', points: pts(metricOf('dbhost_cpu_pct'), (r: { max: number }) => r.max) },
+    { name: 'Memory %', color: '#a855f7', dashed: true, points: pts(metricOf('dbhost_mem_pct'), (r: { avg: number }) => r.avg) },
+    { name: 'Lowest free disk %', color: '#3b82f6', points: pts(metricOf('dbhost_disk_free_pct'), (r: { min: number }) => r.min) },
+  ]
+  const pulseSeries = [
+    { name: 'Longest freeze of the app (ms)', color: '#ef4444', points: pts(metricOf('loop_max_ms'), (r: { max: number }) => r.max) },
+    { name: 'App to database round trip, slowest (ms)', color: '#3b82f6', points: pts(metricOf('db_latency_ms'), (r: { max: number }) => r.max) },
+    { name: 'Slow data calls, 3 s or more (right)', color: '#f59e0b', axis: 'r' as const, step: true, points: pts(metricOf('data_slow'), (r: { max: number }) => r.max) },
+    { name: 'Stuck calls answered by a second try (right)', color: '#14b8a6', axis: 'r' as const, step: true, points: pts(metricOf('data_hedged'), (r: { max: number }) => r.max) },
+    { name: 'Calls that ran out of time (right)', color: '#8b5cf6', axis: 'r' as const, step: true, points: pts(metricOf('data_timeouts'), (r: { max: number }) => r.max) },
+  ]
   const detailOf = (key: string) => checkOf(key)?.detail ?? ''
   const dbCheck = checkOf('database')
   const lowestFree = Math.min(...[latest.disk_d_free_pct, latest.nas_free_pct].filter((v): v is number => typeof v === 'number'))
@@ -180,6 +192,12 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
         </ChartCard>
         <ChartCard title="Work done" description="Requests the app answered per minute (left) and the share of database connections in use (right)." series={workSeries}>
           <LineChart series={workSeries} fromMs={fromMs} toMs={toMs} leftUnit="/min" rightUnit="%" rightMax={100} />
+        </ChartCard>
+        <ChartCard title="Database server (10.0.0.205)" description="Processor, memory and the emptiest disk of the database server itself, reported once a minute by a small read-only program that runs there." series={dbHostSeries}>
+          <LineChart series={dbHostSeries} fromMs={fromMs} toMs={toMs} leftUnit="%" leftMax={100} limit={{ value: SERVER_LIMITS.cpuPct, label: 'CPU limit 90%' }} emptyText="Not reporting yet: the small reporter is not installed on the database server (steps in docs/PRODUCTION-INFRASTRUCTURE-AND-MIGRATION.md)." />
+        </ChartCard>
+        <ChartCard title="The app's own pulse" description="How long the app froze at its worst, how long it waited for the database, and (right) calls to the data services that were slow, were stuck and answered by a second try, or ran out of time." series={pulseSeries}>
+          <LineChart series={pulseSeries} fromMs={fromMs} toMs={toMs} leftUnit="ms" limit={{ value: 3000, label: '3 s' }} emptyText="No readings yet: the app writes them every 10 minutes." />
         </ChartCard>
         <ChartCard title="Disks and server" description="Processor and memory use of the app server, and free space on D:, in %." series={serverSeries}>
           <LineChart series={serverSeries} fromMs={fromMs} toMs={toMs} leftUnit="%" leftMax={100} limit={{ value: SERVER_LIMITS.cpuPct, label: 'CPU limit 90%' }} />

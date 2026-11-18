@@ -9,7 +9,8 @@ import { ageBucketLabel, ageInDays } from '@/lib/reporting/aging'
 import { createShortCache } from '@/lib/cache/short-ttl'
 import { istStamp, istTime, isOverdueDate } from '@/lib/reporting/ist'
 import { isSlaPausedStatus } from '@/lib/constants/requests'
-import { fetchAllPages, type PageResult } from '@/lib/queries/paging'
+import { fetchAllPages, fetchAllPagesParallel, type CountedPageResult, type PageResult } from '@/lib/queries/paging'
+import { AGGREGATES_RPC_MIN_TICKETS, loadRequestAggregates, type RequestAggregates } from '@/lib/queries/report-aggregates'
 import type { Database } from '@/types/database'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -23,6 +24,8 @@ export interface ReportDataResult {
   fields: ReportField[]
   rows: ReportRow[]
   truncated: boolean
+  /** set by the Report Builder's server action: the columns every row has. Rows are then sent without their empty cells and the browser puts them back (lib/reporting/compact-rows.ts). */
+  rowKeys?: string[]
 }
 
 // The age of a record in whole elapsed days (rounded down), the same way every other report counts it (lib/reporting/aging.ts, audit F-16)
@@ -36,6 +39,12 @@ function daysBetween(a: string, b: string): number {
  */
 async function fetchCapped<T>(build: (from: number, to: number) => PromiseLike<PageResult>): Promise<{ rows: T[]; truncated: boolean }> {
   const { rows } = await fetchAllPages<T>(build, { maxRows: MAX_REPORT_ROWS + 1 })
+  return { rows: rows.slice(0, MAX_REPORT_ROWS), truncated: rows.length > MAX_REPORT_ROWS }
+}
+
+/** The same as fetchCapped, for the biggest read (the tickets): the first page also returns the total, and the other pages are then read four at a time instead of one after the other. */
+async function fetchCappedParallel<T>(build: (from: number, to: number, withCount: boolean) => PromiseLike<CountedPageResult>): Promise<{ rows: T[]; truncated: boolean }> {
+  const { rows } = await fetchAllPagesParallel<T>(build, { maxRows: MAX_REPORT_ROWS + 1 })
   return { rows: rows.slice(0, MAX_REPORT_ROWS), truncated: rows.length > MAX_REPORT_ROWS }
 }
 
@@ -189,9 +198,15 @@ function serviceFormFieldToReportField(f: ServiceFormFieldRef): ReportField {
   }
 }
 
+// The form fields of every active service change only when an administrator edits a template. The Report Builder asks for them twice on every open (once for the field list,
+// once for the rows) and the second ask used to repeat the same query, so the answer is kept for a few seconds and shared.
+const FORM_FIELDS_CACHE_MS = 20_000
+const formFieldsCache = createShortCache<ServiceFormFieldRef[]>(FORM_FIELDS_CACHE_MS, 10)
 async function getOrgRequestFormFields(admin: AnyClient, orgId: string): Promise<ServiceFormFieldRef[]> {
-  const all = await getServiceFormFieldsForOrg(admin, orgId)
-  return all.filter((f) => !SKIPPED_FORM_FIELD_TYPES.has(f.type))
+  return formFieldsCache.get(`formfields|${orgId}`, async () => {
+    const all = await getServiceFormFieldsForOrg(admin, orgId)
+    return all.filter((f) => !SKIPPED_FORM_FIELD_TYPES.has(f.type))
+  })
 }
 
 /** The field list the UI shows for an entity — static columns + whatever
@@ -219,14 +234,16 @@ async function fetchRequestRows(
   admin: AnyClient,
   orgId: string,
   scope: ReportViewerScope,
-  formFields: ServiceFormFieldRef[]
+  // (still loading while the first pages of tickets are read: the two do not depend on each other until the rows are shaped below)
+  formFieldsPromise: Promise<ServiceFormFieldRef[]>
 ): Promise<{ rows: ReportRow[]; truncated: boolean }> {
+  formFieldsPromise.catch(() => {})   // (a failure is raised where it is awaited; this only keeps it from being reported as unhandled if the tickets fail first)
   // { kind: 'team' } with no teams means "on no team" — an empty .in() filter
   // would otherwise match every row instead of none.
   if (scope.kind === 'team' && scope.teamIds.length === 0) return { rows: [], truncated: false }
 
   // (a fresh query for every page: a query object is changed by each .order() / .range() call, so one object is not reused across pages)
-  const makeQuery = () => {
+  const makeQuery = (withCount = false) => {
     let query = admin
       .from('requests')
       .select(`
@@ -238,7 +255,7 @@ async function fetchRequestRows(
         team:teams(name), project:projects(name),
         requester:profiles!requests_requester_id_fkey(full_name),
         assignee:profiles!requests_assigned_to_fkey(full_name)
-      `)
+      `, withCount ? { count: 'exact' } : undefined)
       .eq('org_id', orgId)
 
     if (scope.kind === 'own') query = query.eq('requester_id', scope.userId)
@@ -260,19 +277,28 @@ async function fetchRequestRows(
   }
 
   // newest first with the id as a tie-breaker, so every page is a stable slice (no row is read twice or missed between two pages)
-  const { rows: pageRows, truncated } = await fetchCapped<Row>((from, to) => makeQuery().order('created_at', { ascending: false }).order('id', { ascending: true }).range(from, to))
+  const { rows: pageRows, truncated } = await fetchCappedParallel<Row>((from, to, withCount) => makeQuery(withCount).order('created_at', { ascending: false }).order('id', { ascending: true }).range(from, to))
   const requestIds = pageRows.map((r) => r.id)
 
   const resolvedIds = pageRows.filter((r) => r.resolved_at).map((r) => r.id)
-  const [collabCounts, attachmentCounts, commentCounts, timeMinutes, csatRatings, approvalSummaries, resolutionRemarkByRequest] = await Promise.all([
-    countByRequestId(admin, 'request_collaborators', requestIds),
-    countByRequestId(admin, 'request_attachments', requestIds, (q) => q.is('deleted_at', null)),
-    countByRequestId(admin, 'request_comments', requestIds),
-    sumTimeTrackedMinutes(admin, requestIds),
-    getCsatRatings(admin, requestIds),
-    getApprovalSummaryByRequestId(admin, requestIds),
+  // the five per-ticket numbers: one database call for a big report (migration 210), the per-batch way for a small one or when the function is not there yet
+  const perBatch = async (): Promise<RequestAggregates> => {
+    const [collabCounts, attachmentCounts, commentCounts, timeMinutes, csatRatings] = await Promise.all([
+      countByRequestId(admin, 'request_collaborators', requestIds),
+      countByRequestId(admin, 'request_attachments', requestIds, (q) => q.is('deleted_at', null)),
+      countByRequestId(admin, 'request_comments', requestIds),
+      sumTimeTrackedMinutes(admin, requestIds),
+      getCsatRatings(admin, requestIds),
+    ])
+    return { collabCounts, attachmentCounts, commentCounts, timeMinutes, csatRatings }
+  }
+  const [aggregates, approvalSummaries, resolutionRemarkByRequest, formFields] = await Promise.all([
+    loadRequestAggregates(admin as never, orgId, requestIds, perBatch),
+    getApprovalSummaryByRequestId(admin, requestIds, orgId),
     getResolutionRemarks(admin, resolvedIds),
+    formFieldsPromise,
   ])
+  const { collabCounts, attachmentCounts, commentCounts, timeMinutes, csatRatings } = aggregates
 
   // The web/portal channel never writes requests.description — the requester's
   // free-text answer lives in form_data instead, under whichever field the
@@ -483,12 +509,19 @@ type RequestApprovalSummary = { status: string; decidedByName: string; decidedAt
  * approval cycle, only the most recent cycle's outcome is kept. */
 async function getApprovalSummaryByRequestId(
   admin: AnyClient,
-  requestIds: string[]
+  requestIds: string[],
+  orgId: string
 ): Promise<Map<string, RequestApprovalSummary>> {
   type ApprovalRow = { id: string; request_id: string; status: string; created_at: string }
-  const approvals = await selectInBatches<ApprovalRow>(
-    admin, 'approvals', 'id, request_id, status, created_at', requestIds
-  )
+  // A big report: read the organization's approvals in a few pages (there are far fewer approvals than tickets) instead of asking for about 100 tickets at a time
+  // (95 calls for 9,000 tickets). The rows of tickets outside the report are simply never looked up.
+  const approvals = requestIds.length >= AGGREGATES_RPC_MIN_TICKETS
+    ? (await fetchAllPages<ApprovalRow>((from, to) => admin
+        .from('approvals')
+        .select('id, request_id, status, created_at, request:requests!inner(org_id)')
+        .eq('request.org_id', orgId)
+        .order('id', { ascending: true }).range(from, to))).rows
+    : await selectInBatches<ApprovalRow>(admin, 'approvals', 'id, request_id, status, created_at', requestIds)
   if (approvals.length === 0) return new Map()
 
   // Latest approval cycle per request (highest created_at wins).
@@ -778,10 +811,10 @@ async function loadReportDataUtc(
   }
 
   if (entity === 'requests') {
-    let formFields = await getOrgRequestFormFields(admin, orgId)
     // a person who sees tickets as a requester (their own, or those of the people who report to them) does not get the technician-only boxes in a report either (VAPT VA-ADM-04)
-    if (scope.kind === 'own' || scope.kind === 'reports') formFields = formFields.filter((f) => f.requesterCanView !== false)
-    const { rows, truncated } = await fetchRequestRows(admin, orgId, scope, formFields)
+    const formFieldsPromise = getOrgRequestFormFields(admin, orgId).then((all) => (scope.kind === 'own' || scope.kind === 'reports' ? all.filter((f) => f.requesterCanView !== false) : all))
+    const { rows, truncated } = await fetchRequestRows(admin, orgId, scope, formFieldsPromise)
+    const formFields = await formFieldsPromise
     return { fields: [RECORD_COUNT_FIELD, ...getEntityFields(entity, toReportFields(formFields))], rows, truncated }
   }
 

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from '@/lib/queries/profiles'
+import { createShortCache } from '@/lib/cache/short-ttl'
 import { isLocationRuleExempt, isServiceVisibleToLocation } from '@/lib/services/location-visibility'
 import type { FilterTaxonomy } from '@/lib/requests/filter-taxonomy'
 import type {
@@ -206,7 +207,19 @@ export async function getServiceSubCategoriesForFilter(): Promise<ServiceSubCate
 }
 
 /** Everything the linked Service / Category / Sub Category filters of the ticket lists need, read once (see lib/requests/filter-taxonomy.ts). */
+// The service / category / sub-category lists (and which sub-category belongs to which service) change only when an administrator edits the set-up, yet every ticket-list
+// view and every 30-second background refresh read them again: four queries and about 175 KB. They are the same for everyone in an organization (the read rules on these
+// tables are by organization only, and the queries ask for active rows only), so they are kept for a short while per organization and shared.
+const TAXONOMY_CACHE_MS = 30_000
+const taxonomyCache = createShortCache<FilterTaxonomy>(TAXONOMY_CACHE_MS, 10)
+
 export async function getRequestFilterTaxonomy(): Promise<FilterTaxonomy> {
+  const profile = await getCurrentProfile()
+  if (!profile?.org_id) return loadRequestFilterTaxonomy()
+  return taxonomyCache.get(`taxonomy|${profile.org_id}`, loadRequestFilterTaxonomy)
+}
+
+async function loadRequestFilterTaxonomy(): Promise<FilterTaxonomy> {
   const supabase = await createClient()
   const [services, categories, subs, tags] = await Promise.all([
     supabase.from('services').select('id, name').eq('is_active', true).order('sort_order'),

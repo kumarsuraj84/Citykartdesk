@@ -179,6 +179,7 @@ export async function sendNotificationEmail(opts: {
           // Set to the string 'false' (not a real boolean — see `data`'s Record<string,
           // string> typing) for the technician who sent it, as opposed to the requester.
           recipientIsRequester: data.recipientIsRequester !== 'false',
+          recipientIsAssignee: data.recipientIsAssignee === 'true',
         })
         break
       case 'approval_rejected':
@@ -190,6 +191,7 @@ export async function sendNotificationEmail(opts: {
           approverName: data.approverName || undefined,
           reason: data.reason || undefined,
           recipientIsRequester: data.recipientIsRequester !== 'false',
+          recipientIsAssignee: data.recipientIsAssignee === 'true',
         })
         break
       case 'collaborator_added':

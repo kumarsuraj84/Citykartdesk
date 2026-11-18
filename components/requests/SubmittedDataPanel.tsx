@@ -36,7 +36,7 @@ function FieldRow({ field, data }: { field: FormField; data: Record<string, unkn
         {isTechnicianMandatory(field) && <span className="mr-0.5 text-destructive">*</span>}
         {field.label}
       </dt>
-      <dd className="text-right text-xs font-medium text-foreground whitespace-pre-wrap break-words">
+      <dd className="text-right text-xs font-medium text-foreground whitespace-pre-wrap [overflow-wrap:anywhere]">
         {displayFieldValue(field, data[field.id])}
       </dd>
     </div>

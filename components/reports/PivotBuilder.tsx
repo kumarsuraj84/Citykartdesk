@@ -26,6 +26,7 @@ import {
   listSavedReports, createSavedReport, updateSavedReport, deleteSavedReport,
 } from '@/lib/actions/reporting'
 import { exportReportXlsx, type ReportExportConfig } from '@/lib/actions/reportExport'
+import { expandRows } from '@/lib/reporting/compact-rows'
 import { downloadXlsxBase64 } from '@/lib/export/xlsx'
 import {
   computePivot, toFlatTable,
@@ -119,7 +120,8 @@ export function PivotBuilder() {
         }
         const loadedFields = fRes.data ?? []
         setFields(loadedFields)
-        setRows(dRes.data?.rows ?? [])
+        // the server leaves the empty cells out of what it sends (they were two thirds of it): put them back so every row has every column
+        setRows(dRes.data?.rowKeys ? expandRows(dRes.data.rows, dRes.data.rowKeys) : (dRes.data?.rows ?? []))
         setTruncated(dRes.data?.truncated ?? false)
         setColumns(defaultReportColumnKeys(loadedFields))
         setRowFields([])

@@ -43,7 +43,9 @@ export async function runInAppProbes(enabled: (key: string) => boolean): Promise
   const add = (key: string, fn: () => Promise<Verdict | null>) => { if (enabled(key)) jobs.push(timed(key, fn)) }
 
   add('database', async () => {
+    const t0 = Date.now()
     const { error } = await db().from('profiles').select('id').limit(1).maybeSingle()
+    if (!error) metrics.push({ metric: 'db_latency_ms', value: Date.now() - t0 })   // for the chart: how long the app waits for the database
     return error ? { ok: false, detail: `the database returned an error: ${String(error.message).slice(0, 100)}` } : { ok: true, detail: 'answered' }
   })
   add('page_speed', async () => {

@@ -2,6 +2,7 @@
 // AC red-flag limit, and how many tickets new stores raised in the last 30 days. Limited to the viewer's own technician groups, like every report.
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { createShortCache } from '@/lib/cache/short-ttl'
 import { fetchAllPages } from '@/lib/queries/paging'
 import { isCurrentlyBreached } from '@/lib/sla/breach'
 import { isSlaPausedStatus } from '@/lib/constants/requests'
@@ -34,7 +35,17 @@ function teamIdsOf(scope: ReportViewerScope): string[] | null {
   return [NO_TEAM_ID]
 }
 
-export async function getStoreSnapshot(orgId: string, scope: ReportViewerScope, now: Date = new Date()): Promise<StoreSnapshot> {
+/** The card may be up to this old. It reads every open ticket of the viewer's groups plus the whole Store Master and AC list, and every manager's Home view (and its 30-second background refresh) repeated all of it. */
+export const STORE_SNAPSHOT_CACHE_MS = 45_000
+const snapshotCache = createShortCache<StoreSnapshot>(STORE_SNAPSHOT_CACHE_MS, 50)
+
+/** Several managers (and one manager's background refreshes) within the time share ONE load. The key holds everything that decides what the viewer may see (organization and groups). A caller that passes its own `now` (a test) always gets a fresh load. */
+export async function getStoreSnapshot(orgId: string, scope: ReportViewerScope, now?: Date): Promise<StoreSnapshot> {
+  if (now) return loadStoreSnapshot(orgId, scope, now)
+  return snapshotCache.get(`snapshot|${orgId}|${JSON.stringify(scope)}`, () => loadStoreSnapshot(orgId, scope, new Date()))
+}
+
+async function loadStoreSnapshot(orgId: string, scope: ReportViewerScope, now: Date): Promise<StoreSnapshot> {
   const admin = createAdminClient() as unknown as AnyClient
   const teamIds = teamIdsOf(scope)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -37,6 +37,7 @@ import { ProjectCell } from '@/components/requests/ProjectCell'
 import { CommentForm } from '@/components/requests/CommentForm'
 import { AttachmentChips } from '@/components/requests/AttachmentChips'
 import { RequestDetailTabs } from '@/components/requests/RequestDetailTabs'
+import { TICKET_TEXT_WRAP } from '@/lib/ui/ticket-layout'
 import { RequestActionBar } from '@/components/requests/RequestActionBar'
 import { ApprovalRejectedReopenBanner } from '@/components/requests/ApprovalRejectedReopenBanner'
 import { ResolvedReopenBanner } from '@/components/requests/ResolvedReopenBanner'
@@ -1017,7 +1018,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
       {/* Header card */}
       <div className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
         {/* Action bar row */}
-        <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           {/* Left: title meta */}
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={request.status} />
@@ -1061,7 +1062,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
           </div>
         </div>
 
-        <h1 className="text-xl font-bold tracking-tight text-foreground">
+        <h1 className={`text-xl font-bold tracking-tight text-foreground ${TICKET_TEXT_WRAP}`}>
           {request.title}
         </h1>
         <p className="mt-1 text-xs text-muted-foreground">

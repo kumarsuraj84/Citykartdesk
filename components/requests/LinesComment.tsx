@@ -5,7 +5,7 @@ import type { LinesCommentView } from '@/lib/vendor/lines-comment'
 export function LinesComment({ view }: { view: LinesCommentView }) {
   return (
     <div className="mt-2 space-y-2 text-sm leading-relaxed text-foreground">
-      {view.before && <p className="whitespace-pre-wrap break-words">{view.before}</p>}
+      {view.before && <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{view.before}</p>}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[320px] border-collapse text-sm">
           <thead>
@@ -21,7 +21,7 @@ export function LinesComment({ view }: { view: LinesCommentView }) {
             {view.rows.map((r) => (
               <tr key={r.no}>
                 <td className="border border-border px-2.5 py-1.5 align-top">{r.no}</td>
-                <td className="break-words border border-border px-2.5 py-1.5 align-top">{r.item}</td>
+                <td className="[overflow-wrap:anywhere] border border-border px-2.5 py-1.5 align-top">{r.item}</td>
                 <td className="border border-border px-2.5 py-1.5 text-right align-top">{r.qty}</td>
                 {view.hasPrice && <td className="border border-border px-2.5 py-1.5 text-right align-top">{r.price}</td>}
                 {view.hasPrice && <td className="border border-border px-2.5 py-1.5 text-right align-top">{r.total}</td>}
@@ -38,7 +38,7 @@ export function LinesComment({ view }: { view: LinesCommentView }) {
           )}
         </table>
       </div>
-      {view.after && <p className="whitespace-pre-wrap break-words">{view.after}</p>}
+      {view.after && <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{view.after}</p>}
     </div>
   )
 }

@@ -193,6 +193,8 @@ export function approvalDecisionEmail(d: {
   /** False for the technician who sent it for approval (not the requester themselves) —
    *  "the request you sent for approval" instead of "your request". Defaults to true. */
   recipientIsRequester?: boolean
+  /** True for the technician the ticket is assigned to, told because the approval was sent by the moved-tickets tool: "the request assigned to you" */
+  recipientIsAssignee?: boolean
 }): { subject: string; html: string; text: string } {
   const e = escapeEmailFields(d, ['requestUrl'])
   const approved = d.decision === 'approved'
@@ -201,10 +203,10 @@ export function approvalDecisionEmail(d: {
     ? `Request approved: ${d.requestTitle}`
     : `Request not approved: ${d.requestTitle}`
   const who = e.approverName ? ` by <strong>${e.approverName}</strong>` : ''
-  const requestRef = isRequester ? 'your request' : `the request you sent for approval,`
+  const requestRef = isRequester ? 'your request' : d.recipientIsAssignee ? `the request assigned to you,` : `the request you sent for approval,`
   const decisionLine = approved
     ? `<p>Great news — ${requestRef} <strong>${e.requestTitle}</strong> has been <strong style="color:#16a34a;">approved</strong>${who}.</p>`
-    : `<p>${isRequester ? 'Your' : 'The'} request <strong>${e.requestTitle}</strong>${isRequester ? '' : ' you sent for approval'} was <strong style="color:#dc2626;">not approved</strong>${who}.</p>`
+    : `<p>${isRequester ? 'Your' : 'The'} request <strong>${e.requestTitle}</strong>${isRequester ? '' : d.recipientIsAssignee ? ' assigned to you' : ' you sent for approval'} was <strong style="color:#dc2626;">not approved</strong>${who}.</p>`
   const reasonLine = e.reason
     ? `<p style="margin:12px 0;padding:12px 16px;background:#F8FAFD;border-left:3px solid #2563eb;border-radius:4px;">${e.reason}</p>`
     : ''

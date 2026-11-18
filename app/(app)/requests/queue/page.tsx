@@ -121,42 +121,53 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
   const breachedOnly = params.sla === 'breached'
   const priorityFilter = PRIORITY_OPTIONS.some((p) => p.value === rawPriority) ? (rawPriority as RequestPriority) : undefined
   // Service -> Category -> Sub Category are linked: each list offers only what fits the choice above it, and a choice that no longer fits is dropped
-  const taxonomy = await getRequestFilterTaxonomy()
+  const isBoard = layout === 'board'
+  const listOptions = (serviceId?: string, categoryId?: string, subCategoryId?: string) => ({
+    view: 'queue' as const,
+    userId: profile.id,
+    status: statusFilter,
+    q: q || undefined,
+    requesterId: requesterParam,
+    assignedTo,
+    breachedOnly,
+    priority: priorityFilter,
+    serviceId,
+    categoryId,
+    subCategoryId,
+    page: isBoard ? 1 : page,
+    pageSize: isBoard ? 200 : pageSize,
+    sort: sortCol,
+    dir: sortDir,
+  })
+  // The filter lists and the tickets do not depend on each other unless a service / category / sub-category was chosen (that choice is checked against the lists first).
+  // With none chosen, which is the usual view, both are asked for at once, and so is the viewer's own technician group (needed below unless the tickets show other groups).
+  const noTaxonomyChoice = !rawService && !rawCategory && !rawSubCategory
+  const taxonomyPromise = getRequestFilterTaxonomy()
+  const listEarly = noTaxonomyChoice ? getRequests(listOptions()) : null
+  listEarly?.catch(() => {})   // (a failure is raised where it is awaited below; this only keeps it from being reported as unhandled if the filter lists fail first)
+  const ownTeamIds = Array.from(new Set(profile.team_members.map((m) => m.team_id)))
+  const ownTeamMembersPromise = getTeamMembersForTeams(ownTeamIds)
+  ownTeamMembersPromise.catch(() => {})
+  const taxonomy = await taxonomyPromise
   const scoped = scopeTaxonomy(taxonomy, { service: rawService || undefined, category: rawCategory || undefined, subcategory: rawSubCategory || undefined })
   const serviceFilter = scoped.effective.service
   const categoryFilter = scoped.effective.category
   const subCategoryFilter = scoped.effective.subcategory
 
-  const isBoard = layout === 'board'
-
   const [result, requesterRow] = await Promise.all([
-    getRequests({
-      view: 'queue',
-      userId: profile.id,
-      status: statusFilter,
-      q: q || undefined,
-      requesterId: requesterParam,
-      assignedTo,
-      breachedOnly,
-      priority: priorityFilter,
-      serviceId: serviceFilter,
-      categoryId: categoryFilter,
-      subCategoryId: subCategoryFilter,
-      page: isBoard ? 1 : page,
-      pageSize: isBoard ? 200 : pageSize,
-      sort: sortCol,
-      dir: sortDir,
-    }),
+    listEarly ?? getRequests(listOptions(serviceFilter, categoryFilter, subCategoryFilter)),
     requesterParam ? getRequesterName(requesterParam) : Promise.resolve(null),
   ])
   const requests = result.data
 
   const relevantTeamIds = Array.from(new Set([
     ...requests.map((r) => r.team_id),
-    ...profile.team_members.map((m) => m.team_id),
+    ...ownTeamIds,
   ]))
   const assignableUsers = await (async () => {
-    const scoped = relevantTeamIds.length > 0 ? await getTeamMembersForTeams(relevantTeamIds) : []
+    // (when the tickets are all from the viewer's own groups, the answer already asked for above is the one needed)
+    const needsMore = relevantTeamIds.some((id) => !ownTeamIds.includes(id))
+    const scoped = relevantTeamIds.length === 0 ? [] : needsMore ? await getTeamMembersForTeams(relevantTeamIds) : await ownTeamMembersPromise
     return scoped.length > 0 ? scoped : await getAgentTierProfiles()
   })()
 

@@ -14,6 +14,7 @@
  */
 
 import { reportFailure, reportResponse } from '@/lib/syslog/failure-reporter'
+import { recordCall } from '@/lib/supabase/call-stats'
 
 const TIMEOUT_MS = 20_000
 const MAX_RETRIES = 2
@@ -87,6 +88,65 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/** Whether a call is a read that is safe to send twice at the same moment (GET / HEAD only: a write is never sent twice). */
+export function canHedge(method: string | undefined): boolean {
+  const m = (method ?? 'GET').toUpperCase()
+  return m === 'GET' || m === 'HEAD'
+}
+
+/**
+ * Stuck-call protection for reads. A read that has had no answer after HEDGE_AFTER_MS is sent a second time on a NEW connection and whichever answers first is used; the
+ * other is cancelled. A normal read answers in well under a second, so this never fires for them; when one connection or one worker behind the gateway has silently
+ * stopped answering (the 13:41-14:25 stall of 18 Nov 2026: pages waiting the full 20 s), the second copy answers in milliseconds and the person waits 3 seconds, not 20.
+ * At most MAX_HEDGES_IN_FLIGHT second copies run at once, so a service that is simply slow is not buried under extra work. Both copies share the one time limit.
+ */
+export const HEDGE_AFTER_MS = 3_000
+const MAX_HEDGES_IN_FLIGHT = 8
+let hedgesInFlight = 0
+
+interface Sent { response: Response; hedged: boolean; hedgeWon: boolean }
+
+async function sendOnce(input: Parameters<typeof fetch>[0], init: RequestInit | undefined, signal: AbortSignal, hedge: boolean): Promise<Sent> {
+  const first = new AbortController()
+  signal.addEventListener('abort', () => first.abort())
+  const firstCall = fetch(input, { ...init, signal: first.signal })
+  if (!hedge) return { response: await firstCall, hedged: false, hedgeWon: false }
+
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const waitForHedgeTime = new Promise<'hedge'>((resolve) => { timer = setTimeout(() => resolve('hedge'), HEDGE_AFTER_MS) })
+  firstCall.catch(() => {})   // a cancelled loser must never become an unhandled rejection
+  try {
+    const early = await Promise.race([firstCall.then((r) => ({ r }), (e) => ({ e })), waitForHedgeTime])
+    if (early !== 'hedge') {
+      if ('e' in early) throw early.e
+      return { response: early.r, hedged: false, hedgeWon: false }
+    }
+    // no answer yet: send the second copy (unless too many are already out)
+    if (hedgesInFlight >= MAX_HEDGES_IN_FLIGHT) return { response: await firstCall, hedged: false, hedgeWon: false }
+    hedgesInFlight++
+    const second = new AbortController()
+    signal.addEventListener('abort', () => second.abort())
+    const secondCall = fetch(input, { ...init, signal: second.signal })
+    secondCall.catch(() => {})
+    try {
+      // the first answer wins; if one copy fails, the other still gets its chance
+      const winner = await new Promise<Sent>((resolve, reject) => {
+        let failures = 0
+        let firstError: unknown
+        const fail = (e: unknown) => { if (failures === 0) firstError = e; if (++failures === 2) reject(firstError) }
+        firstCall.then((response) => resolve({ response, hedged: true, hedgeWon: false }), fail)
+        secondCall.then((response) => resolve({ response, hedged: true, hedgeWon: true }), fail)
+      })
+      ;(winner.hedgeWon ? first : second).abort()   // cancel the loser
+      return winner
+    } finally {
+      hedgesInFlight--
+    }
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 export const resilientFetch: typeof fetch = async (input, init) => {
   let lastError: unknown
   const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
@@ -110,8 +170,10 @@ export const resilientFetch: typeof fetch = async (input, init) => {
 
     const started = Date.now()
     try {
-      const response = await fetch(input, { ...init, signal: controller.signal })
+      const sent = await sendOnce(input, init, controller.signal, mode === 'go' && canHedge(method))
+      const response = sent.response
       clearTimeout(timeout)
+      recordCall(Date.now() - started, { hedged: sent.hedged, hedgeWon: sent.hedgeWon })
       // the gateway in front of the services answers 502 / 503 / 504 when the service behind it is down (often slowly): treat that like a
       // failure for the next few calls, but hand the answer itself back unchanged. Any other answer means the service is alive.
       if (response.status === 502 || response.status === 503 || response.status === 504) tripped(service, Date.now())
@@ -122,6 +184,7 @@ export const resilientFetch: typeof fetch = async (input, init) => {
     } catch (err) {
       clearTimeout(timeout)
       lastError = err
+      if (timedOut) recordCall(Date.now() - started, { timedOut: true })
 
       if (!canRetry(init?.method ?? (input instanceof Request ? input.method : undefined), err) || attempt === attempts) {
         reportFailure({ url, method, error: err, ms: Date.now() - started })

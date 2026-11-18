@@ -11,14 +11,14 @@ export function OemSentComment({ view }: { view: OemCommentView }) {
           {view.meta.map((m, i) => (
             <div key={i} className="contents">
               <dt className="font-semibold text-muted-foreground">{m.label}</dt>
-              <dd className="min-w-0 break-words">{m.value}</dd>
+              <dd className="min-w-0 [overflow-wrap:anywhere]">{m.value}</dd>
             </div>
           ))}
         </dl>
       )}
       {view.blocks.map((b, i) =>
         b.kind === 'text' ? (
-          <p key={i} className="whitespace-pre-wrap break-words">{b.text}</p>
+          <p key={i} className="whitespace-pre-wrap [overflow-wrap:anywhere]">{b.text}</p>
         ) : (
           <div key={i} className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
@@ -26,7 +26,7 @@ export function OemSentComment({ view }: { view: OemCommentView }) {
                 {b.rows.map((r, j) => (
                   <tr key={j}>
                     <th scope="row" className="w-[30%] border border-border bg-muted/60 px-2.5 py-1.5 text-left align-top font-semibold">{r.label}</th>
-                    <td className="whitespace-pre-wrap break-words border border-border px-2.5 py-1.5 align-top">{r.value}</td>
+                    <td className="whitespace-pre-wrap [overflow-wrap:anywhere] border border-border px-2.5 py-1.5 align-top">{r.value}</td>
                   </tr>
                 ))}
               </tbody>

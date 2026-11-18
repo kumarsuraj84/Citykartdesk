@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { RequestTabId } from '@/lib/ui/requestTabs'
+import { TICKET_TEXT_WRAP } from '@/lib/ui/ticket-layout'
 
 const ALL_TABS = [
   { id: 'conversations', label: 'Conversations' },
@@ -154,7 +155,7 @@ export function RequestDetailTabs({
             id="request-tab-panel"
             role="tabpanel"
             aria-labelledby={`request-tab-${current}`}
-            className={current === 'tasks' || current === 'conversations' ? '' : 'p-5'}
+            className={`${current === 'tasks' || current === 'conversations' ? '' : 'p-5'} ${TICKET_TEXT_WRAP}`}
           >
             {content[current]}
           </div>

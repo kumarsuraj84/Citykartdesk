@@ -5,6 +5,17 @@
 const http = require('http')
 
 const PORT = 8443
+
+// Every log line now starts with the time (the old lines had none, so a stall could not be matched to the clock), and an upstream that takes SLOW_UPSTREAM_MS or more to start
+// answering is logged with the route and the time (never the query string, which can hold ids). Added 18 Nov 2026 to find out where the 20-second stalls came from.
+const SLOW_UPSTREAM_MS = 3000
+const stamp = () => new Date().toISOString()
+const logError = (...args) => console.error(stamp(), ...args)
+const safePath = (u) => String(u || '').split('?')[0].slice(0, 80)
+function noteSlow(req, startedAt) {
+  const ms = Date.now() - startedAt
+  if (ms >= SLOW_UPSTREAM_MS) logError(`[proxy] slow upstream: ${req.method} ${safePath(req.url)} took ${ms} ms to start answering`)
+}
 const ROUTES = [
   { prefix: '/auth/v1', target: { host: '127.0.0.1', port: 9999 }, pooled: true },
   { prefix: '/rest/v1', target: { host: '127.0.0.1', port: 3001 }, pooled: true },
@@ -77,6 +88,7 @@ const MAX_BUFFERED_BODY_BYTES = 4 * 1024 * 1024 // generous for JSON auth/rest p
 function forwardPooled(req, res, route, forwardPath) {
   bufferBody(req, MAX_BUFFERED_BODY_BYTES)
     .then((bodyBuffer) => {
+      const startedAt = Date.now()
       const attempt = (isRetry) => {
         const proxyReq = http.request(
           {
@@ -89,17 +101,18 @@ function forwardPooled(req, res, route, forwardPath) {
             agent: isRetry ? false : pooledAgent,
           },
           (proxyRes) => {
+            noteSlow(req, startedAt)
             res.writeHead(proxyRes.statusCode, proxyRes.headers)
             proxyRes.pipe(res)
           }
         )
         proxyReq.on('error', (err) => {
           if (!isRetry && isStaleSocketError(err)) {
-            console.error(`[proxy] stale pooled connection for ${req.method} ${req.url}, retrying once:`, err.message)
+            logError(`[proxy] stale pooled connection for ${req.method} ${req.url}, retrying once:`, err.message)
             attempt(true)
             return
           }
-          console.error(`[proxy] upstream error for ${req.method} ${req.url}:`, err.message)
+          logError(`[proxy] upstream error for ${req.method} ${req.url}:`, err.message)
           if (!res.headersSent) {
             res.writeHead(502, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ error: 'upstream unavailable', detail: err.message }))
@@ -113,7 +126,7 @@ function forwardPooled(req, res, route, forwardPath) {
       attempt(false)
     })
     .catch((err) => {
-      console.error(`[proxy] failed to buffer request body for ${req.method} ${req.url}:`, err.message)
+      logError(`[proxy] failed to buffer request body for ${req.method} ${req.url}:`, err.message)
       if (!res.headersSent) {
         res.writeHead(413, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ error: 'request body too large for proxy buffering', detail: err.message }))
@@ -122,6 +135,7 @@ function forwardPooled(req, res, route, forwardPath) {
 }
 
 function forwardOneShot(req, res, route, forwardPath) {
+  const startedAt = Date.now()
   const proxyReq = http.request(
     {
       host: route.target.host,
@@ -137,13 +151,14 @@ function forwardOneShot(req, res, route, forwardPath) {
       agent: false,
     },
     (proxyRes) => {
+      noteSlow(req, startedAt)
       res.writeHead(proxyRes.statusCode, proxyRes.headers)
       proxyRes.pipe(res)
     }
   )
 
   proxyReq.on('error', (err) => {
-    console.error(`[proxy] upstream error for ${req.method} ${req.url}:`, err.message)
+    logError(`[proxy] upstream error for ${req.method} ${req.url}:`, err.message)
     if (!res.headersSent) {
       res.writeHead(502, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: 'upstream unavailable', detail: err.message }))
@@ -153,7 +168,7 @@ function forwardOneShot(req, res, route, forwardPath) {
   })
 
   req.on('error', (err) => {
-    console.error(`[proxy] client request error for ${req.method} ${req.url}:`, err.message)
+    logError(`[proxy] client request error for ${req.method} ${req.url}:`, err.message)
     proxyReq.destroy()
   })
 
@@ -179,7 +194,7 @@ function createProxyServer(routes = ROUTES) {
   })
 
   server.on('clientError', (err, socket) => {
-    console.error('[proxy] client connection error:', err.message)
+    logError('[proxy] client connection error:', err.message)
     if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n')
   })
   return server

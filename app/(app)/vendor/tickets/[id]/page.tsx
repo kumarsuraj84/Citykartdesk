@@ -3,6 +3,7 @@ import { VendorAccessOff } from '@/components/vendor/VendorAccessOff'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ChevronLeft } from 'lucide-react'
+import { TICKET_TEXT_WRAP } from '@/lib/ui/ticket-layout'
 import { getCurrentProfile } from '@/lib/queries/profiles'
 import { getRequestById, getRequestComments } from '@/lib/queries/requests'
 import { getRequestAttachments } from '@/lib/queries/attachments'
@@ -35,7 +36,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 px-4 py-2">
       <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-right text-xs font-medium whitespace-pre-wrap break-words">{value || '—'}</dd>
+      <dd className="text-right text-xs font-medium whitespace-pre-wrap [overflow-wrap:anywhere]">{value || '—'}</dd>
     </div>
   )
 }
@@ -109,7 +110,7 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-xs text-muted-foreground">{request.request_no}</div>
-          <h1 className="text-lg font-semibold leading-tight">{request.title}</h1>
+          <h1 className={`text-lg font-semibold leading-tight ${TICKET_TEXT_WRAP}`}>{request.title}</h1>
         </div>
         <div className="flex items-center gap-2">
           {(request.reopen_count ?? 0) > 0 && <span className="rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">Reopened ×{request.reopen_count}</span>}
@@ -130,8 +131,8 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
         oemRequired={programAsset ? programAsset.oemNumberRequired : true}
       />
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
-        <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className={`space-y-4 ${TICKET_TEXT_WRAP}`}>
           <section className="rounded-xl border border-border">
             <h2 className="border-b border-border px-4 py-2 text-sm font-semibold">What the store reported</h2>
             <dl className="divide-y divide-border">
@@ -152,7 +153,7 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
                     <span className="font-medium text-foreground">{c.author?.full_name ?? 'Someone outside'}</span>
                     <span>{formatDateTime(c.created_at)}</span>
                   </div>
-                  {(() => { const oem = parseOemComment(c.body); if (oem) return <OemSentComment view={oem} />; const lines = parseLinesComment(c.body); return lines ? <LinesComment view={lines} /> : <p className="mt-1 whitespace-pre-wrap break-words text-sm">{c.body}</p> })()}
+                  {(() => { const oem = parseOemComment(c.body); if (oem) return <OemSentComment view={oem} />; const lines = parseLinesComment(c.body); return lines ? <LinesComment view={lines} /> : <p className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere] text-sm">{c.body}</p> })()}
                   {(filesByComment.get(c.id) ?? []).length > 0 && (
                     <div className="mt-2"><AttachmentChips attachments={filesByComment.get(c.id) ?? []} currentUserId={profile.id} canManageAll={false} /></div>
                   )}

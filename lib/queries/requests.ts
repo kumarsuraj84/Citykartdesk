@@ -378,9 +378,10 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
   // Explicit column list — excludes the heavy JSONB columns (form_data,
   // form_schema_snapshot, form_sections_snapshot) which the list never renders and are
   // only needed on the detail page (getRequestById). Avoids shipping 100KB+/page of
-  // unused JSON.
+  // unused JSON. The description (free text, can be long) is left out too: no list or board
+  // card shows it (searching still looks inside it, on the database side).
   const selectCols = `
-      id, request_no, title, description, requester_id, assigned_to, service_id, team_id,
+      id, request_no, title, requester_id, assigned_to, service_id, team_id,
       org_id, priority, status, response_due_at, resolution_due_at, responded_at,
       waiting_since, resolved_at, closed_at, created_at, updated_at, source_metadata,
       category_id, sub_category_id, reopen_count,
@@ -493,11 +494,22 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
     // to work on is still live work assigned to them and must show up in their
     // own queue, not vanish because they happen to also be the requester.
     if (assignedTo !== 'me') {
-      const { data: intakeByMe } = await supabase
-        .from('requests')
-        .select('id')
-        .eq('requester_id', userId)
-        .filter('source_metadata', 'cs', '{"created_via":"intake"}')
+      // (the two small look-ups do not depend on each other: asked together, one wait instead of two)
+      const [{ data: intakeByMe }, { data: collabRows }] = await Promise.all([
+        supabase
+          .from('requests')
+          .select('id')
+          .eq('requester_id', userId)
+          .filter('source_metadata', 'cs', '{"created_via":"intake"}'),
+        // Also exclude anything the user collaborates on — collaborated requests
+        // belong in the dedicated "Collaborated" tab only, kept as a distinct facet
+        // from "raised by me" (My Requests) and "my team's work" (Team Queue) so no
+        // ticket is duplicated across tabs.
+        supabase
+          .from('request_collaborators')
+          .select('request_id')
+          .eq('user_id', userId),
+      ])
       const intakeByMeIds = (intakeByMe ?? []).map((r) => (r as { id: string }).id)
 
       if (intakeByMeIds.length > 0) {
@@ -506,14 +518,6 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
         query = query.neq('requester_id', userId)
       }
 
-      // Also exclude anything the user collaborates on — collaborated requests
-      // belong in the dedicated "Collaborated" tab only, kept as a distinct facet
-      // from "raised by me" (My Requests) and "my team's work" (Team Queue) so no
-      // ticket is duplicated across tabs.
-      const { data: collabRows } = await supabase
-        .from('request_collaborators')
-        .select('request_id')
-        .eq('user_id', userId)
       const collabIds = (collabRows ?? []).map((r) => r.request_id)
       if (collabIds.length > 0) {
         query = query.not('id', 'in', `(${collabIds.join(',')})`)

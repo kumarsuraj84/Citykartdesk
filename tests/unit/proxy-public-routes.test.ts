@@ -35,6 +35,7 @@ describe('proxy() — public API route allowlist', () => {
     const publicRoutes = [
       '/api/health',
       '/api/health/collect',
+      '/api/health/db-host',
       '/api/alerts/run',
       '/api/business-rules/run',
       '/api/desktime/sync',

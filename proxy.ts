@@ -73,6 +73,7 @@ export async function proxy(request: NextRequest) {
   const PUBLIC_API_ROUTES = new Set([
     '/api/health',
     '/api/version',
+    '/api/health/db-host',        // every minute: the small reporter on the database server posts its CPU / memory / disk figures (own shared secret HEALTH_AGENT_SECRET)
     '/api/health/collect',        // every minute: the health probe on the app server asks the app to run its own checks and store them (shared secret; platform owners read the result on the Health page)
     '/api/alerts/run',
     '/api/business-rules/run',

@@ -103,27 +103,33 @@ export default async function RequestsPage({ searchParams }: PageProps) {
 
   const priorityFilter = PRIORITY_OPTIONS.some((p) => p.value === rawPriority) ? (rawPriority as RequestPriority) : undefined
   // Service -> Category -> Sub Category are linked: each list offers only what fits the choice above it, and a choice that no longer fits is dropped
-  const taxonomy = await getRequestFilterTaxonomy()
+  const listOptions = (serviceId?: string, categoryId?: string, subCategoryId?: string) => ({
+    view: rawView,
+    userId: profile.id,
+    status: statusFilter,
+    q: q || undefined,
+    priority: priorityFilter,
+    serviceId,
+    categoryId,
+    subCategoryId,
+    page,
+    pageSize,
+    sort: sortCol,
+    dir: sortDir,
+  })
+  // The filter lists and the tickets do not depend on each other unless a service / category / sub-category was chosen (that choice is checked against the lists first):
+  // with none chosen, which is the usual view, both are asked for at once.
+  const taxonomyPromise = getRequestFilterTaxonomy()
+  const listEarly = !rawService && !rawCategory && !rawSubCategory ? getRequests(listOptions()) : null
+  listEarly?.catch(() => {})   // (a failure is raised where it is awaited below; this only keeps it from being reported as unhandled if the filter lists fail first)
+  const taxonomy = await taxonomyPromise
   const scoped = scopeTaxonomy(taxonomy, { service: rawService || undefined, category: rawCategory || undefined, subcategory: rawSubCategory || undefined })
   const serviceFilter = scoped.effective.service
   const categoryFilter = scoped.effective.category
   const subCategoryFilter = scoped.effective.subcategory
 
   const [result, showTeamView] = await Promise.all([
-    getRequests({
-      view: rawView,
-      userId: profile.id,
-      status: statusFilter,
-      q: q || undefined,
-      priority: priorityFilter,
-      serviceId: serviceFilter,
-      categoryId: categoryFilter,
-      subCategoryId: subCategoryFilter,
-      page,
-      pageSize,
-      sort: sortCol,
-      dir: sortDir,
-    }),
+    listEarly ?? getRequests(listOptions(serviceFilter, categoryFilter, subCategoryFilter)),
     hasSubordinates(profile.id),
   ])
   const requests = result.data

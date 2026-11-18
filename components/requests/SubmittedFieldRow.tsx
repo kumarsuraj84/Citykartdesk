@@ -107,7 +107,7 @@ export function SubmittedFieldRow({ requestId, field, value, canEdit }: Submitte
         ) : (
           // Plain text, not a button: text inside a <button> cannot be selected by dragging, and a
           // value the technician can't edit is exactly the one they want to select and copy.
-          <span className="cursor-text select-text break-words whitespace-pre-wrap text-right text-xs text-foreground">{shown}</span>
+          <span className="cursor-text select-text [overflow-wrap:anywhere] whitespace-pre-wrap text-right text-xs text-foreground">{shown}</span>
         )}
         <CopyButton value={shown} label={field.label} />
 

@@ -22,6 +22,17 @@ export async function register() {
       }
     }
   } catch { /* timing must never stop the server from starting */ }
+  // The app's own pulse (longest freeze of the app, slow / stuck / timed-out calls to the data services), stored every 10 minutes for the Health & Performance page.
+  try {
+    if (process.env.REQUEST_TIMING !== '0' && !(globalThis as { __ckVitals?: boolean }).__ckVitals) {
+      ;(globalThis as { __ckVitals?: boolean }).__ckVitals = true
+      const vitals = await import('./lib/observability/app-vitals')
+      if (vitals.startVitals()) {
+        const timer = setInterval(() => { void vitals.storeVitals() }, 10 * 60_000)
+        if (typeof timer.unref === 'function') timer.unref()
+      }
+    }
+  } catch { /* the pulse must never stop the server from starting */ }
   try {
     const { startupWarnings } = await import('./lib/observability/startup-check')
     for (const w of startupWarnings()) console.warn(`[startup] ${w}`)

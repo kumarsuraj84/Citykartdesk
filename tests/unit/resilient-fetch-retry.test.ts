@@ -42,12 +42,12 @@ describe('resilient fetch: the fast-fail breaker (REL-1)', () => {
     const first = resilientFetch(REST).catch((e) => e)
     await vi.advanceTimersByTimeAsync(20_000)
     expect(await first).toBeInstanceOf(DOMException)
-    expect(fetchMock).toHaveBeenCalledTimes(1)               // before: 3 attempts = 60 s
+    expect(fetchMock).toHaveBeenCalledTimes(2)               // the read and its one second copy sent after 3 s (before: 3 attempts = 60 s)
 
     const started = Date.now()
     for (let i = 0; i < 5; i++) await expect(resilientFetch(REST)).rejects.toMatchObject({ cause: { code: 'ECIRCUITOPEN' } })
     expect(Date.now() - started).toBe(0)                      // no waiting at all
-    expect(fetchMock).toHaveBeenCalledTimes(1)               // and nothing was sent
+    expect(fetchMock).toHaveBeenCalledTimes(2)               // and nothing more was sent
   })
 
   it('only the failed service is held back; the others keep working', async () => {
@@ -81,16 +81,16 @@ describe('resilient fetch: the fast-fail breaker (REL-1)', () => {
     await expect(resilientFetch(REST)).rejects.toMatchObject({ cause: { code: 'ECIRCUITOPEN' } })   // others do not pile on
     await vi.advanceTimersByTimeAsync(PROBE_TIMEOUT_MS)           // the test call gives up quickly, not after 20 s
     expect(await probe).toBeInstanceOf(DOMException)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(3)                    // (the first call's two copies, then the one test call: a test call is never sent twice)
 
     await vi.advanceTimersByTimeAsync(BREAKER_MS + 1)             // the second hold-off is longer than the first
     await expect(resilientFetch(REST)).rejects.toMatchObject({ cause: { code: 'ECIRCUITOPEN' } })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
     await vi.advanceTimersByTimeAsync(BREAKER_MS + 1)
     const probe2 = resilientFetch(REST).catch((e) => e)
     await vi.advanceTimersByTimeAsync(PROBE_TIMEOUT_MS)
     await probe2
-    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock).toHaveBeenCalledTimes(4)
   })
 
   it('a refused connection is repeated quickly (reads), then held off; a one-off reset on a write does not hold anything off', async () => {
