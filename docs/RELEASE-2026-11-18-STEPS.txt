@@ -1,0 +1,43 @@
+CITYKART DESK - RELEASE 7dbd713 (18 Nov 2026) - STEPS
+=====================================================
+What is in it: stuck-call protection, Health page (database server + app pulse), faster Reports pivot / queue / Home,
+ticket page width fix, 10-second deploys, approval notice to the technician for moved Zoho tickets.
+Order matters. "ME" = Claude does it over ssh after you say so. "YOU" = you type it on the server (passwords/secrets are typed by you).
+
+STEP 1 - YOU, on the DATABASE server 10.0.0.205 (Remote Desktop, PowerShell as Administrator)
+    cd C:\ckdesk-release
+    .\run-ckdesk-migration-210.ps1
+  - It asks for the postgres password (typed, hidden, not saved). It takes a backup first, then adds ONE read-only function (report_request_aggregates).
+  - Expected at the end:   functions = 1   (recorded = 1 or 0 is fine)   and a small table with  tickets_counted  (a number).
+  - If it prints "FAILED", nothing was changed: tell me what it says.
+  - Tell me "migration 210 done".
+
+STEP 2 - ME: restart the data service CkDeskPostgrest on 98 (a 2-3 second blip), check that the Reports pivot function is visible.
+
+STEP 3 - YOU, on the APP server 10.0.1.98 (Remote Desktop, PowerShell as Administrator)  -  for the new database-server cards on the Health page
+    cd D:\Citykart_Applications\Citykart_Ckdesk_App\tools
+    .\set-health-agent-secret.ps1 -Generate
+  - It shows a long secret ONCE on the screen: keep that window open (or copy it to your password manager). It is saved into .env.local on 98 only.
+  - (You can skip steps 3 and 5. The three database-server checks then simply show "Not in use".)
+
+STEP 4 - ME (when you say "deploy now"): build the release from main, copy it to 98, run swap-app.ps1.
+  The app is out of service for about 10 seconds. The old build is kept as app\standalone-bak-<time>; if the new one is not healthy it goes back by itself.
+  I then check: version, health, all 16 checks, the Reports pivot, the request queue, the ticket page, the Health page.
+
+STEP 5 - YOU, on the DATABASE server 10.0.0.205  (only if you did step 3; only AFTER step 4)
+    cd C:\ckdesk-release
+    .\add-db-host-agent-task.ps1
+  - It asks for the secret: type the SAME value from step 3 (hidden). It saves it in C:\ckdesk-health\agent.secret (SYSTEM + Administrators only),
+    adds one scheduled task "CitykartDesk-DbHostAgent" (every minute, SYSTEM) and runs one test.
+  - Expected last line:  OK - the app accepted the report.
+  - The Health page shows the database server CPU / memory / disks within 2-3 minutes.
+  - It only READS Windows counters. Remove any time:  .\add-db-host-agent-task.ps1 -Remove
+
+STEP 6 - OPTIONAL, ME (needs your OK, about 20 seconds of downtime): put the new proxy file in (adds the time and slow answers to the proxy log).
+  New file is already on 98: services\proxy\server.js.new-20261118 (not active). Old one stays as server.js.bak-20261118.
+
+ROLLBACK
+  App:     I run:  Stop-Service CkDeskApp; rename app\standalone -> standalone-failed; rename app\standalone-bak-<time> -> standalone; Start-Service CkDeskApp
+  Pivot:   nothing to undo (the app uses the old way by itself if the function is missing). Function drop (never needed):  DROP FUNCTION public.report_request_aggregates(uuid);
+  Reporter: .\add-db-host-agent-task.ps1 -Remove   (on 205)
+  Secret:   the old .env.local copy is saved next to it as .env.local.bak-<time>
