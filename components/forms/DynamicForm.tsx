@@ -329,7 +329,7 @@ export const DynamicForm = forwardRef<DynamicFormHandle, DynamicFormProps>(funct
   // from values/validation/rendering all at once.
   const sectionsForAnyCategory = filterFieldsForRequester(resolveServiceFormSections(service))
   // A field limited to certain categories (for example Qty for fixtures) appears only after one of them is chosen, and is then checked like any other field.
-  const sections = withProgramMachineOptions(withAcUnitOptions(filterSectionsForCategory(sectionsForAnyCategory, categoryId), acUnitOptions), programMachineOptions, categoryId)
+  const sections = withProgramMachineOptions(withAcUnitOptions(filterSectionsForCategory(sectionsForAnyCategory, categoryId, subCategoryId), acUnitOptions), programMachineOptions, categoryId)
   const allFields: FormField[] = flattenSections(sections)
   const everyField: FormField[] = flattenSections(sectionsForAnyCategory)
 

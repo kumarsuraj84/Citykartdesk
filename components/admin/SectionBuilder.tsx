@@ -32,6 +32,8 @@ interface SectionBuilderProps {
   libraryFields?: LibraryFieldDef[]
   /** The categories of the service desk, so a field can be limited to some of them ("Show only for these categories"). */
   categories?: { id: string; name: string }[]
+  /** The sub-categories (each with its category), so a field can be limited to some of them ("Show only for these sub-categories"). */
+  subCategories?: { id: string; name: string; categoryId: string; categoryName: string }[]
 }
 
 type Selected = { s: string; f: string } | null
@@ -600,6 +602,7 @@ export function SectionBuilder({
   fieldIdsWithSla = [],
   libraryFields,
   categories = [],
+  subCategories = [],
 }: SectionBuilderProps) {
   const slaFieldIds = useMemo(() => new Set(fieldIdsWithSla), [fieldIdsWithSla])
   const [libraryQuery, setLibraryQuery] = useState('')
@@ -1280,6 +1283,44 @@ export function SectionBuilder({
                           />
                           {c.name}
                         </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {subCategories.length > 0 && selectedField.type !== 'store_address' && (
+                <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="text-sm font-medium text-foreground">Show only for these sub-categories</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Leave all unticked to show this field for every sub-category. When some are ticked, the requester sees the field (and, if it is required, must fill it) only after choosing one of them, and on the ticket it is shown only while the ticket is in one of them. If a technician moves the ticket to another sub-category the field is hidden; what was typed stays saved and comes back if the ticket moves back. Can be combined with the categories above (both must match).
+                  </p>
+                  <div className="mt-2 max-h-56 space-y-2 overflow-y-auto">
+                    {Array.from(new Set(subCategories.map((s) => s.categoryId))).map((cid) => {
+                      const group = subCategories.filter((s) => s.categoryId === cid)
+                      return (
+                        <div key={cid}>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group[0]?.categoryName || 'Other'}</p>
+                          <div className="mt-1 grid grid-cols-1 gap-1">
+                            {group.map((sc) => {
+                              const on = (selectedField.show_for_sub_categories ?? []).includes(sc.id)
+                              return (
+                                <label key={sc.id} className="flex cursor-pointer items-center gap-2 pl-1 text-xs text-foreground">
+                                  <input
+                                    type="checkbox"
+                                    checked={on}
+                                    onChange={() => {
+                                      const cur = selectedField.show_for_sub_categories ?? []
+                                      const next = on ? cur.filter((x) => x !== sc.id) : [...cur, sc.id]
+                                      updateField(selectedSection.id, selectedField.id, { show_for_sub_categories: next.length > 0 ? next : undefined })
+                                    }}
+                                  />
+                                  {sc.name}
+                                </label>
+                              )
+                            })}
+                          </div>
+                        </div>
                       )
                     })}
                   </div>

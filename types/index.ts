@@ -257,6 +257,11 @@ export type FormField = {
   /** When set (a list of category ids), the field exists only for tickets of those categories: the requester sees it, and a required one must be filled, only after
    *  choosing one of them (for example Qty for fixtures and hangers). Absent or empty = every category, which is what every field saved before this behaves like. */
   show_for_categories?: string[]
+  /** When set (a list of sub-category ids), the field exists only for tickets of those sub-categories (for example the carry-bag details only for "Carry bag updation"): the requester sees it, and a
+   *  required one must be filled, only after choosing one of them, and on the ticket it is shown only while the ticket is in one of them. Works together with show_for_categories (both must
+   *  match when both are set). Absent or empty = every sub-category, which is what every field saved before this behaves like. A value already entered stays saved when the ticket moves
+   *  to another sub-category (the field is only hidden) and shows again if it moves back. */
+  show_for_sub_categories?: string[]
   /** When true, the answer to this field is shown in the "earlier requests of this store" box of the approval mail and the approve page (for example Qty), for the
    *  categories that switch that box on. Absent = not shown, which is what every field saved before this behaves like. */
   show_in_approval_history?: boolean

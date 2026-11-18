@@ -3,7 +3,7 @@
 // and when the form asked for a file but the ticket has no attachment at all, an internal note tells the technician and the requester is told on the "Request created"
 // screen. The ticket itself is kept (it is a real request); only the missing file is flagged.
 
-import { resolveFormSections, isRequesterMandatory, fieldAppliesToCategory } from '@/lib/forms/sections'
+import { resolveFormSections, isRequesterMandatory, fieldAppliesToTicket } from '@/lib/forms/sections'
 import type { FormField } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -14,12 +14,12 @@ export const REQUIRED_FILE_NOTE = 'A required file was not attached'
 
 /** Labels of the file fields the requester had to fill in on this ticket's form (the form as it was when the ticket was made). */
 export function requiredFileLabels(
-  ticket: { form_sections_snapshot?: unknown; form_schema_snapshot?: unknown; category_id?: string | null },
+  ticket: { form_sections_snapshot?: unknown; form_schema_snapshot?: unknown; category_id?: string | null; sub_category_id?: string | null },
 ): string[] {
   const sections = resolveFormSections({ form_sections: ticket.form_sections_snapshot, form_fields: ticket.form_schema_snapshot })
   const fields: FormField[] = sections.flatMap((s) => s.fields)
   return fields
-    .filter((f) => f.type === 'file' && isRequesterMandatory(f) && fieldAppliesToCategory(f, ticket.category_id))
+    .filter((f) => f.type === 'file' && isRequesterMandatory(f) && fieldAppliesToTicket(f, ticket.category_id, ticket.sub_category_id))
     .map((f) => f.label)
 }
 
@@ -29,7 +29,7 @@ export function requiredFileLabels(
  */
 export async function flagMissingRequiredFiles(admin: AnyClient, requestId: string, noteAuthorId: string): Promise<{ missing: string[] }> {
   try {
-    const { data: ticket } = await admin.from('requests').select('form_sections_snapshot, form_schema_snapshot, category_id').eq('id', requestId).maybeSingle()
+    const { data: ticket } = await admin.from('requests').select('form_sections_snapshot, form_schema_snapshot, category_id, sub_category_id').eq('id', requestId).maybeSingle()
     if (!ticket) return { missing: [] }
     const labels = requiredFileLabels(ticket)
     if (labels.length === 0) return { missing: [] }

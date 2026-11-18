@@ -20,7 +20,7 @@ import { STATUS_LABELS, isClosedLikeStatus } from '@/lib/constants/requests'
 import { getResolvedReopenWindowHours } from '@/lib/settings/reopenWindow'
 import { isFieldValueEmpty } from '@/lib/validation/formFields'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
-import { resolveServiceFormSections, isTechnicianMandatory, fieldAppliesToCategory } from '@/lib/forms/sections'
+import { resolveServiceFormSections, isTechnicianMandatory, fieldAppliesToTicket } from '@/lib/forms/sections'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { buildFirstResponseMessage } from '@/lib/requests/first-response'
 import { issueCsat } from '@/lib/csat/issue'
@@ -174,7 +174,7 @@ export async function applyStatusChange(
   // the PO approver is not necessarily on the ticket's team, so a PO decision (already authorised by its own screen) reads the ticket with the server's key
   const { data: request } = await (options.poDecision ? createAdminClient() : supabase)
     .from('requests')
-    .select('id, request_no, status, priority, requester_id, team_id, assigned_to, responded_at, waiting_since, response_due_at, resolution_due_at, resolved_at, form_data, category_id, form_sections_snapshot, form_schema_snapshot, cancellation_reason, reopen_deadline_at, reopen_count, paused_ms_total')
+    .select('id, request_no, status, priority, requester_id, team_id, assigned_to, responded_at, waiting_since, response_due_at, resolution_due_at, resolved_at, form_data, category_id, sub_category_id, form_sections_snapshot, form_schema_snapshot, cancellation_reason, reopen_deadline_at, reopen_count, paused_ms_total')
     .eq('id', requestId)
     .single()
 
@@ -365,7 +365,7 @@ export async function applyStatusChange(
     // permanently block every status transition on every ticket from that
     // service.
     const missing = snapshotFields.filter(
-      (f) => f.type !== 'store_address' && fieldAppliesToCategory(f, (request as { category_id?: string | null }).category_id) && isTechnicianMandatory(f) && isFieldValueEmpty(formDataForCheck[f.id], f.type)
+      (f) => f.type !== 'store_address' && fieldAppliesToTicket(f, (request as { category_id?: string | null }).category_id, (request as { sub_category_id?: string | null }).sub_category_id) && isTechnicianMandatory(f) && isFieldValueEmpty(formDataForCheck[f.id], f.type)
     )
     if (missing.length > 0) {
       return {

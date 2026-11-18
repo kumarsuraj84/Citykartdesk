@@ -46,7 +46,7 @@ import { diagnoseTickets } from '@/lib/automation/diagnose'
 import { getResolvedReopenWindowHours } from '@/lib/settings/reopenWindow'
 import { MarkRequestNotificationsRead } from '@/components/requests/MarkRequestNotificationsRead'
 import { getActiveTimer } from '@/lib/actions/requests'
-import { filterFieldsForRequester, filterFlatFieldsForRequester, filterSectionsForCategory, fieldAppliesToCategory } from '@/lib/forms/sections'
+import { filterFieldsForRequester, filterFlatFieldsForRequester, filterSectionsForCategory, fieldAppliesToTicket } from '@/lib/forms/sections'
 import { formatRelativeTime, formatDateTime } from '@/lib/utils'
 import { parseOemComment } from '@/lib/masters/comment-view'
 import { parseLinesComment } from '@/lib/vendor/lines-comment'
@@ -474,8 +474,10 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
   // an agent viewer sees everything, including the fields the requester can't.
   // a field limited to certain categories (for example Qty for fixtures) is not shown on a ticket of another category
   const ticketCategoryId = (request as { category_id?: string | null }).category_id ?? null
-  const formSchema   = (isAgent ? formSchemaRaw   : filterFlatFieldsForRequester(formSchemaRaw)).filter((f) => fieldAppliesToCategory(f, ticketCategoryId))
-  const formSections = filterSectionsForCategory(isAgent ? formSectionsRaw : filterFieldsForRequester(formSectionsRaw), ticketCategoryId)
+  // ... or of another sub-category (for example the carry-bag details only for "Carry bag updation"): hidden when the technician moves the ticket, the saved values stay
+  const ticketSubCategoryId = (request as { sub_category_id?: string | null }).sub_category_id ?? null
+  const formSchema   = (isAgent ? formSchemaRaw   : filterFlatFieldsForRequester(formSchemaRaw)).filter((f) => fieldAppliesToTicket(f, ticketCategoryId, ticketSubCategoryId))
+  const formSections = filterSectionsForCategory(isAgent ? formSectionsRaw : filterFieldsForRequester(formSectionsRaw), ticketCategoryId, ticketSubCategoryId)
   const formData = (request.form_data ?? {}) as Record<string, unknown>
   // The Description a requester actually fills in lives in form_data as a
   // template textarea field, not requests.description (that column is only

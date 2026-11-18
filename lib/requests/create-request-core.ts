@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { logActivity } from '@/lib/activity'
 import { notify } from '@/lib/notifications'
 import { resolveSlaDeadlines } from '@/lib/sla/resolve'
-import { resolveServiceFormSections, requesterCanSet, fieldAppliesToCategory } from '@/lib/forms/sections'
+import { resolveServiceFormSections, requesterCanSet, fieldAppliesToTicket } from '@/lib/forms/sections'
 import { validateRequesterFormCompletion } from '@/lib/requests/validate-requester-form-completion'
 import { resolveSubCategoryForService } from '@/lib/requests/resolve-sub-category'
 import { pickTitleField, subjectToTitle } from '@/lib/requests/title-field'
@@ -281,7 +281,8 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
 
   // A field limited to certain categories (for example Qty for fixtures) belongs only to those categories: for any other category its answer is dropped, so it is
   // neither required nor stored.
-  for (const f of allFields) if (!fieldAppliesToCategory(f, categoryId)) delete parsedFormData[f.id]
+  // (the same for a field limited to some sub-categories, for example the carry-bag details)
+  for (const f of allFields) if (!fieldAppliesToTicket(f, categoryId, subCategoryResolution.subCategoryId)) delete parsedFormData[f.id]
 
   // A plain requester answers only the questions a requester may answer. Anything else they send (a technician-only box, an id that is not on the form)
   // is dropped: otherwise a pre-filled technician field would pass the technician's "must fill before moving on" gate, and a hidden field could pick
@@ -371,7 +372,7 @@ export async function createRequestCore(params: CreateRequestCoreParams): Promis
   // has none, it leaves one internal note "A required file was not attached" and the screen tells the requester. The other channels (e-mail, WhatsApp,
   // intake) do not use it: WhatsApp asks for the file before the ticket is made (lib/conversations), and the others keep their files with the message.
   // Any attachment on the ticket counts (a file is not tied to one field).
-  const completion = validateRequesterFormCompletion({ service, formData: parsedFormData, categoryId })
+  const completion = validateRequesterFormCompletion({ service, formData: parsedFormData, categoryId, subCategoryId: subCategoryResolution.subCategoryId })
   if (!completion.valid) {
     const firstIssue = completion.missingFields[0] ?? completion.invalidFields[0]
     const message = completion.missingFields[0]

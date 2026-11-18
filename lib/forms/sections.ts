@@ -85,9 +85,21 @@ export function fieldAppliesToCategory(field: FormField, categoryId: string | nu
   return !!categoryId && only.includes(categoryId)
 }
 
-/** The sections with the fields that do not apply to this category removed. */
-export function filterSectionsForCategory(sections: FormSection[], categoryId: string | null | undefined): FormSection[] {
-  return sections.map((s) => ({ ...s, fields: s.fields.filter((f) => fieldAppliesToCategory(f, categoryId)) }))
+/** Whether the field applies to a ticket of this sub-category. No sub-category list = every sub-category; with a list, only when the sub-category is in it (none chosen yet = not applicable). */
+export function fieldAppliesToSubCategory(field: FormField, subCategoryId: string | null | undefined): boolean {
+  const only = field.show_for_sub_categories
+  if (!Array.isArray(only) || only.length === 0) return true
+  return !!subCategoryId && only.includes(subCategoryId)
+}
+
+/** Whether the field applies to a ticket with this category AND sub-category (each limit, when the field has one, must be met). This is the one rule every screen and check uses. */
+export function fieldAppliesToTicket(field: FormField, categoryId: string | null | undefined, subCategoryId: string | null | undefined): boolean {
+  return fieldAppliesToCategory(field, categoryId) && fieldAppliesToSubCategory(field, subCategoryId)
+}
+
+/** The sections with the fields that do not apply to this category and sub-category removed. */
+export function filterSectionsForCategory(sections: FormSection[], categoryId: string | null | undefined, subCategoryId?: string | null): FormSection[] {
+  return sections.map((s) => ({ ...s, fields: s.fields.filter((f) => fieldAppliesToTicket(f, categoryId, subCategoryId)) }))
 }
 
 /** required && the requester can actually see and fill it in themselves. */

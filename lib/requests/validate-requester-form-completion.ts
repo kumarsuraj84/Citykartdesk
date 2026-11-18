@@ -1,5 +1,5 @@
 import type { FormField } from '@/types'
-import { resolveServiceFormSections, filterFlatFieldsForRequester, isRequesterMandatory, fieldAppliesToCategory } from '@/lib/forms/sections'
+import { resolveServiceFormSections, filterFlatFieldsForRequester, isRequesterMandatory, fieldAppliesToTicket } from '@/lib/forms/sections'
 import { validateFieldValue, isFieldValueEmpty } from '@/lib/validation/formFields'
 
 export type RequesterFieldIssue = { key: string; label: string }
@@ -56,15 +56,17 @@ export function validateRequesterFormCompletion(params: {
   treatFileFieldsAsSatisfied?: boolean
   /** the ticket's category: a field limited to certain categories counts only when this category is one of them */
   categoryId?: string | null
+  /** the ticket's sub-category: a field limited to certain sub-categories counts only when this one is among them */
+  subCategoryId?: string | null
 }): RequesterFormCompletionResult {
-  const { service, formData, treatFileFieldsAsSatisfied = true, categoryId = null } = params
+  const { service, formData, treatFileFieldsAsSatisfied = true, categoryId = null, subCategoryId = null } = params
 
   const sections = resolveServiceFormSections(service)
   const allFields: FormField[] = [...sections]
     .sort((a, b) => a.order - b.order)
     .flatMap((s) => [...s.fields].sort((a, b) => a.order - b.order))
 
-  const requesterFields = filterFlatFieldsForRequester(allFields).filter((f) => fieldAppliesToCategory(f, categoryId))
+  const requesterFields = filterFlatFieldsForRequester(allFields).filter((f) => fieldAppliesToTicket(f, categoryId, subCategoryId))
 
   const missingFields: RequesterFieldIssue[] = []
   const invalidFields: RequesterFieldInvalid[] = []

@@ -93,7 +93,7 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
   const vendorFieldIds = new Set([vf.oemNumber?.id, vf.oemDate?.id, vf.resolution?.id, programBoxes.number?.id, programBoxes.date?.id].filter(Boolean) as string[])
   const bgText = (k: string) => String(formData[k] ?? '').trim()
   // what the store filled in (the technician-only boxes are shown separately below)
-  const storeSections = filterFieldsForRequester(filterSectionsForCategory(sections, request.category_id))
+  const storeSections = filterFieldsForRequester(filterSectionsForCategory(sections, request.category_id, (request as { sub_category_id?: string | null }).sub_category_id ?? null))
     .map((s) => ({ ...s, fields: s.fields.filter((f) => !vendorFieldIds.has(f.id) && f.type !== 'store_address') }))
     .filter((s) => s.fields.length > 0)
 

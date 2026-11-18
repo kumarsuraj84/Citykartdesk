@@ -25,6 +25,10 @@ export default async function AdminFormTemplateEditorPage({ params }: PageProps)
   const supabase = await createClient()
   const { data: categoryRows } = await supabase.from('service_categories').select('id, name').eq('is_active', true).order('name')
   const categoryOptions = (categoryRows ?? []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))
+  // ... and the sub-categories ("Show only for these sub-categories"), each with the category it belongs to
+  const { data: subCategoryRows } = await supabase.from('service_sub_categories').select('id, name, category_id').eq('is_active', true).order('sort_order').order('name')
+  const categoryNameById = new Map(categoryOptions.map((c) => [c.id, c.name]))
+  const subCategoryOptions = (subCategoryRows ?? []).map((s: { id: string; name: string; category_id: string }) => ({ id: s.id, name: s.name, categoryId: s.category_id, categoryName: categoryNameById.get(s.category_id) ?? '' }))
   if (!template) notFound()
 
   const initialSections = Array.isArray(template.form_sections)
@@ -74,6 +78,7 @@ export default async function AdminFormTemplateEditorPage({ params }: PageProps)
         initialSections={initialSections}
         libraryFields={libraryFields}
         categories={categoryOptions}
+        subCategories={subCategoryOptions}
         onSave={saveTemplateSections.bind(null, template.id)}
       />
     </div>
