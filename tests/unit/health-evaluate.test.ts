@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { decideIncident, levelOf, overallStatus, humanMinutes, zohoSyncVerdict, sheetsVerdict, emailVerdict, weatherVerdict, uptimeText } from '@/lib/health/evaluate'
+import { isNotApplicable, decideIncident, levelOf, overallStatus, humanMinutes, zohoSyncVerdict, sheetsVerdict, emailVerdict, weatherVerdict, uptimeText } from '@/lib/health/evaluate'
 import { canSeeHealth } from '@/lib/health/access'
 import { CHECKS, INCIDENT_AFTER } from '@/lib/health/catalog'
 
@@ -41,6 +41,16 @@ describe('the state of a check right now', () => {
     expect(overallStatus([{ group: 'core', level: 'good' }, { group: 'sync', level: 'down' }])).toBe('degraded')
     expect(overallStatus([{ group: 'core', level: 'good' }, { group: 'core', level: 'nodata' }])).toBe('degraded')
     expect(overallStatus([])).toBe('unknown')
+  })
+})
+
+describe('a check that does not apply right now', () => {
+  it('is "not in use" only when the app\'s own collector is alive; a dead collector or a probe check is still a problem', () => {
+    expect(isNotApplicable('app', 'nodata', true)).toBe(true)
+    expect(isNotApplicable('app', 'nodata', false)).toBe(false)   // the collector itself stopped
+    expect(isNotApplicable('probe', 'nodata', true)).toBe(false)  // the probe's checks always have an answer
+    expect(isNotApplicable('app', 'down', true)).toBe(false)
+    expect(isNotApplicable('app', 'good', true)).toBe(false)
   })
 })
 

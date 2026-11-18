@@ -38,7 +38,7 @@ function Tile({ label, value, note }: { label: string; value: string; note?: str
 }
 
 function CheckCard({ c, nowMs }: { c: CheckState; nowMs: number }) {
-  const lv = LEVEL[c.level]
+  const lv = c.notApplicable ? { dot: 'bg-zinc-300', text: 'Not in use' } : LEVEL[c.level]
   const age = c.lastAt ? (nowMs - new Date(c.lastAt).getTime()) / 60_000 : null
   return (
     <div className="rounded-lg border border-border bg-card p-3">
@@ -59,7 +59,7 @@ function CheckCard({ c, nowMs }: { c: CheckState; nowMs: number }) {
       </dl>
       <div className="mt-2"><DayStrip days={c.days} /></div>
       <p className="mt-1.5 text-[11px] text-muted-foreground">
-        {c.lastAt ? <>Last check {age !== null && age < 1 ? 'just now' : `${humanMinutes(age ?? 0)} ago`}{c.lastMs !== null ? <> · answered in <span className="font-medium text-foreground">{fmt(c.lastMs)} ms</span></> : null}</> : 'No check recorded in the last 15 minutes.'}
+        {c.notApplicable ? 'Nothing to check right now (it is not set up or not active). It starts showing here by itself when it is.' : c.lastAt ? <>Last check {age !== null && age < 1 ? 'just now' : `${humanMinutes(age ?? 0)} ago`}{c.lastMs !== null ? <> · answered in <span className="font-medium text-foreground">{fmt(c.lastMs)} ms</span></> : null}</> : 'No check recorded in the last 15 minutes.'}
         {c.detail && c.level !== 'good' && <span className="mt-0.5 block text-foreground">{c.detail}</span>}
         {c.detail && c.level === 'good' && <span className="block">{c.detail}</span>}
       </p>

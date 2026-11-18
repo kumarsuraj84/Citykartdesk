@@ -20,6 +20,15 @@ export function levelOf(newest: Sample | null, nowMs: number = Date.now()): Leve
   return newest.ok ? 'good' : 'down'
 }
 
+/**
+ * A check the APP measures that has no recent answer while the app's OTHER checks are answering means the app looked and found nothing to check (for example no active
+ * mailbox for the e-mail poll, no Google Sheet set up). That is "not in use", not a problem. When none of the app's checks has answered, the collector itself has
+ * stopped, and that stays "no recent data".
+ */
+export function isNotApplicable(by: 'probe' | 'app', level: Level, appCollectorAlive: boolean): boolean {
+  return by === 'app' && level === 'nodata' && appCollectorAlive
+}
+
 /** The state of the whole system: down if any enabled core check is down, degraded if only a sync is late or data is missing, else healthy. */
 export function overallStatus(items: { group: 'core' | 'sync'; level: Level }[]): 'healthy' | 'degraded' | 'down' | 'unknown' {
   if (items.length === 0) return 'unknown'

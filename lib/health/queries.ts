@@ -5,7 +5,7 @@ import 'server-only'
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CHECKS, type CheckDef } from './catalog'
-import { levelOf, overallStatus, type Level } from './evaluate'
+import { isNotApplicable, levelOf, overallStatus, type Level } from './evaluate'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; rpc: (f: string, a?: Record<string, unknown>) => any }
@@ -14,6 +14,8 @@ const db = () => createAdminClient() as unknown as AnyClient
 export type CheckState = CheckDef & {
   enabled: boolean
   level: Level
+  /** the app looked and there is nothing to check right now (no active mailbox, no sheet set up): shown as "Not in use", never counted as a problem */
+  notApplicable: boolean
   lastAt: string | null
   lastMs: number | null
   detail: string | null
@@ -66,6 +68,8 @@ export async function getHealthOverview(): Promise<HealthOverview> {
   }))
   const stripBy = new Map(strip)
 
+  // the app's own collector is alive when any check it measures has a fresh answer
+  const appCollectorAlive = CHECKS.some((c) => c.by === 'app' && !off.has(c.key) && levelOf(newest.get(c.key) ? { ok: newest.get(c.key)!.ok, at: newest.get(c.key)!.at } : null, nowMs) !== 'nodata')
   const checks: CheckState[] = CHECKS.map((c) => {
     const n = newest.get(c.key) ?? null
     const enabled = !off.has(c.key)
@@ -77,10 +81,12 @@ export async function getHealthOverview(): Promise<HealthOverview> {
       const r = rows.get(day)
       days.push({ day, share: r && Number(r.samples) > 0 ? Number(r.ok_samples) / Number(r.samples) : null })
     }
+    const level: Level = enabled ? levelOf(n ? { ok: n.ok, at: n.at } : null, nowMs) : 'nodata'
     return {
       ...c,
       enabled,
-      level: enabled ? levelOf(n ? { ok: n.ok, at: n.at } : null, nowMs) : 'nodata',
+      level,
+      notApplicable: enabled && isNotApplicable(c.by, level, appCollectorAlive),
       lastAt: n?.at ?? null,
       lastMs: n?.ms ?? null,
       detail: n?.detail ?? null,
@@ -92,7 +98,7 @@ export async function getHealthOverview(): Promise<HealthOverview> {
 
   const lastSampleAt = [...newest.values()].map((n) => n.at).sort().pop() ?? null
   return {
-    status: overallStatus(checks.filter((c) => c.enabled).map((c) => ({ group: c.group, level: c.level }))),
+    status: overallStatus(checks.filter((c) => c.enabled && !c.notApplicable).map((c) => ({ group: c.group, level: c.level }))),
     checks,
     incidents: ((incidents.data ?? []) as { id: number; check_key: string; started_at: string; ended_at: string | null; detail: string | null; failed_samples: number }[])
       .map((r) => ({ id: r.id, checkKey: r.check_key, startedAt: r.started_at, endedAt: r.ended_at, detail: r.detail, failedSamples: r.failed_samples })),
