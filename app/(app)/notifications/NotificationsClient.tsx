@@ -321,7 +321,7 @@ export function NotificationsClient({
       </div>
 
       {/* List */}
-      <div className="space-y-2">
+      <div className="space-y-2" data-sticky-list>
         {visible.length === 0 ? (
           <EmptyState filter={filter} />
         ) : (

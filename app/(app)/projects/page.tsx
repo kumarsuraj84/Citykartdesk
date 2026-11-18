@@ -119,7 +119,7 @@ export default async function ProjectsPage({ searchParams }: PageProps) {
               profiles={profiles}
             />
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div data-sticky-list className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {projects.map((project) => (
                 <ProjectCard key={project.id} project={project} progress={progressByProject[project.id]} profiles={profiles} />
               ))}

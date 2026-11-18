@@ -15,6 +15,7 @@ import { ROLE_LABELS } from '@/lib/constants/roles'
 import type { ProfileWithTeams, NavVisibility, NotificationWithActor } from '@/types'
 import type { NavCounts } from '@/lib/queries/profiles'
 import type { PendingApprovalItem } from '@/lib/queries/approvals'
+import { StickyTables } from '@/components/layout/StickyTables'
 
 function getInitials(name: string): string {
   return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -192,6 +193,7 @@ export function AppShell({ profile, navVisibility, navCountsPromise, notificatio
           <div className="page">
             {children}
           </div>
+          <StickyTables />
         </main>
       </div>
 

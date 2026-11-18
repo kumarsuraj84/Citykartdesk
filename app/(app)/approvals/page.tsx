@@ -145,7 +145,7 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
           />
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <div data-sticky-list className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <div className="divide-y divide-border">
             {approvals.map((approval) => (
               <ApprovalRow key={approval.id} approval={approval} viewerId={profile.id} viewerRole={profile.role} />

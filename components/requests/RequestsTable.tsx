@@ -397,6 +397,7 @@ export function RequestsTable({
               </th>
               <SortableTh label="Request #" col="request_no" sortCol={sortCol} sortDir={sortDir} pathname={pathname} currentSearch={currentSearch} />
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Title</th>
+              <SortableTh label="Created" col="created_at" sortCol={sortCol} sortDir={sortDir} pathname={pathname} currentSearch={currentSearch} />
               <SortableTh label="Status" col="status" sortCol={sortCol} sortDir={sortDir} pathname={pathname} currentSearch={currentSearch} />
               <SortableTh label="Priority" col="priority" sortCol={sortCol} sortDir={sortDir} pathname={pathname} currentSearch={currentSearch} />
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Source</th>
@@ -406,7 +407,6 @@ export function RequestsTable({
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Sub Category</th>
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Service</th>
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">SLA</th>
-              <SortableTh label="Created" col="created_at" sortCol={sortCol} sortDir={sortDir} pathname={pathname} currentSearch={currentSearch} />
               <SortableTh label="Updated" col="updated_at" sortCol={sortCol} sortDir={sortDir} pathname={pathname} currentSearch={currentSearch} />
             </tr>
           </thead>
@@ -430,6 +430,7 @@ export function RequestsTable({
                   <td className="max-w-[240px] truncate px-3 py-2 font-medium text-foreground">
                     <Link href={rowHref(req.id)} className="hover:text-primary hover:underline underline-offset-2">{requestSubject(req)}</Link>
                   </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground" suppressHydrationWarning>{formatDateTime(req.created_at)}</td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap items-center gap-1">
                       <StatusBadge status={req.status} size="sm" />
@@ -459,7 +460,6 @@ export function RequestsTable({
                   <td className="px-3 py-2">
                     <SLABadge resolutionDueAt={req.resolution_due_at} responseDueAt={req.response_due_at} status={req.status} showLabel />
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground" suppressHydrationWarning>{formatDateTime(req.created_at)}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-muted-foreground" suppressHydrationWarning>{formatRelativeTime(req.updated_at)}</td>
                 </tr>
               )
