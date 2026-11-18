@@ -10,18 +10,33 @@ import { usePathname } from 'next/navigation'
  * such a box scrolls on both axes by itself. So the box is given the height that is left on the screen (its top to the bottom of the page, minus whatever sits below it, such as a
  * pager), and the table scrolls inside it with its headings pinned (the CSS in globals.css for `[data-sticky-table]`). The page itself then has nothing left to scroll.
  *
- * Only a table that starts near the top of the page and is taller than the space left is changed; a table lower down on a page of several blocks, a short table, a table that already
- * has its own height limit, a table inside a dialog, or one marked `data-no-sticky` is left exactly as it was. Nothing is stored and nothing is sent anywhere.
+ * A list at the top of a page is frozen at EVERY window size: when the window is so short that nothing is left for it, the box keeps a usable minimum (STICKY_SMALL_BOX) and the page scrolls to
+ * the filters and the pager. A table lower down on a page of several blocks that does not fit, a short table, a table that already has its own height limit, a table inside a dialog, or one
+ * marked `data-no-sticky` is left exactly as it was. Nothing is stored and nothing is sent anywhere.
  */
 
-/** A table is only fixed when at least this much height is left for it (below that the page scrolls as before). */
+/** A table that starts anywhere on the page is fixed to the screen that is left for it when that is at least this much. */
 export const STICKY_MIN_HEIGHT = 200
 export const STICKY_GAP = 12
+/** A list at the top of the page (its table starts within this many px of the top: the title, tabs and filters above it) is ALWAYS frozen, whatever the window size. */
+export const STICKY_TOP_LIMIT = 420
+/** On a short window (a small laptop screen, large Windows scaling, a phone turned sideways) the box never gets smaller than this: the headings stay frozen, a few rows stay visible,
+ *  and the page itself scrolls to reach the filters above and the pager below. About the header and three rows. */
+export const STICKY_SMALL_BOX = 160
+/** ...and so is a list that is the LAST block of its page (only a pager and the page padding follow it, at most this much), wherever it starts: on a narrow phone the title, tabs and filters stack and push the table far down. */
+export const STICKY_LAST_BLOCK = 140
 
-/** The height to give the box, or null when there is not enough room (leave it alone). Pure, so it is covered by a unit test. */
+/**
+ * The height to give the box, or null when the table is to be left alone. Pure, so it is covered by a unit test.
+ *  - room for at least STICKY_MIN_HEIGHT: the box fills the screen that is left (the page itself has nothing to scroll);
+ *  - less room, but the table is at the top of the page or is the last block of it (a list page): the box is as tall as the room, never under STICKY_SMALL_BOX, and the page scrolls;
+ *  - less room and the table is lower down with other blocks after it: left as it was.
+ */
 export function stickyMaxHeight(p: { mainHeight: number; top: number; below: number }): number | null {
   const room = Math.floor(p.mainHeight - p.top - p.below - STICKY_GAP)
-  return room >= STICKY_MIN_HEIGHT ? room : null
+  if (room >= STICKY_MIN_HEIGHT) return room
+  if (p.top <= STICKY_TOP_LIMIT || p.below <= STICKY_LAST_BLOCK) return Math.max(room, STICKY_SMALL_BOX)
+  return null
 }
 
 /**

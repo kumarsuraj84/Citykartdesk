@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { stickyMaxHeight, spaceBelow, STICKY_MIN_HEIGHT } from '@/components/layout/StickyTables'
+import { stickyMaxHeight, spaceBelow, STICKY_MIN_HEIGHT, STICKY_SMALL_BOX, STICKY_TOP_LIMIT, STICKY_LAST_BLOCK } from '@/components/layout/StickyTables'
 
 describe('list pages: the height given to the table box', () => {
   it('fills the screen that is left, minus whatever sits below the table', () => {
@@ -7,14 +7,26 @@ describe('list pages: the height given to the table box', () => {
     expect(stickyMaxHeight({ mainHeight: 700, top: 180, below: 60 })).toBe(448)
     expect(stickyMaxHeight({ mainHeight: 700, top: 180, below: 0 })).toBe(508)
   })
-  it('leaves a table alone when there is not enough room (a table low on a page of several blocks, or a tiny window)', () => {
-    expect(stickyMaxHeight({ mainHeight: 700, top: 560, below: 0 })).toBeNull()
-    expect(stickyMaxHeight({ mainHeight: 400, top: 120, below: 80 })).toBeNull()
-    expect(stickyMaxHeight({ mainHeight: 400, top: 120, below: 70 })).toBeNull() // 198 is still under the minimum of 200: the page scrolls as before
+  it('a list at the top of the page is still frozen when the window is short: the box keeps a usable minimum and the page scrolls', () => {
+    expect(stickyMaxHeight({ mainHeight: 400, top: 120, below: 80 })).toBe(188)            // 188 of room: the box is as tall as the room
+    expect(stickyMaxHeight({ mainHeight: 400, top: 250, below: 70 })).toBe(STICKY_SMALL_BOX) // only 68 left: never smaller than the minimum box
+    expect(stickyMaxHeight({ mainHeight: 300, top: 260, below: 60 })).toBe(STICKY_SMALL_BOX) // a phone turned sideways
+    expect(stickyMaxHeight({ mainHeight: 200, top: 300, below: 0 })).toBe(STICKY_SMALL_BOX)  // even a tiny window
   })
-  it('the smallest box is the documented minimum', () => {
+  it('leaves a table alone only when it is lower down on a page of several blocks and does not fit', () => {
+    expect(stickyMaxHeight({ mainHeight: 700, top: 560, below: 300 })).toBeNull()
+    expect(stickyMaxHeight({ mainHeight: 600, top: STICKY_TOP_LIMIT + 1, below: STICKY_LAST_BLOCK + 1 })).toBeNull()
+    // ...but a table lower down that does fit is still fixed, as before
+    expect(stickyMaxHeight({ mainHeight: 900, top: 500, below: 60 })).toBe(328)
+  })
+  it('a list that is the last block of its page is frozen wherever it starts (a narrow phone pushes it far down)', () => {
+    expect(stickyMaxHeight({ mainHeight: 300, top: 520, below: 50 })).toBe(STICKY_SMALL_BOX)
+    expect(stickyMaxHeight({ mainHeight: 700, top: 560, below: 0 })).toBe(STICKY_SMALL_BOX)
+    expect(stickyMaxHeight({ mainHeight: 700, top: 560, below: STICKY_LAST_BLOCK })).toBe(STICKY_SMALL_BOX)
+  })
+  it('the smallest room that fills the screen is the documented minimum; under it a top list gets the small box', () => {
     expect(stickyMaxHeight({ mainHeight: STICKY_MIN_HEIGHT + 12, top: 0, below: 0 })).toBe(STICKY_MIN_HEIGHT)
-    expect(stickyMaxHeight({ mainHeight: STICKY_MIN_HEIGHT + 11, top: 0, below: 0 })).toBeNull()
+    expect(stickyMaxHeight({ mainHeight: STICKY_MIN_HEIGHT + 11, top: 0, below: 0 })).toBe(STICKY_MIN_HEIGHT - 1)
   })
 })
 
