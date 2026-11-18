@@ -16,6 +16,7 @@ import { MoveControls } from './MoveControls'
 import { RunPanel } from './RunPanel'
 import { MovedSwitch } from './MovedSwitch'
 import { RefreshPanel } from './RefreshPanel'
+import { ApprovalPanel } from './ApprovalPanel'
 import { unmatchedPeople } from '@/lib/zoho/transfer/people-warning'
 import { SERVICE_FIELDS } from '@/lib/zoho/queries'
 import { zohoUdfLabel } from '@/lib/zoho/transfer/udf-labels'
@@ -161,6 +162,7 @@ export default async function ZohoMovePage({ searchParams }: { searchParams: Pro
       <MovedSwitch active={movedActive} canChange={canMove} />
       <RunPanel filters={filters} canMove={canMove} />
       <RefreshPanel canMove={canMove} />
+      <ApprovalPanel canMove={canMove} />
       {recentRuns.length > 0 && (
         <details className="rounded-lg border border-border bg-card p-3 text-xs">
           <summary className="cursor-pointer text-sm font-semibold text-foreground">Recent runs ({recentRuns.length})</summary>

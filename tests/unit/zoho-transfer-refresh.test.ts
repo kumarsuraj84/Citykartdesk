@@ -118,3 +118,16 @@ describe('the warning about people CK Desk does not recognise', () => {
     expect(r.requesters.map((p) => p.name).sort()).toEqual(['(no name in Zoho)', 'x@y.z'])
   })
 })
+
+describe('who Zoho sent the approval to', () => {
+  it('reads the address after "sent to", not the sender, and not twice', async () => {
+    const { approverEmailsFromLines } = await import('@/lib/zoho/transfer/approval-targets')
+    expect(approverEmailsFromLines(['[Zoho approval] req_approval — Approval mail sent to suraj@citykart.org In Stage I By: Ajay Kumar'])).toEqual(['suraj@citykart.org'])
+    expect(approverEmailsFromLines(['[Zoho approval] x — Approval mail sent to A.B@Citykart.org, c.d@citykartstores.com In Stage I By: someone@else.com', '[Zoho approval] y — sent to a.b@citykart.org By: z']))
+      .toEqual(['a.b@citykart.org', 'c.d@citykartstores.com'])
+  })
+  it('lines that name nobody give nobody', async () => {
+    const { approverEmailsFromLines } = await import('@/lib/zoho/transfer/approval-targets')
+    expect(approverEmailsFromLines(['[Zoho approval] Approval status in Zoho: Pending Approval', 'By: boss@citykart.org', ''])).toEqual([])
+  })
+})

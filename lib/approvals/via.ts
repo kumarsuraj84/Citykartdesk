@@ -1,10 +1,11 @@
 // How an approval got its approver(s), written into the history entry "requested approval" so a wrong approver can be traced afterwards:
 //  - 'auto_cvm'            the automatic CVM approval of a category that asks for it (Hangers, Fixtures, Fixture Attachments): nobody chose anybody;
 //  - 'cvm_suggestion_kept' a technician sent it with the store's CVM that the screen had pre-filled (only offered for those categories) among the approvers;
-//  - 'chosen'              a technician picked every approver by hand.
+//  - 'chosen'              a technician picked every approver by hand;
+//  - 'zoho_transfer'       a ticket moved from Zoho that was waiting for approval: the approver is the person Zoho had already sent it to.
 // Pure (no database), so the wording and the rule are easy to test.
 
-export type ApprovalVia = 'auto_cvm' | 'cvm_suggestion_kept' | 'chosen'
+export type ApprovalVia = 'auto_cvm' | 'cvm_suggestion_kept' | 'chosen' | 'zoho_transfer'
 
 /** A manual "Send for approval": did the approvers include the CVM the screen offered? (`suggestedCvmId` is what the server works out itself, never what the browser says.) */
 export function classifyManualApproval(p: { approverIds: string[]; suggestedCvmId: string | null }): ApprovalVia {
@@ -17,6 +18,7 @@ export function approvalViaText(via: unknown, actorName: string): string {
     case 'auto_cvm': return 'automatically: the CVM approval of this category, nobody chose the approver'
     case 'cvm_suggestion_kept': return `the store's CVM was pre-filled for this category and ${actorName} kept it`
     case 'chosen': return `chosen by ${actorName}`
+    case 'zoho_transfer': return `the person Zoho had already sent it to; re-sent from CK Desk by ${actorName}`
     default: return ''
   }
 }

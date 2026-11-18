@@ -29,7 +29,7 @@ export type AdHocRequest = {
  */
 export async function createAdHocApproval(
   admin: Db,
-  p: { request: AdHocRequest; approvers: { id: string; full_name: string }[]; senderId: string; senderName: string; /** how the approvers were chosen: written into the history so a wrong approver can be traced */ via?: ApprovalVia },
+  p: { request: AdHocRequest; approvers: { id: string; full_name: string }[]; senderId: string; senderName: string; /** how the approvers were chosen: written into the history so a wrong approver can be traced */ via?: ApprovalVia; /** a ticket moved from Zoho that is ALREADY in Pending Approval: create the approval and tell the approvers only; change nothing else on the ticket (no status change, no timers, no word to the requester) */ keepStatus?: boolean },
 ): Promise<{ error?: string }> {
   const req = p.request
   const approverIds = p.approvers.map((a) => a.id)
@@ -73,14 +73,17 @@ export async function createAdHocApproval(
   // Put request on hold - SLA pauses the same way "Waiting on User" does. If it was already paused (e.g. sent while waiting on the user), keep the
   // original pause start rather than resetting the clock. pre_approval_status remembers whatever it actually was (in_progress OR waiting_user) so full
   // approval can resume there instead of always forcing in_progress.
+  // keepStatus (a moved ticket already waiting): only remember where it goes back to after the approval; the status and the clock stay exactly as they are
   const { error: stErr } = await admin
     .from('requests')
-    .update({
-      status: 'pending_approval',
-      pre_approval_status: req.status,
-      updated_at: new Date().toISOString(),
-      waiting_since: req.waiting_since ?? new Date().toISOString(),
-    })
+    .update(p.keepStatus
+      ? { pre_approval_status: 'in_progress', updated_at: new Date().toISOString() }
+      : {
+        status: 'pending_approval',
+        pre_approval_status: req.status,
+        updated_at: new Date().toISOString(),
+        waiting_since: req.waiting_since ?? new Date().toISOString(),
+      })
     .eq('id', req.id)
   if (stErr) {
     // The ticket never moved to "pending approval": withdraw the approval and its workflow so the ticket is not left blocked by an approval nobody can decide.
@@ -90,9 +93,9 @@ export async function createAdHocApproval(
   }
 
   // the ticket is parked waiting for the approval, so nobody is working on it: running timers stop (B-07)
-  await stopOpenTimeEntries(req.id, new Date().toISOString())
+  if (!p.keepStatus) await stopOpenTimeEntries(req.id, new Date().toISOString())
 
-  await logActivity({ requestId: req.id, actorId: p.senderId, action: 'status_changed', metadata: { from: req.status, to: 'pending_approval' } })
+  if (!p.keepStatus) await logActivity({ requestId: req.id, actorId: p.senderId, action: 'status_changed', metadata: { from: req.status, to: 'pending_approval' } })
   await logActivity({ requestId: req.id, actorId: p.senderId, action: 'approval_requested', metadata: { approver_names: p.approvers.map((a) => a.full_name), ...(p.via ? { via: p.via } : {}) } })
 
   // Notify all approvers at once
@@ -109,7 +112,7 @@ export async function createAdHocApproval(
   }
 
   // Let the requester know their ticket has moved to approval, and by whom it's being reviewed - otherwise it just silently stops progressing from their side.
-  if (req.requester_id !== p.senderId) {
+  if (req.requester_id !== p.senderId && !p.keepStatus) {
     const approverNames = p.approvers.map((a) => a.full_name).join(', ')
     notify({
       recipientId: req.requester_id,

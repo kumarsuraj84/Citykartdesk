@@ -173,6 +173,39 @@ export async function refreshMovedFieldsAction(numbers: number[]): Promise<Refre
   return { results }
 }
 
+export type ApprovalPreviewResult = { error?: string; targets?: import('@/lib/zoho/transfer/approvals').ApprovalTarget[] }
+export type ApprovalSendResult = { error?: string; results?: import('@/lib/zoho/transfer/approvals').SendApprovalResult[] }
+
+/** Which moved tickets are waiting for approval and who Zoho sent the approval to (read only). Leave `numbers` empty to see all of them. Administrators only. */
+export async function previewMovedApprovalsAction(numbers: number[]): Promise<ApprovalPreviewResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return { error: guard.error }
+  const { previewMovedApprovals } = await import('@/lib/zoho/transfer/approvals')
+  const clean = [...new Set((Array.isArray(numbers) ? numbers : []).map(Number).filter((n) => Number.isSafeInteger(n) && n > 0))].slice(0, 200)
+  return { targets: await previewMovedApprovals(guard.orgId, clean.length ? clean : undefined) }
+}
+
+/**
+ * Creates the CK Desk approval, and tells only the approver, for the chosen moved tickets that are waiting for approval. Administrators only; the ticket numbers must be named
+ * (no "send all" in one press: a handful at a time). Everything is re-read and re-checked here.
+ */
+export async function sendMovedApprovalsAction(numbers: number[]): Promise<ApprovalSendResult> {
+  const guard = await requireAdmin()
+  if ('error' in guard) return { error: guard.error }
+  const { sendMovedApprovals, APPROVAL_BATCH_LIMIT } = await import('@/lib/zoho/transfer/approvals')
+  const clean = [...new Set((Array.isArray(numbers) ? numbers : []).map(Number).filter((n) => Number.isSafeInteger(n) && n > 0))]
+  if (clean.length === 0) return { error: 'Type the Zoho ticket numbers to send.' }
+  if (clean.length > APPROVAL_BATCH_LIMIT) return { error: `Send at most ${APPROVAL_BATCH_LIMIT} tickets at a time.` }
+  const results = await sendMovedApprovals({ orgId: guard.orgId, actorId: guard.profile.id, actorName: guard.profile.full_name ?? 'An administrator', numbers: clean })
+  const ok = results.filter((r) => r.ok)
+  await logAdminAudit({
+    orgId: guard.orgId, actorId: guard.profile.id, entityType: 'zoho_transfer', entityId: guard.profile.id, action: 'zoho_transfer.approvals_sent',
+    metadata: { asked: clean.length, sent: ok.length, failed: results.length - ok.length, numbers: ok.map((r) => r.requestNo) },
+  })
+  revalidatePath('/requests')
+  return { results }
+}
+
 // ── STAGE 3: move everything that matches the filters, in chunks, with a record ─────────────────────────────────────────────
 
 type RunFilters = import('@/lib/zoho/transfer/data').MoveFilters

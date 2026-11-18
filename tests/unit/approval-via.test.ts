@@ -21,6 +21,7 @@ describe('the words in the history', () => {
     expect(approvalViaText('cvm_suggestion_kept', 'Kaushlesh')).toMatch(/pre-filled.*Kaushlesh kept it/)
   })
   it('says nothing for an old entry that has no record', () => {
+    expect(approvalViaText('zoho_transfer', 'Ankur')).toMatch(/Zoho had already sent it.*Ankur/)
     expect(approvalViaText(undefined, 'X')).toBe('')
     expect(approvalViaText('something else', 'X')).toBe('')
   })
