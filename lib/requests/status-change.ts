@@ -9,6 +9,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { logActivity } from '@/lib/activity'
 import { notify, getRequestAudience } from '@/lib/notifications'
 import { logger } from '@/lib/observability/logger'
+import { afterResponse } from '@/lib/requests/after-response'
 import { pauseCreditMs, shiftDeadlineByCredit } from '@/lib/sla/business-hours'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS, VENDOR_TRANSITIONS } from '@/lib/constants/request-transitions'
 import { vendorRoleOf } from '@/lib/vendor/access'
@@ -522,13 +523,18 @@ export async function applyStatusChange(
   // must succeed regardless of who resolved the request. When that e-mail goes out, the plain "resolved" e-mail
   // below is skipped (the bell notification still appears); when it cannot (CSAT off, no link secret, no
   // address), the plain e-mail is sent as before so the requester always hears that it is resolved.
+  // The survey and its e-mail (an SMTP conversation of 1-3 seconds) are done AFTER the answer has been sent (afterResponse), so the technician sees the ticket resolved at once instead of waiting for the mail server.
+  // The requester's "resolved" notice below waits for it, because whether it carries its own e-mail depends on whether the survey e-mail went out.
   let csatEmailed = false
-  if (newStatus === 'resolved' && request.requester_id && profile.org_id) {
+  let requesterNotice: (() => Promise<unknown>) | null = null
+  const surveyRequesterId = request.requester_id
+  const surveyOrgId = profile.org_id
+  const csatWork: (() => Promise<void>) | null = newStatus === 'resolved' && surveyRequesterId && surveyOrgId ? async () => {
     try {
       const admin = createAdminClient()
       const { data: titleRow } = await admin.from('requests').select('title').eq('id', requestId).maybeSingle()
       const csat = await issueCsat(admin as never, {
-        id: requestId, requestNo: request.request_no, title: titleRow?.title ?? '', orgId: profile.org_id, requesterId: request.requester_id,
+        id: requestId, requestNo: request.request_no, title: titleRow?.title ?? '', orgId: surveyOrgId, requesterId: surveyRequesterId,
       }, {
         resolutionNote: comment ?? '', resolverName: profile.full_name, reopenDeadlineIso: (updatePayload.reopen_deadline_at as string | null | undefined) ?? null,
         wasReopened: (request.reopen_count ?? 0) > 0, nowIso,
@@ -537,7 +543,7 @@ export async function applyStatusChange(
     } catch (e) {
       logger.error({ event: 'status_change.csat_failed', message: 'The status was changed to resolved, but the CSAT survey could not be created', route: 'lib/requests/status-change.ts#applyStatusChange', requestId, errorCode: 'csat_issue_failed', error: e })
     }
-  }
+  } : null
 
   // REOPEN: recalculate resolution_due_at from current time and clear resolution timestamps.
   // Uses the same field-override > policy resolution as request creation — a
@@ -626,10 +632,12 @@ export async function applyStatusChange(
     const notifyConfig = notifyStatuses[newStatus]
     if (notifyConfig) {
       notifiedUserIds.add(request.requester_id)
-      notify({
+      const sendRequesterNotice = () => notify({
         recipientId: request.requester_id,
         actorId: profile.id,
         ...notifyConfig,
+        // for a resolution: no plain e-mail when the survey e-mail went out (known only once the survey work has run)
+        ...(newStatus === 'resolved' ? { skipEmail: csatEmailed } : {}),
         requestId,
         link: `/requests/${requestId}`,
         // The status-changed email template shows "from X to Y" — without these the
@@ -640,7 +648,15 @@ export async function applyStatusChange(
           comment: comment?.trim() || undefined,
         },
       }).catch(() => {})
+      if (csatWork) requesterNotice = sendRequesterNotice
+      else void sendRequesterNotice()
     }
+  }
+  if (csatWork) {
+    await afterResponse('resolution survey and notice', async () => {
+      await csatWork()
+      if (requesterNotice) await requesterNotice()
+    }, { requestId })
   }
 
   // B-14: a ticket that is cancelled or resolved is also news for the technician who has it (a vendor technician included) and for its collaborators, not only for the requester.

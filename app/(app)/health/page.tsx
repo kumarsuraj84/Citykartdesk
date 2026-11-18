@@ -4,15 +4,17 @@ import { formatDateTime } from '@/lib/utils'
 import { CHECKS, INCIDENT_AFTER, labelOf, METRICS, PAGE_LIMITS, SERVER_LIMITS, STALE_AFTER_MINUTES } from '@/lib/health/catalog'
 import { lcpRating, RUM_GOOD, RUM_POOR, VIEWPORT_LABEL, type ViewportClass } from '@/lib/health/rum'
 import { humanMinutes, uptimeText } from '@/lib/health/evaluate'
-import { getCheckSeries, getHealthOverview, getInterruptions, getMetricSeries, getPerf, getRum, type CheckState } from '@/lib/health/queries'
+import { getCheckSeries, getHealthOverview, getInterruptions, getLatestMetrics, getMetricSeries, getPerf, getRum, type CheckState } from '@/lib/health/queries'
+import { average } from '@/lib/health/dashboard'
 import { humanSeconds, sumInterruptions } from '@/lib/health/blips'
 import { DayStrip, Trend } from './_components/Charts'
+import { ChartCard, LineChart, StatStrip, StatusStrip } from './_components/Dashboard'
 import { CheckToggles } from './_components/CheckToggles'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Health & Performance' }
 
-const RANGES = { '24h': { label: 'Last 24 hours', hours: 24 }, '7d': { label: 'Last 7 days', hours: 24 * 7 }, '30d': { label: 'Last 30 days', hours: 24 * 30 } } as const
+const RANGES = { '1h': { label: 'Last hour', hours: 1 }, '24h': { label: 'Last 24 hours', hours: 24 }, '7d': { label: 'Last 7 days', hours: 24 * 7 }, '30d': { label: 'Last 30 days', hours: 24 * 30 } } as const
 type RangeKey = keyof typeof RANGES
 const fmt = (x: number) => x.toLocaleString('en-IN')
 
@@ -77,7 +79,7 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
   const hours = RANGES[range].hours
   const selected = CHECKS.find((c) => c.key === sp.check)?.key ?? 'app'
 
-  const [overview, perf, series, metricSeries, rum, interruptions] = await Promise.all([getHealthOverview(), getPerf(hours), getCheckSeries(selected, hours), Promise.all(METRICS.map((m) => getMetricSeries(m.key, hours))), getRum(hours), getInterruptions(hours)])
+  const [overview, perf, series, metricSeries, rum, interruptions, beat, latest] = await Promise.all([getHealthOverview(), getPerf(hours), getCheckSeries(selected, hours), Promise.all(METRICS.map((m) => getMetricSeries(m.key, hours))), getRum(hours), getInterruptions(hours), Promise.all(['app', 'postgrest', 'proxy'].map((k) => getCheckSeries(k, hours))), getLatestMetrics(['cpu_pct', 'mem_pct', 'disk_d_free_pct', 'nas_free_pct', 'db_conn_pct', 'db_size_mb'])])
   const nowMs = overview.nowMs
   const st = STATUS_TEXT[overview.status]
   const lastAge = overview.lastSampleAt ? (nowMs - new Date(overview.lastSampleAt).getTime()) / 60_000 : null
@@ -89,9 +91,60 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
   const syncs = enabledChecks.filter((c) => c.group === 'sync')
 
   const totalReq = perf.series.reduce((a, p) => a + p.n, 0)
-  const wAvg = (k: 'p50' | 'p95') => (totalReq ? Math.round(perf.series.reduce((a, p) => a + p[k] * p.n, 0) / totalReq) : null)
-  const errs = perf.series.reduce((a, p) => a + p.errors5xx, 0)
-  const slowest = perf.series.reduce((a, p) => Math.max(a, p.max), 0)
+
+  // ── the dashboard: figures, charts and status tiles ──
+  const toMs = nowMs
+  const fromMs = toMs - hours * 3_600_000
+  const at = (iso: string) => new Date(iso).getTime()
+  const pts = (rows: { at: string }[], f: (r: never) => number | null) => rows.map((r) => ({ t: at(r.at), v: f(r as never) }))
+  const metricOf = (key: string) => metricSeries[METRICS.findIndex((m) => m.key === key)] ?? []
+  const checkOf = (key: string) => overview.checks.find((c) => c.key === key)
+  const perfBucketMin = hours <= 1 ? 10 : hours <= 24 ? 20 : hours <= 24 * 7 ? 120 : 480
+  const lastPerf = perf.series[perf.series.length - 1]
+  const reqPerMin = (n: number) => n / perfBucketMin
+  const r1 = (v: number | null) => (v === null ? '—' : String(Math.round(v * 10) / 10))
+  const r0 = (v: number | null) => (v === null ? '—' : fmt(Math.round(v)))
+  const appAnswer = checkOf('app')?.lastMs ?? null
+  const appAvg = average(beat[0].map((p) => p.p50))
+  const stats = [
+    { label: 'App answers in', value: r0(appAnswer), unit: 'ms', latest: appAnswer, avg: appAvg, avgText: r0(appAvg) },
+    { label: 'Typical page time', value: lastPerf ? r0(lastPerf.p50) : '—', unit: 'ms', latest: lastPerf?.p50 ?? null, avg: average(perf.series.map((p) => p.p50)), avgText: r0(average(perf.series.map((p) => p.p50))) },
+    { label: 'Requests', value: lastPerf ? r1(reqPerMin(lastPerf.n)) : '—', unit: '/ min', latest: lastPerf ? reqPerMin(lastPerf.n) : null, avg: average(perf.series.map((p) => reqPerMin(p.n))), avgText: r1(average(perf.series.map((p) => reqPerMin(p.n)))) },
+    { label: 'Failed requests', value: lastPerf ? fmt(lastPerf.errors5xx) : '—', unit: 'now', latest: lastPerf?.errors5xx ?? null, avg: average(perf.series.map((p) => p.errors5xx)), avgText: r1(average(perf.series.map((p) => p.errors5xx))) },
+    { label: 'Server CPU', value: r0(latest.cpu_pct ?? null), unit: '%', latest: latest.cpu_pct ?? null, avg: average(metricOf('cpu_pct').map((p) => p.avg)), avgText: r0(average(metricOf('cpu_pct').map((p) => p.avg))) },
+    { label: 'Server memory', value: r0(latest.mem_pct ?? null), unit: '%', latest: latest.mem_pct ?? null, avg: average(metricOf('mem_pct').map((p) => p.avg)), avgText: r0(average(metricOf('mem_pct').map((p) => p.avg))) },
+  ]
+  const beatSeries = [
+    { name: 'CK Desk app', color: '#10b981', points: pts(beat[0], (r: { max: number }) => r.max) },
+    { name: 'Data service', color: '#6366f1', points: pts(beat[1], (r: { max: number }) => r.max) },
+    { name: 'Gateway', color: '#f59e0b', points: pts(beat[2], (r: { max: number }) => r.max) },
+  ]
+  const speedSeries = [
+    { name: 'Typical page time (ms)', color: '#3b82f6', points: pts(perf.series, (r: { p50: number }) => r.p50) },
+    { name: 'Slow pages, 95th (ms)', color: '#f59e0b', points: pts(perf.series, (r: { p95: number }) => r.p95) },
+    { name: 'Failed requests (right)', color: '#ef4444', axis: 'r' as const, step: true, points: pts(perf.series, (r: { errors5xx: number }) => r.errors5xx) },
+  ]
+  const workSeries = [
+    { name: 'Requests per minute', color: '#8b5cf6', points: pts(perf.series, (r: { n: number }) => reqPerMin(r.n)) },
+    { name: 'Database connections used, % (right)', color: '#14b8a6', axis: 'r' as const, points: pts(metricOf('db_conn_pct'), (r: { avg: number }) => r.avg) },
+  ]
+  const serverSeries = [
+    { name: 'CPU %', color: '#10b981', points: pts(metricOf('cpu_pct'), (r: { max: number }) => r.max) },
+    { name: 'Memory %', color: '#a855f7', dashed: true, points: pts(metricOf('mem_pct'), (r: { avg: number }) => r.avg) },
+    { name: 'Free space on D: %', color: '#3b82f6', points: pts(metricOf('disk_d_free_pct'), (r: { avg: number }) => r.avg) },
+  ]
+  const detailOf = (key: string) => checkOf(key)?.detail ?? ''
+  const dbCheck = checkOf('database')
+  const lowestFree = Math.min(...[latest.disk_d_free_pct, latest.nas_free_pct].filter((v): v is number => typeof v === 'number'))
+  const svc = /all (\d+) services/.exec(detailOf('services'))
+  const statusTiles = [
+    { icon: 'heart' as const, label: 'Probe heartbeat', value: probeStopped ? 'stopped' : humanMinutes(lastAge ?? 0), note: 'The one-minute check on the app server. After 5 min without a report the page shows "no data".', tone: probeStopped ? ('bad' as const) : ('ok' as const) },
+    { icon: 'database' as const, label: 'Database', value: dbCheck ? (dbCheck.level === 'good' ? 'Up' : dbCheck.level === 'down' ? 'Down' : 'no data') : '—', note: `Answers in ${dbCheck?.lastMs ?? '—'} ms${typeof latest.db_size_mb === 'number' ? ` · ${(latest.db_size_mb / 1024).toFixed(1)} GB` : ''}`, tone: dbCheck?.level === 'good' ? ('ok' as const) : ('bad' as const) },
+    { icon: 'gauge' as const, label: 'Slow pages (95th)', value: lastPerf ? `${(lastPerf.p95 / 1000).toFixed(1)} s` : '—', note: `Limit ${PAGE_LIMITS.p95Ms / 1000} s, judged over the last ${PAGE_LIMITS.lookbackMinutes} min`, tone: lastPerf && lastPerf.p95 >= PAGE_LIMITS.p95Ms ? ('bad' as const) : ('ok' as const) },
+    { icon: 'users' as const, label: 'Database connections', value: typeof latest.db_conn_pct === 'number' ? `${Math.round(latest.db_conn_pct)}%` : '—', note: detailOf('db_load') || 'of the connection limit', tone: checkOf('db_load')?.level === 'down' ? ('bad' as const) : ('ok' as const) },
+    { icon: 'disk' as const, label: 'Lowest free disk', value: Number.isFinite(lowestFree) ? `${lowestFree.toFixed(1)}%` : '—', note: detailOf('server_disk') || 'D: and the NAS', tone: checkOf('server_disk')?.level === 'down' ? ('bad' as const) : ('ok' as const) },
+    { icon: 'server' as const, label: 'Windows services', value: svc ? `${svc[1]} / ${svc[1]}` : checkOf('services')?.level === 'down' ? 'problem' : '—', note: detailOf('services') || 'the five CK Desk services', tone: checkOf('services')?.level === 'down' ? ('bad' as const) : ('ok' as const) },
+  ]
 
   return (
     <>
@@ -116,6 +169,25 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
         </p>
       </div>
 
+      <StatStrip items={stats} />
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartCard title="App heartbeat" description="How long the app, the data service and the gateway took to answer. The slowest answer in each period is drawn, so a stall never hides. A gap means nothing answered." series={beatSeries}>
+          <LineChart series={beatSeries} fromMs={fromMs} toMs={toMs} leftUnit="ms" limit={{ value: 500, label: '500 ms' }} />
+        </ChartCard>
+        <ChartCard title="Page speed and failures" description="How long pages took for people (typical and the slow 95th), and how many requests failed (right)." series={speedSeries}>
+          <LineChart series={speedSeries} fromMs={fromMs} toMs={toMs} leftUnit="ms" limit={{ value: PAGE_LIMITS.p95Ms, label: '4 s' }} />
+        </ChartCard>
+        <ChartCard title="Work done" description="Requests the app answered per minute (left) and the share of database connections in use (right)." series={workSeries}>
+          <LineChart series={workSeries} fromMs={fromMs} toMs={toMs} leftUnit="/min" rightUnit="%" rightMax={100} />
+        </ChartCard>
+        <ChartCard title="Disks and server" description="Processor and memory use of the app server, and free space on D:, in %." series={serverSeries}>
+          <LineChart series={serverSeries} fromMs={fromMs} toMs={toMs} leftUnit="%" leftMax={100} limit={{ value: SERVER_LIMITS.cpuPct, label: 'CPU limit 90%' }} />
+        </ChartCard>
+      </div>
+
+      <StatusStrip items={statusTiles} />
+
       <section aria-labelledby="core-h" className="space-y-2">
         <h2 id="core-h" className="text-sm font-semibold text-foreground">The system</h2>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{core.map((c) => <CheckCard key={c.key} c={c} nowMs={nowMs} blips={blips24[c.key]} />)}</div>
@@ -125,14 +197,6 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
         <section aria-labelledby="srv-h" className="space-y-2">
           <h2 id="srv-h" className="text-sm font-semibold text-foreground">The servers</h2>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{servers.map((c) => <CheckCard key={c.key} c={c} nowMs={nowMs} />)}</div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {METRICS.map((m, i) => (
-              <div key={m.key} className="rounded-lg border border-border bg-card p-3">
-                <p className="mb-1 text-xs font-semibold text-foreground">{m.label} — {RANGES[range].label.toLowerCase()}</p>
-                <Trend points={metricSeries[i].map((p) => ({ at: p.at, a: p.avg, b: m.worst === 'max' ? p.max : p.min }))} aLabel="Average" bLabel={m.worst === 'max' ? 'Highest' : 'Lowest'} unit={m.unit} fixedMax={m.max} emptyText="Not enough data for a chart yet." />
-              </div>
-            ))}
-          </div>
         </section>
       )}
 
@@ -149,15 +213,6 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
           <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">No page-speed figures stored yet. The app writes them every 10 minutes once this release (and its database update) is live.</p>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <Tile label="Page requests" value={fmt(totalReq)} />
-              <Tile label="Typical page time" value={`${fmt(wAvg('p50') ?? 0)} ms`} note="half of the requests were faster" />
-              <Tile label="Slow page time (95th)" value={`${fmt(wAvg('p95') ?? 0)} ms`} note="19 of 20 requests were faster" />
-              <Tile label="Failed requests (5xx)" value={fmt(errs)} note={`slowest single request ${fmt(slowest)} ms`} />
-            </div>
-            <div className="rounded-lg border border-border bg-card p-3">
-              <Trend points={perf.series.map((p) => ({ at: p.at, a: p.p50, b: p.p95 }))} aLabel="Typical" bLabel="Slow (95th)" emptyText="Not enough data for a trend yet." />
-            </div>
             <div className="overflow-x-auto rounded-lg border border-border bg-card">
               <table className="w-full text-xs">
                 <caption className="px-3 py-2 text-left text-sm font-semibold text-foreground">Slowest pages (asked at least 5 times)</caption>

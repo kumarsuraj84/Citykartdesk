@@ -109,8 +109,11 @@ export async function getHealthOverview(): Promise<HealthOverview> {
 }
 
 export type SeriesPoint = { at: string; samples: number; okSamples: number; p50: number; p95: number; max: number }
+/** The width of one point on a chart, in minutes, for a period of this many hours: a point per minute for the last hour, 5 min for a day, hourly for a week, 4-hourly for a month. */
+export const bucketFor = (hours: number) => (hours <= 1 ? 1 : hours <= 24 ? 5 : hours <= 24 * 7 ? 60 : 240)
+
 export async function getCheckSeries(checkKey: string, hours: number): Promise<SeriesPoint[]> {
-  const bucket = hours <= 24 ? 10 : hours <= 24 * 7 ? 60 : 240
+  const bucket = bucketFor(hours)
   const { data } = await db().rpc('health_series', { p_check: checkKey, p_hours: hours, p_bucket_min: bucket })
   return ((data ?? []) as { bucket: string; samples: number; ok_samples: number; p50_ms: number; p95_ms: number; max_ms: number }[])
     .map((r) => ({ at: r.bucket, samples: Number(r.samples), okSamples: Number(r.ok_samples), p50: Number(r.p50_ms), p95: Number(r.p95_ms), max: Number(r.max_ms) }))
@@ -126,7 +129,7 @@ export async function getInterruptions(hours: number): Promise<Interruption[]> {
 export type MetricPoint = { at: string; avg: number; max: number; min: number }
 /** One server number over time (CPU %, memory %, free disk %, database connections %) in buckets, for the charts. */
 export async function getMetricSeries(metric: string, hours: number): Promise<MetricPoint[]> {
-  const bucket = hours <= 24 ? 10 : hours <= 24 * 7 ? 60 : 240
+  const bucket = bucketFor(hours)
   const { data } = await db().rpc('health_metric_series', { p_metric: metric, p_hours: hours, p_bucket_min: bucket })
   return ((data ?? []) as { bucket: string; avg_value: number; max_value: number; min_value: number }[]).map((r) => ({ at: r.bucket, avg: Number(r.avg_value), max: Number(r.max_value), min: Number(r.min_value) }))
 }
@@ -153,10 +156,18 @@ export async function getRum(hours: number): Promise<{ summary: RumSummary | nul
   }
 }
 
+/** The newest stored value of each metric (CPU %, memory %, free disk %, database connections %, database size MB). */
+export async function getLatestMetrics(keys: string[]): Promise<Record<string, number>> {
+  const { data } = await db().from('health_metrics').select('metric, value, at').in('metric', keys).order('at', { ascending: false }).limit(keys.length * 6)
+  const out: Record<string, number> = {}
+  for (const r of (data ?? []) as { metric: string; value: number }[]) if (!(r.metric in out)) out[r.metric] = Number(r.value)
+  return out
+}
+
 export type PerfPoint = { at: string; n: number; p50: number; p95: number; max: number; errors5xx: number }
 export type SlowRoute = { route: string; method: string; requests: number; p50: number; p95: number; slowest: number; errors5xx: number }
 export async function getPerf(hours: number): Promise<{ series: PerfPoint[]; slowest: SlowRoute[] }> {
-  const bucket = hours <= 24 ? 30 : hours <= 24 * 7 ? 120 : 480
+  const bucket = hours <= 1 ? 10 : hours <= 24 ? 20 : hours <= 24 * 7 ? 120 : 480   // (the app saves one window every 10 minutes)
   const [s, w] = await Promise.all([
     db().rpc('perf_series', { p_hours: hours, p_bucket_min: bucket }),
     db().rpc('perf_slowest', { p_hours: hours, p_limit: 15 }),

@@ -92,6 +92,11 @@ const nextConfig: NextConfig = {
         // Step by step plan (watch the reports first, then enforce, then tighten): docs/HTTPS-AND-CSP-PLAN.md.
         { key: process.env.CSP_ENFORCE === '1' ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only', value: buildCspReportOnly(process.env.NEXT_PUBLIC_SUPABASE_URL) },
       ],
+    }, {
+      // The site's own small pictures (the browser tab icon, the logos) are kept by the browser for a day and refreshed in the background for a week, instead of being asked for again on every page
+      // (load review of 18 Nov 2026: the tab icon was fetched ~690 times in 30 minutes). Next's own hashed files already carry a one-year cache; the app's pages and data are not touched.
+      source: '/:file(citykart-desk-icon\\.png|citykart-desk-logo-full\\.png|citykart-desk-wordmark\\.png)',
+      headers: [{ key: 'Cache-Control', value: 'public, max-age=86400, stale-while-revalidate=604800' }],
     }]
   },
   // Type errors fail the production build (D-050): `npm run typecheck` is clean, so nothing is skipped any more. (The tables added by
