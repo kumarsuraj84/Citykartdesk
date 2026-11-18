@@ -9,6 +9,7 @@
  *   proxy       GET  <SUPABASE_URL>/rest/v1/                       any answer below 500 (the gateway in front of the services is alive)
  *   nas_files   list the CK Desk files folder on the NAS           must open within 5 seconds
  *
+   (HEALTH_POSTGREST_URL is the data service's own address, no /rest/v1 on the end: http://127.0.0.1:3001; a local Supabase stack needs http://127.0.0.1:54321/rest/v1)
  * Read-only toward the NAS and the app; it writes only the health tables, with the service key from the app's .env.local (never printed, never stored elsewhere).
  * Self-contained: Node 18+, no dependencies. A check switched off on the Health page (health_check_settings) is skipped.
  * Exit code 0 when the probe itself ran (a failed CHECK is data, not a failed task); 1 only when it could not record anything.
@@ -62,7 +63,7 @@ async function main() {
 
   let off = new Set()
   try {
-    const r = await rest('rest/v1/health_check_settings?select=check_key,enabled&enabled=eq.false')
+    const r = await rest('health_check_settings?select=check_key,enabled&enabled=eq.false')
     if (r.ok) off = new Set((await r.json()).map((x) => x.check_key))
   } catch { /* the settings table is not there yet or the data service is down: measure everything */ }
 
@@ -81,11 +82,11 @@ async function main() {
   // record (the data service may itself be the thing that is down: then there is nothing to record into, and the gap on the page is the signal)
   let recorded = false
   try {
-    const r = await rest('rest/v1/health_samples', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(samples.map((s) => ({ check_key: s.key, ok: s.ok, ms: s.ms, detail: s.detail }))) })
+    const r = await rest('health_samples', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(samples.map((s) => ({ check_key: s.key, ok: s.ok, ms: s.ms, detail: s.detail }))) })
     recorded = r.ok
     if (!r.ok) console.error(`health-probe: could not store the samples (HTTP ${r.status})`)
     else {
-      const j = await rest('rest/v1/rpc/health_judge', { method: 'POST', body: JSON.stringify({ p_keys: samples.map((s) => s.key) }) })
+      const j = await rest('rpc/health_judge', { method: 'POST', body: JSON.stringify({ p_keys: samples.map((s) => s.key) }) })
       if (!j.ok) console.error(`health-probe: health_judge failed (HTTP ${j.status})`)
       else { const acts = await j.json(); for (const a of acts) console.log(`health-probe: outage ${a.action}: ${a.check_key}`) }
     }
