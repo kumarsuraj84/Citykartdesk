@@ -4,7 +4,8 @@ import { formatDateTime } from '@/lib/utils'
 import { CHECKS, INCIDENT_AFTER, labelOf, METRICS, PAGE_LIMITS, SERVER_LIMITS, STALE_AFTER_MINUTES } from '@/lib/health/catalog'
 import { lcpRating, RUM_GOOD, RUM_POOR, VIEWPORT_LABEL, type ViewportClass } from '@/lib/health/rum'
 import { humanMinutes, uptimeText } from '@/lib/health/evaluate'
-import { getCheckSeries, getHealthOverview, getMetricSeries, getPerf, getRum, type CheckState } from '@/lib/health/queries'
+import { getCheckSeries, getHealthOverview, getInterruptions, getMetricSeries, getPerf, getRum, type CheckState } from '@/lib/health/queries'
+import { humanSeconds, sumInterruptions } from '@/lib/health/blips'
 import { DayStrip, Trend } from './_components/Charts'
 import { CheckToggles } from './_components/CheckToggles'
 
@@ -38,7 +39,7 @@ function Tile({ label, value, note }: { label: string; value: string; note?: str
   )
 }
 
-function CheckCard({ c, nowMs }: { c: CheckState; nowMs: number }) {
+function CheckCard({ c, nowMs, blips }: { c: CheckState; nowMs: number; blips?: { count: number; seconds: number } }) {
   const lv = c.notApplicable ? { dot: 'bg-zinc-300', text: 'Not in use' } : LEVEL[c.level]
   const age = c.lastAt ? (nowMs - new Date(c.lastAt).getTime()) / 60_000 : null
   return (
@@ -64,6 +65,7 @@ function CheckCard({ c, nowMs }: { c: CheckState; nowMs: number }) {
         {c.detail && c.level !== 'good' && <span className="mt-0.5 block text-foreground">{c.detail}</span>}
         {c.detail && c.level === 'good' && <span className="block">{c.detail}</span>}
       </p>
+      {blips && blips.count > 0 && <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">Not answering {humanSeconds(blips.seconds)} in the last 24 h ({blips.count} short interruption{blips.count === 1 ? '' : 's'}: restarts, deployments)</p>}
       {c.openSince && <p className="mt-1 text-[11px] font-semibold text-red-700 dark:text-red-400">Outage since {formatDateTime(c.openSince)} ({humanMinutes((nowMs - new Date(c.openSince).getTime()) / 60_000)})</p>}
     </div>
   )
@@ -75,13 +77,14 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
   const hours = RANGES[range].hours
   const selected = CHECKS.find((c) => c.key === sp.check)?.key ?? 'app'
 
-  const [overview, perf, series, metricSeries, rum] = await Promise.all([getHealthOverview(), getPerf(hours), getCheckSeries(selected, hours), Promise.all(METRICS.map((m) => getMetricSeries(m.key, hours))), getRum(hours)])
+  const [overview, perf, series, metricSeries, rum, interruptions] = await Promise.all([getHealthOverview(), getPerf(hours), getCheckSeries(selected, hours), Promise.all(METRICS.map((m) => getMetricSeries(m.key, hours))), getRum(hours), getInterruptions(hours)])
   const nowMs = overview.nowMs
   const st = STATUS_TEXT[overview.status]
   const lastAge = overview.lastSampleAt ? (nowMs - new Date(overview.lastSampleAt).getTime()) / 60_000 : null
   const probeStopped = lastAge === null || lastAge > STALE_AFTER_MINUTES
   const enabledChecks = overview.checks.filter((c) => c.enabled)
   const core = enabledChecks.filter((c) => c.group === 'core')
+  const blips24 = sumInterruptions(interruptions, nowMs - 24 * 3_600_000)
   const servers = enabledChecks.filter((c) => c.group === 'server')
   const syncs = enabledChecks.filter((c) => c.group === 'sync')
 
@@ -115,7 +118,7 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
 
       <section aria-labelledby="core-h" className="space-y-2">
         <h2 id="core-h" className="text-sm font-semibold text-foreground">The system</h2>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{core.map((c) => <CheckCard key={c.key} c={c} nowMs={nowMs} />)}</div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{core.map((c) => <CheckCard key={c.key} c={c} nowMs={nowMs} blips={blips24[c.key]} />)}</div>
       </section>
 
       {servers.length > 0 && (
@@ -263,6 +266,7 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
 
       <section aria-labelledby="inc-h" className="space-y-2">
         <h2 id="inc-h" className="text-sm font-semibold text-foreground">Outages</h2>
+        <p className="text-xs text-muted-foreground">An outage is raised after {INCIDENT_AFTER} failed checks in a row. Anything shorter (a restart, a deployment, a hiccup) is listed below as a short interruption, so nothing is missed.</p>
         {overview.incidents.length === 0 ? (
           <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">No outage has been recorded.</p>
         ) : (
@@ -275,6 +279,29 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
                     <td className="px-3 py-1.5 font-medium text-foreground">{labelOf(i.checkKey)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{formatDateTime(i.startedAt)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{i.endedAt ? humanMinutes((new Date(i.endedAt).getTime() - new Date(i.startedAt).getTime()) / 60_000) : <span className="font-semibold text-red-700 dark:text-red-400">still down ({humanMinutes((nowMs - new Date(i.startedAt).getTime()) / 60_000)})</span>}</td>
+                    <td className="px-3 py-1.5 text-muted-foreground">{i.detail ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section aria-labelledby="blip-h" className="space-y-2">
+        <h2 id="blip-h" className="text-sm font-semibold text-foreground">Short interruptions — {RANGES[range].label.toLowerCase()}</h2>
+        {interruptions.length === 0 ? (
+          <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">The app, the data service and the gateway answered every time they were asked (they are asked every 5 seconds).</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-border bg-card">
+            <table className="w-full text-xs">
+              <thead><tr className="text-left text-muted-foreground"><th className="px-3 py-1.5 font-medium">What</th><th className="px-3 py-1.5 font-medium">Began</th><th className="px-3 py-1.5 font-medium">Not answering for</th><th className="px-3 py-1.5 font-medium">What was seen</th></tr></thead>
+              <tbody>
+                {interruptions.slice(0, 40).map((i) => (
+                  <tr key={`${i.checkKey}|${i.startedAt}`} className="border-t border-border align-top">
+                    <td className="px-3 py-1.5 font-medium text-foreground">{labelOf(i.checkKey)}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{formatDateTime(i.startedAt)}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{humanSeconds(i.seconds)}{i.ongoing ? ' (and still)' : ''}</td>
                     <td className="px-3 py-1.5 text-muted-foreground">{i.detail ?? '—'}</td>
                   </tr>
                 ))}

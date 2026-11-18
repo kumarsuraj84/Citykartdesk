@@ -12,6 +12,9 @@
  *   server_cpu / server_memory   this server                       CPU under 90% (measured over one second), memory in use under 92%
  *   server_disk                 C:, D: and the NAS                 each at least 10% and 5 GB free
  * The numbers behind the server checks are also kept (health_metrics) for the charts.
+ * SHORT INTERRUPTIONS: after the checks the probe keeps watching the app, the data service and the gateway every 5 seconds for the rest of the minute, so a restart or a deployment
+ * of 10 to 30 seconds is seen too (a once-a-minute check misses it, and an outage alert needs 3 failed minutes). Every stretch of failed answers is stored as a row with the check key
+ * blip_app / blip_postgrest / blip_proxy (at = when it began, ms = how long it lasted in milliseconds); the Health page lists them.
  *
  * (HEALTH_POSTGREST_URL is the data service's own address, no /rest/v1 on the end: http://127.0.0.1:3001; a local Supabase stack needs http://127.0.0.1:54321/rest/v1)
  * Read-only toward the NAS, the app and the services; it writes only the health tables, with the service key from the app's .env.local (never printed, never stored elsewhere).
@@ -26,6 +29,8 @@ import { fileURLToPath } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const TIMEOUT_MS = 4000
+const WATCH_MS = 50_000      // how long into each minute the quick checks keep being repeated
+const WATCH_EVERY_MS = 5_000
 
 // ── the limits (the same numbers the Health page prints: lib/health/catalog.ts SERVER_LIMITS) ───────────────────────────────────────────────────────
 export const LIMITS = { cpuPct: 90, memoryPct: 92, diskFreePct: 10, diskFreeGb: 5 }
@@ -68,6 +73,21 @@ export function servicesVerdict(states) {
   if (names.length === 0 || names.every((n) => states[n] === null)) return null
   const bad = names.filter((n) => states[n] !== 'RUNNING')
   return bad.length ? { ok: false, detail: `not running: ${bad.map((n) => `${n} (${states[n] ? states[n].toLowerCase() : 'missing'})`).join(', ')}` } : { ok: true, detail: `all ${names.length} services are running` }
+}
+
+/** Follows several checks over time and reports each stretch of failed answers once it ends. observe() returns the finished stretch (or null); finish() returns the ones still going. */
+export function createOutageTracker() {
+  const down = new Map()   // key -> { since, detail }
+  const stretch = (key, d, at, ongoing) => ({ key, startedAt: d.since, endedAt: at, seconds: Math.max(1, Math.round((at - d.since) / 1000)), detail: d.detail, ongoing })
+  return {
+    observe(key, ok, detail, at) {
+      const d = down.get(key)
+      if (!ok && !d) { down.set(key, { since: at, detail }); return null }
+      if (ok && d) { down.delete(key); return stretch(key, d, at, false) }
+      return null
+    },
+    finish(at) { const out = [...down].map(([k, d]) => stretch(k, d, at, true)); down.clear(); return out },
+  }
 }
 
 // ── the environment ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -167,6 +187,7 @@ async function main() {
     }
     return diskVerdict(drives)
   })
+  const startedAt = Date.now()
   const samples = (await Promise.all(jobs)).filter(Boolean)
 
   // record (the data service may itself be the thing that is down: then there is nothing to record into, and the gap on the page is the signal)
@@ -195,6 +216,35 @@ async function main() {
       if (res.status !== 200) console.error(`health-probe: the app's own checks answered HTTP ${res.status}`)
     } catch (e) { console.error(`health-probe: the app's own checks did not finish (${e && e.message ? e.message : e})`) }
   }
+  // keep watching the three quick checks every 5 seconds until the minute is nearly over (a restart or deployment shows up as a short interruption)
+  const quick = { app: samples.find((s) => s.key === 'app'), postgrest: samples.find((s) => s.key === 'postgrest'), proxy: samples.find((s) => s.key === 'proxy') }
+  const tracker = createOutageTracker()
+  for (const [k, s] of Object.entries(quick)) if (s && !s.ok) tracker.observe(k, false, s.detail, startedAt)
+  const blips = []
+  const probes = {
+    app: async () => { const s = await get(`${APP}/api/health`); if (s !== 200) throw new Error(`the app answered ${s}`) },
+    postgrest: async () => { const s = await get(`${POSTGREST}/`, { apikey: ANON_KEY }); if (s >= 500) throw new Error(`the data service answered ${s}`) },
+    ...(GATEWAY ? { proxy: async () => { const s = await get(`${GATEWAY}/rest/v1/`, { apikey: ANON_KEY }); if (s >= 500) throw new Error(`the gateway answered ${s}`) } } : {}),
+  }
+  const watchUntil = startedAt + WATCH_MS
+  while (Date.now() + WATCH_EVERY_MS < watchUntil) {
+    await sleep(WATCH_EVERY_MS)
+    await Promise.all(Object.entries(probes).filter(([k]) => quick[k] && !off.has(k)).map(async ([k, fn]) => {
+      let ok = true, detail = ''
+      try { await fn() } catch (e) { ok = false; detail = String(e && e.message ? e.message : e).slice(0, 160) }
+      const done = tracker.observe(k, ok, detail, Date.now())
+      if (done) blips.push(done)
+    }))
+  }
+  blips.push(...tracker.finish(Date.now()))
+  if (blips.length) {
+    try {
+      const r = await rest('health_samples', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(blips.map((b) => ({ at: new Date(b.startedAt).toISOString(), check_key: `blip_${b.key}`, ok: false, ms: Math.round(b.endedAt - b.startedAt), detail: `${b.detail || 'did not answer'}${b.ongoing ? ' (still not answering when this minute ended)' : ''}`.slice(0, 240) }))) })
+      if (!r.ok) console.error(`health-probe: could not store the interruptions (HTTP ${r.status})`)
+      else for (const b of blips) console.log(`health-probe: interruption ${b.key} ${b.seconds}s${b.ongoing ? ' (ongoing)' : ''}`)
+    } catch (e) { console.error(`health-probe: could not store the interruptions (${e && e.message ? e.message : e})`) }
+  }
+
   console.log(`health-probe: ${samples.map((s) => `${s.key}=${s.ok ? 'ok' : 'FAIL'}(${s.ms}ms)`).join(' ')}`)
   return recorded ? 0 : 1
 }

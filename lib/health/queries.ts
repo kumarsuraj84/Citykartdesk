@@ -6,6 +6,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CHECKS, type CheckDef } from './catalog'
 import { isNotApplicable, levelOf, overallStatus, type Level } from './evaluate'
+import { BLIP_PREFIX, mergeBlips, type Interruption } from './blips'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; rpc: (f: string, a?: Record<string, unknown>) => any }
@@ -113,6 +114,13 @@ export async function getCheckSeries(checkKey: string, hours: number): Promise<S
   const { data } = await db().rpc('health_series', { p_check: checkKey, p_hours: hours, p_bucket_min: bucket })
   return ((data ?? []) as { bucket: string; samples: number; ok_samples: number; p50_ms: number; p95_ms: number; max_ms: number }[])
     .map((r) => ({ at: r.bucket, samples: Number(r.samples), okSamples: Number(r.ok_samples), p50: Number(r.p50_ms), p95: Number(r.p95_ms), max: Number(r.max_ms) }))
+}
+
+/** Every stretch when the app, the data service or the gateway did not answer, however short (restarts and deployments included), newest first. */
+export async function getInterruptions(hours: number): Promise<Interruption[]> {
+  const since = new Date(Date.now() - Math.min(hours, 24 * 45) * 3_600_000).toISOString()
+  const { data } = await db().from('health_samples').select('check_key, at, ms, detail').like('check_key', `${BLIP_PREFIX}%`).gte('at', since).order('at', { ascending: false }).limit(1000)
+  return mergeBlips((data ?? []) as { check_key: string; at: string; ms: number; detail: string | null }[])
 }
 
 export type MetricPoint = { at: string; avg: number; max: number; min: number }
