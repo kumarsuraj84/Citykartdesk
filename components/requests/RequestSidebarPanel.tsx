@@ -151,6 +151,7 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
   }
 
   function pick(next: RequestStatus) {
+    setOpen(false)
     // Reopening a resolved ticket ("I'm not satisfied" / "reopening my own
     // work") must explain why — agent or requester, both required
     // server-side too, but collecting it here avoids a round-trip just to
@@ -235,17 +236,18 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
               rows={3}
               className="w-full resize-none rounded-lg border border-input bg-background px-2 py-1.5 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
-            {pendingComment.hint && !pendingCommentError && <p className="text-[10px] leading-snug text-muted-foreground">{pendingComment.hint}</p>}
-            {pendingCommentError && <p className="text-[11px] text-destructive">{pendingCommentError}</p>}
+            {pendingComment.hint && <p className="text-[10px] leading-snug text-muted-foreground">{pendingComment.hint}</p>}
             <AttachFilesField files={attach.files} problem={attach.problem} addFiles={attach.addFiles} removeAt={attach.removeAt} disabled={isPending} />
-            <div className="flex gap-2">
-              <button onClick={confirmPendingComment} disabled={isPending} className="btn-gradient flex-1 !py-1 !text-xs">
+            <div className="flex flex-wrap gap-2">
+              <button onClick={confirmPendingComment} disabled={isPending} className="btn-gradient max-w-full flex-1 !whitespace-normal !py-1 !text-xs">
                 {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : pendingComment.cta}
               </button>
               <button onClick={() => { setPendingComment(null); setPendingCommentText(''); setPendingCommentError(null); attach.clear() }} className="btn-soft !py-1 !text-xs">
                 Cancel
               </button>
             </div>
+            {/* below the buttons on purpose: an error line above them pushed the buttons down by a line and the next click landed on "Attach a file" */}
+            {pendingCommentError && <p role="alert" className="text-[11px] text-destructive">{pendingCommentError}</p>}
           </div>
         )}
       </div>
@@ -637,13 +639,13 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
                   className="w-full resize-none rounded-lg border border-input bg-background px-2 py-1.5 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
                 <p className="text-[10px] leading-snug text-muted-foreground">The priority and the deadlines are worked out again from the new sub-category. The reason is kept in the ticket history.</p>
-                {reasonError && <p className="text-[11px] text-destructive">{reasonError}</p>}
-                <div className="flex gap-2">
-                  <button onClick={confirmPick} disabled={isPending} className="btn-gradient flex-1 !py-1 !text-xs">
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={confirmPick} disabled={isPending} className="btn-gradient max-w-full flex-1 !whitespace-normal !py-1 !text-xs">
                     {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Change sub-category'}
                   </button>
                   <button onClick={cancelPick} className="btn-soft !py-1 !text-xs">Cancel</button>
                 </div>
+                {reasonError && <p role="alert" className="text-[11px] text-destructive">{reasonError}</p>}
               </div>
             )}
           </div>

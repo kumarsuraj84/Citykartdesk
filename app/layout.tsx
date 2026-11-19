@@ -3,6 +3,7 @@ import { Manrope, JetBrains_Mono } from 'next/font/google'
 import { Toaster } from 'sonner'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { ChunkErrorRecovery } from '@/components/ChunkErrorRecovery'
+import { PopupFitter } from '@/components/ui/PopupFitter'
 import './globals.css'
 
 const manrope = Manrope({
@@ -53,6 +54,7 @@ export default function RootLayout({
       </head>
       <body className="h-full">
         <ChunkErrorRecovery />
+        <PopupFitter />
         <ErrorBoundary>{children}</ErrorBoundary>
         <Toaster richColors position="bottom-right" />
       </body>

@@ -62,12 +62,12 @@ export function AttachFilesField({ files, problem, addFiles, removeAt, disabled 
   const input = useRef<HTMLInputElement>(null)
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <button type="button" onClick={() => input.current?.click()} disabled={disabled}
-          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-foreground hover:bg-muted disabled:opacity-50">
+          className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-border px-2 py-1 text-[11px] font-medium text-foreground hover:bg-muted disabled:opacity-50">
           <Paperclip className="h-3 w-3" aria-hidden /> Attach a file
         </button>
-        <span className="text-[10px] text-muted-foreground">optional · or press Ctrl+V to paste an image</span>
+        <span className="min-w-0 text-[10px] text-muted-foreground">optional · or press Ctrl+V to paste an image</span>
         <input ref={input} type="file" multiple accept={ATTACH_ACCEPT} className="hidden" aria-label="Attach files (optional)"
           onChange={(e) => { const picked = Array.from(e.target.files ?? []); if (picked.length) void addFiles(picked); e.target.value = '' }} />
       </div>

@@ -286,8 +286,8 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
         </ul>
       )}
 
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -300,7 +300,7 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             title="Attach files (max 25 MB each). You can also paste a copied file or screenshot (Ctrl+V) or drop files into the box."
-            className="flex min-h-[36px] cursor-pointer select-none items-center gap-1.5 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+            className="flex min-h-[36px] shrink-0 cursor-pointer select-none items-center gap-1.5 whitespace-nowrap rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
           >
             <Paperclip className="h-3.5 w-3.5" />
             Attach
@@ -311,7 +311,7 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
               onClick={() => setCcOpen((v) => !v)}
               aria-pressed={ccOpen || cc.length > 0}
               title="Copy this comment, with the whole ticket and conversation, to CK Desk users or OEM contacts by e-mail"
-              className={`flex min-h-[36px] cursor-pointer select-none items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors ${ccOpen || cc.length > 0 ? 'border-primary/40 bg-primary/5 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}
+              className={`flex min-h-[36px] shrink-0 cursor-pointer select-none items-center gap-1.5 whitespace-nowrap rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors ${ccOpen || cc.length > 0 ? 'border-primary/40 bg-primary/5 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}
             >
               <AtSign className="h-3.5 w-3.5" />
               CC{cc.length > 0 ? ` (${cc.length})` : ''}
@@ -322,7 +322,7 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
               type="button"
               onClick={() => setIsInternal(!isInternal)}
               aria-pressed={isInternal}
-              className={`flex min-h-[36px] cursor-pointer select-none items-center gap-2.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`flex min-h-[36px] shrink-0 cursor-pointer select-none items-center gap-2.5 whitespace-nowrap rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors ${
                 isInternal
                   ? 'border-amber-300 bg-amber-50 text-amber-800'
                   : 'border-border bg-background text-muted-foreground hover:bg-muted'
@@ -348,7 +348,7 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
             <button
               type="button"
               onClick={() => setShowCanned(!showCanned)}
-              className="flex min-h-[36px] cursor-pointer select-none items-center gap-1.5 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+              className="flex min-h-[36px] shrink-0 cursor-pointer select-none items-center gap-1.5 whitespace-nowrap rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
             >
               Templates
               <ChevronDown className={`h-3 w-3 transition-transform ${showCanned ? 'rotate-180' : ''}`} />
@@ -422,7 +422,7 @@ export function CommentForm({ requestId, canPostInternal }: CommentFormProps) {
         <button
           type="submit"
           disabled={isPending || (!body.trim() && files.length === 0)}
-          className="btn-gradient disabled:opacity-40"
+          className="btn-gradient ml-auto shrink-0 disabled:opacity-40"
         >
           {isPending ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
