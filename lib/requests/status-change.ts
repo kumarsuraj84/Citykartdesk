@@ -29,6 +29,7 @@ import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus,
 import type { Database } from '@/types/database'
 import { checkResolutionNote } from '@/lib/requests/resolution-note'
 import { accessOf, pickUpRefusal } from '@/lib/requests/ownership-server'
+import { roleOnTicket } from '@/lib/email/parties'
 
 type RequestUpdate = Database['public']['Tables']['requests']['Update']
 /** commentId: the conversation message written for this change (when there was one), so a caller can tie a file (FSR, quote, PO document) to it. */
@@ -541,7 +542,7 @@ export async function applyStatusChange(
       const csat = await issueCsat(admin as never, {
         id: requestId, requestNo: request.request_no, title: titleRow?.title ?? '', orgId: surveyOrgId, requesterId: surveyRequesterId,
       }, {
-        resolutionNote: comment ?? '', resolverName: profile.full_name, reopenDeadlineIso: (updatePayload.reopen_deadline_at as string | null | undefined) ?? null,
+        resolutionNote: comment ?? '', resolverName: profile.full_name, resolverRole: roleOnTicket({ actorId: profile.id, requesterId: request.requester_id, assigneeId: request.assigned_to, userRole: profile.role }), reopenDeadlineIso: (updatePayload.reopen_deadline_at as string | null | undefined) ?? null,
         wasReopened: (request.reopen_count ?? 0) > 0, nowIso,
       })
       csatEmailed = csat.emailed

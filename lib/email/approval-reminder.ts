@@ -9,6 +9,8 @@ export interface ReminderItem {
   requestTitle: string
   requesterName: string
   sentByName: string
+  /** the technician of the ticket: a name, null = nobody assigned yet, undefined = not known (nothing is shown) */
+  technicianName?: string | null
   /** whole days the approval has been waiting (0 = sent today) */
   waitingDays: number
   requestUrl: string
@@ -18,6 +20,8 @@ export interface ReminderItem {
 }
 
 const waited = (days: number): string => (days <= 0 ? 'sent today' : days === 1 ? 'waiting 1 day' : `waiting ${days} days`)
+/** "technician Amit Verma" / "technician not assigned yet" (empty when it is not known) */
+const technician = (i: ReminderItem, esc: (s: string) => string = (s) => s): string => (i.technicianName === undefined ? '' : i.technicianName ? `technician ${esc(i.technicianName)}` : 'technician not assigned yet')
 const label = (i: ReminderItem): string => (i.requestNo ? `${i.requestNo} - ${i.requestTitle}` : i.requestTitle)
 
 export function approvalReminderEmail(d: { approverName: string; items: ReminderItem[]; /** the page listing everything waiting for this person */ approvalsUrl: string }): { subject: string; html: string; text: string } {
@@ -28,7 +32,7 @@ export function approvalReminderEmail(d: { approverName: string; items: Reminder
   const intro = one ? 'This approval is still waiting for your decision.' : `These ${items.length} approvals are still waiting for your decision.`
 
   const row = (i: ReminderItem): string => {
-    const who = [i.requesterName ? `raised by ${escapeHtml(i.requesterName)}` : '', i.sentByName && i.sentByName !== i.requesterName ? `sent by ${escapeHtml(i.sentByName)}` : ''].filter(Boolean).join(' · ')
+    const who = [i.requesterName ? `raised by ${escapeHtml(i.requesterName)}` : '', technician(i, escapeHtml), i.sentByName && i.sentByName !== i.requesterName ? `sent by ${escapeHtml(i.sentByName)}` : ''].filter(Boolean).join(' · ')
     const buttons = i.approveUrl && i.rejectUrl
       ? `<a href="${i.approveUrl}" style="display:inline-block;background:#16a34a;color:#ffffff;padding:8px 18px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;margin:6px 8px 0 0;">Approve</a>` +
         `<a href="${i.rejectUrl}" style="display:inline-block;background:#dc2626;color:#ffffff;padding:8px 18px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;margin:6px 8px 0 0;">Reject</a>`
@@ -53,7 +57,7 @@ export function approvalReminderEmail(d: { approverName: string; items: Reminder
   `)
   const text = [
     `Hi ${d.approverName},`, '', intro, '',
-    ...items.map((i) => `- ${label(i)} (${i.requesterName ? `raised by ${i.requesterName}, ` : ''}${waited(i.waitingDays)})\n  Open: ${i.requestUrl}${i.approveUrl && i.rejectUrl ? `\n  Approve: ${i.approveUrl}\n  Reject: ${i.rejectUrl}` : ''}`),
+    ...items.map((i) => `- ${label(i)} (${i.requesterName ? `raised by ${i.requesterName}, ` : ''}${technician(i) ? `${technician(i)}, ` : ''}${waited(i.waitingDays)})\n  Open: ${i.requestUrl}${i.approveUrl && i.rejectUrl ? `\n  Approve: ${i.approveUrl}\n  Reject: ${i.rejectUrl}` : ''}`),
     '', 'A comment is required to approve or reject.',
   ].join('\n')
   return { subject, html, text }

@@ -11,6 +11,7 @@ import {
   approvalDecisionEmail,
   requestEventEmail,
 } from './templates'
+import { partiesFromData, PARTY_KEYS, type Parties } from './parties'
 
 /** Links inside a notification are app-relative ("/requests/123"); an email needs the full address. */
 export function absoluteAppUrl(link: string | undefined): string {
@@ -21,6 +22,13 @@ export function absoluteAppUrl(link: string | undefined): string {
 }
 
 // Events whose only email is the generic "your request ..." message.
+/** new = first ask, next_step = an earlier step was approved, delegated = handed over (the notification's own title tells them apart) */
+function approvalKindOf(data: Record<string, string>): 'new' | 'next_step' | 'delegated' {
+  return data.title === 'Approval delegated to you' ? 'delegated' : data.title === 'Approval requested' ? 'next_step' : 'new'
+}
+
+const SENDER_LABEL = { new: 'Sent for approval by', next_step: 'Previous step approved by', delegated: 'Passed to you by' } as const
+
 const SIMPLE_REQUEST_EVENTS: Record<string, string> = {
   request_resolved: 'Request resolved',
   request_closed: 'Request closed',
@@ -52,6 +60,10 @@ export async function sendNotificationEmail(opts: {
     const link = absoluteAppUrl(rawData.requestUrl || rawData.taskUrl || rawData.link)
     const data: Record<string, string> = { ...rawData, requestUrl: link, taskUrl: rawData.taskUrl ? absoluteAppUrl(rawData.taskUrl) : link, link }
 
+    // Who is who on this ticket (the Requester / Technician block) and what the person who did it is on the ticket ("Technician", "Requester", ...): filled in by lib/notifications.ts
+    const parties: Parties | undefined = partiesFromData(data)
+    const actorRole = data[PARTY_KEYS.actorRole] || null
+
     let template: { subject: string; html: string; text: string } | null = null
 
     switch (type) {
@@ -60,6 +72,7 @@ export async function sendNotificationEmail(opts: {
           requesterName: recipientName || data.requesterName || '',
           requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
+          parties,
           serviceName: data.serviceName || '',
         })
         break
@@ -69,10 +82,13 @@ export async function sendNotificationEmail(opts: {
           recipientName: recipientName || '',
           requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
+          parties,
           oldStatus: data.oldStatus || '',
           newStatus: data.newStatus || '',
           comment: data.comment || undefined,
           assigneeName: data.assigneeName || undefined,
+          changedByName: data.actorName || undefined,
+          changedByRole: actorRole,
         })
         break
       case 'comment_added':
@@ -81,7 +97,9 @@ export async function sendNotificationEmail(opts: {
           recipientName: recipientName || '',
           requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
+          parties,
           commenterName: data.commenterName || '',
+          commenterRole: data.commenterName ? actorRole : null,
           commentBody: data.commentBody || data.body || '',
         })
         break
@@ -107,6 +125,7 @@ export async function sendNotificationEmail(opts: {
             recipientName,
             requestTitle: withNo(data.requestTitle || data.title || ''),
             requestUrl: data.requestUrl || data.link || '',
+            parties,
             headline: 'Your request has been sent for approval',
             detail: data.approverNames ? `Waiting on approval from ${data.approverNames}.` : undefined,
           })
@@ -118,12 +137,13 @@ export async function sendNotificationEmail(opts: {
           approverName: recipientName || '',
           requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
+          parties: parties && data.actorName ? { ...parties, extra: [{ label: SENDER_LABEL[approvalKindOf(data)], value: data.actorName }] } : parties,
           requesterName: data.requesterName || '',
           // who sent it to this approver; the notification's own title tells the three cases apart
           senderName: data.actorName || '',
           // the approver's own Approve / Reject links (omitted when no signing secret is configured)
           ...(data.approvalId && data.approverId ? (() => { const l = approvalLinkUrls(data.approvalId, data.approverId); return l ? { approveUrl: l.approveUrl, rejectUrl: l.rejectUrl } : {} })() : {}),
-          kind: data.title === 'Approval delegated to you' ? 'delegated' : data.title === 'Approval requested' ? 'next_step' : 'new',
+          kind: approvalKindOf(data),
         })
         break
       case 'sla_warning':
@@ -134,6 +154,7 @@ export async function sendNotificationEmail(opts: {
             recipientName,
             requestTitle: withNo(data.requestTitle || data.title || ''),
             requestUrl: data.requestUrl || data.link || '',
+            parties,
             headline: `Reminder from ${data.nudgedBy || 'your manager'}`,
             detail: data.note ? `"${data.note}"` : 'Please take a look at this request and update it.',
           })
@@ -143,6 +164,7 @@ export async function sendNotificationEmail(opts: {
           recipientName: recipientName || '',
           requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
+          parties,
           slaDeadline: data.slaDeadline || '',
           tier: data.tier || '',
         })
@@ -156,6 +178,7 @@ export async function sendNotificationEmail(opts: {
             recipientName,
             requestTitle: withNo(data.requestTitle || data.title || ''),
             requestUrl: data.requestUrl || data.link || '',
+            parties,
             headline: type === 'request_reassigned' ? 'Your request was reassigned' : 'Your request has been assigned',
             detail: `${data.assigneeName} is now handling your request.`,
           })
@@ -165,6 +188,7 @@ export async function sendNotificationEmail(opts: {
           recipientName: recipientName || '',
           requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
+          parties,
           assignerName: data.assignerName || data.actorName || '',
         })
         break
@@ -173,6 +197,7 @@ export async function sendNotificationEmail(opts: {
           recipientName: recipientName || '',
           requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
+          parties,
           decision: 'approved',
           approverName: data.approverName || undefined,
           reason: data.reason || undefined,
@@ -187,6 +212,7 @@ export async function sendNotificationEmail(opts: {
           recipientName: recipientName || '',
           requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
+          parties,
           decision: 'rejected',
           approverName: data.approverName || undefined,
           reason: data.reason || undefined,
@@ -200,6 +226,7 @@ export async function sendNotificationEmail(opts: {
           recipientName: recipientName || '',
           requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
+          parties,
           oldStatus: '',
           newStatus: type === 'collaborator_added' ? 'collaborator added' : 'collaborator removed',
         })
@@ -209,7 +236,9 @@ export async function sendNotificationEmail(opts: {
           recipientName: recipientName || '',
           requestTitle: withNo(data.requestTitle || data.title || ''),
           requestUrl: data.requestUrl || data.link || '',
+          parties,
           commenterName: data.commenterName || data.actorName || '',
+          commenterRole: actorRole,
           commentBody: data.commentBody || data.body || '',
         })
         break
@@ -219,6 +248,7 @@ export async function sendNotificationEmail(opts: {
             recipientName,
             requestTitle: withNo(data.requestTitle || data.title || ''),
             requestUrl: data.requestUrl || data.link || '',
+            parties,
             headline: SIMPLE_REQUEST_EVENTS[type],
             // The technician's own remark (e.g. what they did to resolve it) is far more
             // useful to the requester than the generic "X marked it resolved" sentence —

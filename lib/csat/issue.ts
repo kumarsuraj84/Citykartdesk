@@ -4,6 +4,7 @@
 import { sendEmail } from '@/lib/email/send'
 import { absoluteAppUrl } from '@/lib/email/notify-email'
 import { csatResolvedEmail, csatReminderEmail } from '@/lib/email/csat-templates'
+import { loadTicketParties, type Parties } from '@/lib/email/parties'
 import { CSAT_LINK_DAYS, signCsatToken } from './token'
 import { getCsatSettings } from './settings'
 
@@ -50,6 +51,12 @@ async function requesterContact(admin: AnyClient, requesterId: string): Promise<
   }
 }
 
+/** The Requester / Technician block for the requester's own mail ("(you)" after their name); undefined when it cannot be loaded (the mail then goes out without it). */
+async function partiesForRequester(admin: AnyClient, requestId: string): Promise<Parties | undefined> {
+  const t = await loadTicketParties(admin, requestId)
+  return t && t.requesterName ? { requesterName: t.requesterName, technicianName: t.technicianName, requesterIsYou: true } : undefined
+}
+
 /**
  * Called right after a ticket becomes Resolved. Creates (or restarts) the survey and sends the single "resolved + how did we do?" e-mail.
  * Returns whether that e-mail went out, so the caller can skip the plain "resolved" e-mail (and still send it as a fallback when not).
@@ -57,6 +64,8 @@ async function requesterContact(admin: AnyClient, requesterId: string): Promise<
 export async function issueCsat(admin: AnyClient, ticket: CsatTicket, p: {
   resolutionNote: string
   resolverName: string
+  /** what the resolver is on this ticket (Requester / Technician / Manager / Other); not set for an automatic rule */
+  resolverRole?: string | null
   /** ISO time the reopen window ends (null when the window is not used) */
   reopenDeadlineIso: string | null
   /** the ticket had been reopened before this resolution: ask again from scratch */
@@ -99,10 +108,12 @@ export async function issueCsat(admin: AnyClient, ticket: CsatTicket, p: {
   const who = await requesterContact(admin, ticket.requesterId)
   if (!links || !who) return { surveyId, emailed: false }
 
+  const parties = await partiesForRequester(admin, ticket.id)
   const mail = csatResolvedEmail({
+    parties,
     recipientName: who.firstName, requestNo: ticket.requestNo, requestTitle: ticket.title, requestUrl: links.requestUrl,
     starUrls: links.starUrls, reopenUrl: links.reopenUrl, reopenUntil: p.reopenDeadlineIso ? fmtWhen(p.reopenDeadlineIso) : '',
-    resolutionNote: p.resolutionNote.trim(), resolverName: p.resolverName, resolvedOn: fmtWhen(nowIso),
+    resolutionNote: p.resolutionNote.trim(), resolverName: p.resolverName, resolverRole: p.resolverRole ?? null, resolvedOn: fmtWhen(nowIso),
   })
   const res = await sendEmail({ to: who.email, subject: mail.subject, html: mail.html, text: mail.text, threadRequestNo: ticket.requestNo })
   return { surveyId, emailed: !res.error }
@@ -115,7 +126,9 @@ export async function sendCsatReminder(admin: AnyClient, p: {
   const links = buildCsatLinks(p.surveyId, p.requestId, p.resolvedAtMs)
   const who = await requesterContact(admin, p.requesterId)
   if (!links || !who) return false
+  const parties = await partiesForRequester(admin, p.requestId)
   const mail = csatReminderEmail({
+    parties,
     recipientName: who.firstName, requestNo: p.requestNo, requestTitle: p.title, requestUrl: links.requestUrl,
     starUrls: links.starUrls, reopenUrl: links.reopenUrl, reopenUntil: p.reopenDeadlineIso ? fmtWhen(p.reopenDeadlineIso) : '',
   })

@@ -12,6 +12,7 @@ import { alertOperator } from '@/lib/observability/alert'
 import type { NotificationType } from '@/types'
 import type { Json } from '@/types/database'
 import { inBatches } from '@/lib/queries/in-batches'
+import { partyData, roleOnTicket } from '@/lib/email/parties'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -80,20 +81,23 @@ export async function notify(inputs: NotifyInput | NotifyInput[]): Promise<void>
   // Give every email the ticket number and the real ticket title (the notification's own title is a
   // sentence like "Request assigned to you", which made a poor subject line).
   const requestIds = [...new Set(active.map((r) => r.requestId).filter((v): v is string => !!v))]
-  const requestInfo = new Map<string, { request_no: string | null; title: string; requester_name: string }>()
+  const requestInfo = new Map<string, { request_no: string | null; title: string; requester_name: string; requester_id: string | null; technician_id: string | null; technician_name: string | null }>()
   if (requestIds.length > 0) {
-    const { data: reqRows } = await admin.from('requests').select('id, request_no, title, requester:profiles!requests_requester_id_fkey(full_name)').in('id', requestIds)
-    for (const q of (reqRows ?? []) as unknown as { id: string; request_no: string | null; title: string; requester: { full_name: string } | { full_name: string }[] | null }[]) {
-      const who = Array.isArray(q.requester) ? q.requester[0] : q.requester
-      requestInfo.set(q.id, { request_no: q.request_no, title: q.title, requester_name: who?.full_name ?? '' })
+    // the requester and the assigned technician too: every ticket e-mail shows both names (lib/email/parties.ts)
+    const { data: reqRows } = await admin.from('requests').select('id, request_no, title, requester_id, assigned_to, requester:profiles!requests_requester_id_fkey(full_name), assignee:profiles!requests_assigned_to_fkey(full_name)').in('id', requestIds)
+    type Named = { full_name: string | null } | { full_name: string | null }[] | null
+    const one = (v: Named) => (Array.isArray(v) ? v[0] : v)
+    for (const q of (reqRows ?? []) as unknown as { id: string; request_no: string | null; title: string; requester_id: string | null; assigned_to: string | null; requester: Named; assignee: Named }[]) {
+      requestInfo.set(q.id, { request_no: q.request_no, title: q.title, requester_name: one(q.requester)?.full_name ?? '', requester_id: q.requester_id, technician_id: q.assigned_to, technician_name: one(q.assignee)?.full_name ?? null })
     }
   }
   // who did it (the sender), for e-mails that say "X sent this to you"
   const actorIds = [...new Set(active.map((r) => r.actorId).filter((v): v is string => !!v))]
   const actorNameById = new Map<string, string>()
+  const actorUserRoleById = new Map<string, string>()
   if (actorIds.length > 0) {
-    const { data: actorRows } = await inBatches(actorIds, (batch) => admin.from('profiles').select('id, full_name').in('id', batch))
-    for (const a of (actorRows ?? []) as { id: string; full_name: string | null }[]) actorNameById.set(a.id, a.full_name ?? '')
+    const { data: actorRows } = await inBatches(actorIds, (batch) => admin.from('profiles').select('id, full_name, role').in('id', batch))
+    for (const a of (actorRows ?? []) as { id: string; full_name: string | null; role: string | null }[]) { actorNameById.set(a.id, a.full_name ?? ''); if (a.role) actorUserRoleById.set(a.id, a.role) }
   }
 
   // Org-level channel toggles (Request Configuration → Notification Rules).
@@ -199,6 +203,14 @@ export async function notify(inputs: NotifyInput | NotifyInput[]): Promise<void>
               ...(r.actorId && actorNameById.get(r.actorId) ? { actorName: actorNameById.get(r.actorId)! } : {}),
               ...(r.type === 'approval_requested' && r.requestId && approvalByRequest.get(r.requestId) ? { approvalId: approvalByRequest.get(r.requestId)!, approverId: r.recipientId } : {}),
               ...(r.metadata as Record<string, string> ?? {}),
+              // who is who on the ticket for THIS reader ("(you)"), and what the person who did it is on the ticket
+              ...(r.requestId && requestInfo.get(r.requestId)
+                ? partyData({
+                    requesterName: requestInfo.get(r.requestId)!.requester_name, technicianName: requestInfo.get(r.requestId)!.technician_name,
+                    requesterId: requestInfo.get(r.requestId)!.requester_id, technicianId: requestInfo.get(r.requestId)!.technician_id, readerId: r.recipientId,
+                    actorRole: roleOnTicket({ actorId: r.actorId, requesterId: requestInfo.get(r.requestId)!.requester_id, assigneeId: requestInfo.get(r.requestId)!.technician_id, userRole: r.actorId ? actorUserRoleById.get(r.actorId) : null }),
+                  })
+                : {}),
               title: r.title, body: r.body ?? '', link: r.link ?? '',
             },
           })

@@ -92,6 +92,21 @@ async function markDayDone(admin: AnyClient, today: string): Promise<void> {
   else await admin.from('app_settings').insert({ key: LAST_RUN_KEY, value: today })
 }
 
+/** The technician of each ticket, by name (null = nobody assigned). One query per 200 tickets; a failure only means the mail has no technician line. */
+async function technicianNames(admin: AnyClient, requestIds: string[]): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>()
+  try {
+    for (let i = 0; i < requestIds.length; i += 200) {
+      const { data } = await admin.from('requests').select('id, assignee:profiles!requests_assigned_to_fkey(full_name)').in('id', requestIds.slice(i, i + 200))
+      for (const r of (data ?? []) as { id: string; assignee: { full_name: string | null } | { full_name: string | null }[] | null }[]) {
+        const a = Array.isArray(r.assignee) ? r.assignee[0] : r.assignee
+        out.set(r.id, a?.full_name ?? null)
+      }
+    }
+  } catch { /* no technician line */ }
+  return out
+}
+
 export async function sendApprovalReminders(admin: AnyClient, deps: ReminderDeps = {}): Promise<ReminderResult> {
   const now = deps.now ?? new Date()
   const getPending = deps.getPending ?? getActionableApprovalsForUser
@@ -123,13 +138,14 @@ export async function sendApprovalReminders(admin: AnyClient, deps: ReminderDeps
     type Person = { id: string; full_name: string; role: string; org_id: string | null; is_active: boolean }
     let best: { p: Person; waiting: PendingApprovalItem[] } | null = null
     /** the approver's e-mail: every waiting approval, the longest waiting first, each with their own Approve / Reject links */
-    const compose = (p: Person, waiting: PendingApprovalItem[]) => {
+    const compose = (p: Person, waiting: PendingApprovalItem[], technicians: Map<string, string | null> = new Map()) => {
       const items: ReminderItem[] = [...waiting]
         .sort((x, y) => x.createdAt.localeCompare(y.createdAt))
         .map((w) => {
           const links = approvalLinkUrls(w.approvalId, p.id)
           return {
             requestNo: w.requestNo, requestTitle: w.requestTitle, requesterName: w.requesterName, sentByName: w.sentByName,
+            ...(technicians.has(w.requestId) ? { technicianName: technicians.get(w.requestId) ?? null } : {}),
             waitingDays: Math.max(0, Math.round((Date.parse(today) - Date.parse(istDay(w.createdAt))) / DAY_MS)),   // calendar days: sent yesterday = 1
             requestUrl: absoluteAppUrl(`/requests/${w.requestId}?tab=approvals`),
             ...(links ? { approveUrl: links.approveUrl, rejectUrl: links.rejectUrl } : {}),
@@ -160,7 +176,7 @@ export async function sendApprovalReminders(admin: AnyClient, deps: ReminderDeps
       const to: string | undefined = u?.user?.email
       if (!to) { result.failed++; await release(); continue }
 
-      const mail = compose(p, waiting)
+      const mail = compose(p, waiting, await technicianNames(admin, waiting.map((w) => w.requestId)))
       let res: { error?: string }
       try {
         res = await send({ to, subject: mail.subject, html: mail.html, text: mail.text })
@@ -173,7 +189,7 @@ export async function sendApprovalReminders(admin: AnyClient, deps: ReminderDeps
     }
     // a test: ONE sample, to the address asked for
     if (sample && best) {
-      const mail = compose(best.p, best.waiting)
+      const mail = compose(best.p, best.waiting, await technicianNames(admin, best.waiting.map((w) => w.requestId)))
       const res = await send({ to: sample, subject: `[SAMPLE of ${best.p.full_name}'s reminder] ${mail.subject}`, html: mail.html, text: mail.text })
       result.sampleOf = best.p.full_name
       if (res.error) result.failed++

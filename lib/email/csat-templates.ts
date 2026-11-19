@@ -1,8 +1,9 @@
 // The one e-mail a requester gets when a ticket is resolved: what was done, a one-click rating, and a way to reopen it.
 // Replaces the plain "request resolved" e-mail (the in-app notification still appears as before).
 
-import { escapeEmailFields } from './escape'
+import { escapeEmailFields, escapeHtml } from './escape'
 import { layout, btn } from './templates'
+import { nameWithRoleHtml, nameWithRoleText, partiesHtml, partiesText, type Parties } from './parties'
 
 type Common = {
   recipientName: string
@@ -14,6 +15,8 @@ type Common = {
   reopenUrl: string
   /** e.g. "11 Oct 2026, 5:30 pm"; empty when the window is already closed */
   reopenUntil: string
+  /** the Requester / Technician block (the reader is the requester) */
+  parties?: Parties
 }
 
 const STAR_LABELS = ['Poor', 'Fair', 'Good', 'Very good', 'Excellent']
@@ -27,7 +30,7 @@ function stars(urls: string[]): string {
   return `<table role="presentation" cellspacing="0" cellpadding="0" style="margin:8px 0 4px;"><tr>${cells}</tr></table>`
 }
 
-export function csatResolvedEmail(d: Common & { resolutionNote: string; resolverName: string; resolvedOn: string }): { subject: string; html: string; text: string } {
+export function csatResolvedEmail(d: Common & { resolutionNote: string; resolverName: string; /** Requester, Technician, Manager or Other: what the resolver is on this ticket (empty for an automatic rule) */ resolverRole?: string | null; resolvedOn: string }): { subject: string; html: string; text: string } {
   const e = escapeEmailFields(d, ['requestUrl', 'reopenUrl'])
   const subject = `Resolved: ${d.requestNo ? `${d.requestNo} — ` : ''}${d.requestTitle}`
   const note = d.resolutionNote
@@ -38,7 +41,8 @@ export function csatResolvedEmail(d: Common & { resolutionNote: string; resolver
     : ''
   const html = layout(`
     <p>Hi ${e.recipientName},</p>
-    <p>Your request <strong>${d.requestNo ? `${e.requestNo} — ` : ''}${e.requestTitle}</strong> has been marked <strong>resolved</strong>${e.resolverName ? ` by ${e.resolverName}` : ''}${e.resolvedOn ? ` on ${e.resolvedOn}` : ''}.</p>
+    <p>Your request <strong>${d.requestNo ? `${e.requestNo} — ` : ''}${e.requestTitle}</strong> has been marked <strong>resolved</strong>${d.resolverName ? ` by ${nameWithRoleHtml(d.resolverName, d.resolverRole)}` : ''}${e.resolvedOn ? ` on ${e.resolvedOn}` : ''}.</p>
+    ${partiesHtml(d.parties)}
     ${note}
     <p style="margin-top:20px;font-weight:600;">How did we do? Tap a star:</p>
     ${stars(d.starUrls)}
@@ -47,7 +51,8 @@ export function csatResolvedEmail(d: Common & { resolutionNote: string; resolver
   `)
   const text = [
     `Hi ${d.recipientName},`, '',
-    `Your request "${d.requestNo ? `${d.requestNo} — ` : ''}${d.requestTitle}" has been marked resolved${d.resolverName ? ` by ${d.resolverName}` : ''}.`,
+    `Your request "${d.requestNo ? `${d.requestNo} — ` : ''}${d.requestTitle}" has been marked resolved${d.resolverName ? ` by ${nameWithRoleText(d.resolverName, d.resolverRole)}` : ''}.`,
+    partiesText(d.parties) ? `\n${partiesText(d.parties)}` : '',
     d.resolutionNote ? `\n${d.resolutionNote}\n` : '',
     'How did we do? Rate us (1 = poor, 5 = excellent):',
     ...d.starUrls.map((u, i) => `  ${i + 1} star: ${u}`),
@@ -63,7 +68,8 @@ export function csatReminderEmail(d: Common): { subject: string; html: string; t
   const subject = `Quick question: ${d.requestNo ? `${d.requestNo} — ` : ''}${d.requestTitle}`
   const html = layout(`
     <p>Hi ${e.recipientName},</p>
-    <p>A couple of days ago we resolved your request <strong>${d.requestNo ? `${e.requestNo} — ` : ''}${e.requestTitle}</strong>. Was it sorted out?</p>
+    <p>A couple of days ago we resolved your request <strong>${d.requestNo ? `${e.requestNo} — ` : ''}${e.requestTitle}</strong>${d.parties?.technicianName ? ` (handled by <strong>${escapeHtml(d.parties.technicianName)}</strong>)` : ''}. Was it sorted out?</p>
+    ${partiesHtml(d.parties)}
     <p style="font-weight:600;">Tap a star to rate it:</p>
     ${stars(d.starUrls)}
     ${d.reopenUntil ? `<p style="font-size:14px;color:#374151;">If it is not fixed, <a href="${d.reopenUrl}" style="color:#2563eb;font-weight:600;">reopen it</a> before <strong>${e.reopenUntil}</strong>.</p>` : ''}
@@ -71,7 +77,8 @@ export function csatReminderEmail(d: Common): { subject: string; html: string; t
   `)
   const text = [
     `Hi ${d.recipientName},`, '',
-    `We resolved "${d.requestNo ? `${d.requestNo} — ` : ''}${d.requestTitle}" a couple of days ago. Was it sorted out?`,
+    `We resolved "${d.requestNo ? `${d.requestNo} — ` : ''}${d.requestTitle}" a couple of days ago${d.parties?.technicianName ? ` (handled by ${d.parties.technicianName})` : ''}. Was it sorted out?`,
+    partiesText(d.parties) ? `\n${partiesText(d.parties)}` : '',
     ...d.starUrls.map((u, i) => `  ${i + 1} star: ${u}`),
     d.reopenUntil ? `Not fixed? Reopen it before ${d.reopenUntil}: ${d.reopenUrl}` : '',
   ].filter((l) => l !== '').join('\n')

@@ -1,6 +1,10 @@
 import { escapeEmailFields, escapeHtml } from './escape'
 import { LINK_DAYS } from '@/lib/approvals/email-link'
 import { approvalHistoryHtml, approvalHistoryText, type ApprovalHistory } from '@/lib/approvals/history-model'
+import { nameWithRoleHtml, nameWithRoleText, partiesHtml, partiesText, type Parties } from './parties'
+
+/** The Requester / Technician block as a paragraph for the text version ('' when the mail has no ticket). */
+const partiesTextBlock = (p?: Parties) => { const t = partiesText(p); return t ? `${t}\n\n` : '' }
 
 export function layout(body: string): string {
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#ffffff;font-family:sans-serif;">
@@ -22,16 +26,18 @@ export function requestCreatedEmail(d: {
   requestTitle: string
   requestUrl: string
   serviceName: string
+  parties?: Parties
 }): { subject: string; html: string; text: string } {
   const e = escapeEmailFields(d, ['requestUrl'])
   const subject = `Request created: ${d.requestTitle}`
   const html = layout(`
     <p>Hi ${e.requesterName},</p>
     <p>Your request <strong>${e.requestTitle}</strong> has been submitted successfully via the <strong>${e.serviceName}</strong> service.</p>
+    ${partiesHtml(d.parties)}
     <p>You will be notified as it progresses.</p>
     ${btn(e.requestUrl, 'View Request')}
   `)
-  const text = `Hi ${d.requesterName},\n\nYour request "${d.requestTitle}" has been submitted via ${d.serviceName}.\n\nView it here: ${d.requestUrl}`
+  const text = `Hi ${d.requesterName},\n\nYour request "${d.requestTitle}" has been submitted via ${d.serviceName}.\n\n${partiesTextBlock(d.parties)}View it here: ${d.requestUrl}`
   return { subject, html, text }
 }
 
@@ -47,21 +53,29 @@ export function requestStatusChangedEmail(d: {
   /** Who now has the ticket (e.g. after a reopen lands it back with the same technician) —
    *  shown so the requester knows who to expect to hear from, not just that it moved. */
   assigneeName?: string
+  /** who made the change and what they are on this ticket ("Amit Verma (Technician)"), shown as "by ..." */
+  changedByName?: string
+  changedByRole?: string | null
+  parties?: Parties
 }): { subject: string; html: string; text: string } {
   const e = escapeEmailFields(d, ['requestUrl'])
   const subject = `Request updated: ${d.requestTitle}`
   const commentHtml = d.comment
     ? `<p style="margin:12px 0;padding:12px 16px;background:#F8FAFD;border-left:3px solid #2563eb;border-radius:4px;">${e.comment}</p>`
     : ''
-  const assigneeLine = e.assigneeName ? `<p>It's with <strong>${e.assigneeName}</strong>.</p>` : ''
+  // with the Requester / Technician block the technician is already named, so the older "It's with ..." line is only used when there is no block
+  const assigneeLine = e.assigneeName && !d.parties ? `<p>It's with <strong>${e.assigneeName}</strong>.</p>` : ''
+  const byHtml = d.changedByName ? ` by <strong>${nameWithRoleHtml(d.changedByName, d.changedByRole)}</strong>` : ''
+  const byText = d.changedByName ? ` by ${nameWithRoleText(d.changedByName, d.changedByRole)}` : ''
   const html = layout(`
     <p>Hi ${e.recipientName},</p>
-    <p>The status of request <strong>${e.requestTitle}</strong> has changed from <strong>${e.oldStatus}</strong> to <strong>${e.newStatus}</strong>.</p>
+    <p>The status of request <strong>${e.requestTitle}</strong> has changed from <strong>${e.oldStatus}</strong> to <strong>${e.newStatus}</strong>${byHtml}.</p>
     ${assigneeLine}
+    ${partiesHtml(d.parties)}
     ${commentHtml}
     ${btn(e.requestUrl, 'View Request')}
   `)
-  const text = `Hi ${d.recipientName},\n\nRequest "${d.requestTitle}" status changed from ${d.oldStatus} to ${d.newStatus}.${d.assigneeName ? ` It's with ${d.assigneeName}.` : ''}${d.comment ? `\n\n"${d.comment}"` : ''}\n\nView it here: ${d.requestUrl}`
+  const text = `Hi ${d.recipientName},\n\nRequest "${d.requestTitle}" status changed from ${d.oldStatus} to ${d.newStatus}${byText}.${d.assigneeName && !d.parties ? ` It's with ${d.assigneeName}.` : ''}${d.comment ? `\n\n"${d.comment}"` : ''}\n\n${partiesTextBlock(d.parties)}View it here: ${d.requestUrl}`
   return { subject, html, text }
 }
 
@@ -70,17 +84,21 @@ export function commentAddedEmail(d: {
   requestTitle: string
   requestUrl: string
   commenterName: string
+  /** what the commenter is on this ticket: Requester, Technician, Manager or Other */
+  commenterRole?: string | null
   commentBody: string
+  parties?: Parties
 }): { subject: string; html: string; text: string } {
   const e = escapeEmailFields(d, ['requestUrl'])
   const subject = `New comment on: ${d.requestTitle}`
   const html = layout(`
     <p>Hi ${e.recipientName},</p>
-    <p><strong>${e.commenterName}</strong> left a comment on request <strong>${e.requestTitle}</strong>:</p>
+    <p><strong>${nameWithRoleHtml(d.commenterName, d.commenterRole)}</strong> left a comment on request <strong>${e.requestTitle}</strong>:</p>
     <blockquote style="border-left:3px solid #e5e7eb;margin:16px 0;padding:8px 16px;color:#6B7280;">${e.commentBody}</blockquote>
+    ${partiesHtml(d.parties)}
     ${btn(e.requestUrl, 'View Comment')}
   `)
-  const text = `Hi ${d.recipientName},\n\n${d.commenterName} commented on "${d.requestTitle}":\n\n${d.commentBody}\n\nView it here: ${d.requestUrl}`
+  const text = `Hi ${d.recipientName},\n\n${nameWithRoleText(d.commenterName, d.commenterRole)} commented on "${d.requestTitle}":\n\n${d.commentBody}\n\n${partiesTextBlock(d.parties)}View it here: ${d.requestUrl}`
   return { subject, html, text }
 }
 
@@ -145,12 +163,14 @@ export function approvalRequiredEmail(d: {
   rejectUrl?: string
   /** what the store is asking now and the last decisions on the same store and sub-category (only for the categories that switch it on) */
   history?: ApprovalHistory | null
+  parties?: Parties
 }): { subject: string; html: string; text: string } {
   const e = escapeEmailFields({ ...d, history: undefined }, ['requestUrl', 'approveUrl', 'rejectUrl'])
   const subject = `Approval required: ${d.requestTitle}`
   const html = layout(`
     <p>Hi ${e.approverName},</p>
     <p>${approvalRequestSentence(d, (s) => `<strong>${escapeHtml(s)}</strong>`)}</p>
+    ${partiesHtml(d.parties)}
     ${d.history ? approvalHistoryHtml(d.history) : ''}
     ${d.approveUrl && d.rejectUrl
       ? `<p style="margin:18px 0 6px;">
@@ -160,7 +180,7 @@ export function approvalRequiredEmail(d: {
          <p style="font-size:13px;color:#6B7280;margin:4px 0 12px;">A comment is required. Only <strong>${e.approverName}</strong> can decide from this e-mail: you will be asked to confirm it is you. The buttons work for ${LINK_DAYS} days. Or <a href="${e.requestUrl}" style="color:#2563eb;">open the request in Citykart Desk</a>.</p>`
       : btn(e.requestUrl, 'Review & Approve')}
   `)
-  const text = `Hi ${d.approverName},\n\n${approvalRequestSentence(d, (s) => s)}\n\n${d.history ? `${approvalHistoryText(d.history)}\n\n` : ''}${d.approveUrl && d.rejectUrl ? `Approve: ${d.approveUrl}\nReject: ${d.rejectUrl}\n(A comment is required. Only ${d.approverName} can decide from this e-mail; you will be asked to confirm it is you. The links work for ${LINK_DAYS} days.)\n\nOr open it in Citykart Desk: ${d.requestUrl}` : `Review it here: ${d.requestUrl}`}`
+  const text = `Hi ${d.approverName},\n\n${approvalRequestSentence(d, (s) => s)}\n\n${partiesTextBlock(d.parties)}${d.history ? `${approvalHistoryText(d.history)}\n\n` : ''}${d.approveUrl && d.rejectUrl ? `Approve: ${d.approveUrl}\nReject: ${d.rejectUrl}\n(A comment is required. Only ${d.approverName} can decide from this e-mail; you will be asked to confirm it is you. The links work for ${LINK_DAYS} days.)\n\nOr open it in Citykart Desk: ${d.requestUrl}` : `Review it here: ${d.requestUrl}`}`
   return { subject, html, text }
 }
 
@@ -169,15 +189,17 @@ export function requestAssignedEmail(d: {
   requestTitle: string
   requestUrl: string
   assignerName: string
+  parties?: Parties
 }): { subject: string; html: string; text: string } {
   const e = escapeEmailFields(d, ['requestUrl'])
   const subject = `Request assigned to you: ${d.requestTitle}`
   const html = layout(`
     <p>Hi ${e.recipientName},</p>
     <p><strong>${e.assignerName}</strong> assigned you to a request: <strong>${e.requestTitle}</strong>.</p>
+    ${partiesHtml(d.parties)}
     ${btn(e.requestUrl, 'View Request')}
   `)
-  const text = `Hi ${d.recipientName},\n\n${d.assignerName} assigned you to "${d.requestTitle}".\n\nView it here: ${d.requestUrl}`
+  const text = `Hi ${d.recipientName},\n\n${d.assignerName} assigned you to "${d.requestTitle}".\n\n${partiesTextBlock(d.parties)}View it here: ${d.requestUrl}`
   return { subject, html, text }
 }
 
@@ -195,6 +217,7 @@ export function approvalDecisionEmail(d: {
   recipientIsRequester?: boolean
   /** True for the technician the ticket is assigned to, told because the approval was sent by the moved-tickets tool: "the request assigned to you" */
   recipientIsAssignee?: boolean
+  parties?: Parties
 }): { subject: string; html: string; text: string } {
   const e = escapeEmailFields(d, ['requestUrl'])
   const approved = d.decision === 'approved'
@@ -214,13 +237,14 @@ export function approvalDecisionEmail(d: {
     <p>Hi ${e.recipientName},</p>
     ${decisionLine}
     ${reasonLine}
+    ${partiesHtml(d.parties)}
     ${btn(e.requestUrl, 'View Request')}
   `)
   const textDecision = approved ? 'approved' : 'not approved'
   const textWho = d.approverName ? ` by ${d.approverName}` : ''
   const textReason = d.reason ? `\n\n"${d.reason}"` : ''
   const textRequestRef = isRequester ? 'Your request' : 'The request you sent for approval'
-  const text = `Hi ${d.recipientName},\n\n${textRequestRef} "${d.requestTitle}" was ${textDecision}${textWho}.${textReason}\n\nView it here: ${d.requestUrl}`
+  const text = `Hi ${d.recipientName},\n\n${textRequestRef} "${d.requestTitle}" was ${textDecision}${textWho}.${textReason}\n\n${partiesTextBlock(d.parties)}View it here: ${d.requestUrl}`
   return { subject, html, text }
 }
 
@@ -230,6 +254,7 @@ export function slaBreachEmail(d: {
   requestUrl: string
   slaDeadline: string
   tier: string
+  parties?: Parties
 }): { subject: string; html: string; text: string } {
   const e = escapeEmailFields(d, ['requestUrl'])
   const subject = `SLA alert: ${d.requestTitle}`
@@ -237,10 +262,11 @@ export function slaBreachEmail(d: {
     <p>Hi ${e.recipientName},</p>
     <p>The <strong>${e.tier}</strong> SLA for request <strong>${e.requestTitle}</strong> is at risk.</p>
     <p>Deadline: <strong>${e.slaDeadline}</strong></p>
+    ${partiesHtml(d.parties)}
     <p>Please take action to avoid a breach.</p>
     ${btn(e.requestUrl, 'View Request')}
   `)
-  const text = `Hi ${d.recipientName},\n\nSLA alert for "${d.requestTitle}" (${d.tier} tier). Deadline: ${d.slaDeadline}.\n\nView it here: ${d.requestUrl}`
+  const text = `Hi ${d.recipientName},\n\nSLA alert for "${d.requestTitle}" (${d.tier} tier). Deadline: ${d.slaDeadline}.\n\n${partiesTextBlock(d.parties)}View it here: ${d.requestUrl}`
   return { subject, html, text }
 }
 
@@ -255,6 +281,7 @@ export function requestEventEmail(d: {
   requestUrl: string
   headline: string
   detail?: string
+  parties?: Parties
 }): { subject: string; html: string; text: string } {
   const e = escapeEmailFields(d, ['requestUrl'])
   const subject = `${d.headline}: ${d.requestTitle}`
@@ -262,8 +289,9 @@ export function requestEventEmail(d: {
     <p>Hi ${e.recipientName},</p>
     <p><strong>${e.headline}</strong> — request <strong>${e.requestTitle}</strong>.</p>
     ${d.detail ? `<p>${e.detail}</p>` : ''}
+    ${partiesHtml(d.parties)}
     ${btn(e.requestUrl, 'View Request')}
   `)
-  const text = `Hi ${d.recipientName},\n\n${d.headline} — request "${d.requestTitle}".\n${d.detail ? d.detail + '\n' : ''}\nView it here: ${d.requestUrl}`
+  const text = `Hi ${d.recipientName},\n\n${d.headline} — request "${d.requestTitle}".\n${d.detail ? d.detail + '\n' : ''}\n${partiesTextBlock(d.parties)}View it here: ${d.requestUrl}`
   return { subject, html, text }
 }
