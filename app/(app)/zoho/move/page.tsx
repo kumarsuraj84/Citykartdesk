@@ -240,7 +240,7 @@ export default async function ZohoMovePage({ searchParams }: { searchParams: Pro
       )}
 
       {/* The less used tools, out of the way: move everything that matches, fill in moved tickets, send approvals, alerts on moved tickets, the run history, and how moving works. */}
-      <details className="rounded-lg border border-border bg-card">
+      <details id="more-tools" className="rounded-lg border border-border bg-card">
         <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-xs">
           <span className="font-semibold text-foreground">More tools</span>
           <span className="text-muted-foreground">move everything that matches · fill in moved tickets · send approvals · alerts on moved tickets are {movedActive ? 'ON' : 'OFF'}{recentRuns.length ? ` · ${recentRuns.length} recent runs` : ''} · how moving works</span>

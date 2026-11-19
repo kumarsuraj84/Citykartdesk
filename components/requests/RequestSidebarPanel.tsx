@@ -22,6 +22,8 @@ import { requesterCanSet } from '@/lib/forms/sections'
 import { AGENT_TRANSITIONS, REQUESTER_TRANSITIONS } from '@/lib/constants/request-transitions'
 import { formatRelativeTime, formatDateTime } from '@/lib/utils'
 import { checkResolutionNote, RESOLUTION_NOTE_HINT, RESOLUTION_NOTE_PLACEHOLDER } from '@/lib/requests/resolution-note'
+import { uploadAttachment } from '@/lib/actions/attachments'
+import { AttachFilesField, useAttachFiles } from './useAttachFiles'
 import type { RequestStatus, RequestPriority, RequestCollaborator, FormField, FormSection, AllowedSubCategory } from '@/types'
 
 interface TeamMember { id: string; full_name: string }
@@ -48,6 +50,8 @@ interface RequestSidebarPanelProps {
   teamId: string
   viewerId: string
   isAgent: boolean
+  /** may change the ticket (its owner, or a manager); a technician of the group who is not the owner sees everything but edits nothing until "Pick up" */
+  canWork: boolean
   isManager: boolean
   isRequester: boolean
   isTerminal: boolean
@@ -96,6 +100,8 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
   const [pendingComment, setPendingComment] = useState<{ next: RequestStatus; heading: string; placeholder: string; cta: string; hint?: string } | null>(null)
   const [pendingCommentText, setPendingCommentText] = useState('')
   const [pendingCommentError, setPendingCommentError] = useState<string | null>(null)
+  // optional files for the message (chosen with Attach, pasted with Ctrl+V, or dropped on the box)
+  const attach = useAttachFiles()
   const ref = useRef<HTMLDivElement>(null)
   // Guards against a slow, now-superseded transition's error rollback
   // clobbering a value set by a later, faster one (e.g. two rapid clicks).
@@ -120,13 +126,27 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
     return () => document.removeEventListener('mousedown', h)
   }, [open])
 
-  function apply(next: RequestStatus, comment?: string) {
+  function apply(next: RequestStatus, comment?: string, files: File[] = []) {
     const prev = cur
     const seq = ++seqRef.current
-    setCur(next); setOpen(false); setPendingComment(null); setPendingCommentText(''); setPendingCommentError(null)
+    setCur(next); setOpen(false); setPendingComment(null); setPendingCommentText(''); setPendingCommentError(null); attach.clear()
     startTransition(async () => {
       const result = await updateRequestStatus(requestId, next, comment)
-      if (result?.error) { toast.error(result.error); if (seqRef.current === seq) setCur(prev) }
+      if (result?.error) { toast.error(result.error); if (seqRef.current === seq) setCur(prev); return }
+      // the status is changed and its message posted; the optional files go to that message, one after the other
+      if (files.length > 0) {
+        if (!result?.commentId) { toast.error('The status was changed, but the files could not be attached to its message.'); return }
+        const failed: string[] = []
+        for (const file of files) {
+          try {
+            const fd = new FormData()
+            fd.append('file', file)
+            const up = await uploadAttachment(requestId, fd, result.commentId)
+            if (up.error) failed.push(file.name)
+          } catch { failed.push(file.name) }
+        }
+        if (failed.length) toast.error(`The status was changed, but ${failed.length === 1 ? 'this file was' : 'these files were'} not attached: ${failed.join(', ')}. Add ${failed.length === 1 ? 'it' : 'them'} in the conversation box.`)
+      }
     })
   }
 
@@ -178,7 +198,7 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
     if (!pendingCommentText.trim()) { setPendingCommentError('This message is required.'); return }
     // a resolution note must say what was wrong and what was done, and carry no password
     if (pendingComment.next === 'resolved') { const problem = checkResolutionNote(pendingCommentText); if (problem) { setPendingCommentError(problem); return } }
-    apply(pendingComment.next, pendingCommentText)
+    apply(pendingComment.next, pendingCommentText, attach.files)
   }
 
   return (
@@ -204,10 +224,11 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
           </div>
         )}
         {pendingComment && (
-          <div className="absolute right-0 top-full z-50 mt-1 w-64 space-y-2 rounded-xl border border-border bg-card p-3 shadow-xl">
+          <div className="absolute right-0 top-full z-50 mt-1 w-72 space-y-2 rounded-xl border border-border bg-card p-3 shadow-xl" onDrop={attach.onDrop} onDragOver={(e) => e.preventDefault()}>
             <p className="text-[11px] font-medium text-foreground">{pendingComment.heading}</p>
             <textarea
               autoFocus
+              onPaste={attach.onPaste}
               value={pendingCommentText}
               onChange={(e) => { setPendingCommentText(e.target.value); setPendingCommentError(null) }}
               placeholder={pendingComment.placeholder}
@@ -216,11 +237,12 @@ function StatusRow({ requestId, status, isAgent, isRequester }: {
             />
             {pendingComment.hint && !pendingCommentError && <p className="text-[10px] leading-snug text-muted-foreground">{pendingComment.hint}</p>}
             {pendingCommentError && <p className="text-[11px] text-destructive">{pendingCommentError}</p>}
+            <AttachFilesField files={attach.files} problem={attach.problem} addFiles={attach.addFiles} removeAt={attach.removeAt} disabled={isPending} />
             <div className="flex gap-2">
               <button onClick={confirmPendingComment} disabled={isPending} className="btn-gradient flex-1 !py-1 !text-xs">
                 {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : pendingComment.cta}
               </button>
-              <button onClick={() => { setPendingComment(null); setPendingCommentText(''); setPendingCommentError(null) }} className="btn-soft !py-1 !text-xs">
+              <button onClick={() => { setPendingComment(null); setPendingCommentText(''); setPendingCommentError(null); attach.clear() }} className="btn-soft !py-1 !text-xs">
                 Cancel
               </button>
             </div>
@@ -764,7 +786,7 @@ export function RequestSidebarPanel({
   categoryName, subCategoryId, subCategoryName, allowedSubCategories,
   requesterId, requesterName,
   resolutionDueAt, responseDueAt, createdAt,
-  viewerId, isAgent, isManager, isRequester, isTerminal,
+  viewerId, isAgent, canWork, isManager, isRequester, isTerminal,
   teamMembers, initialCollaborators,
   formSections, formSchema, formData,
 }: RequestSidebarPanelProps) {
@@ -804,7 +826,7 @@ export function RequestSidebarPanel({
       {/* All properties in one compact list */}
       <div className="px-4 py-1">
         {/* Editable: Status */}
-        <StatusRow requestId={requestId} status={status} isAgent={isAgent} isRequester={isRequester} />
+        <StatusRow requestId={requestId} status={status} isAgent={isAgent && canWork} isRequester={isRequester} />
 
         {/* Editable: Priority */}
         <PriorityRow priority={priority} />
@@ -817,7 +839,7 @@ export function RequestSidebarPanel({
             assigneeName={assigneeName}
             viewerId={viewerId}
             teamMembers={teamMembers}
-            isAgent={!isTerminal}
+            isAgent={!isTerminal && canWork}
             isManager={isManager}
           />
         )}
@@ -870,7 +892,7 @@ export function RequestSidebarPanel({
           categoryName={categoryName}
           subCategoryId={subCategoryId}
           subCategoryName={subCategoryName}
-          isAgent={isAgent}
+          isAgent={isAgent && canWork}
           allowedSubCategories={allowedSubCategories}
         />
 
@@ -886,7 +908,7 @@ export function RequestSidebarPanel({
             requestId={requestId}
             field={field}
             value={formData[field.id]}
-            canEdit={isAgent && !requesterCanSet(field)}
+            canEdit={isAgent && canWork && !requesterCanSet(field)}
           />
         ))}
 
@@ -907,7 +929,12 @@ export function RequestSidebarPanel({
         )}
 
         {/* Collaborators */}
-        {isAgent && (
+        {isAgent && !canWork && initialCollaborators.length > 0 && (
+          <PropRow label="Collaborators">
+            <span className="text-xs text-foreground">{initialCollaborators.map((c) => c.profile.full_name).join(', ')}</span>
+          </PropRow>
+        )}
+        {isAgent && canWork && (
           <CollaboratorsRow
             requestId={requestId}
             assigneeId={assigneeId}

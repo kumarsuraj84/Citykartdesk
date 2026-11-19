@@ -3,9 +3,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { logActivity } from '@/lib/activity'
 import { notify } from '@/lib/notifications'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
+import { logger } from '@/lib/observability/logger'
 import { barStoreApprovers } from '@/lib/approvals/store-users'
 import type { ApprovalVia } from '@/lib/approvals/via'
 import { stopOpenTimeEntries } from '@/lib/requests/status-change'
+import { approvalNoteBody, approvalNotifyBody } from '@/lib/approvals/note'
 import type { RequestStatus } from '@/types'
 
 type Db = ReturnType<typeof createAdminClient>
@@ -29,8 +31,8 @@ export type AdHocRequest = {
  */
 export async function createAdHocApproval(
   admin: Db,
-  p: { request: AdHocRequest; approvers: { id: string; full_name: string }[]; senderId: string; senderName: string; /** how the approvers were chosen: written into the history so a wrong approver can be traced */ via?: ApprovalVia; /** a ticket moved from Zoho that is ALREADY in Pending Approval: create the approval and tell the approvers only; change nothing else on the ticket (no status change, no timers, no word to the requester) */ keepStatus?: boolean },
-): Promise<{ error?: string }> {
+  p: { request: AdHocRequest; approvers: { id: string; full_name: string }[]; senderId: string; senderName: string; /** how the approvers were chosen: written into the history so a wrong approver can be traced */ via?: ApprovalVia; /** the technician's optional remarks and the number of files he is adding: written as one public message in the conversation, so the approver can read them */ note?: { remarks?: string; fileCount?: number }; /** a ticket moved from Zoho that is ALREADY in Pending Approval: create the approval and tell the approvers only; change nothing else on the ticket (no status change, no timers, no word to the requester) */ keepStatus?: boolean },
+): Promise<{ error?: string; commentId?: string }> {
   const req = p.request
   const approverIds = p.approvers.map((a) => a.id)
 
@@ -95,6 +97,21 @@ export async function createAdHocApproval(
   // the ticket is parked waiting for the approval, so nobody is working on it: running timers stop (B-07)
   if (!p.keepStatus) await stopOpenTimeEntries(req.id, new Date().toISOString())
 
+  // The technician's optional remarks and files: one PUBLIC message in the conversation (an approver cannot read internal notes), written now so the approver finds it with the
+  // approval; the files are added to it by the screen right after. A failure here never undoes the approval: the approval is what matters, the note is logged.
+  let noteCommentId: string | undefined
+  const remarks = (p.note?.remarks ?? '').trim()
+  const fileCount = p.note?.fileCount ?? 0
+  if (remarks || fileCount > 0) {
+    const { data: note, error: noteErr } = await admin
+      .from('request_comments')
+      .insert({ request_id: req.id, author_id: p.senderId, body: approvalNoteBody({ approverNames: p.approvers.map((a) => a.full_name), remarks, fileCount }), is_internal: false })
+      .select('id')
+      .single()
+    if (noteErr || !note) logger.error({ event: 'approval.note_failed', message: 'The remarks sent with an approval could not be saved', route: 'approvals/adhoc.ts', requestId: req.id, errorCode: noteErr?.code, error: noteErr })
+    else noteCommentId = note.id as string
+  }
+
   if (!p.keepStatus) await logActivity({ requestId: req.id, actorId: p.senderId, action: 'status_changed', metadata: { from: req.status, to: 'pending_approval' } })
   await logActivity({ requestId: req.id, actorId: p.senderId, action: 'approval_requested', metadata: { approver_names: p.approvers.map((a) => a.full_name), ...(p.via ? { via: p.via } : {}) } })
 
@@ -105,7 +122,7 @@ export async function createAdHocApproval(
       actorId: p.senderId,
       type: 'approval_requested',
       title: 'Approval required',
-      body: `"${req.title}" has been sent to you for approval.`,
+      body: approvalNotifyBody(req.title, p.senderName, remarks, fileCount),
       requestId: req.id,
       link: `/requests/${req.id}?tab=approvals`,
     }).catch(() => {})
@@ -125,5 +142,5 @@ export async function createAdHocApproval(
       metadata: { audience: 'requester', approverNames, requestTitle: req.title },
     }).catch(() => {})
   }
-  return {}
+  return { commentId: noteCommentId }
 }

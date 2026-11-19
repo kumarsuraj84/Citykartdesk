@@ -27,6 +27,8 @@ import type { Database, Json } from '@/types/database'
 import { inBatches } from '@/lib/queries/in-batches'
 import { exportAllowed, auditExportEvent, EXPORT_LIMIT_MESSAGE } from '@/lib/security/export-guard'
 import { submissionKey, claimSubmission, releaseSubmission, findSubmittedTicket } from '@/lib/requests/submission-key'
+import { accessOf, isCollaboratorOf, pickUpRefusal, workRefusal } from '@/lib/requests/ownership-server'
+import { canCommentOn } from '@/lib/requests/ownership'
 
 type RequestUpdate = Database['public']['Tables']['requests']['Update']
 
@@ -169,7 +171,7 @@ export async function updateRequestStatus(
   requestId: string,
   newStatus: RequestStatus,
   commentInput?: string
-): Promise<ActionResult> {
+): Promise<ActionResult & { commentId?: string }> {
   const supabase = await createClient()
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
@@ -210,6 +212,11 @@ export async function assignRequest(
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
 
   if (!isOnTeam) return { error: 'Not authorized to assign requests for this technician group.' }
+
+  // A technician who does not own the ticket can only pick it up for himself; handing it to someone else is for its owner or a manager (lib/requests/ownership.ts).
+  if (!isManager && accessOf(profile, request).mustPickUp && assigneeId !== profile.id) {
+    return { error: 'Only the technician this ticket belongs to, or a manager, can hand it to someone else. Pick it up first.' }
+  }
 
   // A plain technician (not a manager+) can only hand a ticket to a teammate
   // on the same team — never leave it unassigned, and never forward it to
@@ -563,6 +570,10 @@ export async function addCollaborator(
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
 
   if (!isOnTeam) return { error: 'Not authorized to add collaborators for this technician group.' }
+  {
+    const refusal = await workRefusal(profile, request)
+    if (refusal) return { error: refusal }
+  }
 
   if (request.assigned_to === userId) {
     return { error: 'Technician is already the primary owner.' }
@@ -708,7 +719,7 @@ export async function addComment(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, status, requester_id, team_id, responded_at, waiting_since, response_due_at, resolution_due_at, paused_ms_total')
+    .select('id, status, requester_id, team_id, assigned_to, responded_at, waiting_since, response_due_at, resolution_due_at, paused_ms_total')
     .eq('id', requestId)
     .single()
 
@@ -719,6 +730,15 @@ export async function addComment(
     profile.role === 'admin' ||
     profile.role === 'platform_owner' ||
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
+
+  // A technician of the group who does not own the ticket can read it but cannot add to the conversation until "Pick up" - unless he is a collaborator on it (lib/requests/ownership.ts).
+  {
+    const access = accessOf(profile, request)
+    if (access.mustPickUp) {
+      const allowed = canCommentOn(access, { isCollaborator: await isCollaboratorOf(requestId, profile.id), isRequester: request.requester_id === profile.id })
+      if (!allowed) return { error: await pickUpRefusal(request) }
+    }
+  }
 
   // Only agents/managers may post internal notes
   const internal = isInternal && isAgent
@@ -983,6 +1003,10 @@ export async function updateRequestCategory(
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
 
   if (!isOnTeam) return { error: 'Not authorized to reclassify requests for this technician group.' }
+  {
+    const refusal = await workRefusal(profile, request)
+    if (refusal) return { error: refusal }
+  }
 
   if (request.sub_category_id === subCategoryId) return {}
 
@@ -1100,7 +1124,7 @@ export async function updateRequestFormData(
 
   const { data: request } = await supabase
     .from('requests')
-    .select('id, team_id, form_schema_snapshot, form_sections_snapshot')
+    .select('id, team_id, assigned_to, form_schema_snapshot, form_sections_snapshot')
     .eq('id', requestId)
     .single()
 
@@ -1113,6 +1137,10 @@ export async function updateRequestFormData(
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
 
   if (!isOnTeam) return { error: 'Not authorized to edit this request.' }
+  {
+    const refusal = await workRefusal(profile, request)
+    if (refusal) return { error: refusal }
+  }
 
   let parsed: Record<string, unknown>
   try {
@@ -1290,7 +1318,7 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
 
   const { data: req } = await supabase
     .from('requests')
-    .select('id, title, status, service_id, team_id, requester_id, org_id, waiting_since, services(approval_workflow_id)')
+    .select('id, title, status, service_id, team_id, assigned_to, requester_id, org_id, waiting_since, services(approval_workflow_id)')
     .eq('id', requestId)
     .single()
 
@@ -1300,6 +1328,10 @@ export async function submitForApproval(requestId: string): Promise<ActionResult
   // Only staff of the ticket send it for approval: a requester could otherwise freeze their own ticket and pause its SLA (VAPT VA-TKT-05).
   if (!['manager', 'admin', 'platform_owner'].includes(profile.role) && !onTeam)
     return { error: 'Unauthorized.' }
+  {
+    const refusal = await workRefusal(profile, req)
+    if (refusal) return { error: refusal }
+  }
 
   if (isClosedLikeStatus(req.status) || req.status === 'pending_approval')
     return { error: 'Request cannot be submitted for approval in its current state.' }
@@ -1548,12 +1580,16 @@ export async function addRelatedRequest(
   // Get org_id from the source request
   const { data: src } = await supabase
     .from('requests')
-    .select('team:teams(org_id)')
+    .select('team_id, assigned_to, team:teams(org_id)')
     .eq('id', requestId)
     .single()
 
   const orgId = src?.team?.org_id
   if (!orgId) return { error: 'Could not determine org.' }
+  {
+    const refusal = await workRefusal(profile, { team_id: src.team_id ?? null, assigned_to: src.assigned_to ?? null })
+    if (refusal) return { error: refusal }
+  }
 
   const { data: link, error } = await supabase
     .from('related_requests')
@@ -1592,6 +1628,15 @@ export async function removeRelatedRequest(linkId: string): Promise<ActionResult
   if (!profile) return { error: 'Not authenticated.' }
 
   const supabase = await createClient()
+  // a technician who has not picked the ticket up cannot unlink its related tickets
+  {
+    const { data: link } = await supabase.from('related_requests').select('request_id').eq('id', linkId).maybeSingle()
+    const { data: src } = link ? await supabase.from('requests').select('team_id, assigned_to').eq('id', link.request_id).maybeSingle() : { data: null }
+    if (src) {
+      const refusal = await workRefusal(profile, src)
+      if (refusal) return { error: refusal }
+    }
+  }
   const { error } = await supabase
     .from('related_requests')
     .delete()
@@ -1651,13 +1696,17 @@ export async function updateRequestSource(requestId: string, source: string | nu
   const supabase = await createClient()
   const { data: current } = await supabase
     .from('requests')
-    .select('source_metadata, team_id')
+    .select('source_metadata, team_id, assigned_to')
     .eq('id', requestId)
     .single()
   // Only the technician group of the ticket, or a manager / administrator, may change where a ticket came from (this used to rest on row security alone).
   const sourceTeamId = (current as { team_id?: string } | null)?.team_id
   const mayEditSource = !!current && (['manager', 'admin', 'platform_owner'].includes(profile.role) || (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === sourceTeamId)))
   if (!mayEditSource) return { error: 'Not authorized to change the source of this request.' }
+  {
+    const refusal = await workRefusal(profile, { team_id: sourceTeamId ?? null, assigned_to: (current as { assigned_to?: string | null } | null)?.assigned_to ?? null })
+    if (refusal) return { error: refusal }
+  }
 
   const meta = { ...((current as { source_metadata?: Record<string, unknown> | null } | null)?.source_metadata ?? {}) }
   if (source) meta.created_via = source

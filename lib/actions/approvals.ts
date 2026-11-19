@@ -19,7 +19,10 @@ import { createAdHocApproval } from '@/lib/approvals/adhoc'
 import { recallApprovalCore } from '@/lib/approvals/recall'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
 import { findAuthUserByEmail } from '@/lib/auth/emails'
-import type { RequestPriority, RequestStatus } from '@/types'
+import { workRefusal } from '@/lib/requests/ownership-server'
+import { APPROVAL_NOTE_MAX, findApprovalNote, approvalNoteText } from '@/lib/approvals/note'
+import { getRequestAttachments, getApproverAttachments } from '@/lib/queries/attachments'
+import type { RequestPriority, RequestStatus, RequestAttachmentWithUploader } from '@/types'
 
 type ActionResult = { error?: string }
 
@@ -142,9 +145,14 @@ async function loadValidApprovers(
 // decision (approve or reject) is final: the request resumes or is cancelled right then.
 export async function sendAdHocApproval(
   requestId: string,
-  approverIds: string[]
-): Promise<ActionResult> {
+  approverIds: string[],
+  /** optional: the technician's remarks for the approver, and how many files the screen is about to add to them */
+  note?: { remarks?: string; fileCount?: number }
+): Promise<ActionResult & { commentId?: string }> {
   if (!approverIds.length) return { error: 'Select at least one approver.' }
+  const remarks = typeof note?.remarks === 'string' ? note.remarks.trim() : ''
+  if (remarks.length > APPROVAL_NOTE_MAX) return { error: `The remarks are too long (${APPROVAL_NOTE_MAX.toLocaleString('en-US')} characters at most).` }
+  const fileCount = Number.isInteger(note?.fileCount) ? Math.min(Math.max(note!.fileCount!, 0), 20) : 0
 
   const profile = await getCurrentProfile()
   if (!profile) return { error: 'Not authenticated.' }
@@ -154,7 +162,7 @@ export async function sendAdHocApproval(
 
   const { data: req } = await supabase
     .from('requests')
-    .select('id, request_no, title, status, team_id, requester_id, org_id, waiting_since')
+    .select('id, request_no, title, status, team_id, assigned_to, requester_id, org_id, waiting_since')
     .eq('id', requestId)
     .single()
   if (!req) return { error: 'Request not found.' }
@@ -162,6 +170,10 @@ export async function sendAdHocApproval(
   const onTeam = profile.role === 'agent' && profile.team_members.some((m) => m.team_id === req.team_id)
   if (!['manager', 'admin', 'platform_owner'].includes(profile.role) && !onTeam)
     return { error: 'Unauthorized.' }
+  {
+    const refusal = await workRefusal(profile, req)
+    if (refusal) return { error: refusal }
+  }
 
   if (['resolved', 'closed', 'cancelled', 'pending_approval'].includes(req.status))
     return { error: 'Request is already in approval or a terminal state.' }
@@ -190,11 +202,12 @@ export async function sendAdHocApproval(
     senderId: profile.id,
     senderName: profile.full_name,
     via: classifyManualApproval({ approverIds, suggestedCvmId }),
+    note: { remarks, fileCount },
   })
   if (sent.error) return { error: sent.error }
 
   revalidatePath(`/requests/${requestId}`)
-  return {}
+  return sent.commentId ? { commentId: sent.commentId } : {}
 }
 
 // Add more people to an approval that is already pending (e.g. Banking was asked, and now Ankur
@@ -214,7 +227,7 @@ export async function addAdHocApprovers(
 
   const { data: req } = await supabase
     .from('requests')
-    .select('id, title, status, team_id, requester_id, org_id')
+    .select('id, title, status, team_id, assigned_to, requester_id, org_id')
     .eq('id', requestId)
     .single()
   if (!req) return { error: 'Request not found.' }
@@ -222,6 +235,10 @@ export async function addAdHocApprovers(
   const onTeam = profile.role === 'agent' && profile.team_members.some((m) => m.team_id === req.team_id)
   if (!['manager', 'admin', 'platform_owner'].includes(profile.role) && !onTeam)
     return { error: 'Unauthorized.' }
+  {
+    const refusal = await workRefusal(profile, req)
+    if (refusal) return { error: refusal }
+  }
   if (!req.org_id) return { error: 'Request has no organization.' }
 
   const { data: approval } = await admin
@@ -461,6 +478,8 @@ export type ApprovalPreviewData = {
     created_at: string
     author_name: string
   }[]
+  /** what the technician wrote and attached when he sent this approval (null when he added nothing) */
+  senderNote: { senderName: string; at: string; text: string; files: RequestAttachmentWithUploader[] } | null
 }
 
 export async function getApprovalPreview(
@@ -469,16 +488,28 @@ export async function getApprovalPreview(
   const supabase = await createClient()
   const { data: approval } = await supabase
     .from('approvals')
-    .select('request_id')
+    .select('request_id, created_at, requested_by')
     .eq('id', approvalId)
     .single()
   if (!approval) return { error: 'Approval not found.' }
 
-  const [request, comments] = await Promise.all([
+  const [request, comments, ownFiles] = await Promise.all([
     getRequestPreviewSummary(approval.request_id),
     getRequestComments(approval.request_id),
+    getRequestAttachments(approval.request_id),
   ])
   if (!request) return { error: 'Request not found.' }
+  // an approver who is not on the ticket's group cannot list its files through row security: the server checks that he is an approver of this ticket and gives him the public ones
+  const files = ownFiles.length > 0 ? ownFiles : await getApproverAttachments(approval.request_id)
+  const noteComment = findApprovalNote(approval, comments.filter((c) => !c.is_internal))
+  const senderNote = noteComment
+    ? {
+        senderName: noteComment.author?.full_name ?? 'The technician',
+        at: noteComment.created_at,
+        text: approvalNoteText(noteComment.body),
+        files: files.filter((f) => (f as RequestAttachmentWithUploader & { comment_id: string | null }).comment_id === noteComment.id),
+      }
+    : null
 
   return {
     data: {
@@ -505,6 +536,7 @@ export async function getApprovalPreview(
           created_at: c.created_at,
           author_name: c.author?.full_name ?? 'Unknown',
         })),
+      senderNote,
     },
   }
 }

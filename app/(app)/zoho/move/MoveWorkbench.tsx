@@ -63,6 +63,12 @@ export function MoveWorkbench({ rows, reasons, total, truncated, canMove, limit,
     setHint(r.readyCount === 0 ? 'No ticket in this list can be moved yet.' : r.capped ? `${r.selected.length} ticked: only ${limit} can be moved at a time, and ${fmt(r.readyCount - r.selected.length)} more are ready. Move these, then press the button again for the next ${limit}.` : null)
   }
   function clearAll() { setSelected([]); setHint(null) }
+  /** "Move all N that match": the run panel lives in "More tools" at the bottom of the page; open it and bring it into view */
+  function openMoveEverything() {
+    const tools = document.getElementById('more-tools') as HTMLDetailsElement | null
+    if (tools) tools.open = true
+    document.getElementById('move-everything')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
   function click(e: React.MouseEvent, row: WorkbenchRow) {
     if (e.shiftKey && last.current !== null && last.current !== row.zohoNo) {
       const r = selectRange(visible, last.current, row.zohoNo, selected, limit)
@@ -112,6 +118,12 @@ export function MoveWorkbench({ rows, reasons, total, truncated, canMove, limit,
                 Select all that can be moved{readyVisible.length ? ` (${readyVisible.length > limit ? `first ${limit} of ${fmt(readyVisible.length)}` : fmt(readyVisible.length)})` : ''}
               </button>
               <button type="button" onClick={clearAll} disabled={selected.length === 0} className="rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">Clear ticks</button>
+              {total > limit && (
+                <button type="button" onClick={openMoveEverything} className="rounded-md border border-primary bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20"
+                  title="Moves every ticket that matches the filters (not only the ones in the table), 25 at a time, with Pause and Stop. It opens the panel at the bottom of this page.">
+                  Move all {fmt(total)} that match…
+                </button>
+              )}
               <span className="text-xs text-foreground" aria-live="polite"><strong className="tabular-nums">{selected.length}</strong> ticked{selected.length ? ` of ${limit} allowed at a time` : ''}</span>
               <MoveControls canMove={canMove} selected={selected} limit={limit} unmatched={unmatched} onMoved={() => { setSelected([]); setHint(null); router.refresh() }} />
             </>

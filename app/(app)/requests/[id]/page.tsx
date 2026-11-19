@@ -14,9 +14,11 @@ import { AGENT_QUEUE_PATH, REQUESTS_PATH, safeOrigin, defaultTicketOrigin, ticke
 import { getCurrentProfile, getTeamMembers } from '@/lib/queries/profiles'
 import { suggestedCvmForRequest } from '@/lib/cvm/suggest'
 import { getRequestById, getRequestActivity, getRequestComments, getRequestCollaborators, getRelatedRequests, getCsatSurveyForRequest } from '@/lib/queries/requests'
-import { getRequestAttachments } from '@/lib/queries/attachments'
+import { getRequestAttachments, getApproverAttachments } from '@/lib/queries/attachments'
+import { findApprovalNote, approvalNoteText } from '@/lib/approvals/note'
 import { getApprovalsForRequest } from '@/lib/queries/approvals'
 import { buildTicketSummary } from '@/lib/requests/ticket-summary'
+import { ticketAccess, canCommentOn, pickUpMessage } from '@/lib/requests/ownership'
 import { TicketSummaryCard } from '@/components/requests/TicketSummaryCard'
 import { ApprovalPanel } from '@/components/requests/ApprovalPanel'
 import { ApprovalHistoryBox } from '@/components/requests/ApprovalHistoryBox'
@@ -395,7 +397,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
 
   // Phase 1: everything that only needs `id` runs in parallel.
   // teamMembers and csatSurvey are gated on request data so they stay in Phase 2.
-  const [request, activity, comments, attachments, collaborators, approvals, linkedTasks, activeTimer, relatedRequests, allProjects] = await Promise.all([
+  const [request, activity, comments, attachmentsOwn, collaborators, approvals, linkedTasks, activeTimer, relatedRequests, allProjects] = await Promise.all([
     getRequestById(id),
     getRequestActivity(id),
     getRequestComments(id),
@@ -422,6 +424,9 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
     profile.role === 'platform_owner' ||
     (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
   const isRequester = request.requester_id === profile.id
+  // A person asked to approve (not on the group, not a manager, not the requester) cannot list the ticket's files through row security: they get the PUBLIC files of the ticket,
+  // e.g. what the technician sent with the approval, after the server has checked that they are an approver of this ticket.
+  const attachments = !isAgent && !isRequester && attachmentsOwn.length === 0 ? await getApproverAttachments(request.id) : attachmentsOwn
   // the CVM of the requester's store, offered as the approver when a technician sends this ticket for approval (technicians and managers only)
   // (only for a category that asks for the CVM's approval - Hangers, Fixtures, Fixture Attachments; nothing is pre-filled for any other category)
   const suggestedApprover = isAgent ? await suggestedCvmForRequest({ requesterId: request.requester_id, orgId: profile.org_id, viewerId: profile.id, categoryId: (request as { category_id?: string | null }).category_id ?? null }) : null
@@ -444,7 +449,14 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
   // Resolved ticket, which is the one place the reopen window/countdown appears.
   const resolvedReopenWindowHours =
     isRequester && request.status === 'resolved' ? await getResolvedReopenWindowHours() : null
-  const canManage   = isAgent
+  // The ownership rule (lib/requests/ownership.ts): every technician of the group SEES the ticket; only the one it is assigned to (or a manager) WORKS on it - the others press "Pick up" first.
+  const access = ticketAccess({ role: profile.role, userId: profile.id, teamIds: profile.team_members.map((m) => m.team_id), requestTeamId: request.team_id, assignedTo: request.assigned_to })
+  const isCollaborator = collaborators.some((c) => c.user_id === profile.id)
+  const canWork = access.canWork
+  const mustPickUp = access.mustPickUp
+  const canReply = canCommentOn(access, { isCollaborator, isRequester })
+  const pickUpNotice = mustPickUp ? pickUpMessage(request.assignee?.full_name ?? null) : null
+  const canManage   = isAgent && canWork
   const isManager   = profile.role === 'manager' || profile.role === 'admin' || profile.role === 'platform_owner'
   // Tasks is Admin/Owner-only for now (see components/layout/Sidebar.tsx) — a
   // linked task here would otherwise deep-link to /tasks, which redirects any
@@ -642,7 +654,13 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
       {/* Pinned reply composer */}
       {!isTerminal ? (
         <div className="shrink-0 border-t border-border bg-card px-4 py-3 space-y-3">
-          <CommentForm requestId={request.id} canPostInternal={isAgent} />
+          {canReply ? (
+            <CommentForm requestId={request.id} canPostInternal={isAgent} />
+          ) : (
+            <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+              {pickUpNotice} You can read everything on it until then.
+            </p>
+          )}
         </div>
       ) : (
         <div className="shrink-0 border-t border-border bg-muted/20 px-4 py-2.5 text-center">
@@ -777,6 +795,17 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
             approval={a}
             viewerId={profile.id}
             viewerRole={profile.role}
+            senderNote={(() => {
+              // the technician's remarks and files that were sent WITH this approval (a public message in the conversation, found by its marker, sender and time)
+              const note = findApprovalNote(a, comments)
+              if (!note) return null
+              return {
+                senderName: note.author?.full_name ?? 'The technician',
+                at: note.created_at,
+                text: approvalNoteText(note.body),
+                files: attachments.filter((f) => (f as RequestAttachmentWithUploader & { comment_id: string | null }).comment_id === note.id),
+              }
+            })()}
           />
         </div>
       ))}
@@ -955,6 +984,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
         teamId={request.team_id}
         viewerId={profile.id}
         isAgent={isAgent}
+        canWork={canWork}
         isManager={isManager}
         isRequester={isRequester}
         isTerminal={isTerminal}
@@ -1049,6 +1079,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
             isAgent={isAgent}
             isManager={isManager}
             isAssignedToViewer={request.assigned_to === profile.id}
+            canWork={canWork}
             isTerminal={isTerminal}
             status={request.status}
             activeTimer={activeTimer}
@@ -1075,6 +1106,13 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
           <span className="mx-1.5 opacity-40">·</span>
           {formatRelativeTime(request.created_at)}
         </p>
+
+        {/* A technician of the group who does not own this ticket: he sees everything, and works on it after "Pick up" */}
+        {mustPickUp && !isTerminal && (
+          <p role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+            {pickUpNotice} Press <strong>Pick up</strong> above to make it yours. Until then you can read all of it, but not change the status, add to the conversation or edit it.
+          </p>
+        )}
 
         {/* Task progress bar — only shown when tasks are linked */}
         {linkedTasks.length > 0 && (() => {

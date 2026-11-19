@@ -74,7 +74,7 @@ export function RunPanel({ filters, canMove }: { filters: MoveFilters; canMove: 
   const pct = total ? Math.min(100, Math.round((done.handled / total) * 100)) : 0
 
   return (
-    <section aria-label="Move everything that matches" className="rounded-lg border border-border bg-card p-3">
+    <section id="move-everything" aria-label="Move everything that matches" className="scroll-mt-20 rounded-lg border border-border bg-card p-3">
       <h2 className="text-sm font-semibold text-foreground">Move everything that matches these filters</h2>
       <p className="text-[11px] text-muted-foreground">Moves the tickets {CHUNK} at a time with a Pause / Stop button, and keeps a record of the run. No mail, WhatsApp, push or survey is sent.</p>
 

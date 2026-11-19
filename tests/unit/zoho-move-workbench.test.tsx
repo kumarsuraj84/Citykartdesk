@@ -105,6 +105,23 @@ describe('Move Zoho tickets: the table', () => {
     expect(screen.getByText(/Only an administrator can move tickets/)).toBeTruthy()
   })
 
+  it('"Move all N that match" shows when more tickets match than one batch, and opens the run panel at the bottom of the page', () => {
+    const tools = document.createElement('details'); tools.id = 'more-tools'
+    const panel = document.createElement('section'); panel.id = 'move-everything'; panel.scrollIntoView = vi.fn()
+    tools.appendChild(panel); document.body.appendChild(tools)
+    setup(mixed, { total: 818, truncated: true })
+    fireEvent.click(screen.getByRole('button', { name: /Move all 818 that match/ }))
+    expect(tools.open).toBe(true)
+    expect(panel.scrollIntoView).toHaveBeenCalled()
+    tools.remove()
+    cleanup()
+    setup(mixed)                                                      // 6 match: one batch is enough, no extra button
+    expect(screen.queryByRole('button', { name: /Move all/ })).toBeNull()
+    cleanup()
+    setup(mixed, { total: 818, truncated: true, canMove: false })    // a person who may not move sees nothing to press
+    expect(screen.queryByRole('button', { name: /Move all/ })).toBeNull()
+  })
+
   it('tickets that were moved (no longer ready after the refresh) leave the selection', () => {
     const view = setup(mixed)
     fireEvent.click(screen.getByRole('button', { name: /Select all that can be moved/ }))

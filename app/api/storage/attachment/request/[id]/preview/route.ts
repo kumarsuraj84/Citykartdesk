@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { previewXlsx, PreviewError, MAX_PREVIEW_FILE_BYTES } from '@/lib/attachments/xlsx-preview'
 import { pathBelongsToRequest } from '@/lib/attachments/serve'
+import { getApproverAttachmentRow } from '@/lib/queries/attachments'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,11 +16,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   const supabase = await createClient()
 
-  const { data: attachment, error } = await supabase
+  const { data: rlsRow, error } = await supabase
     .from('request_attachments')
     .select('storage_path, file_name, mime_type, file_size, deleted_at, request_id')
     .eq('id', id)
     .maybeSingle()
+  // an approver of the ticket may preview the PUBLIC files of that ticket too (see getApproverAttachmentRow)
+  const attachment = rlsRow ?? (error ? null : (await getApproverAttachmentRow(id)) as typeof rlsRow)
   if (error || !attachment || attachment.deleted_at) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }

@@ -5,6 +5,8 @@ import { Loader2, UserCheck, ChevronDown, GitMerge, CheckCircle2, Search, X } fr
 import { assignRequest, updateRequestStatus } from '@/lib/actions/requests'
 import { sendAdHocApproval, addAdHocApprovers, searchManagersForApproval } from '@/lib/actions/approvals'
 import { SLACountdownClocks } from './SLACountdownClocks'
+import { uploadAttachment } from '@/lib/actions/attachments'
+import { AttachFilesField, useAttachFiles } from './useAttachFiles'
 import type { RequestStatus } from '@/types'
 import { ROLE_LABELS } from '@/lib/constants/roles'
 import { sendButtonLabel } from '@/lib/approvals/via'
@@ -15,6 +17,8 @@ interface Props {
   isAgent:            boolean
   isManager:          boolean
   isAssignedToViewer: boolean
+  /** may change the ticket: its owner, or a manager. A technician of the group who is not the owner only sees it and can "Pick up". */
+  canWork:            boolean
   isTerminal:         boolean
   status:             RequestStatus
   activeTimer?:       { id: string; started_at: string } | null
@@ -35,6 +39,7 @@ export function RequestActionBar({
   isAgent,
   isManager,
   isAssignedToViewer,
+  canWork,
   isTerminal,
   status,
   responseDueAt,
@@ -52,6 +57,9 @@ export function RequestActionBar({
   const [approvalSearch, setApprovalSearch]    = useState('')
   const [approvalResults, setApprovalResults]  = useState<{ id: string; full_name: string; role: string }[]>([])
   const [selectedApprovers, setSelectedApprovers] = useState<{ id: string; full_name: string }[]>(() => (suggestedApprover ? [suggestedApprover] : []))
+  // optional remarks and files that go to the approver with a new approval (Ctrl+V, drag and drop and the Attach button all work)
+  const [approvalRemarks, setApprovalRemarks]  = useState('')
+  const approvalFiles = useAttachFiles()
   const [pickUpError, setPickUpError]          = useState<string | null>(null)
   const [startWorkError, setStartWorkError]    = useState<string | null>(null)
   const [localStatus, setLocalStatus]          = useState(status)
@@ -167,14 +175,34 @@ export function RequestActionBar({
     if (!selectedApprovers.length) return
     setShowApprovalPicker(false)
     const names = selectedApprovers.map((a) => a.full_name).join(', ')
+    const remarks = approvalRemarks.trim()
+    const files = approvalFiles.files
     actTransition(async () => {
       const ids = selectedApprovers.map((a) => a.id)
-      const result = isPendingApproval ? await addAdHocApprovers(requestId, ids) : await sendAdHocApproval(requestId, ids)
+      // remarks and files are optional and go with a NEW approval (the approver reads them with it); adding another approver to an open approval adds no new remarks
+      const result = isPendingApproval ? await addAdHocApprovers(requestId, ids) : await sendAdHocApproval(requestId, ids, { remarks, fileCount: files.length })
       if (result.error) { flash(result.error, true); return }
-      flash(isPendingApproval ? `Added ${names} to the approval` : `Sent to ${names} for approval`)
       setApprovalSearch('')
       setApprovalResults([])
       setSelectedApprovers([])
+      setApprovalRemarks('')
+      approvalFiles.clear()
+      // the approval is sent and its message written; the files are added to that message one after the other
+      const commentId = isPendingApproval ? undefined : (result as { commentId?: string }).commentId
+      if (!isPendingApproval && files.length > 0) {
+        if (!commentId) { flash(`Sent to ${names} for approval, but the files could not be attached. Add them in the conversation box.`, true); return }
+        const failed: string[] = []
+        for (const file of files) {
+          try {
+            const fd = new FormData()
+            fd.append('file', file)
+            const up = await uploadAttachment(requestId, fd, commentId)
+            if (up.error) failed.push(file.name)
+          } catch { failed.push(file.name) }
+        }
+        if (failed.length) { flash(`Sent to ${names} for approval, but ${failed.length === 1 ? 'this file was' : 'these files were'} not attached: ${failed.join(', ')}. Add ${failed.length === 1 ? 'it' : 'them'} in the conversation box.`, true); return }
+      }
+      flash(isPendingApproval ? `Added ${names} to the approval` : `Sent to ${names} for approval`)
     })
   }
 
@@ -221,7 +249,7 @@ export function RequestActionBar({
         />
 
         {/* Actions dropdown */}
-        <div className="relative" ref={dropdownRef}>
+        <div className={`relative ${canWork ? '' : 'hidden'}`} ref={dropdownRef}>
           <button
             onClick={() => { setShowActions((v) => !v); setShowApprovalPicker(false) }}
             className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
@@ -308,6 +336,24 @@ export function RequestActionBar({
                             </li>
                           ))}
                         </ul>
+                      )}
+
+                      {/* Optional: remarks for the approver and files (screenshot with Ctrl+V, a quote, ...). The approver sees them with the approval. */}
+                      {!isPendingApproval && (
+                        <div className="space-y-1.5" onDrop={approvalFiles.onDrop} onDragOver={(e) => e.preventDefault()}>
+                          <label className="block text-[11px] font-medium text-foreground" htmlFor="approval-remarks">Remarks for the approver <span className="font-normal text-muted-foreground">(optional)</span></label>
+                          <textarea
+                            id="approval-remarks"
+                            value={approvalRemarks}
+                            onChange={(e) => setApprovalRemarks(e.target.value)}
+                            onPaste={approvalFiles.onPaste}
+                            maxLength={2000}
+                            rows={3}
+                            placeholder="e.g. Quote attached. Please approve by Friday."
+                            className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-1.5 text-xs outline-none focus:border-ring"
+                          />
+                          <AttachFilesField files={approvalFiles.files} problem={approvalFiles.problem} addFiles={approvalFiles.addFiles} removeAt={approvalFiles.removeAt} disabled={isActing} />
+                        </div>
                       )}
 
                       <button

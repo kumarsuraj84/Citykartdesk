@@ -28,6 +28,7 @@ import { resendOemOnReopen } from '@/lib/requests/master-routing'
 import type { FormField, FormSection, SLAConfig, RequestPriority, RequestStatus, ProfileWithTeams } from '@/types'
 import type { Database } from '@/types/database'
 import { checkResolutionNote } from '@/lib/requests/resolution-note'
+import { accessOf, pickUpRefusal } from '@/lib/requests/ownership-server'
 
 type RequestUpdate = Database['public']['Tables']['requests']['Update']
 /** commentId: the conversation message written for this change (when there was one), so a caller can tie a file (FSR, quote, PO document) to it. */
@@ -197,14 +198,18 @@ export async function applyStatusChange(
     return { error: 'Transition is not permitted.' }
   }
 
+  const isRequester = request.requester_id === profile.id
+  // A technician of the group who does not own the ticket sees it but cannot change it until "Pick up" (lib/requests/ownership.ts). A vendor technician (the owner of his
+  // ticket by definition) and a PO decision (already authorised by its own screen) are not affected; managers always can.
+  const mustPickUp = !isVendorTech && !isPoDecision && accessOf(profile, request).mustPickUp
   const isAgent =
     isVendorTech ||
     isPoDecision ||
     profile.role === 'manager' ||
     profile.role === 'admin' ||
     profile.role === 'platform_owner' ||
-    (profile.role === 'agent' && profile.team_members.some((m) => m.team_id === request.team_id))
-  const isRequester = request.requester_id === profile.id
+    (profile.role === 'agent' && !mustPickUp && profile.team_members.some((m) => m.team_id === request.team_id))
+  if (mustPickUp && !isRequester) return { error: await pickUpRefusal(request) }
 
   const allowedForAgent = (isPoDecision ? [PO_DECISION_MOVES[options.poDecision!]] : isVendorTech ? VENDOR_TRANSITIONS[currentStatus] : AGENT_TRANSITIONS[currentStatus]) ?? []
   const allowedForRequester = REQUESTER_TRANSITIONS[currentStatus] ?? []

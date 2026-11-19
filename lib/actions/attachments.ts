@@ -10,6 +10,8 @@ import { uploadAllowed, uploadBytesAllowed, ticketBytesAllowed, UPLOAD_LIMIT_MES
 import { flagMissingRequiredFiles } from '@/lib/attachments/required-files'
 import { validateAttachmentServer } from '@/lib/attachments/validate-server'
 import { vendorRoleOf } from '@/lib/vendor/access'
+import { accessOf, isCollaboratorOf, pickUpRefusal } from '@/lib/requests/ownership-server'
+import { canCommentOn } from '@/lib/requests/ownership'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -120,6 +122,13 @@ export async function uploadAttachment(
 
   if (!isRequester && !isAgent) {
     return { error: 'You do not have permission to attach files to this request.' }
+  }
+  // A technician of the group who does not own the ticket cannot add files until "Pick up" (a collaborator keeps the right, like commenting): lib/requests/ownership.ts
+  if (!isVendorAssignee) {
+    const access = accessOf(profile, request)
+    if (access.mustPickUp && !canCommentOn(access, { isCollaborator: await isCollaboratorOf(requestId, profile.id), isRequester })) {
+      return { error: await pickUpRefusal(request) }
+    }
   }
 
   // ── Comment association check ─────────────────────────────────────────────
@@ -235,7 +244,7 @@ export async function deleteAttachment(
   // Additional authorization: only uploader or agent/manager may delete
   const { data: request } = await supabase
     .from('requests')
-    .select('team_id')
+    .select('team_id, assigned_to')
     .eq('id', attachment.request_id)
     .single()
 
@@ -248,6 +257,10 @@ export async function deleteAttachment(
 
   if (!isUploader && !isAgent) {
     return { error: 'You do not have permission to delete this attachment.' }
+  }
+  // someone else's file on a ticket he has not picked up is not his to delete (his own upload stays his)
+  if (!isUploader && request && accessOf(profile, request).mustPickUp) {
+    return { error: await pickUpRefusal(request) }
   }
 
   // ── Soft delete the DB row first ──────────────────────────────────────────

@@ -82,7 +82,7 @@ function actor(over: Record<string, unknown> = {}): StatusActor {
   const supabase = { from: (table: string) => chain(table, () => ({ data: table === 'requests' ? world.request : { full_name: 'Someone' }, error: null })) }
   return {
     supabase: supabase as never,
-    profile: { id: 'agent-1', full_name: 'Agent One', role: 'agent', org_id: 'org-1', team_members: [{ team_id: 'team-1' }], vendor_company_id: null, vendor_role: null, ...over } as never,
+    profile: { id: 'agent-1', full_name: 'Agent One', role: 'manager', org_id: 'org-1', team_members: [{ team_id: 'team-1' }], vendor_company_id: null, vendor_role: null, ...over } as never,
   }
 }
 
@@ -198,5 +198,38 @@ describe('B-07: a finished ticket never keeps a running timer', () => {
     world.request.status = 'assigned'
     await applyStatusChange(actor(), 'req-1', 'cancelled', 'Raised twice by mistake, the other ticket is open.')
     expect(world.ops.some((o) => o.table === 'request_time_entries' && o.op === 'update' && 'stopped_at' in (o.payload ?? {}))).toBe(true)
+  })
+})
+
+describe('ticket ownership: only the technician the ticket is assigned to (or a manager) changes its status', () => {
+  const tech = (id: string) => actor({ id, role: 'agent' })
+
+  it('another technician of the group is refused until he picks the ticket up, and nothing is written', async () => {
+    world.request.status = 'in_progress'
+    const r = await applyStatusChange(tech('other-tech'), 'req-1', 'resolved', 'Replaced the cable and tested the link, the user confirmed it works again.')
+    expect(r.error).toMatch(/Pick it up first/)
+    expect(world.ops.some((o) => o.table === 'requests' && o.op === 'update')).toBe(false)
+  })
+
+  it('an unassigned ticket must be picked up first too', async () => {
+    world.request.assigned_to = null
+    const r = await applyStatusChange(tech('other-tech'), 'req-1', 'waiting_user', 'Please send the serial number.')
+    expect(r.error).toMatch(/Nobody has picked this ticket up yet/)
+  })
+
+  it('the technician it is assigned to can change it', async () => {
+    const r = await applyStatusChange(tech('tech-1'), 'req-1', 'waiting_user', 'Please send the serial number.')
+    expect(r.error).toBeUndefined()
+  })
+
+  it('a manager can change any ticket without picking it up', async () => {
+    const r = await applyStatusChange(actor({ id: 'boss', role: 'manager' }), 'req-1', 'waiting_user', 'Please send the serial number.')
+    expect(r.error).toBeUndefined()
+  })
+
+  it('the requester is not limited by this rule', async () => {
+    world.request.status = 'resolved'
+    const r = await applyStatusChange(actor({ id: 'req-user', role: 'user', team_members: [] }), 'req-1', 'open', 'It is not fixed.')
+    expect(r.error).not.toMatch(/Pick it up/)
   })
 })

@@ -6,7 +6,8 @@ import { approveApproval, rejectApproval, delegateApproval, recallApproval, sear
 import { canActOnApproval } from '@/lib/approvals/canAct'
 import { mayRecallApproval } from '@/lib/approvals/recall-rule'
 import type { ApprovalWithDetails } from '@/lib/queries/approvals'
-import type { UserRole } from '@/types'
+import type { UserRole, RequestAttachmentWithUploader } from '@/types'
+import { AttachmentChips } from './AttachmentChips'
 
 interface ApprovalPanelProps {
   approval: ApprovalWithDetails
@@ -17,6 +18,8 @@ interface ApprovalPanelProps {
   // like ApprovalPreviewDialog close itself once the viewer's decision is
   // done, instead of leaving them to find a separate Close button.
   onDecided?: () => void
+  /** what the technician wrote and attached when he sent this approval (optional): shown to the approver above the decision */
+  senderNote?: { senderName: string; at: string; text: string; files: RequestAttachmentWithUploader[] } | null
 }
 
 function formatDate(iso: string) {
@@ -36,7 +39,7 @@ function StatusPill({ status }: { status: string }) {
   return <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700"><Clock className="h-3 w-3" />Pending</span>
 }
 
-export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: ApprovalPanelProps) {
+export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided, senderNote = null }: ApprovalPanelProps) {
   const [isPending, startTransition] = useTransition()
   const [comment, setComment]       = useState('')
   const [error, setError]           = useState<string | null>(null)
@@ -119,6 +122,23 @@ export function ApprovalPanel({ approval, viewerId, viewerRole, onDecided }: App
           <p className="text-xs text-muted-foreground">
             Workflow: <span className="font-medium text-foreground">{approval.workflow.name}</span>
           </p>
+        )}
+
+        {/* What the technician wrote and attached when he sent this for approval (optional) */}
+        {senderNote && (senderNote.text || senderNote.files.length > 0) && (
+          <div className="rounded-lg border border-violet-200 bg-violet-50/60 px-3 py-2.5 dark:border-violet-900/50 dark:bg-violet-950/20" aria-label="Remarks from the technician">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold text-violet-800 dark:text-violet-300">
+              <MessageSquare className="h-3 w-3" aria-hidden />
+              Remarks from {senderNote.senderName}
+              <span className="font-normal text-muted-foreground">· {formatDate(senderNote.at)}</span>
+            </p>
+            {senderNote.text && <p className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground">{senderNote.text}</p>}
+            {senderNote.files.length > 0 && (
+              <div className="mt-2">
+                <AttachmentChips attachments={senderNote.files} currentUserId={viewerId} canManageAll={false} />
+              </div>
+            )}
+          </div>
         )}
 
         {/* Progress summary */}
