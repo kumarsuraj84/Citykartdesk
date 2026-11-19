@@ -11,7 +11,7 @@ vi.mock('next/headers', () => ({
   cookies: vi.fn().mockResolvedValue({ getAll: () => [], set: () => {} }),
 }))
 const state = vi.hoisted(() => ({ profile: null as unknown }))
-vi.mock('@/lib/queries/profiles', () => ({ getCurrentProfile: vi.fn(async () => state.profile) }))
+vi.mock('@/lib/queries/profiles', () => ({ getPollIdentity: vi.fn(async () => state.profile) }))
 
 import { createClient } from '@/lib/supabase/server'
 import { GET } from '@/app/api/notifications/new/route'
@@ -25,8 +25,7 @@ describe('GET /api/notifications/new', () => {
 
   async function as(user: TestUser | null) {
     if (!user) { state.profile = null; return }
-    const { data } = await admin.from('profiles').select('*, team_members(team_id, is_lead, joined_at, team:teams(*))').eq('id', user.id).single()
-    state.profile = data
+    state.profile = { id: user.id }   // the route only needs who is asking (getPollIdentity)
     vi.mocked(createClient).mockResolvedValue(clientForToken(user.accessToken) as never)
   }
   const call = async (since?: string) => {

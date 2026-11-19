@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { safeNextPath } from '@/lib/auth/safe-next'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { rateLimit, getClientIp, isOverLimit, recordEvent, progressiveWaitMs, recordProgressiveFailure, clearProgressive } from '@/lib/rate-limit'
+import { rateLimit, getClientIp, isOverLimitShared, recordEventShared, progressiveWaitMsShared, recordProgressiveFailureShared, clearProgressiveShared } from '@/lib/rate-limit'
 import { validateNewPassword } from '@/lib/security/password-policy'
 import { redactLoginName } from '@/lib/security/login-name'
 import { getCurrentProfileForPasswordReset } from '@/lib/queries/profiles'
@@ -37,8 +37,8 @@ export async function signInWithPassword(formData: FormData) {
   // Without a trusted address the account is the only thing to follow, and a hard 10-minute lock would let anyone lock a known account out for good. There the wait
   // grows with each wrong try and then ends by itself (progressive delay, A-04); with a trusted address the old per-address-and-account limit stays.
   const attempts = await rateLimit(`login:${email}`, 60, 60_000)           // raw speed of tries on one account (protects the sign-in service)
-  const spraying = !!ip && isOverLimit(`login-fail-ip:${ip}`, 40)
-  if (attempts.limited || spraying || (ip ? isOverLimit(failKey, 10) : progressiveWaitMs(failKey) > 0)) {
+  const spraying = !!ip && await isOverLimitShared(`login-fail-ip:${ip}`, 40)
+  if (attempts.limited || spraying || (ip ? await isOverLimitShared(failKey, 10) : (await progressiveWaitMsShared(failKey)) > 0)) {
     await recordAudit({ category: 'security', source: 'auth', action: 'auth.login_rate_limited', outcome: 'denied', severity: 'warning', message: 'Too many sign-in attempts', after: { email: typedName } })
     return { error: 'Too many login attempts. Please wait a minute.' }
   }
@@ -52,18 +52,18 @@ export async function signInWithPassword(formData: FormData) {
   }
 
   if (error) {
-    if (ip) recordEvent(failKey, 10 * 60_000)
-    else recordProgressiveFailure(failKey)
-    if (ip) recordEvent(`login-fail-ip:${ip}`, 10 * 60_000)
+    if (ip) await recordEventShared(failKey, 10 * 60_000)
+    else await recordProgressiveFailureShared(failKey)
+    if (ip) await recordEventShared(`login-fail-ip:${ip}`, 10 * 60_000)
     // many different accounts failing in a short time, from anywhere: report it once per window so someone looks (password spraying, any address)
-    if (recordEvent('login-fail-global', 10 * 60_000) === 200) {
+    if ((await recordEventShared('login-fail-global', 10 * 60_000)) === 200) {
       await recordAudit({ category: 'security', source: 'auth', action: 'auth.spray_suspected', outcome: 'denied', severity: 'warning', message: 'About 200 failed sign-ins in 10 minutes across the whole site' })
     }
     await recordAudit({ category: 'security', source: 'auth', action: 'auth.login_failed', outcome: 'failure', severity: 'warning', message: 'Sign-in refused', after: { email: typedName } })
     return { error: sanitizeError(error, { route: 'auth.ts#signInWithPassword', fallback: 'Invalid login credentials.' }) }
   }
 
-  if (!ip) clearProgressive(failKey)      // a correct sign-in ends the wait count
+  if (!ip) await clearProgressiveShared(failKey)      // a correct sign-in ends the wait count
 
   // D-010: a deactivated account does not get a session (accounts deactivated before sign-in was blocked at the authentication service)
   if (signedIn?.user?.id) {

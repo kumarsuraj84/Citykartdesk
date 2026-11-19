@@ -12,13 +12,14 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push }), usePathname: ()
 vi.mock('@/lib/actions/notifications', () => ({ markNotificationRead: markRead }))
 
 import { NotificationPopups } from '@/components/layout/NotificationPopups'
-import { PREFS_KEY } from '@/lib/notifications/popup-rules'
+import { PREFS_KEY, pollDelayMs } from '@/lib/notifications/popup-rules'
 
 const REQ = '123e4567-e89b-12d3-a456-426614174000'
 const mk = (id: string, type: string, extra: object = {}) => ({
   id, type, title: `title ${id}`, body: 'body', link: `/requests/${REQ}`, request_id: REQ, metadata: null,
   created_at: new Date().toISOString(), actor_name: 'Ayush', ...extra,
 })
+let randomSpy: ReturnType<typeof vi.spyOn>
 let reply: { items: unknown[]; unread: number }
 // the address argument is only there so the calls can be inspected
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -35,9 +36,10 @@ beforeEach(() => {
   toastCustom.mockClear(); toastDismiss.mockClear(); push.mockClear(); markRead.mockClear(); fetchMock.mockClear()
   localStorage.clear(); path.value = '/home'; reply = { items: [], unread: 0 }
   vi.stubGlobal('fetch', fetchMock)
+  randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5)   // 0.5 = no spread, so the wait is exactly the base time
   Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
 })
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals() })
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); randomSpy.mockRestore() })
 
 describe('notification pop-ups', () => {
   it('shows a card for a new notification and asks only for what is new since the last check', async () => {
@@ -45,14 +47,14 @@ describe('notification pop-ups', () => {
     await runFirstCheck()
     expect(shownIds()).toEqual(['popup-a'])
     expect(String(fetchMock.mock.calls[0][0])).toContain('/api/notifications/new?since=')
-    await act(async () => { await vi.advanceTimersByTimeAsync(20100) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(60100) })
     expect(String(fetchMock.mock.calls[1][0])).toContain('since=') // moved forward to the server time of the last check
   })
 
   it('shows each notification once, even if the same one comes back', async () => {
     reply = { items: [mk('a', 'comment_added')], unread: 1 }
     await runFirstCheck()
-    await act(async () => { await vi.advanceTimersByTimeAsync(20100) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(60100) })
     expect(shownIds()).toEqual(['popup-a'])
   })
 
@@ -80,7 +82,7 @@ describe('notification pop-ups', () => {
     toastCustom.mockClear()
     localStorage.setItem(PREFS_KEY, JSON.stringify({ mode: 'off', sound: false }))
     reply = { items: [mk('c', 'sla_breached')], unread: 3 }
-    await act(async () => { await vi.advanceTimersByTimeAsync(20100) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(60100) })
     expect(toastCustom).not.toHaveBeenCalled()
   })
 
@@ -121,12 +123,57 @@ describe('notification pop-ups', () => {
     expect(toastDismiss).toHaveBeenCalledWith('tid')
   })
 
+  it('asks once a minute while the tab is open, not every 20 seconds', async () => {
+    await runFirstCheck()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await act(async () => { await vi.advanceTimersByTimeAsync(31_000) })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_100) })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('a hidden tab asks only every 5 minutes', async () => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+    await runFirstCheck()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await act(async () => { await vi.advanceTimersByTimeAsync(4 * 60_000) })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await act(async () => { await vi.advanceTimersByTimeAsync(61_000) })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('coming back to a tab that was hidden checks within seconds (not after the slow hidden wait), and switching tabs again and again cannot flood', async () => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+    await runFirstCheck()
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })   // a minute later: still waiting for the 5 minute check
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(100) })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    // flipping again straight away: the next check waits for the end of the 10 second gap, and many flips still make only one check
+    for (let i = 0; i < 5; i++) await act(async () => { document.dispatchEvent(new Event('visibilitychange')) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000) })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('the wait is spread by +-20 % so devices opened together do not stay in step', () => {
+    expect(pollDelayMs(60_000, 0)).toBe(48_000)
+    expect(pollDelayMs(60_000, 0.5)).toBe(60_000)
+    expect(pollDelayMs(60_000, 1)).toBe(72_000)
+    expect(pollDelayMs(300_000, 0)).toBe(240_000)
+  })
+
   it('carries on quietly if a check fails', async () => {
     fetchMock.mockRejectedValueOnce(new Error('offline'))
     reply = { items: [mk('a', 'comment_added')], unread: 1 }
     await runFirstCheck()
     expect(toastCustom).not.toHaveBeenCalled()
-    await act(async () => { await vi.advanceTimersByTimeAsync(20100) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(60100) })
     expect(shownIds()).toEqual(['popup-a'])
   })
 })

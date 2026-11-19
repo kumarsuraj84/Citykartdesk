@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
+import { readVerifiedUserId } from '@/lib/auth/verified-user'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { rateLimit } from '@/lib/rate-limit'
 import { sanitizeRum } from '@/lib/health/rum'
@@ -16,10 +18,14 @@ export async function POST(req: NextRequest) {
   if (process.env.RUM_ENABLED === '0') return new NextResponse(null, { status: 204 })
   const site = req.headers.get('sec-fetch-site')
   if (site && site !== 'same-origin' && site !== 'none') return new NextResponse(null, { status: 403 })
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return new NextResponse(null, { status: 401 })
-  if ((await rateLimit(`rum:${user.id}`, 120, 60_000)).limited) return new NextResponse(null, { status: 204 })
+  // Who is asking: the id the proxy has already verified and signed for this request. This used to ask the sign-in service (a network call plus two database reads there) for every
+  // report - the busiest single source of calls to it (measured 19 Nov 2026). Only if the signed header is missing is the session checked the old way.
+  const forwarded = readVerifiedUserId(await headers())
+  let userId: string | null
+  if (forwarded !== undefined) userId = forwarded
+  else userId = (await (await createClient()).auth.getUser()).data.user?.id ?? null
+  if (!userId) return new NextResponse(null, { status: 401 })
+  if ((await rateLimit(`rum:${userId}`, 120, 60_000)).limited) return new NextResponse(null, { status: 204 })
 
   let row = null
   try {

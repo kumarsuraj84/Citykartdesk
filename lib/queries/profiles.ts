@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { OPEN_REQUEST_STATUSES } from '@/lib/constants/requests'
 import { getActionableApprovalsForUser } from '@/lib/queries/approvals'
 import { fetchAllPages } from '@/lib/queries/paging'
+import { createShortCache } from '@/lib/cache/short-ttl'
 import type { ModuleSlug, ProfileWithTeams, UserRole } from '@/types'
 
 const PROFILE_SELECT = `
@@ -84,6 +85,41 @@ async function loadCurrentProfile(includePasswordReset: boolean): Promise<Profil
 }
 
 export const getCurrentProfile = cache(() => loadCurrentProfile(false))
+
+/**
+ * Who is asking, for the tiny routes that are called all day by every open tab (the pop-up check). The full profile (with the person's teams) is a three-table read and
+ * these routes need only the id, so this reads three columns instead and remembers a positive answer for 30 s per person: a minute-by-minute check from 2,000 devices then costs
+ * the database almost nothing for this part. The same rules as getCurrentProfile apply (proxy-verified id, not deactivated, not waiting for a first password); the only difference is
+ * that someone deactivated a moment ago can still get their OWN notification list for up to 30 s. Anything that changes data keeps using getCurrentProfile.
+ */
+const POLL_IDENTITY_TTL_MS = 30_000
+class NotAllowedToPoll extends Error {}
+const pollIdentityCache = createShortCache<{ id: string }>(POLL_IDENTITY_TTL_MS, 5_000, (v) => ({ ...v }))
+export const getPollIdentity = cache(async (): Promise<{ id: string } | null> => {
+  const forwardedUserId = readVerifiedUserId(await headers())
+  let userId: string | null
+  if (forwardedUserId !== undefined) userId = forwardedUserId
+  else {
+    const supabase = await createClient()
+    userId = (await supabase.auth.getUser()).data.user?.id ?? null
+  }
+  if (!userId) return null
+  try {
+    return await pollIdentityCache.get(userId, async () => {
+      const supabase = await createClient()
+      const { data, error } = await supabase.from('profiles').select('id, is_active, must_reset_password').eq('id', userId).maybeSingle()
+      if (error) throw new Error('Could not read the signed-in person')   // not kept by the cache; the route answers 503 and the tab asks again later
+      const row = data as { id: string; is_active?: boolean; must_reset_password?: boolean } | null
+      // a "no" is thrown, so it is never kept: it is read again next time (a person just reactivated, or who has just chosen a password, is let in at once)
+      if (!row || row.is_active === false || row.must_reset_password) throw new NotAllowedToPoll()
+      return { id: row.id }
+    })
+  } catch (e) {
+    if (e instanceof NotAllowedToPoll) return null
+    throw e
+  }
+})
+
 /** Like getCurrentProfile, but also returns a person who still has to choose their own password: only the layout redirect and the password-change action use it. */
 export const getCurrentProfileForPasswordReset = cache(() => loadCurrentProfile(true))
 

@@ -1,22 +1,43 @@
 import { headers } from 'next/headers'
+import { createCounters, type ProgressiveOptions } from './rate-limit-counters.cjs'
 
-type Entry = { count: number; resetAt: number }
-const store = new Map<string, Entry>()
+// The counting itself lives in rate-limit-counters.cjs (also used by the cluster launcher). Each app process counts for itself: with ONE process that is the whole site.
+// When the app runs as several worker processes (deploy/windows/cluster/cluster-server.cjs sets CKDESK_SHARED_COUNTERS=1), the counters that protect sign-in and the
+// other limits are kept ONCE, in the launcher, and every worker asks it over the process channel, so a limit still means "per site" and not "per worker".
+// If the launcher does not answer within 1.5 s, the worker counts on its own for that one call (never a failure for the person).
+const local = createCounters()
 
-const MAX_KEYS = 50_000
-let lastCleanup = 0
-function cleanup() {
-  const now = Date.now()
-  // at most once a second (it used to scan the whole table on every call), and the table can never grow without limit
-  if (now - lastCleanup < 1000 && store.size <= MAX_KEYS) return
-  lastCleanup = now
-  for (const [k, v] of store) if (v.resetAt < now) store.delete(k)
-  for (const k of store.keys()) { if (store.size <= MAX_KEYS) break; store.delete(k) }
+type Pending = { done: (v: unknown) => void }
+const pending = new Map<number, Pending>()
+let nextId = 1
+let listening = false
+const SHARED_TIMEOUT_MS = 1500
+
+function sharedOn(): boolean {
+  return process.env.CKDESK_SHARED_COUNTERS === '1' && typeof process.send === 'function'
+}
+
+function ask<T>(op: string, args: unknown[], fallback: () => T): Promise<T> {
+  if (!sharedOn()) return Promise.resolve(fallback())
+  if (!listening) {
+    listening = true
+    process.on('message', (m: unknown) => {
+      const msg = m as { ckrl?: number; id?: number; v?: unknown } | null
+      if (!msg || msg.ckrl !== 2 || typeof msg.id !== 'number') return
+      const p = pending.get(msg.id)
+      if (p) { pending.delete(msg.id); p.done(msg.v) }
+    })
+  }
+  return new Promise<T>((resolve) => {
+    const id = nextId++
+    const timer = setTimeout(() => { pending.delete(id); resolve(fallback()) }, SHARED_TIMEOUT_MS)
+    pending.set(id, { done: (v) => { clearTimeout(timer); resolve(v as T) } })
+    try { process.send!({ ckrl: 1, id, op, args }) } catch { clearTimeout(timer); pending.delete(id); resolve(fallback()) }
+  })
 }
 
 /**
- * Simple in-process rate limiter.
- * In production with multiple replicas, replace with Upstash Redis.
+ * In-process rate limiter (shared across the worker processes when the app runs as a cluster, see above).
  * @param key    Scope key (e.g. ip:email)
  * @param limit  Max requests per window
  * @param windowMs Window in milliseconds
@@ -26,37 +47,17 @@ export async function rateLimit(
   limit = 5,
   windowMs = 60_000
 ): Promise<{ limited: boolean; remaining: number }> {
-  cleanup()
-  key = key.length > 200 ? key.slice(0, 200) : key   // VAPT VA-API-03
-  const now = Date.now()
-  const entry = store.get(key)
-
-  if (!entry || entry.resetAt < now) {
-    store.set(key, { count: 1, resetAt: now + windowMs })
-    return { limited: false, remaining: limit - 1 }
-  }
-
-  entry.count++
-  if (entry.count > limit) return { limited: true, remaining: 0 }
-  return { limited: false, remaining: limit - entry.count }
+  return ask('hit', [key, limit, windowMs], () => local.hit(key, limit, windowMs))
 }
 
-/** Is this key already over its limit? Does not count the call (used to look before a sign-in attempt; only FAILED attempts are then counted with recordEvent). */
+/** Is this key already over its limit? Does not count the call (used to look before a sign-in attempt; only FAILED attempts are then counted with recordEvent). This process only; see isOverLimitShared. */
 export function isOverLimit(key: string, limit: number): boolean {
-  key = key.length > 200 ? key.slice(0, 200) : key
-  const entry = store.get(key)
-  return !!entry && entry.resetAt >= Date.now() && entry.count >= limit
+  return local.over(key, limit)
 }
 
-/** Count one event on a key (a failed sign-in) and return how many there have been in the window. */
+/** Count one event on a key (a failed sign-in) and return how many there have been in the window. This process only; see recordEventShared. */
 export function recordEvent(key: string, windowMs: number): number {
-  cleanup()
-  key = key.length > 200 ? key.slice(0, 200) : key
-  const now = Date.now()
-  const entry = store.get(key)
-  if (!entry || entry.resetAt < now) { store.set(key, { count: 1, resetAt: now + windowMs }); return 1 }
-  entry.count++
-  return entry.count
+  return local.rec(key, windowMs)
 }
 
 /**
@@ -77,39 +78,25 @@ export async function getClientIp(): Promise<string | null> {
 // after 10 wrong tries then lets ANY stranger who knows a login name lock that person (a store login, an administrator) out for 10 minutes, again and again.
 // Instead each further wrong try doubles a short wait (30 s, 1 min, 2 min, 4 min, then at most 5 min), and the wait ends by itself; nothing stays locked.
 // The first `free` - 1 wrong tries cost nothing (the 10th starts the first wait, the same allowance as before). Whether the account exists is never part of the answer: the key is simply whatever was typed.
-type Progressive = { fails: number; lastAt: number; until: number }
-const progressive = new Map<string, Progressive>()
-const PROGRESSIVE_FORGET_MS = 30 * 60_000          // a quiet half hour clears the count
 
-function progressiveCleanup(now: number) {
-  if (progressive.size <= MAX_KEYS) return
-  for (const [k, v] of progressive) if (now - v.lastAt > PROGRESSIVE_FORGET_MS) progressive.delete(k)
-  for (const k of progressive.keys()) { if (progressive.size <= MAX_KEYS) break; progressive.delete(k) }
-}
-
-/** Milliseconds still to wait before this key may try again (0 = free to try). Does not count anything. */
+/** Milliseconds still to wait before this key may try again (0 = free to try). Does not count anything. This process only; see progressiveWaitMsShared. */
 export function progressiveWaitMs(key: string, now = Date.now()): number {
-  key = key.length > 200 ? key.slice(0, 200) : key
-  const e = progressive.get(key)
-  return e && e.until > now ? e.until - now : 0
+  return local.pwait(key, now)
 }
 
-/** Count one failure; once `free` failures have happened a wait starts and every further failure doubles it (baseMs, 2x, 4x ... up to maxMs). Returns the wait that now applies. */
-export function recordProgressiveFailure(key: string, opts: { free?: number; baseMs?: number; maxMs?: number } = {}, now = Date.now()): number {
-  key = key.length > 200 ? key.slice(0, 200) : key
-  const { free = 10, baseMs = 30_000, maxMs = 300_000 } = opts
-  progressiveCleanup(now)
-  let e = progressive.get(key)
-  if (!e || now - e.lastAt > PROGRESSIVE_FORGET_MS) e = { fails: 0, lastAt: now, until: 0 }
-  e.fails++
-  e.lastAt = now
-  const over = e.fails - free + 1                       // the `free`-th failure already starts the first wait
-  e.until = over > 0 ? now + Math.min(baseMs * 2 ** (over - 1), maxMs) : 0
-  progressive.set(key, e)
-  return e.until > now ? e.until - now : 0
+/** Count one failure; once `free` failures have happened a wait starts and every further failure doubles it (baseMs, 2x, 4x ... up to maxMs). Returns the wait that now applies. This process only. */
+export function recordProgressiveFailure(key: string, opts: ProgressiveOptions = {}, now = Date.now()): number {
+  return local.pfail(key, opts, now)
 }
 
-/** A correct sign-in ends the count. */
+/** A correct sign-in ends the count. This process only. */
 export function clearProgressive(key: string): void {
-  progressive.delete(key.length > 200 ? key.slice(0, 200) : key)
+  local.pclear(key)
 }
+
+// ── The same, counted once for the whole site (use these for sign-in) ───────────────────────────────────────────────────────────────────
+export const isOverLimitShared = (key: string, limit: number): Promise<boolean> => ask('over', [key, limit], () => local.over(key, limit))
+export const recordEventShared = (key: string, windowMs: number): Promise<number> => ask('rec', [key, windowMs], () => local.rec(key, windowMs))
+export const progressiveWaitMsShared = (key: string): Promise<number> => ask('pwait', [key], () => local.pwait(key))
+export const recordProgressiveFailureShared = (key: string, opts: ProgressiveOptions = {}): Promise<number> => ask('pfail', [key, opts], () => local.pfail(key, opts))
+export const clearProgressiveShared = (key: string): Promise<void> => ask<null>('pclear', [key], () => { local.pclear(key); return null }).then(() => undefined)

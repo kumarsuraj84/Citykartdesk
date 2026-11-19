@@ -69,6 +69,12 @@ try {
   Copy-Item .next-deploy\static ".next-deploy\standalone\$distDir\static" -Recurse -Force
   Copy-Item public .next-deploy\standalone\public -Recurse -Force
 
+  # The launcher that can run the app as several worker processes (deploy/windows/cluster/cluster-server.cjs) and the counters code it shares with the app.
+  # Shipped in every build but UNUSED until the service is pointed at cluster-server.cjs (the service keeps running server.js, exactly as before).
+  Copy-Item deploy\windows\cluster\cluster-server.cjs .next-deploy\standalone\cluster-server.cjs -Force
+  Copy-Item lib\rate-limit-counters.cjs .next-deploy\standalone\rate-limit-counters.cjs -Force
+  if (-not ((Test-Path .next-deploy\standalone\cluster-server.cjs) -and (Test-Path .next-deploy\standalone\rate-limit-counters.cjs))) { throw 'The cluster launcher files were not copied into the build.' }
+
   $bad = Get-ChildItem .next-deploy\standalone, .next-deploy\static -Recurse -File |
     Select-String -Pattern '127.0.0.1:54321', 'localhost:3210' -List | Select-Object -First 3
   "local URLs baked: " + [bool]$bad

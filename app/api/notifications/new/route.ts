@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server'
-import { getCurrentProfile } from '@/lib/queries/profiles'
+import { getPollIdentity } from '@/lib/queries/profiles'
 import { createClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// A very small check the pop-ups ask every few seconds: this person's unread count and, when "since" is given, the unread
-// notifications created after it. Read with the signed-in person's own session, so nobody can see anyone else's.
+// A very small check the pop-ups ask about once a minute from every open tab: this person's unread count and, when "since" is given, the unread
+// notifications created after it. Read with the signed-in person's own session, so nobody can see anyone else's. Because it is asked so often it
+// does NOT load the full profile (getPollIdentity: three columns, remembered for 30 s) - it costs two small queries, or one for a hidden tab.
 export async function GET(req: Request) {
-  const profile = await getCurrentProfile()
+  let profile: { id: string } | null
+  try { profile = await getPollIdentity() } catch { return NextResponse.json({ error: 'try again' }, { status: 503 }) }
   if (!profile) return NextResponse.json({ error: 'not signed in' }, { status: 401 })
 
   const sinceRaw = new URL(req.url).searchParams.get('since')

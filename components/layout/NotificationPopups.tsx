@@ -5,17 +5,12 @@ import { usePathname, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { markNotificationRead } from '@/lib/actions/notifications'
 import {
-  MAX_CARDS_PER_CHECK, NORMAL_DURATION_MS, loadPrefs, popupDecision, requestIdFromPath, withTitleBadge,
+  MAX_CARDS_PER_CHECK, MIN_GAP_BETWEEN_CHECKS_MS, NORMAL_DURATION_MS, POLL_HIDDEN_MS, POLL_VISIBLE_MS, loadPrefs, pollDelayMs, popupDecision, requestIdFromPath, withTitleBadge,
   type PopupNotification,
 } from '@/lib/notifications/popup-rules'
 import { PopupCard } from './PopupCard'
 
-// 20 s (was 8 s): the load review of 4 Nov 2026 found every open tab polling this route (auth + profile + query through the data-service proxy); a new notification now shows within ~20 s, and the
-// pop-up still accepts anything up to POPUP_MAX_AGE_MS (10 min) old, so nothing is missed.
-const POLL_VISIBLE_MS = 20_000
-// A tab nobody is looking at only refreshes the number in its title, and it is checked again the moment the person comes back to it (onVisible below), so it asks rarely: 120 s (was 30 s).
-// Load review of 18 Nov 2026: this route was asked ~65 times a minute from ~20 open tabs, most of them left in the background all day.
-const POLL_HIDDEN_MS = 120_000
+// How often the tab asks (60 s visible, 5 min hidden, each spread by +-20 %) is explained in lib/notifications/popup-rules.ts.
 const SHOWN_KEEP = 200
 
 function readJson<T>(key: string, fallback: T): T {
@@ -62,6 +57,7 @@ export function NotificationPopups({ viewerId }: { viewerId: string }) {
     let since: string = readJson<string | null>(sinceKey, null) ?? new Date().toISOString()
     let stopped = false
     let timer: number | undefined
+    let lastCheckAt = 0
 
     // each notification is claimed once per browser, so two open tabs never both pop it up
     const claim = async (id: string): Promise<boolean> => {
@@ -111,6 +107,7 @@ export function NotificationPopups({ viewerId }: { viewerId: string }) {
 
     const poll = async () => {
       if (stopped) return
+      lastCheckAt = Date.now()
       const hidden = document.hidden
       try {
         // a hidden tab only refreshes the number in the tab title; what happened meanwhile is shown when the tab is back
@@ -125,10 +122,16 @@ export function NotificationPopups({ viewerId }: { viewerId: string }) {
           }
         }
       } catch { /* offline or the server is restarting: try again next time */ }
-      if (!stopped) timer = window.setTimeout(poll, document.hidden ? POLL_HIDDEN_MS : POLL_VISIBLE_MS)
+      if (!stopped) timer = window.setTimeout(poll, pollDelayMs(document.hidden ? POLL_HIDDEN_MS : POLL_VISIBLE_MS))
     }
 
-    const onVisible = () => { if (!document.hidden) { window.clearTimeout(timer); void poll() } }
+    // coming back to the tab checks at once; if it was checked less than MIN_GAP ago, the check is moved up to the end of that gap (never left waiting for a slow hidden-tab timer)
+    const onVisible = () => {
+      if (document.hidden) return
+      window.clearTimeout(timer)
+      const wait = Math.max(0, MIN_GAP_BETWEEN_CHECKS_MS - (Date.now() - lastCheckAt))
+      timer = window.setTimeout(poll, wait)
+    }
     document.addEventListener('visibilitychange', onVisible)
     timer = window.setTimeout(poll, 1500)
     return () => { stopped = true; window.clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible) }

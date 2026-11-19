@@ -19,6 +19,21 @@ export const NORMAL_DURATION_MS = 8_000
 /** At most this many cards for one check; anything beyond is summarised in one card. */
 export const MAX_CARDS_PER_CHECK = 3
 
+/**
+ * How often an open tab asks the server whether something new has arrived. 60 s visible (was 20 s) and 5 min hidden (was 2 min): with 1,000+ people and 2,000+ devices
+ * the 20 s check alone would have been ~100 requests a second, about 40 times today's whole peak (capacity review of 19 Nov 2026). A new notification now shows within
+ * a minute; the pop-up still accepts anything up to POPUP_MAX_AGE_MS old, so nothing is missed. A tab nobody looks at is also checked the moment the person comes back to it.
+ */
+export const POLL_VISIBLE_MS = 60_000
+export const POLL_HIDDEN_MS = 300_000
+/** Coming back to a tab checks at once, but never more often than this, so switching tabs again and again cannot flood the server. */
+export const MIN_GAP_BETWEEN_CHECKS_MS = 10_000
+/** Every wait is spread by +-20 % so that devices which were all opened together (a morning start, a release) do not keep asking at the very same second. `random` is 0..1 (0.5 gives exactly `baseMs`). */
+export const POLL_JITTER = 0.2
+export function pollDelayMs(baseMs: number, random: number = Math.random()): number {
+  return Math.round(baseMs * (1 - POLL_JITTER + 2 * POLL_JITTER * random))
+}
+
 /** Asks for attention: stays until dismissed. */
 export const IMPORTANT_TYPES: ReadonlySet<string> = new Set([
   'approval_requested', 'sla_breached', 'sla_warning', 'csat_low_rating', 'request_reopened',
