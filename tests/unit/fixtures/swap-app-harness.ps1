@@ -15,7 +15,18 @@ function Server-Js($version, $healthy) {
 }
 Set-Content -Path (Join-Path $old 'server.js') -Value (Server-Js 'OLD' $true)
 Set-Content -Path (Join-Path $old '.env.local') -Value 'SECRET_FOR_TEST=1'
+# page files of the old build (what a browser tab left open before the release still asks for)
+$oldChunks = Join-Path $old '.next-deploy\static\chunks'
+New-Item -ItemType Directory -Force -Path $oldChunks | Out-Null
+Set-Content -Path (Join-Path $oldChunks 'old-abc.js') -Value 'OLDFILE'
+Set-Content -Path (Join-Path $oldChunks 'common.js') -Value 'OLDVERSION'
+Set-Content -Path (Join-Path $oldChunks 'old-ancient.js') -Value 'ANCIENT'
+(Get-Item (Join-Path $oldChunks 'old-ancient.js')).LastWriteTime = (Get-Date).AddDays(-30)
 Set-Content -Path (Join-Path $newSrc 'server.js') -Value (Server-Js 'NEW' ($NewBuild -eq 'good'))
+$newChunks = Join-Path $newSrc '.next-deploy\static\chunks'
+New-Item -ItemType Directory -Force -Path $newChunks | Out-Null
+Set-Content -Path (Join-Path $newChunks 'new-xyz.js') -Value 'NEWFILE'
+Set-Content -Path (Join-Path $newChunks 'common.js') -Value 'NEWVERSION'
 # a few hundred small files, like a real build, so unpacking takes a moment
 New-Item -ItemType Directory -Force -Path (Join-Path $newSrc 'node_modules') | Out-Null
 1..300 | ForEach-Object { Set-Content -Path (Join-Path $newSrc "node_modules\f$_.js") -Value "module.exports=$_" }
@@ -62,10 +73,15 @@ try { $version = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 "$url/api/ver
 $bakNames = @(Get-ChildItem $app -Directory | Where-Object { $_.Name -like 'standalone-bak-*' } | ForEach-Object { $_.Name }) -join ','
 $hasNext = Test-Path (Join-Path $app 'standalone-next')
 $envKept = Test-Path (Join-Path $app 'standalone\.env.local')
+$st = Join-Path $app 'standalone\.next-deploy\static\chunks'
+$oldKept = Test-Path (Join-Path $st 'old-abc.js')
+$ancientGone = -not (Test-Path (Join-Path $st 'old-ancient.js'))
+$newKept = Test-Path (Join-Path $st 'new-xyz.js')
+$commonNew = $false; if (Test-Path (Join-Path $st 'common.js')) { $commonNew = ((Get-Content (Join-Path $st 'common.js') -Raw) -match 'NEWVERSION') }
 if ($global:proc -and -not $global:proc.HasExited) { Stop-Process -Id $global:proc.Id -Force }
 Start-Sleep -Milliseconds 300
 Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
 
-"RESULT exit=$exit longestSilenceSeconds=$([math]::Round($longest, 1)) version=$version backups=$bakNames leftoverNext=$hasNext envKept=$envKept"
+"RESULT exit=$exit longestSilenceSeconds=$([math]::Round($longest, 1)) version=$version backups=$bakNames leftoverNext=$hasNext envKept=$envKept oldChunkKept=$oldKept ancientChunkPruned=$ancientGone newChunk=$newKept commonIsNew=$commonNew"
 "--- script output ---"
 $out

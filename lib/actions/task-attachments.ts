@@ -6,6 +6,7 @@ import { getCurrentProfile } from '@/lib/queries/profiles'
 import { ALLOWED_MIME_SET as ALLOWED_MIME_TYPES, ALLOWED_EXTENSIONS, MAX_FILE_SIZE_BYTES as MAX_FILE_SIZE } from '@/lib/attachments/validate'
 import { uploadAllowed, uploadBytesAllowed, UPLOAD_LIMIT_MESSAGE, UPLOAD_BYTES_MESSAGE } from '@/lib/attachments/quota'
 import { validateAttachmentServer } from '@/lib/attachments/validate-server'
+import { safeStorageName } from '@/lib/attachments/safe-name'
 
 
 
@@ -15,7 +16,7 @@ function getExtension(fileName: string): string {
 }
 
 function sanitizeName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200)
+  return safeStorageName(name)
 }
 
 export async function uploadTaskAttachment(

@@ -2,11 +2,12 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { ALLOWED_MIME_SET, ALLOWED_EXTENSIONS, MAX_FILE_SIZE_BYTES } from '@/lib/attachments/validate'
 import { validateAttachmentServer } from '@/lib/attachments/validate-server'
 import { logActivity } from '@/lib/activity'
+import { safeStorageName } from '@/lib/attachments/safe-name'
 
 // Stores one file on a ticket on behalf of a person whose right to do so was already checked by the caller (for example the PO approver adding the PO document).
 // It applies the same file rules as the ordinary upload (size, type, and the real content of the file), then writes the file and its record with the server's key.
 
-const safeName = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_')
+const safeName = (name: string) => safeStorageName(name)
 
 export async function saveTicketFile(p: { requestId: string; file: File; uploadedBy: string; isInternal?: boolean }): Promise<{ attachmentId?: string; error?: string }> {
   const { file } = p

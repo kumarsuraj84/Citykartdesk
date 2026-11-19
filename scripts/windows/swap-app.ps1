@@ -51,6 +51,23 @@ Copy-Item "$live\.env.local" "$next\.env.local" -Force
 if (-not (Test-Path "$next\server.js")) { Remove-Item $next -Recurse -Force; throw 'the unpacked build has no server.js: nothing was changed' }
 "unpacked in $([int]$stopwatch.Elapsed.TotalSeconds) s (the app was still running)"
 
+# 1b. keep the page files of the previous build. A browser tab that was open before the release still asks for the OLD page files (".next-deploy\static"); once they are gone the person
+# sees "Loading chunk ... failed" and a blank page until they refresh (the system log held thousands of these). Only files the new build does not have are copied (a new file is
+# never overwritten), and copied files older than 14 days are removed again so the folder cannot grow for ever. Any problem here is reported and ignored: it never stops a release.
+$oldStatic = "$live\.next-deploy\static"
+$newStatic = "$next\.next-deploy\static"
+if ((Test-Path $oldStatic) -and (Test-Path $newStatic)) {
+  try {
+    # /XC /XN /XO = skip a file that already exists in the new build, whatever its state: only the missing ones are copied
+    & robocopy $oldStatic $newStatic /E /XC /XN /XO /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+    $cutoff = (Get-Date).AddDays(-14)
+    Get-ChildItem $newStatic -Recurse -File | Where-Object { $_.LastWriteTime -lt $cutoff } | Remove-Item -Force -ErrorAction SilentlyContinue
+    "kept the page files of the previous build for open browser tabs"
+  } catch {
+    "could not keep the old page files (the release goes on): $($_.Exception.Message)"
+  }
+}
+
 # 2. the short part: stop, swap the folders, start
 $down = [Diagnostics.Stopwatch]::StartNew()
 try {

@@ -1,6 +1,7 @@
 'use client'
 
 import { Suspense, useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -30,6 +31,13 @@ function LoginForm() {
     resolver: zodResolver(passwordSchema),
     defaultValues: { email: '', password: '' },
   })
+
+  function rememberEmailForReset() {
+    try {
+      const typed = passwordForm.getValues('email').trim()
+      if (typed) window.sessionStorage.setItem('ckdesk.reset-email', typed)
+    } catch { /* storage may be blocked: the person simply types the address again */ }
+  }
 
   function handlePasswordSubmit(data: PasswordForm) {
     setServerError(null)
@@ -61,6 +69,9 @@ function LoginForm() {
           {serverError && (
             <div role="alert" className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {serverError}
+              <Link href="/forgot-password" onClick={rememberEmailForReset} className="mt-1 block font-medium underline">
+                Forgot your password? Get a reset link by e-mail.
+              </Link>
             </div>
           )}
 
@@ -91,7 +102,13 @@ function LoginForm() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                {/* The reset page only e-mails a one-time link to the address on the account; nothing is changed there. The typed address is handed over in this tab's session storage, never in the web address. */}
+                <Link href="/forgot-password" onClick={rememberEmailForReset} className="text-xs font-medium text-primary hover:underline">
+                  Forgot your password?
+                </Link>
+              </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input

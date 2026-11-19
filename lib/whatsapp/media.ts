@@ -2,6 +2,7 @@ import { findAttachmentsForConversation, updateAttachmentStatus, type Conversati
 import type { WhatsAppGraphClient } from './graph-client'
 import { ALLOWED_MIME_SET as ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES as MAX_ATTACHMENT_SIZE, contentMatchesDeclaredType } from '@/lib/attachments/validate'
 import { inspectBytes } from '@/lib/attachments/scan'
+import { safeStorageName } from '@/lib/attachments/safe-name'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; storage: any }
@@ -49,7 +50,7 @@ export async function retrieveAndValidateMedia(client: WhatsAppGraphClient, medi
 }
 
 function sanitizeFileName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_')
+  return safeStorageName(name)
 }
 
 const STAGING_BUCKET = 'request-attachments'

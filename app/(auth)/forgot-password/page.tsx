@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useTransition } from 'react'
+import { Suspense, useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -29,6 +29,14 @@ function ForgotPasswordForm() {
     defaultValues: { email: '' },
   })
 
+  // the address typed on the sign-in page is handed over in this tab's session storage (never in the web address)
+  useEffect(() => {
+    try {
+      const typed = window.sessionStorage.getItem('ckdesk.reset-email')
+      if (typed) { form.setValue('email', typed); window.sessionStorage.removeItem('ckdesk.reset-email') }
+    } catch { /* storage may be blocked: the person types the address */ }
+  }, [form])
+
   function handleSubmit(data: Form) {
     setServerError(null)
     const fd = new FormData()
@@ -52,7 +60,10 @@ function ForgotPasswordForm() {
           <p className="text-sm text-muted-foreground">
             We sent a password reset link to{' '}
             <span className="font-medium text-foreground">{form.getValues('email')}</span>.
-            It expires in 1 hour.
+            It works once and expires in 1 hour. Your password does not change until you open that link from the e-mail.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            No e-mail within 5 minutes? Check your spam folder, make sure you used the e-mail you sign in with, or contact IT.
           </p>
         </div>
         <Button variant="ghost" size="sm" render={<Link href="/login" />}>
@@ -125,7 +136,7 @@ export default function ForgotPasswordPage() {
           <BrandLogo height={110} className="justify-center" priority />
           <h1 className="text-2xl font-semibold tracking-tight">Reset your password</h1>
           <p className="text-sm text-muted-foreground">
-            Enter your email and we&apos;ll send you a reset link.
+            Enter the e-mail you sign in with. We send a one-time reset link to that mailbox. Nothing is changed here: your password changes only after you open the link in that e-mail.
           </p>
         </div>
 

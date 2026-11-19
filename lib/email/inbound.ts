@@ -269,6 +269,11 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
     greetingTimeout: 15_000,
     socketTimeout: 60_000,
   })
+  // An 'error' event with nobody listening is THROWN by Node and reached the whole server as "uncaughtException: Connection not available" (76 times in the system log
+  // between 16 Oct and 18 Nov). The pass already ends through its own try/catch below, so the event is only noted here.
+  client.on('error', (e: Error) => {
+    logger.warn({ event: 'inbound_mail.connection_error', message: 'The mailbox connection reported an error during the e-mail sync pass', route: 'lib/email/inbound.ts', error: e })
+  })
   // last resort: if anything still hangs, drop the connection so the pass ends
   const watchdog = setTimeout(() => { try { client.close() } catch { /* already closed */ } }, SYNC_BUDGET_MS + 30_000)
 
@@ -317,7 +322,8 @@ export async function syncInboundReplies(): Promise<InboundSyncResult> {
     result.errors.push(e instanceof Error ? e.message : String(e))
   } finally {
     clearTimeout(watchdog)
-    try { await client.logout() } catch { /* already disconnected */ }
+    // logout is only asked of a connection that is still usable: asking a closed one made the library reject with "Connection not available" with nobody waiting for it
+    try { if (client.usable) await client.logout(); else client.close() } catch { /* already disconnected */ }
   }
 
   return result

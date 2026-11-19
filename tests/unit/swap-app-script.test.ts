@@ -28,6 +28,15 @@ describe.skipIf(process.platform !== 'win32')('deploy swap script: short downtim
     expect(Number(r.get('longestSilenceSeconds'))).toBeLessThan(5)
   }, 130_000)
 
+  it('keeps the page files of the previous build for browser tabs left open (new files win, files older than 14 days go)', () => {
+    const r = run('good')
+    expect(r.get('oldChunkKept')).toBe('True')                   // a tab opened before the release can still load its page files
+    expect(r.get('newChunk')).toBe('True')                       // the new build's own files are there
+    expect(r.get('commonIsNew')).toBe('True')                    // a file both builds have is the NEW one, never overwritten by the old
+    expect(r.get('ancientChunkPruned')).toBe('True')             // old copies are not kept for ever
+    expect(r.out).toContain('kept the page files of the previous build')
+  }, 130_000)
+
   it('a new build that never becomes healthy is rolled back to the old one', () => {
     const r = run('bad')
     expect(r.out).toContain('ROLLED BACK')

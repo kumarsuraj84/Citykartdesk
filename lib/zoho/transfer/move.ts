@@ -29,6 +29,8 @@ import { approvalAction, approverEmail } from './approval'
 import { coerceFieldValue, formDataEntry, type CoerceField } from './coerce'
 import { isFinishedCkStatus } from './suggest'
 import { ZOHO_UDF_LABELS, zohoUdfLabel } from './udf-labels'
+import { safeStorageName } from '@/lib/attachments/safe-name'
+import { contentTypeForFileName } from '@/lib/attachments/serve'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = { from: (t: string) => any; auth: any; storage: any }
@@ -373,11 +375,13 @@ export async function copyAttachments(c: { actorId: string }, requestId: string,
       if (buf.length > MAX_FILE_SIZE_BYTES) throw new Error('the file is larger than the CK Desk limit')
       const check = await inspectBytes(new Uint8Array(buf))
       if (!check.ok) throw new Error(check.code === 'macro' ? 'the file contains macros, which CK Desk does not accept' : check.error ?? 'the file did not pass the safety check')
-      const safe = a.fileName.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_')
+      const safe = safeStorageName(a.fileName)
+      // Zoho leaves the content type blank on some files (about 1 in 100 pictures); the storage refuses an unknown type, so it is taken from the file's extension (the same table the download uses)
+      const fileType = a.contentType && a.contentType.trim() ? a.contentType : contentTypeForFileName(a.fileName)
       const storagePath = `${requestId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`
-      const up = await d.storage.from('request-attachments').upload(storagePath, buf, { contentType: a.contentType || 'application/octet-stream', upsert: false })
+      const up = await d.storage.from('request-attachments').upload(storagePath, buf, { contentType: fileType, upsert: false })
       if (up.error) throw new Error('the file could not be stored')
-      const { error } = await d.from('request_attachments').insert({ request_id: requestId, uploaded_by: c.actorId, file_name: a.fileName, file_size: buf.length, mime_type: a.contentType || 'application/octet-stream', storage_path: storagePath, is_internal: false, uploaded_at: opts.later ? new Date().toISOString() : createdAt })
+      const { error } = await d.from('request_attachments').insert({ request_id: requestId, uploaded_by: c.actorId, file_name: a.fileName, file_size: buf.length, mime_type: fileType, storage_path: storagePath, is_internal: false, uploaded_at: opts.later ? new Date().toISOString() : createdAt })
       if (error) { await d.storage.from('request-attachments').remove([storagePath]); throw new Error('the file could not be recorded') }
       copied++
     } catch (e) {

@@ -11,11 +11,15 @@ const state = vi.hoisted(() => ({
   logout: vi.fn(),
   close: vi.fn(),
   handled: [] as string[],
+  usable: true,
+  listeners: {} as Record<string, (e: Error) => void>,
 }))
 
 vi.mock('imapflow', () => ({
   ImapFlow: class {
     constructor(o: Record<string, unknown>) { state.options = o }
+    get usable() { return state.usable }
+    on(event: string, fn: (e: Error) => void) { state.listeners[event] = fn; return this }
     async connect() {}
     async getMailboxLock() { return { release() {} } }
     async search() { return state.uids }
@@ -44,7 +48,7 @@ import { syncInboundReplies } from '@/lib/email/inbound'
 
 beforeEach(() => {
   state.options = undefined; state.uids = []; state.messageIds = {}; state.downloaded = []; state.handled = []
-  state.logout.mockClear(); state.close.mockClear()
+  state.logout.mockClear(); state.close.mockClear(); state.usable = true; state.listeners = {}
 })
 
 describe('the e-mail reply sync', () => {
@@ -73,5 +77,18 @@ describe('the e-mail reply sync', () => {
     await syncInboundReplies()
     expect(state.downloaded).toEqual([])
     expect(state.logout).toHaveBeenCalledTimes(1)
+  })
+  // the system log held 76 "uncaughtException: Connection not available": a mailbox error event with nobody listening is thrown by Node, and logging out of a closed connection rejected with nobody waiting
+  it('listens for the error events of the mailbox connection, so one can never crash the server, and the pass still ends normally', async () => {
+    await syncInboundReplies()
+    expect(typeof state.listeners.error).toBe('function')
+    expect(() => state.listeners.error(new Error('Connection not available'))).not.toThrow()
+  })
+
+  it('does not ask a connection that is already closed to log out: it is simply closed', async () => {
+    state.usable = false
+    await syncInboundReplies()
+    expect(state.logout).not.toHaveBeenCalled()
+    expect(state.close).toHaveBeenCalledTimes(1)
   })
 })

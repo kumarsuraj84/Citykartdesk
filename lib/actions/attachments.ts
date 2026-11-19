@@ -12,6 +12,7 @@ import { validateAttachmentServer } from '@/lib/attachments/validate-server'
 import { vendorRoleOf } from '@/lib/vendor/access'
 import { accessOf, isCollaboratorOf, pickUpRefusal } from '@/lib/requests/ownership-server'
 import { canCommentOn } from '@/lib/requests/ownership'
+import { safeStorageName } from '@/lib/attachments/safe-name'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -30,8 +31,8 @@ function getExtension(fileName: string): string {
 }
 
 function sanitizeFileName(name: string): string {
-  // Keep only safe characters; collapse runs of unsafe chars to underscore
-  return name.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_')
+  // Keep only safe characters; collapse runs of unsafe chars to underscore and runs of dots to one dot (the database refuses ".." in a stored path)
+  return safeStorageName(name)
 }
 
 function buildStoragePath(requestId: string, fileName: string): string {

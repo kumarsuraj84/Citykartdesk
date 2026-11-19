@@ -89,3 +89,30 @@ export async function emailInvitation(email: string, tokenHash: string, fullName
   const res = await sendEmail({ to: email.trim().toLowerCase(), subject: 'Welcome to Citykart Desk — set your password', html, text })
   return res.error ? { error: res.error } : {}
 }
+
+/**
+ * The safety mail after a password was set or changed: it tells the owner of the mailbox, so a change they did not make is noticed at once.
+ * Never throws and never blocks the change: the password is already changed, this is only the notice.
+ */
+export async function emailPasswordChangedNotice(email: string, how: 'reset-link' | 'changed-by-user', now: Date = new Date()): Promise<{ error?: string }> {
+  try {
+    const to = email.trim().toLowerCase()
+    if (!to || !(await isEmailConfigured())) return {}
+    const when = now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })
+    const what = how === 'reset-link' ? 'using the password reset link that was e-mailed to you' : 'from your profile'
+    const lines = [
+      `The password of your Citykart Desk account (${to}) was changed ${what} on ${when} (IST).`,
+      'You have been signed out on your other devices.',
+      'If this was you, nothing more to do. If it was NOT you, contact IT right away so your account can be secured.',
+    ]
+    const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#1A1F36">
+      <h2 style="margin:0 0 12px">Your Citykart Desk password was changed</h2>
+      ${lines.map((l) => `<p style="line-height:1.5">${escapeHtml(l)}</p>`).join('')}
+    </div>`
+    const res = await sendEmail({ to, subject: 'Your Citykart Desk password was changed', html, text: `Your Citykart Desk password was changed\n\n${lines.join('\n\n')}` })
+    return res.error ? { error: res.error } : {}
+  } catch {
+    return {}
+  }
+}

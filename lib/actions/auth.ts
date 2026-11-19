@@ -9,7 +9,7 @@ import { validateNewPassword } from '@/lib/security/password-policy'
 import { redactLoginName } from '@/lib/security/login-name'
 import { getCurrentProfileForPasswordReset } from '@/lib/queries/profiles'
 import { sanitizeError } from '@/lib/observability/sanitize-error'
-import { emailPasswordResetLink } from '@/lib/email/auth-mail'
+import { emailPasswordResetLink, emailPasswordChangedNotice } from '@/lib/email/auth-mail'
 import { recordAudit } from '@/lib/syslog/audit'
 import { startedByRecentLink } from '@/lib/auth/session-methods'
 
@@ -137,11 +137,16 @@ export async function resetPassword(formData: FormData) {
     }
   }
 
+  const { data: { user: resetUser } } = await supabase.auth.getUser()
   const { error } = await supabase.auth.updateUser({ password })
 
   if (error) {
     return { error: sanitizeError(error, { route: 'auth.ts#resetPassword', fallback: 'Could not update your password. Please try again.' }) }
   }
+
+  // A new password ends every OTHER session of this person (someone who held the old password must not stay signed in), and the owner of the mailbox is told by e-mail.
+  try { await supabase.auth.signOut({ scope: 'others' }) } catch { /* the password is changed either way */ }
+  if (resetUser?.email) await emailPasswordChangedNotice(resetUser.email, 'reset-link')
 
   // Covers both an invite/recovery link AND the forced-reset redirect from
   // app/(app)/layout.tsx (bulkCreateUsers/adminSetPassword flip this flag) —
@@ -187,6 +192,7 @@ export async function changeOwnPassword(formData: FormData): Promise<{ error?: s
   await recordAudit({ category: 'security', source: 'auth', action: 'auth.password_changed', actorId: user.id, message: 'Password changed by the user' })
   // a changed password ends every OTHER session of this person (a stolen session must not survive it): VAPT VA-API-09 / VA-TKT-18
   try { await supabase.auth.signOut({ scope: 'others' }) } catch { /* the password is changed either way */ }
+  await emailPasswordChangedNotice(user.email, 'changed-by-user')
 
   return { success: true }
 }
