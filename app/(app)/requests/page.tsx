@@ -29,6 +29,8 @@ interface PageProps {
     view?: string
     status?: string
     q?: string
+    /** "1" = also search inside the messages (slower) */
+    inmsg?: string
     priority?: string
     service?: string
     category?: string
@@ -83,6 +85,7 @@ export default async function RequestsPage({ searchParams }: PageProps) {
     params.view === 'collaborated' ? 'collaborated' : params.view === 'subordinates' ? 'subordinates' : 'mine'
   const rawStatus     = params.status as string | undefined
   const q             = params.q
+  const inMessages    = params.inmsg === '1'
   const rawPriority   = params.priority
   const rawService    = params.service
   const rawCategory   = params.category
@@ -108,6 +111,7 @@ export default async function RequestsPage({ searchParams }: PageProps) {
     userId: profile.id,
     status: statusFilter,
     q: q || undefined,
+    searchMessages: inMessages,
     priority: priorityFilter,
     serviceId,
     categoryId,
@@ -145,6 +149,7 @@ export default async function RequestsPage({ searchParams }: PageProps) {
     if (rawView !== 'mine') p.set('view', rawView)
     if (rawStatus && rawStatus !== 'active') p.set('status', rawStatus)
     if (q) p.set('q', q)
+    if (q && inMessages) p.set('inmsg', '1')
     if (priorityFilter) p.set('priority', priorityFilter)
     if (serviceFilter) p.set('service', serviceFilter)
     if (categoryFilter) p.set('category', categoryFilter)
@@ -223,7 +228,7 @@ export default async function RequestsPage({ searchParams }: PageProps) {
       <div className="flex flex-wrap items-center gap-2">
         {/* Global search — matches title, request #, and any comment on the request */}
         <div className="relative w-full max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-[15px] h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <form>
             {rawView !== 'mine' && <input type="hidden" name="view" value={rawView} />}
             {rawStatus && rawStatus !== 'active' && (
@@ -240,10 +245,15 @@ export default async function RequestsPage({ searchParams }: PageProps) {
               name="q"
               aria-label="Search tickets"
               defaultValue={q}
-              placeholder="Search ticket, requester, store, technician, service, comments…"
+              placeholder="Search ticket, requester, store, technician, service…"
               className="w-full rounded-lg border border-[#E0E0EC] bg-white py-1.5 pl-8 pr-3 text-[12px] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
+            <label className="mt-1 flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground">
+              <input type="checkbox" name="inmsg" value="1" defaultChecked={inMessages} className="h-3 w-3" />
+              also search inside messages (slower)
+            </label>
           </form>
+          {result.searchNote && <p role="status" className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">{result.searchNote}</p>}
         </div>
 
         {/* Status filter — dropdown instead of a pill row to save horizontal space */}

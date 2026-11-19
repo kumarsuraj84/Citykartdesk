@@ -149,10 +149,13 @@ export interface GetRequestsOptions {
    *  counts only the still-in-flight statuses (open/assigned/in_progress/
    *  waiting_user/pending_approval). */
   status?: RequestStatus | 'active' | 'unresolved'
-  /** Matches the title, ticket number, description, the requester (name or store), the technician, the service / category /
-   *  sub-category name, AND the body of any comment on the request (internal notes included — RLS on request_comments already
-   *  hides those the viewer can't see, same as it would if they opened the thread directly). */
+  /** Matches the title, ticket number, description, the requester (name or store), the technician and the service / category /
+   *  sub-category name. The text of the messages is searched only when `searchMessages` is set (see below). */
   q?: string
+  /** Also look inside the messages (comments) of the tickets, internal notes included (row security on request_comments hides what the viewer cannot see).
+   *  OFF by default: it reads the text of EVERY message of the organisation, and with the 64,000+ messages of the tickets moved from Zoho a single search kept the
+   *  database busy for minutes and slowed the whole system (19 Nov). When asked for, it is given a time limit; if it runs out the ticket search still answers. */
+  searchMessages?: boolean
   limit?: number
   page?: number
   pageSize?: number
@@ -181,7 +184,12 @@ export interface PaginatedRequests {
   page: number
   pageSize: number
   totalPages: number
+  /** a sentence for the person when part of the search could not be done (e.g. the message search ran out of time) */
+  searchNote?: string
 }
+
+/** How long the (optional) search inside messages may run before it is given up. */
+export const MESSAGE_SEARCH_LIMIT_MS = 8000
 
 // ── Workload metrics ──────────────────────────────────────────────────────────
 
@@ -565,18 +573,22 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
     query = query.eq('requester_id', requesterId)
   }
 
-  // ── Search — title/request_no, plus (global) any comment on the request,
-  // internal notes included (RLS on request_comments already scopes what a
-  // given viewer can see, same as opening the thread itself would). ─────────
+  // ── Search — ticket number, title, description, people, store, service / category. The text of the MESSAGES is searched only when asked for
+  // (opts.searchMessages): it is a scan of every message of the organisation, which the 64,000+ messages of the tickets moved from Zoho turned into a
+  // query of minutes that blocked the database connections for everybody. When asked for it gets a time limit. ─────────
 
+  let searchNote: string | undefined
   if (q) {
     const safe = sanitizeQuery(q)
     if (safe.length > 0) {
       const like = `%${safe}%`
+      const noMessages = { data: [] as { request_id: string }[], error: null as unknown }
       // Look the words up in the small tables first, then match tickets by id. The id lists are capped so the request
       // address stays short; a very common word (say "a") matches too much to be a useful search anyway.
       const [comments, people, stores, services, categories, subCategories] = await Promise.all([
-        supabase.from('request_comments').select('request_id').ilike('body', like).order('created_at', { ascending: false }).limit(150),
+        opts.searchMessages
+          ? supabase.from('request_comments').select('request_id').ilike('body', like).order('created_at', { ascending: false }).limit(150).abortSignal(AbortSignal.timeout(MESSAGE_SEARCH_LIMIT_MS))
+          : Promise.resolve(noMessages),
         supabase.from('profiles').select('id').ilike('full_name', like).limit(60),
         supabase.from('stores').select('id').or(`name.ilike.${like},code.ilike.${like}`).limit(20),
         supabase.from('services').select('id').ilike('name', like).limit(20),
@@ -591,6 +603,7 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
         : { data: [] as { id: string }[] }
       const personIds = Array.from(new Set([...ids(people as never), ...ids(storePeople as never)])).slice(0, 60)
       const commentRequestIds = Array.from(new Set((comments.data ?? []).map((r) => r.request_id)))
+      if (opts.searchMessages && comments.error) searchNote = 'Searching inside messages took too long and was stopped. The tickets below match the ticket number, title, people and category only. Try a more specific word.'
       const serviceIds = ids(services as never)
       const categoryIds = ids(categories as never)
       const subCategoryIds = ids(subCategories as never)
@@ -618,6 +631,7 @@ export async function getRequests(opts: GetRequestsOptions): Promise<PaginatedRe
     page: pg,
     pageSize: size,
     totalPages,
+    ...(searchNote ? { searchNote } : {}),
   }
 }
 

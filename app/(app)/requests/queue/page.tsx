@@ -32,6 +32,8 @@ interface PageProps {
     layout?: string
     status?: string
     q?: string
+    /** "1" = also search inside the messages (slower) */
+    inmsg?: string
     /** show only the tickets of this requester (profile id) */
     requester?: string
     assigned?: string
@@ -100,6 +102,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
   const layout: 'table' | 'board' = params.layout === 'board' ? 'board' : 'table'
   const rawStatus      = params.status as string | undefined
   const q              = params.q
+  const inMessages     = params.inmsg === '1'
   const requesterParam = /^[0-9a-f-]{36}$/i.test(params.requester ?? '') ? params.requester : undefined
   const rawAssigned     = rawTab === 'mine' ? 'me' : (params.assigned || undefined)
   const rawPriority    = params.priority
@@ -127,6 +130,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
     userId: profile.id,
     status: statusFilter,
     q: q || undefined,
+    searchMessages: inMessages,
     requesterId: requesterParam,
     assignedTo,
     breachedOnly,
@@ -298,7 +302,7 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
       {/* ── Search + column filters row ── */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-[15px] h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <form>
             <input type="hidden" name="tab" value={rawTab} />
             {rawTab === 'team' && assignedTo && <input type="hidden" name="assigned" value={assignedTo} />}
@@ -319,10 +323,15 @@ export default async function AgentRequestsPage({ searchParams }: PageProps) {
               name="q"
               aria-label="Search tickets"
               defaultValue={q}
-              placeholder="Search ticket, requester, store, technician, service, comments…"
+              placeholder="Search ticket, requester, store, technician, service…"
               className="w-full rounded-lg border border-[#E0E0EC] bg-white py-1.5 pl-8 pr-3 text-[12px] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
+            <label className="mt-1 flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground">
+              <input type="checkbox" name="inmsg" value="1" defaultChecked={inMessages} className="h-3 w-3" />
+              also search inside messages (slower)
+            </label>
           </form>
+          {result.searchNote && <p role="status" className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">{result.searchNote}</p>}
         </div>
 
         <StatusFilterSelect
