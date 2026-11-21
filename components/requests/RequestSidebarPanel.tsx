@@ -428,7 +428,7 @@ function ServiceRow({ serviceName }: { serviceName: string }) {
 // Only picking a sub-category actually saves (via updateRequestCategory,
 // which re-runs SLA using that sub-category's own sla_config) — picking a
 // category alone just changes what the Sub Category popover offers.
-function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, isAgent, allowedSubCategories }: {
+export function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, isAgent, allowedSubCategories }: {
   requestId: string; categoryName: string | null; subCategoryId: string | null; subCategoryName: string | null
   isAgent: boolean; allowedSubCategories: AllowedSubCategory[]
 }) {
@@ -589,7 +589,9 @@ function CategoryRow({ requestId, categoryName, subCategoryId, subCategoryName, 
           )}
         </div>
       </PropRow>
-      {pendingCategoryId && (
+      {/* The Sub Category row is shown whenever the ticket HAS one, also for someone who cannot change it (a technician who has not picked the ticket up yet: the list of choices is only loaded
+          for the person who may work on it, so `pendingCategoryId` is empty for them and the row used to disappear, 21 Nov 2026), and always while a category is being picked. */}
+      {(pendingCategoryId || cur.name) && (
         <PropRow label="Sub Category" copyValue={cur.name}>
           <div ref={subRef} className="relative">
             <button
