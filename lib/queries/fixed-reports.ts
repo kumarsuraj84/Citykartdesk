@@ -11,7 +11,7 @@ import { monthOptions, resolveMonth, resolveMonths } from '@/lib/reporting/analy
 import { techOf } from '@/lib/reporting/analytics/age-summary'
 import { buildFixedReport, findFixedReport, normName, type FixedReportDef } from '@/lib/reporting/analytics/fixed-reports'
 import { effectiveFilter, emptyReportFilter, type EffectiveFilter, type FilterCombo, type FilterDefaults, type ReportFilter } from '@/lib/reporting/analytics/report-filter'
-import { referenceDay, resolveDateRange } from '@/lib/reporting/analytics/date-ranges'
+import { dayBefore, referenceDay, resolveDateRange } from '@/lib/reporting/analytics/date-ranges'
 import type { ReportTable } from '@/lib/reporting/analytics/report-table'
 import { STATUS_LABELS } from '@/lib/constants/requests'
 import type { ProfileWithTeams } from '@/types'
@@ -148,13 +148,16 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
     amcStores = [...byBrand.values()]
   }
 
-  // a summary also shows what was created and resolved today, whatever the status is now
+  // a summary also shows what was created and resolved today and yesterday, whatever the status is now
   let dayFacts: TicketFact[] | undefined
   let day: { start: Date; end: Date; word: string } | undefined
+  let previousDay: { start: Date; end: Date; word: string } | undefined
   if (def.layout === 'summary') {
     const ref = referenceDay(resolveDateRange(undefined))
     day = { start: ref.start, end: ref.end, word: ref.word }
-    const a = ref.start.toISOString()
+    const before = dayBefore(ref)
+    previousDay = { start: before.start, end: before.end, word: before.word }
+    const a = before.start.toISOString()
     const b = ref.end.toISOString()
     const dayRaw = await fetchAll<RawTicket>((from, to) =>
       scoped(admin.from('requests').select(FACT_SELECT)).or(`and(created_at.gte.${a},created_at.lte.${b}),and(resolved_at.gte.${a},resolved_at.lte.${b})`)
@@ -184,5 +187,5 @@ export async function loadFixedReport(profile: ProfileWithTeams, slug: string, f
       else combos.set(k, { group: r.team_id, service: r.service_id, status: r.status, tech, count: 1 })
     }
   }
-  return { ...result(buildFixedReport({ def, facts, dayFacts, day, statusLabel, statuses, month, months, amcStores, acView }), [...combos.values()]), truncated }
+  return { ...result(buildFixedReport({ def, facts, dayFacts, day, previousDay, statusLabel, statuses, month, months, amcStores, acView }), [...combos.values()]), truncated }
 }

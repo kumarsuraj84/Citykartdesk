@@ -96,10 +96,12 @@ export interface BuildInput {
   def: FixedReportDef
   /** the tickets the report counts (already limited to its group, services, statuses and the viewer's own groups) */
   facts: TicketFact[]
-  /** tickets created or resolved on the reference day, whatever their status now (for the "today" columns of a summary) */
+  /** tickets created or resolved on the reference day or the day before it, whatever their status now (for the "today" and "yesterday" columns of a summary) */
   dayFacts?: TicketFact[]
   /** the reference day */
   day?: { start: Date; end: Date; word: string }
+  /** the day before the reference day ("yesterday") */
+  previousDay?: { start: Date; end: Date; word: string }
   statusLabel: (s: string) => string
   /** the statuses counted when the viewer chose others than the report's own */
   statuses?: RequestStatus[]
@@ -240,20 +242,28 @@ export function buildFixedReport(input: BuildInput): ReportTable {
     const a = day ? day.start.getTime() : Number.NaN
     const b = day ? day.end.getTime() : Number.NaN
     const within = (iso: string | null) => { if (!iso) return false; const t = new Date(iso).getTime(); return t >= a && t <= b }
+    const prev = input.previousDay
+    const prevWord = prev?.word ?? 'yesterday'
+    const pa = prev ? prev.start.getTime() : Number.NaN
+    const pb = prev ? prev.end.getTime() : Number.NaN
+    const withinPrev = (iso: string | null) => { if (!iso) return false; const t = new Date(iso).getTime(); return t >= pa && t <= pb }
     const dayFacts = (input.dayFacts ?? []).filter((f) => f.status !== 'cancelled')
     lead = 2
     columns = [col('tech', 'Responsible', 140), col('cat', 'Category', 180), ...bucketCols(buckets),
-      numCol('total', 'Total Tickets', 66, { peach: true }), numCol('created', `Created ${dayWord ?? 'today'}`, 86, { peach: true }), numCol('resolved', `Resolved ${dayWord ?? 'today'}`, 86, { peach: true })]
-    // every technician or category that has a counted ticket or something that day
+      numCol('total', 'Total Tickets', 66, { peach: true }), numCol('created', `Created ${dayWord ?? 'today'}`, 86, { peach: true }), numCol('resolved', `Resolved ${dayWord ?? 'today'}`, 86, { peach: true }),
+      numCol('createdPrev', `Created ${prevWord}`, 86, { peach: true }), numCol('resolvedPrev', `Resolved ${prevWord}`, 86, { peach: true })]
+    // every technician or category that has a counted ticket or something on either day
     const techs = new Set([...facts, ...dayFacts].map((f) => techOf(f.technician)))
     const line = (key: string, kind: RowKind, label: [Cell, Cell], mine: TicketFact[], dayMine: TicketFact[]) => {
       const created = dayMine.filter((f) => within(f.createdAt))
       const resolved = dayMine.filter((f) => within(f.resolvedAt))
+      const createdPrev = dayMine.filter((f) => withinPrev(f.createdAt))
+      const resolvedPrev = dayMine.filter((f) => withinPrev(f.resolvedAt))
       rows.push(row(key, kind, [
         label[0], label[1],
         ...buckets.map((x) => mine.filter((f) => f.ageBucket === x).length || ''),
-        mine.length || '', created.length || '', resolved.length || '',
-      ], [undefined, undefined, ...buckets.map((x) => refs(mine.filter((f) => f.ageBucket === x))), refs(mine), refs(created), refs(resolved)]))
+        mine.length || '', created.length || '', resolved.length || '', createdPrev.length || '', resolvedPrev.length || '',
+      ], [undefined, undefined, ...buckets.map((x) => refs(mine.filter((f) => f.ageBucket === x))), refs(mine), refs(created), refs(resolved), refs(createdPrev), refs(resolvedPrev)]))
     }
     for (const t of [...techs].sort((x, y) => nameOrder(x, y, UNASSIGNED))) {
       const mineT = facts.filter((f) => techOf(f.technician) === t)
@@ -418,7 +428,7 @@ export function buildFixedReport(input: BuildInput): ReportTable {
 
   const counted_ = input.statuses ?? def.statuses
   const statusText = counted_.length === OPEN_STATUSES.length && counted_.every((s) => OPEN_STATUSES.includes(s)) ? 'Open, Assigned, In Progress, Waiting on User, Hold, Pending Approval' : counted_.map(statusLabel).join(', ')
-  // the tickets the report counts (a summary also lists the ones created or resolved today, which are not counted)
+  // the tickets the report counts (a summary also lists the ones created or resolved today or yesterday, which are not counted)
   const counted = def.layout === 'summary' ? facts.length : new Set(rows.filter((r) => r.kind === 'row').flatMap((r) => r.refs.flatMap((x) => x ?? []))).size
   return {
     slug: def.slug, title: def.title, columns, headGroups, rows, tickets: tk.list, lead, dayWord, compact: def.layout === 'weekly' || def.layout === 'monthly' || def.layout === 'repeat-ac',

@@ -47,10 +47,10 @@ const t4 = fact({ ticketNo: 'CKSD-4', technician: 'Krishan', category: 'ADMIN AC
 describe('summary reports (Admin / BD / NSO)', () => {
   it('lists each technician once with their categories, a Total line per technician and a Grand Total', () => {
     const t = build('admin-summary-report', [t1, t2, t3, t4])
-    expect(t.columns.map((c) => c.label)).toEqual(['Responsible', 'Category', '0–5 days', '6–10 days', '11–20 days', 'Total Tickets', 'Created today', 'Resolved today'])
+    expect(t.columns.map((c) => c.label)).toEqual(['Responsible', 'Category', '0–5 days', '6–10 days', '11–20 days', 'Total Tickets', 'Created today', 'Resolved today', 'Created yesterday', 'Resolved yesterday'])
     expect(lines(t)).toEqual(['row:Arun Das/HANGERS', 'row:MAT', 'subtotal:Arun Das Total', 'row:Krishan/ADMIN AC ISSUE', 'subtotal:Krishan Total', 'grand:Grand Total'])
     const grand = t.rows.at(-1)!
-    expect(grand.cells.slice(2)).toEqual([2, 1, 1, 4, '', ''])
+    expect(grand.cells.slice(2)).toEqual([2, 1, 1, 4, '', '', '', ''])
     expect(t.scopeText).toContain('4 tickets')
   })
   it('every number points at the tickets behind it, a blank does not', () => {
@@ -76,6 +76,37 @@ describe('summary reports (Admin / BD / NSO)', () => {
     expect(mohit.cells[col(t, 'resolved')]).toBe(1)
     expect(mohit.cells[col(t, 'total')]).toBe('')
     expect(t.rows.at(-1)!.cells[col(t, 'created')]).toBe(1)
+  })
+  it('also counts what was created and resolved the day before, in its own two columns, and each number opens its tickets', () => {
+    const day = { start: new Date('2026-10-12T00:00:00'), end: new Date('2026-10-12T23:59:59.999'), word: 'today' }
+    const previousDay = { start: new Date('2026-10-11T00:00:00'), end: new Date('2026-10-11T23:59:59.999'), word: 'yesterday' }
+    const createdToday = fact({ ticketNo: 'CKSD-5', technician: 'Arun Das', category: 'HANGERS', createdAt: new Date('2026-10-12T09:00:00').toISOString() })
+    const createdYesterday = fact({ ticketNo: 'CKSD-8', technician: 'Arun Das', category: 'HANGERS', createdAt: new Date('2026-10-11T23:30:00').toISOString() })
+    const resolvedYesterday = fact({ ticketNo: 'CKSD-9', technician: 'Mohit', category: 'FAN', status: 'closed', createdAt: '2026-10-01T09:00:00.000Z', resolvedAt: new Date('2026-10-11T00:10:00').toISOString() })
+    const twoDaysAgo = fact({ ticketNo: 'CKSD-10', technician: 'Arun Das', category: 'HANGERS', createdAt: new Date('2026-10-10T23:59:00').toISOString() })
+    const cancelled = fact({ ticketNo: 'CKSD-11', technician: 'Arun Das', category: 'HANGERS', status: 'cancelled', createdAt: new Date('2026-10-11T09:30:00').toISOString() })
+    const t = build('admin-summary-report', [t1], { dayFacts: [createdToday, createdYesterday, resolvedYesterday, twoDaysAgo, cancelled], day, previousDay })
+    expect(t.columns.slice(-4).map((c) => c.label)).toEqual(['Created today', 'Resolved today', 'Created yesterday', 'Resolved yesterday'])
+    const hangers = t.rows.find((r) => r.key === 'Arun Das|HANGERS')!
+    expect(hangers.cells[col(t, 'created')]).toBe(1)
+    expect(hangers.cells[col(t, 'createdPrev')]).toBe(1)
+    expect(hangers.cells[col(t, 'resolvedPrev')]).toBe('')
+    expect((hangers.refs[col(t, 'createdPrev')] ?? []).map((i) => t.tickets[i].no)).toEqual(['CKSD-8'])
+    const mohit = t.rows.find((r) => r.key === 'Mohit|FAN')!
+    expect(mohit.cells[col(t, 'resolvedPrev')]).toBe(1)
+    expect(mohit.cells[col(t, 'resolved')]).toBe('')
+    expect(mohit.cells[col(t, 'total')]).toBe('')
+    const grand = t.rows.at(-1)!
+    expect([grand.cells[col(t, 'created')], grand.cells[col(t, 'resolved')], grand.cells[col(t, 'createdPrev')], grand.cells[col(t, 'resolvedPrev')]]).toEqual([1, '', 1, 1])
+  })
+  it('when the report is about an earlier day the headings say which day', () => {
+    const t = build('bd-summary-report', [t1], { day: { start: new Date(), end: new Date(), word: 'on 7 Oct 2026' }, previousDay: { start: new Date(), end: new Date(), word: 'on 6 Oct 2026' } })
+    expect(t.columns.slice(-4).map((c) => c.label)).toEqual(['Created on 7 Oct 2026', 'Resolved on 7 Oct 2026', 'Created on 6 Oct 2026', 'Resolved on 6 Oct 2026'])
+  })
+  it('the NSO and BD summaries have the yesterday columns too', () => {
+    for (const slug of ['nso-summary-report', 'bd-summary-report']) {
+      expect(build(slug, [t1]).columns.slice(-2).map((c) => c.label)).toEqual(['Created yesterday', 'Resolved yesterday'])
+    }
   })
   it('an empty report has no rows', () => { expect(build('bd-summary-report', []).rows).toEqual([]) })
 })
@@ -161,7 +192,7 @@ describe('the report on screen', () => {
 
   it('is the Excel table as it is: one heading row, a Total line per technician, a Grand Total, nothing to fold or choose', () => {
     renderIt()
-    expect([...document.querySelectorAll('thead th')].map((c) => c.textContent)).toEqual(['Responsible', 'Category', '0–5 days', '6–10 days', '11–20 days', 'Total Tickets', 'Created today', 'Resolved today'])
+    expect([...document.querySelectorAll('thead th')].map((c) => c.textContent)).toEqual(['Responsible', 'Category', '0–5 days', '6–10 days', '11–20 days', 'Total Tickets', 'Created today', 'Resolved today', 'Created yesterday', 'Resolved yesterday'])
     const body = [...document.querySelectorAll('tbody tr')].map((tr) => tr.textContent ?? '')
     expect(body.some((t) => t.startsWith('Arun Das Total'))).toBe(true)
     expect(body.at(-1)!.startsWith('Grand Total')).toBe(true)
@@ -221,10 +252,10 @@ describe('Excel is the same table', () => {
     expect(ws.name).toBe('Admin Summary Report')
     expect(ws.getRow(1).getCell(1).value).toBe('Admin Summary Report')
     const row = (n: number) => Array.from({ length: t.columns.length }, (_, i) => ws.getRow(n).getCell(i + 1).value ?? '')
-    expect(row(XLSX_HEAD_ROW)).toEqual(['Responsible', 'Category', '0–5 days', '6–10 days', '11–20 days', 'Total Tickets', 'Created today', 'Resolved today'])
-    expect(row(XLSX_HEAD_ROW + 1)).toEqual(['Arun Das', 'HANGERS', 1, 1, '', 2, '', ''])
+    expect(row(XLSX_HEAD_ROW)).toEqual(['Responsible', 'Category', '0–5 days', '6–10 days', '11–20 days', 'Total Tickets', 'Created today', 'Resolved today', 'Created yesterday', 'Resolved yesterday'])
+    expect(row(XLSX_HEAD_ROW + 1)).toEqual(['Arun Das', 'HANGERS', 1, 1, '', 2, '', '', '', ''])
     expect(row(XLSX_HEAD_ROW + 3).slice(0, 2)).toEqual(['Arun Das Total', 'Arun Das Total']) // the merged label
-    expect(row(ws.rowCount).slice(2)).toEqual([2, 1, 1, 4, '', ''])
+    expect(row(ws.rowCount).slice(2)).toEqual([2, 1, 1, 4, '', '', '', ''])
   })
   it('keeps the heading groups, and writes percentages (the AMC Vendor report’s AC Not Working%) as percentages', async () => {
     const ExcelJS = (await import('exceljs')).default

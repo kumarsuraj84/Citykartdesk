@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveDateRange, parseDay, referenceDay } from '@/lib/reporting/analytics/date-ranges'
+import { resolveDateRange, parseDay, referenceDay, dayBefore } from '@/lib/reporting/analytics/date-ranges'
 import { groupDisplayName, canViewGroupReport, canUseReportAnalytics, selectableGroups } from '@/lib/reporting/analytics/catalog'
 
 const ymd = (d: Date | null) => (d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : null)
@@ -81,6 +81,26 @@ describe('the "that day" is the end of the chosen dates', () => {
   })
   it('never looks into the future', () => {
     expect(ref('custom', '2026-10-01', '2026-12-31')).toEqual(['8 Oct 2026', 'today', true])
+  })
+})
+
+describe('the day before the "that day" (the yesterday columns)', () => {
+  const now = new Date('2026-10-08T10:00:00Z') // 15:30 on 8 Oct 2026, India time
+  const before = (preset: string, f?: string, t?: string) => dayBefore(referenceDay(resolveDateRange(preset, f, t, now), now))
+
+  it('is called "yesterday" when the that-day is today, and is exactly the India day before it', () => {
+    const d = before('all')
+    expect([d.label, d.word, d.isToday]).toEqual(['7 Oct 2026', 'yesterday', false])
+    expect(d.start.toISOString()).toBe('2026-10-06T18:30:00.000Z')
+    expect(d.end.toISOString()).toBe('2026-10-07T18:29:59.999Z')
+  })
+  it('is named by its date when the report is about an earlier day', () => {
+    const d = before('custom', '2026-10-01', '2026-10-07')
+    expect([d.label, d.word]).toEqual(['6 Oct 2026', 'on 6 Oct 2026'])
+  })
+  it('crosses a month and a year end', () => {
+    expect(before('custom', '2026-09-01', '2026-10-01').label).toBe('30 Sep 2026')
+    expect(before('custom', '2025-12-01', '2026-01-01').label).toBe('31 Dec 2025')
   })
 })
 

@@ -124,3 +124,13 @@ export function referenceDay(range: Pick<ResolvedRange, 'to'>, now: Date = new D
   const isToday = base.getTime() === today.getTime()
   return { start: base, end: endOfDay(base), isToday, word: isToday ? 'today' : `on ${formatDay(base)}`, label: formatDay(base) }
 }
+
+/**
+ * The calendar day before a reference day (India days), for the "created / resolved yesterday" columns.
+ * When the reference day is today its word is "yesterday"; for an earlier reference day it is "on 6 Oct 2026".
+ */
+export function dayBefore(ref: Pick<ReferenceDay, 'start' | 'isToday'>): ReferenceDay {
+  const f = istFields(ref.start)
+  const start = istMidnight(f.y, f.mo, f.d - 1)
+  return { start, end: endOfDay(start), isToday: false, word: ref.isToday ? 'yesterday' : `on ${formatDay(start)}`, label: formatDay(start) }
+}
