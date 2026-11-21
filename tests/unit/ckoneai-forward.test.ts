@@ -15,6 +15,7 @@ vi.mock('@/lib/ckoneai/roles', () => ({ computeRoles: async () => state.roles })
 vi.mock('@/lib/syslog/audit', () => ({ recordAudit: async (e: unknown) => { state.audit.push(e) } }))
 
 import { forwardToCkoneai } from '@/lib/ckoneai/forward'
+import { assetCache } from '@/lib/ckoneai/asset-cache'
 import { sha256Hex, sign } from '@/lib/ckoneai/sign'
 
 const SECRET = 's'.repeat(48)
@@ -42,6 +43,7 @@ beforeAll(async () => {
 afterAll(() => new Promise<void>((r) => server.close(() => r())))
 
 beforeEach(() => {
+  assetCache.clear()
   seen = []
   state.audit = []
   state.roles = ['requester']
@@ -247,6 +249,108 @@ describe('forwarding to CKOneAI', () => {
     expect(res.headers.get('etag')).toBe('"abc"')
     expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
     expect(await res.text()).toBe('console.log(1)')
+  })
+})
+
+// The assistant sometimes stalls for seconds (21 Nov 2026: health answers of 13-53 s, page files of 3-15 s). Two protections on the CK Desk side.
+describe('a stalled assistant: the health cut-off and the kept copies of its page files', () => {
+  const JS = 'console.log("the chat page script")'
+  const fixed = (extra: Record<string, string> = {}) => (_q: http.IncomingMessage, res: http.ServerResponse) => {
+    res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=31536000, immutable', etag: '"v1"', ...extra })
+    res.end(JS)
+  }
+
+  it('the health check that is not answered within 5 seconds is cut off with a plain 502, and is not written in the audit trail', async () => {
+    behaviour = (_q, res) => { setTimeout(() => { try { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"status":"ok"}') } catch { /* the caller has gone */ } }, 7000) }
+    const t0 = Date.now()
+    const res = await call('/api/ckoneai/health')
+    const took = Date.now() - t0
+    expect(res.status).toBe(502)
+    expect(took).toBeGreaterThan(4500)
+    expect(took).toBeLessThan(6500)
+    expect(state.audit).toEqual([])
+  }, 15_000)
+
+  it('a health check that answers is passed on as before', async () => {
+    behaviour = (_q, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"status":"ok"}') }
+    const res = await call('/api/ckoneai/health')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('{"status":"ok"}')
+  })
+
+  it('every other call keeps its long wait: a question answered after 5.5 s is still delivered', async () => {
+    behaviour = (_q, res) => { setTimeout(() => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"slow":true}') }, 5500) }
+    const res = await call('/api/ckoneai/capabilities')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('{"slow":true}')
+  }, 15_000)
+
+  it('a fingerprinted page file is asked of the assistant once, then answered from the kept copy', async () => {
+    behaviour = fixed()
+    const a = await call('/ckoneai-ui/assets/index-BsNCApvY.js')
+    expect(a.status).toBe(200)
+    expect(await a.text()).toBe(JS)
+    expect(a.headers.get('x-ckdesk-from-copy')).toBeNull()
+    expect(seen).toHaveLength(1)
+
+    const b = await call('/ckoneai-ui/assets/index-BsNCApvY.js')
+    expect(b.status).toBe(200)
+    expect(await b.text()).toBe(JS)
+    expect(b.headers.get('x-ckdesk-from-copy')).toBe('1')
+    expect(b.headers.get('content-type')).toBe('text/javascript; charset=utf-8')
+    expect(b.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+    expect(b.headers.get('etag')).toBe('"v1"')
+    expect(b.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(seen).toHaveLength(1)   // the assistant was not asked again
+  })
+
+  it('the copy is served even while the assistant is down, and answers a repeat visit with 304', async () => {
+    behaviour = fixed()
+    await (await call('/ckoneai-ui/assets/styles-yU0SCtz1.css')).arrayBuffer()
+    state.access = { ok: true, cfg: { on: true, baseUrl: 'http://127.0.0.1:9', secret: SECRET, pilot: '*' }, profile: { id: USER, org_id: 'org-1', role: 'user' } }
+    const again = await call('/ckoneai-ui/assets/styles-yU0SCtz1.css')
+    expect(again.status).toBe(200)
+    expect(await again.text()).toBe(JS)
+    const cond = await call('/ckoneai-ui/assets/styles-yU0SCtz1.css', { headers: { 'if-none-match': '"v1"' } })
+    expect(cond.status).toBe(304)
+  })
+
+  it('a kept copy is never handed to someone who has no access', async () => {
+    behaviour = fixed()
+    await (await call('/ckoneai-ui/assets/index-BsNCApvY.js')).arrayBuffer()
+    state.access = { ok: false, status: 401, error: 'Sign in to use the assistant.' }
+    const res = await call('/ckoneai-ui/assets/index-BsNCApvY.js')
+    expect(res.status).toBe(401)
+    state.access = { ok: false, status: 403, error: 'The assistant is not open to you yet.' }
+    expect((await call('/ckoneai-ui/assets/index-BsNCApvY.js')).status).toBe(403)
+  })
+
+  it('keeps only what is safe to keep', async () => {
+    // the chat page itself, a file without a fingerprint, a file with a query, an error, an html answer and every API answer are asked of the assistant every time
+    behaviour = fixed()
+    await (await call('/ckoneai-ui?embed=1')).arrayBuffer(); await (await call('/ckoneai-ui?embed=1')).arrayBuffer()
+    await (await call('/ckoneai-ui/assets/app-1.js')).arrayBuffer(); await (await call('/ckoneai-ui/assets/app-1.js')).arrayBuffer()
+    await (await call('/ckoneai-ui/assets/index-BsNCApvY.js?v=2')).arrayBuffer(); await (await call('/ckoneai-ui/assets/index-BsNCApvY.js?v=2')).arrayBuffer()
+    await (await call('/api/ckoneai/capabilities')).arrayBuffer(); await (await call('/api/ckoneai/capabilities')).arrayBuffer()
+    expect(seen).toHaveLength(8)
+    expect(assetCache.size).toBe(0)
+
+    seen = []
+    behaviour = (_q, res) => { res.writeHead(404, { 'content-type': 'text/javascript' }); res.end('nope') }
+    expect((await call('/ckoneai-ui/assets/gone-AbCdEf123.js')).status).toBe(404)
+    expect((await call('/ckoneai-ui/assets/gone-AbCdEf123.js')).status).toBe(404)
+    behaviour = (_q, res) => { res.writeHead(200, { 'content-type': 'text/html' }); res.end('<p>login</p>') }
+    await (await call('/ckoneai-ui/assets/page-AbCdEf123.js')).arrayBuffer(); await (await call('/ckoneai-ui/assets/page-AbCdEf123.js')).arrayBuffer()
+    expect(seen).toHaveLength(4)
+    expect(assetCache.size).toBe(0)
+  })
+
+  it('a file that is too big is passed on as a stream and not kept', async () => {
+    behaviour = (_q, res) => { res.writeHead(200, { 'content-type': 'text/javascript', 'content-length': String(3 * 1024 * 1024) }); res.end(Buffer.alloc(3 * 1024 * 1024, 97)) }
+    const res = await call('/ckoneai-ui/assets/huge-AbCdEf123.js')
+    expect(res.status).toBe(200)
+    expect((await res.arrayBuffer()).byteLength).toBe(3 * 1024 * 1024)
+    expect(assetCache.size).toBe(0)
   })
 })
 

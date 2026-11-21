@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server'
 import { rateLimit } from '@/lib/rate-limit'
 import { recordAudit } from '@/lib/syslog/audit'
 import { assistantAccess } from './access'
+import { assetCache, isCacheableAsset, mayKeep, MAX_FILE_BYTES } from './asset-cache'
 import { checkUpstream, type UpstreamTarget } from './path'
 import { computeRoles } from './roles'
 import { bridgeHeaders } from './sign'
@@ -19,6 +20,9 @@ const LIMITS = { post: 20, other: 240 }                  // per person per minut
 const TIMEOUT = {
   api: { headers: 60_000, total: 10 * 60_000 },
   ui: { headers: 15_000, total: 60_000 },
+  // the health check is only a "is it there?" question that the chat page asks over and over: when it has not answered in 5 s the page is told so (and shows the assistant as busy)
+  // instead of hanging for a minute behind a stalled assistant (21 Nov 2026: answers of 13, 34 and 53 s)
+  health: { headers: 5_000, total: 8_000 },
 }
 /** Request headers that are passed on (everything else, in particular any credential, is dropped). */
 const PASS_REQUEST = ['content-type', 'accept', 'if-none-match', 'if-modified-since', 'x-request-id']
@@ -88,6 +92,20 @@ export async function forwardToCkoneai(req: NextRequest): Promise<Response> {
     if (limited.limited) return refuse(429, 'Too many questions in a minute. Please wait a little.', { 'retry-after': '30' })
   }
 
+  // a fingerprinted page file that is already kept here: answered from memory (the sign-in and pilot checks above have already run)
+  const keepable = isCacheableAsset(method, up.path, up.search)
+  if (keepable) {
+    const hit = assetCache.get(up.path)
+    if (hit) {
+      const out = new Headers(hit.headers)
+      out.set('x-content-type-options', 'nosniff')
+      out.set('x-ckdesk-from-copy', '1')
+      const sent = req.headers.get('if-none-match')
+      if (sent && hit.headers['etag'] && sent === hit.headers['etag']) return new Response(null, { status: 304, headers: out })
+      return new Response(hit.body as unknown as BodyInit, { status: 200, headers: out })
+    }
+  }
+
   const hasBody = method === 'POST' || method === 'DELETE' || method === 'PATCH'
   const body = hasBody ? await readCapped(req, MAX_BODY) : new Uint8Array(0)
   if (body === null) return refuse(413, 'That message is too large.')
@@ -100,7 +118,8 @@ export async function forwardToCkoneai(req: NextRequest): Promise<Response> {
   headers.set('accept-encoding', 'identity')
   for (const [k, v] of Object.entries(bridgeHeaders({ secret: cfg.secret, method, target: up.upstream, userId: profile.id, roles, body }))) headers.set(k, v)
 
-  const t = up.kind === 'api' ? TIMEOUT.api : TIMEOUT.ui
+  const isHealth = up.kind === 'api' && up.path === '/api/ckoneai/health'
+  const t = isHealth ? TIMEOUT.health : up.kind === 'api' ? TIMEOUT.api : TIMEOUT.ui
   const ctl = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined = setTimeout(() => ctl.abort(), t.headers)
   const stop = () => { if (timer) clearTimeout(timer); timer = undefined }
@@ -116,6 +135,7 @@ export async function forwardToCkoneai(req: NextRequest): Promise<Response> {
     res = await fetch(cfg.baseUrl + up.upstream, { method, headers, body: hasBody ? (body as unknown as BodyInit) : undefined, signal: ctl.signal, redirect: 'manual', cache: 'no-store' })
   } catch {
     stop()
+    if (isHealth) return refuse(502, 'The assistant did not answer. Please try again in a moment.')
     void recordAudit({ action: 'ckoneai.unreachable', entityType: 'assistant', actorId: profile.id, orgId: profile.org_id, outcome: 'failure', severity: 'warning', source: 'api_route' })
     return refuse(502, 'The assistant did not answer. Please try again in a moment.')
   }
@@ -131,5 +151,21 @@ export async function forwardToCkoneai(req: NextRequest): Promise<Response> {
 
   if (!res.body || method === 'HEAD' || res.status === 204 || res.status === 304) return new Response(null, { status: res.status, headers: out })
   timer = setTimeout(() => ctl.abort(), t.total)
+  const declared = res.headers.get('content-length')
+  if (keepable && mayKeep(res.status, res.headers.get('content-type'), declared === null ? null : Number(declared))) {
+    try {
+      const bytes = new Uint8Array(await res.arrayBuffer())
+      stop()
+      if (bytes.byteLength <= MAX_FILE_BYTES) {
+        const kept: Record<string, string> = {}
+        for (const [k, v] of out.entries()) if (['content-type', 'etag', 'last-modified', 'cache-control'].includes(k)) kept[k] = v
+        assetCache.set(up.path, { body: bytes, headers: kept, at: Date.now() })
+      }
+      return new Response(bytes as unknown as BodyInit, { status: 200, headers: out })
+    } catch {
+      stop()
+      return refuse(502, 'The assistant did not answer. Please try again in a moment.')
+    }
+  }
   return new Response(guarded(res.body, stop), { status: res.status, headers: out })
 }
