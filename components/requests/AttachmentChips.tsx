@@ -5,6 +5,8 @@ import { toast } from 'sonner'
 import { Paperclip, FileText, FileSpreadsheet, Image, File, X } from 'lucide-react'
 import { deleteAttachment } from '@/lib/actions/attachments'
 import { AttachmentPreviewModal } from './AttachmentPreviewModal'
+import { useAttachmentGallery } from './AttachmentGallery'
+import type { GalleryItem } from '@/lib/attachments/gallery-order'
 import type { RequestAttachmentWithUploader } from '@/types'
 
 interface AttachmentChipsProps {
@@ -33,7 +35,8 @@ function formatBytes(bytes: number): string {
 
 export function AttachmentChips({ attachments: initialAttachments, currentUserId, canManageAll }: AttachmentChipsProps) {
   const [attachments, setAttachments] = useState(initialAttachments)
-  const [previewing, setPreviewing] = useState<RequestAttachmentWithUploader | null>(null)
+  const [previewingId, setPreviewingId] = useState<string | null>(null)
+  const gallery = useAttachmentGallery()
   const [isPending, startTransition] = useTransition()
 
   // Re-sync when someone else adds/removes an attachment and the page's own periodic
@@ -46,6 +49,12 @@ export function AttachmentChips({ attachments: initialAttachments, currentUserId
   }
 
   if (attachments.length === 0) return null
+
+  // The arrows in the preview walk through every file of the ticket when the page provides them
+  // (see AttachmentGallery); a chip row used on its own just walks through its own files.
+  const ownItems: GalleryItem[] = attachments.map((a) => ({ id: a.id, file_name: a.file_name, file_size: a.file_size, mime_type: a.mime_type, signedUrl: a.signedUrl }))
+  const previewItems = previewingId && gallery?.some((g) => g.id === previewingId) ? gallery : ownItems
+  const previewIndex = previewingId ? previewItems.findIndex((i) => i.id === previewingId) : -1
 
   function handleDelete(id: string) {
     if (!confirm('Delete this attachment?')) return
@@ -77,7 +86,7 @@ export function AttachmentChips({ attachments: initialAttachments, currentUserId
               <button
                 type="button"
                 title="Preview"
-                onClick={() => setPreviewing(att)}
+                onClick={() => setPreviewingId(att.id)}
                 className="flex items-center gap-2 min-w-0 text-left"
               >
                 <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-primary" />
@@ -103,7 +112,14 @@ export function AttachmentChips({ attachments: initialAttachments, currentUserId
           )
         })}
       </div>
-      {previewing && <AttachmentPreviewModal attachment={previewing} onClose={() => setPreviewing(null)} />}
+      {previewIndex >= 0 && (
+        <AttachmentPreviewModal
+          items={previewItems}
+          index={previewIndex}
+          onIndexChange={(n) => { const next = previewItems[n]; if (next) setPreviewingId(next.id) }}
+          onClose={() => setPreviewingId(null)}
+        />
+      )}
     </div>
   )
 }

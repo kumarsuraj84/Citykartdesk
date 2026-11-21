@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Download, Loader2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, Loader2, X } from 'lucide-react'
 
 export interface PreviewableAttachment {
   file_name: string
@@ -119,23 +119,14 @@ function SheetView({ state, active, onActive }: { state: SheetsState; active: nu
   )
 }
 
-export function AttachmentPreviewModal({ attachment, onClose }: { attachment: PreviewableAttachment; onClose: () => void }) {
+// The file itself. Kept apart from the frame so that moving to the next file starts it afresh
+// (its own text/sheet loading and the chosen sheet tab), while the window stays open.
+function PreviewBody({ attachment }: { attachment: PreviewableAttachment }) {
   const kind = previewKind(attachment.mime_type, attachment.file_size)
   const [text, setText] = useState<string | null>(null)
   const [textError, setTextError] = useState(false)
   const [sheets, setSheets] = useState<SheetsState>(null)
   const [activeSheet, setActiveSheet] = useState(0)
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = previousOverflow
-    }
-  }, [onClose])
 
   useEffect(() => {
     if (kind !== 'text') return
@@ -162,6 +153,90 @@ export function AttachmentPreviewModal({ attachment, onClose }: { attachment: Pr
   }, [kind, attachment.signedUrl])
 
   return (
+    <>
+      {kind === 'image' && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={attachment.signedUrl} alt={attachment.file_name} className="max-h-full max-w-full object-contain" />
+      )}
+      {kind === 'pdf' && (
+        <iframe src={attachment.signedUrl} title={attachment.file_name} className="h-full w-full border-0 bg-white" />
+      )}
+      {kind === 'video' && (
+        <video src={attachment.signedUrl} controls className="max-h-full max-w-full" />
+      )}
+      {kind === 'audio' && <audio src={attachment.signedUrl} controls />}
+      {kind === 'text' && (
+        <div className="h-full w-full overflow-auto bg-card p-4">
+          {text === null && !textError && (
+            <div className="flex h-full items-center justify-center text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
+          )}
+          {textError && <p className="text-sm text-muted-foreground">Couldn&apos;t load the preview. Use Download instead.</p>}
+          {text !== null && <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">{text}</pre>}
+        </div>
+      )}
+      {kind === 'sheet' && (
+        <SheetView state={sheets} active={activeSheet} onActive={setActiveSheet} />
+      )}
+      {kind === 'none' && (
+        <div className="px-6 text-center">
+          <p className="text-sm font-medium text-foreground">No preview for this file type</p>
+          <p className="mt-1 text-xs text-muted-foreground">Use the Download button to open it on your computer.</p>
+        </div>
+      )}
+    </>
+  )
+}
+
+// Keys that mean something to the thing being typed into or played, so they must not flip the file.
+function keyBelongsToTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'VIDEO' || tag === 'AUDIO' || target.isContentEditable
+}
+
+/**
+ * The preview window. When the ticket has more than one file, `items` is all of them in page
+ * order and `index` is the one shown: arrows on both sides, a "2 of 5" counter and the left/right
+ * keys move through them without closing the window. With one file nothing extra appears.
+ */
+export function AttachmentPreviewModal({
+  items,
+  index,
+  onIndexChange,
+  onClose,
+}: {
+  items: PreviewableAttachment[]
+  index: number
+  onIndexChange: (next: number) => void
+  onClose: () => void
+}) {
+  const total = items.length
+  const attachment = items[Math.min(Math.max(index, 0), total - 1)]
+  const hasPrev = index > 0
+  const hasNext = index < total - 1
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return }
+      if (total < 2 || keyBelongsToTarget(e.target)) return
+      if (e.key === 'ArrowLeft' && index > 0) { e.preventDefault(); onIndexChange(index - 1) }
+      if (e.key === 'ArrowRight' && index < total - 1) { e.preventDefault(); onIndexChange(index + 1) }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose, onIndexChange, index, total])
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [])
+
+  if (!attachment) return null
+
+  return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}
@@ -176,7 +251,10 @@ export function AttachmentPreviewModal({ attachment, onClose }: { attachment: Pr
         <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-foreground">{attachment.file_name}</p>
-            <p className="text-[11px] text-muted-foreground">{formatBytes(attachment.file_size)}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {formatBytes(attachment.file_size)}
+              {total > 1 && <span aria-live="polite"> · {index + 1} of {total}</span>}
+            </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <a
@@ -197,36 +275,36 @@ export function AttachmentPreviewModal({ attachment, onClose }: { attachment: Pr
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 items-center justify-center bg-muted/30">
-          {kind === 'image' && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={attachment.signedUrl} alt={attachment.file_name} className="max-h-full max-w-full object-contain" />
-          )}
-          {kind === 'pdf' && (
-            <iframe src={attachment.signedUrl} title={attachment.file_name} className="h-full w-full border-0 bg-white" />
-          )}
-          {kind === 'video' && (
-            <video src={attachment.signedUrl} controls className="max-h-full max-w-full" />
-          )}
-          {kind === 'audio' && <audio src={attachment.signedUrl} controls />}
-          {kind === 'text' && (
-            <div className="h-full w-full overflow-auto bg-card p-4">
-              {text === null && !textError && (
-                <div className="flex h-full items-center justify-center text-muted-foreground">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                </div>
-              )}
-              {textError && <p className="text-sm text-muted-foreground">Couldn&apos;t load the preview. Use Download instead.</p>}
-              {text !== null && <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">{text}</pre>}
+        <div className="flex min-h-0 flex-1 items-stretch bg-muted/30">
+          {total > 1 && (
+            <div className="flex w-12 shrink-0 items-center justify-center">
+              <button
+                type="button"
+                onClick={() => onIndexChange(index - 1)}
+                disabled={!hasPrev}
+                aria-label="Previous attachment"
+                title="Previous attachment (left arrow key)"
+                className="grid h-10 w-10 place-items-center rounded-full border border-border bg-card text-foreground shadow-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
             </div>
           )}
-          {kind === 'sheet' && (
-            <SheetView state={sheets} active={activeSheet} onActive={setActiveSheet} />
-          )}
-          {kind === 'none' && (
-            <div className="px-6 text-center">
-              <p className="text-sm font-medium text-foreground">No preview for this file type</p>
-              <p className="mt-1 text-xs text-muted-foreground">Use the Download button to open it on your computer.</p>
+          <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center">
+            <PreviewBody key={attachment.signedUrl} attachment={attachment} />
+          </div>
+          {total > 1 && (
+            <div className="flex w-12 shrink-0 items-center justify-center">
+              <button
+                type="button"
+                onClick={() => onIndexChange(index + 1)}
+                disabled={!hasNext}
+                aria-label="Next attachment"
+                title="Next attachment (right arrow key)"
+                className="grid h-10 w-10 place-items-center rounded-full border border-border bg-card text-foreground shadow-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
             </div>
           )}
         </div>

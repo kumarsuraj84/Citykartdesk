@@ -16,6 +16,8 @@ import { VendorTicketActions, type OpenRequestView } from '@/components/vendor/V
 import { listRequestsWithItems } from '@/lib/vendor/requests'
 import { formatMoney } from '@/lib/vendor/lines'
 import { AttachmentChips } from '@/components/requests/AttachmentChips'
+import { AttachmentGalleryProvider } from '@/components/requests/AttachmentGallery'
+import { orderGalleryItems } from '@/lib/attachments/gallery-order'
 import { StatusBadge, PriorityBadge } from '@/components/requests/RequestBadges'
 import { filterFieldsForRequester, filterSectionsForCategory } from '@/lib/forms/sections'
 import { formatDateTime } from '@/lib/utils'
@@ -102,8 +104,11 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
   const isTech = vendorRoleOf(profile) === 'technician' && request.assigned_to === profile.id
   const box = vendorBoxOf(request.status, holdKind)
   const visibleComments = comments.filter((c) => !c.is_internal)
+  // every file of this ticket in the order shown below (conversation, then the store's own files): the preview's arrows step through it
+  const galleryItems = orderGalleryItems(attachments as (typeof attachments[number] & { comment_id?: string | null })[], visibleComments.map((c) => c.id))
 
   return (
+    <AttachmentGalleryProvider items={galleryItems}>
     <div className="max-w-5xl space-y-4">
       <Link href={pms ? '/vendor?tab=pms' : '/vendor'} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ChevronLeft className="h-3.5 w-3.5" /> {pms ? 'PMS tickets' : 'My tickets'}</Link>
 
@@ -266,5 +271,6 @@ export default async function VendorTicketPage({ params }: { params: Promise<{ i
         </aside>
       </div>
     </div>
+    </AttachmentGalleryProvider>
   )
 }

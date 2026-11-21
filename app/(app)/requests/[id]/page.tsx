@@ -38,6 +38,8 @@ import { getAllProjectsMini } from '@/lib/queries/projects'
 import { ProjectCell } from '@/components/requests/ProjectCell'
 import { CommentForm } from '@/components/requests/CommentForm'
 import { AttachmentChips } from '@/components/requests/AttachmentChips'
+import { AttachmentGalleryProvider } from '@/components/requests/AttachmentGallery'
+import { orderGalleryItems } from '@/lib/attachments/gallery-order'
 import { RequestDetailTabs } from '@/components/requests/RequestDetailTabs'
 import { TICKET_TEXT_WRAP } from '@/lib/ui/ticket-layout'
 import { RequestActionBar } from '@/components/requests/RequestActionBar'
@@ -549,6 +551,13 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
     ...approvalEvents.map((item) => ({ kind: 'approval' as const, created_at: item.created_at, item })),
   ].sort((a, b) => b.created_at.localeCompare(a.created_at))
 
+  // Every file of this ticket in the order the conversation shows them (newest message first, the original request last):
+  // the attachment preview steps through exactly this list with its arrows.
+  const galleryItems = orderGalleryItems(
+    attachments as (RequestAttachmentWithUploader & { comment_id: string | null })[],
+    conversationEvents.flatMap((e) => (e.kind === 'comment' ? [e.comment.id] : [])),
+  )
+
   // "Catch me up": what happened and what is pending, for the technician or manager (built from this ticket's own history; nothing leaves the app)
   const ticketSummary = isAgent ? buildTicketSummary({
     now: new Date(nowMs), ticketNo: request.request_no, title: request.title, status: request.status, priority: request.priority, createdAt: request.created_at,
@@ -1012,6 +1021,7 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
+    <AttachmentGalleryProvider items={galleryItems}>
     <div className="mx-auto max-w-6xl space-y-4">
       <MarkRequestNotificationsRead requestId={request.id} />
       {/* Breadcrumb */}
@@ -1160,5 +1170,6 @@ export default async function RequestDetailPage({ params, searchParams }: PagePr
         initialTab={parseRequestTab(tab, { showApprovals: hasApprovalWorkflow })}
       />
     </div>
+    </AttachmentGalleryProvider>
   )
 }
